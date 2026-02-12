@@ -3,7 +3,7 @@ import { formatModelForButton, formatModelForDisplay } from "../../src/model/typ
 
 describe("model/types", () => {
   it("formats model for button without truncation", () => {
-    expect(formatModelForButton("openai", "gpt-4o")).toBe("openai/gpt-4o");
+    expect(formatModelForButton("openai", "gpt-4o")).toBe("🤖 openai/gpt-4o");
   });
 
   it("truncates model for button when text is too long", () => {
@@ -12,8 +12,9 @@ describe("model/types", () => {
       "very-long-model-name-v2-preview",
     );
 
+    expect(result.startsWith("🤖 ")).toBe(true);
     expect(result.endsWith("...")).toBe(true);
-    expect(result.length).toBe(30);
+    expect(result).toBe("🤖 very-long-provider-name/ver...");
   });
 
   it("formats model for display", () => {

@@ -206,7 +206,7 @@ export const en = {
   "keyboard.context": "📊 {used} / {limit} ({percent}%)",
   "keyboard.context_empty": "📊 0",
   "keyboard.variant": "💭 {name}",
-  "keyboard.variant_default": "💭 Default",
+  "keyboard.variant_default": "💡 Default",
   "keyboard.updated": "⌨️ Keyboard updated",
 
   "pinned.default_session_title": "new session",

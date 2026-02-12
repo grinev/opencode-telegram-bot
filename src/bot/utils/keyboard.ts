@@ -44,7 +44,7 @@ export function createMainKeyboard(
   const keyboard = new Keyboard();
   const agentText = getAgentDisplayName(currentAgent);
 
-  // Format model: "providerID/modelID" (no emoji!)
+  // Format model with compact provider/model text and icon
   const modelText = formatModelForButton(currentModel.providerID, currentModel.modelID);
 
   // Context text - show "0" if no data available

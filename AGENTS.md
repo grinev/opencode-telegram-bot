@@ -311,5 +311,6 @@ Full docs: https://opencode.ai/docs/sdk
 2. Inspect existing code before adding or changing components.
 3. Align major architecture changes (including new dependencies) with the user first.
 4. Add or update tests for new functionality.
-5. Update checkboxes in `PRODUCT.md` when relevant tasks are completed.
-6. Keep code clean, consistent, and maintainable.
+5. After code changes, run quality checks: `npm run build`, `npm run lint`, and `npm test`.
+6. Update checkboxes in `PRODUCT.md` when relevant tasks are completed.
+7. Keep code clean, consistent, and maintainable.
