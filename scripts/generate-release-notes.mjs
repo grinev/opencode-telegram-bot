@@ -118,6 +118,16 @@ function createEmptySections() {
   return sections;
 }
 
+function sortByCommitTime(items) {
+  return [...items].sort((left, right) => {
+    if (left.timestamp === right.timestamp) {
+      return left.order - right.order;
+    }
+
+    return left.timestamp - right.timestamp;
+  });
+}
+
 function buildTitle(version, kind) {
   if (kind === "rc") {
     return `## Release Candidate v${version}`;
@@ -142,22 +152,43 @@ function main() {
 
   const lastTag = runGit(["describe", "--tags", "--abbrev=0", "HEAD^"], true);
   const range = lastTag ? `${lastTag}..HEAD` : "HEAD";
-  const logOutput = runGit(["log", "--no-merges", "--pretty=format:%s", range], true);
+  const logOutput = runGit(["log", "--no-merges", "--pretty=format:%ct%x09%s", range], true);
 
   const commits = logOutput
     ? logOutput
         .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .filter((line) => !isReleaseCommit(line))
+        .map((line) => {
+          const tabIndex = line.indexOf("\t");
+
+          if (tabIndex === -1) {
+            return {
+              timestamp: 0,
+              subject: line.trim(),
+            };
+          }
+
+          const timestamp = Number.parseInt(line.slice(0, tabIndex), 10);
+          const subject = line.slice(tabIndex + 1).trim();
+
+          return {
+            timestamp: Number.isNaN(timestamp) ? 0 : timestamp,
+            subject,
+          };
+        })
+        .filter((entry) => entry.subject.length > 0)
+        .filter((entry) => !isReleaseCommit(entry.subject))
     : [];
 
   const sections = createEmptySections();
 
-  for (const commit of commits) {
-    const { section, text } = classifyCommit(commit);
-    sections[section].push(text);
-  }
+  commits.forEach((commit, index) => {
+    const { section, text } = classifyCommit(commit.subject);
+    sections[section].push({
+      text,
+      timestamp: commit.timestamp,
+      order: index,
+    });
+  });
 
   const lines = [buildTitle(version, kind), ""];
 
@@ -172,8 +203,8 @@ function main() {
     hasRenderedSections = true;
     lines.push(`### ${section}`);
 
-    for (const item of items) {
-      lines.push(`- ${item}`);
+    for (const item of sortByCommitTime(items)) {
+      lines.push(`- ${item.text}`);
     }
 
     lines.push("");
