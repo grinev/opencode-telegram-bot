@@ -40,6 +40,32 @@ Additional rules:
 - `chore(release): vX.Y.Z` commits are excluded.
 - Notes use cleaned human-readable text (no commit hashes).
 
+## Version Bump Checklist
+
+This repository is currently in `0.x`, but version bumps still follow a strict SemVer-style policy:
+
+- **Patch (`0.1.1 -> 0.1.2`)**
+  - Bug fixes (`fix`)
+  - Small UX polish that does not change expected behavior
+  - Internal/release/docs/test/ci updates (`chore`, `refactor`, `docs`, `test`, `ci`, `build`, `style`)
+  - No breaking changes
+
+- **Minor (`0.1.1 -> 0.2.0`)**
+  - New user-visible functionality (`feat`)
+  - Meaningful behavior improvements users are expected to notice
+  - Additive changes that remain backward-compatible
+
+- **Major (`0.x -> 1.0.0` or `1.x -> 2.0.0`)**
+  - Breaking changes that require migration
+  - Contract/API changes that can break existing setups
+  - Reserved for explicitly planned compatibility breaks
+
+Quick decision rule:
+
+- Mostly fixes/infra/docs -> patch
+- At least one clear user-facing feature -> minor
+- Any intentional breakage -> major
+
 ## Pull Requests
 
 - Keep PRs focused and small when possible.
