@@ -167,15 +167,16 @@ npm run dev
 
 ### Available Scripts
 
-| Script                  | Description                         |
-| ----------------------- | ----------------------------------- |
-| `npm run dev`           | Build and start (development)       |
-| `npm run build`         | Compile TypeScript                  |
-| `npm start`             | Run compiled code                   |
-| `npm run lint`          | ESLint check (zero warnings policy) |
-| `npm run format`        | Format code with Prettier           |
-| `npm test`              | Run tests (Vitest)                  |
-| `npm run test:coverage` | Tests with coverage report          |
+| Script                          | Description                          |
+| ------------------------------- | ------------------------------------ |
+| `npm run dev`                   | Build and start (development)        |
+| `npm run build`                 | Compile TypeScript                   |
+| `npm start`                     | Run compiled code                    |
+| `npm run release:notes:preview` | Preview auto-generated release notes |
+| `npm run lint`                  | ESLint check (zero warnings policy)  |
+| `npm run format`                | Format code with Prettier            |
+| `npm test`                      | Run tests (Vitest)                   |
+| `npm run test:coverage`         | Tests with coverage report           |
 
 > **Note:** No file watcher or auto-restart is used. The bot maintains persistent SSE and long-polling connections — automatic restarts would break them mid-task. After making changes, restart manually with `npm run dev`.
 
@@ -199,6 +200,10 @@ npm run dev
 
 - Make sure the CLI binary has execute permission: `chmod +x $(which opencode-telegram)`
 - Check that the config directory is writable: `~/.config/opencode-telegram-bot/`
+
+## Contributing
+
+Please follow commit and release note conventions in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
