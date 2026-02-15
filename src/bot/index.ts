@@ -2,6 +2,8 @@ import { Bot, Context, InputFile, NextFunction } from "grammy";
 import { promises as fs } from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { SocksProxyAgent } from "socks-proxy-agent";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import { config } from "../config.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { BOT_COMMANDS } from "./commands/definitions.js";
@@ -332,7 +334,29 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
 }
 
 export function createBot(): Bot<Context> {
-  const bot = new Bot(config.telegram.token);
+  const botOptions: ConstructorParameters<typeof Bot<Context>>[1] = {};
+
+  if (config.telegram.proxyUrl) {
+    const proxyUrl = config.telegram.proxyUrl;
+    let agent;
+
+    if (proxyUrl.startsWith("socks")) {
+      agent = new SocksProxyAgent(proxyUrl);
+      logger.info(`[Bot] Using SOCKS proxy: ${proxyUrl.replace(/\/\/.*@/, "//***@")}`);
+    } else {
+      agent = new HttpsProxyAgent(proxyUrl);
+      logger.info(`[Bot] Using HTTP/HTTPS proxy: ${proxyUrl.replace(/\/\/.*@/, "//***@")}`);
+    }
+
+    botOptions.client = {
+      baseFetchConfig: {
+        agent,
+        compress: true,
+      },
+    };
+  }
+
+  const bot = new Bot(config.telegram.token, botOptions);
 
   // Heartbeat for diagnostics: verify the event loop is not blocked
   let heartbeatCounter = 0;

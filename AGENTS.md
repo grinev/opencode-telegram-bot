@@ -242,10 +242,6 @@ TELEGRAM_ALLOWED_USER_ID=123456789
 # OpenCode API (optional)
 # OPENCODE_API_URL=http://localhost:4096
 
-# OpenCode Server auth (optional)
-# OPENCODE_SERVER_USERNAME=opencode
-# OPENCODE_SERVER_PASSWORD=
-
 # Default model (required)
 OPENCODE_MODEL_PROVIDER=opencode
 OPENCODE_MODEL_ID=big-pickle
@@ -267,11 +263,10 @@ OPENCODE_MODEL_ID=big-pickle
 | -------------------------- | --------------------------------- | -------- | ----------------------- |
 | `TELEGRAM_BOT_TOKEN`       | Bot token from @BotFather         | Yes      | -                       |
 | `TELEGRAM_ALLOWED_USER_ID` | Allowed Telegram user ID          | Yes      | -                       |
+| `TELEGRAM_PROXY_URL`       | Proxy URL for Telegram API        | No       | -                       |
 | `OPENCODE_MODEL_PROVIDER`  | Default model provider            | Yes      | -                       |
 | `OPENCODE_MODEL_ID`        | Default model ID                  | Yes      | -                       |
 | `OPENCODE_API_URL`         | OpenCode API URL                  | No       | `http://localhost:4096` |
-| `OPENCODE_SERVER_USERNAME` | OpenCode auth username            | No       | `opencode`              |
-| `OPENCODE_SERVER_PASSWORD` | OpenCode auth password            | No       | empty                   |
 | `LOG_LEVEL`                | Logging level                     | No       | `info`                  |
 | `SESSIONS_LIST_LIMIT`      | Max sessions shown in `/sessions` | No       | `10`                    |
 | `BOT_LOCALE`               | Bot locale (`en` or `ru`)         | No       | `en`                    |
