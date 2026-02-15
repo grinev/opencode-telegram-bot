@@ -240,6 +240,11 @@ export const en = {
     "Application is not configured yet. Starting wizard...\n",
   "runtime.wizard.tty_required":
     "Interactive wizard requires a TTY terminal. Run `opencode-telegram config` in an interactive shell.",
+  "runtime.wizard.server_auth_header": "--- Server Authentication (optional) ---",
+  "runtime.wizard.ask_server_username":
+    "Enter OpenCode server username (optional, press Enter for default: opencode).\n> ",
+  "runtime.wizard.ask_server_password":
+    "Enter OpenCode server password (optional, press Enter to skip).\n> ",
 
   "cli.usage":
     "Usage:\n  opencode-telegram [start] [--mode sources|installed]\n  opencode-telegram status\n  opencode-telegram stop\n  opencode-telegram config\n\nNotes:\n  - No command defaults to `start`\n  - `--mode` is currently supported for `start` only",

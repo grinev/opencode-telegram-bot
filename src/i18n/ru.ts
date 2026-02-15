@@ -242,6 +242,11 @@ export const ru: I18nDictionary = {
     "Приложение еще не сконфигурировано. Запускаю wizard...\n",
   "runtime.wizard.tty_required":
     "Интерактивный wizard требует TTY-терминал. Запустите `opencode-telegram config` в интерактивной оболочке.",
+  "runtime.wizard.server_auth_header": "--- Аутентификация сервера (опционально) ---",
+  "runtime.wizard.ask_server_username":
+    "Введите имя пользователя OpenCode сервера (опционально, нажмите Enter для значения по умолчанию: opencode).\n> ",
+  "runtime.wizard.ask_server_password":
+    "Введите пароль OpenCode сервера (опционально, нажмите Enter чтобы пропустить).\n> ",
 
   "cli.usage":
     "Использование:\n  opencode-telegram [start] [--mode sources|installed]\n  opencode-telegram status\n  opencode-telegram stop\n  opencode-telegram config\n\nЗаметки:\n  - Без команды по умолчанию используется `start`\n  - `--mode` сейчас поддерживается только для `start`",

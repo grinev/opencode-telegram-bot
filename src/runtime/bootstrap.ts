@@ -25,12 +25,16 @@ interface WizardCollectedValues {
   token: string;
   allowedUserId: string;
   apiUrl?: string;
+  serverUsername?: string;
+  serverPassword?: string;
 }
 
 export interface WizardEnvValues {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_ALLOWED_USER_ID: string;
   OPENCODE_API_URL?: string;
+  OPENCODE_SERVER_USERNAME?: string;
+  OPENCODE_SERVER_PASSWORD?: string;
   OPENCODE_MODEL_PROVIDER: string;
   OPENCODE_MODEL_ID: string;
 }
@@ -103,6 +107,8 @@ export function buildEnvFileContent(existingContent: string, values: WizardEnvVa
     ["TELEGRAM_BOT_TOKEN", values.TELEGRAM_BOT_TOKEN],
     ["TELEGRAM_ALLOWED_USER_ID", values.TELEGRAM_ALLOWED_USER_ID],
     ["OPENCODE_API_URL", values.OPENCODE_API_URL],
+    ["OPENCODE_SERVER_USERNAME", values.OPENCODE_SERVER_USERNAME],
+    ["OPENCODE_SERVER_PASSWORD", values.OPENCODE_SERVER_PASSWORD],
     ["OPENCODE_MODEL_PROVIDER", values.OPENCODE_MODEL_PROVIDER],
     ["OPENCODE_MODEL_ID", values.OPENCODE_MODEL_ID],
   ];
@@ -289,6 +295,28 @@ async function askApiUrl(): Promise<string | undefined> {
   }
 }
 
+async function askServerUsername(): Promise<string | undefined> {
+  const prompt = t("runtime.wizard.ask_server_username");
+  const username = await askVisible(prompt);
+
+  if (!username) {
+    return undefined;
+  }
+
+  return username;
+}
+
+async function askServerPassword(): Promise<string | undefined> {
+  const prompt = t("runtime.wizard.ask_server_password");
+  const password = await askHidden(prompt);
+
+  if (!password) {
+    return undefined;
+  }
+
+  return password;
+}
+
 async function collectWizardValues(): Promise<WizardCollectedValues> {
   process.stdout.write(t("runtime.wizard.start"));
   process.stdout.write("\n");
@@ -298,11 +326,20 @@ async function collectWizardValues(): Promise<WizardCollectedValues> {
   const apiUrl = await askApiUrl();
 
   process.stdout.write("\n");
+  process.stdout.write(t("runtime.wizard.server_auth_header"));
+  process.stdout.write("\n");
+
+  const serverUsername = await askServerUsername();
+  const serverPassword = await askServerPassword();
+
+  process.stdout.write("\n");
 
   return {
     token,
     allowedUserId,
     apiUrl,
+    serverUsername,
+    serverPassword,
   };
 }
 
@@ -340,6 +377,8 @@ async function runWizardAndPersist(runtimePaths: RuntimePaths): Promise<void> {
     TELEGRAM_BOT_TOKEN: wizardValues.token,
     TELEGRAM_ALLOWED_USER_ID: wizardValues.allowedUserId,
     OPENCODE_API_URL: wizardValues.apiUrl,
+    OPENCODE_SERVER_USERNAME: wizardValues.serverUsername,
+    OPENCODE_SERVER_PASSWORD: wizardValues.serverPassword,
     OPENCODE_MODEL_PROVIDER: provider,
     OPENCODE_MODEL_ID: modelId,
   };
