@@ -124,6 +124,7 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `OPENCODE_MODEL_ID`        | Default model ID                             |   Yes    | `big-pickle`            |
 | `BOT_LOCALE`               | Bot UI language (`en` or `ru`)               |    No    | `en`                    |
 | `SESSIONS_LIST_LIMIT`      | Max sessions shown in `/sessions`            |    No    | `10`                    |
+| `HIDE_SUBSESSIONS`         | Hide child sessions from `/sessions` list    |    No    | `false`                 |
 | `CODE_FILE_MAX_SIZE_KB`    | Max file size (KB) to send as document       |    No    | `100`                   |
 | `LOG_LEVEL`                | Log level (`debug`, `info`, `warn`, `error`) |    No    | `info`                  |
 

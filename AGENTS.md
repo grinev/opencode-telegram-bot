@@ -255,6 +255,7 @@ OPENCODE_MODEL_ID=big-pickle
 
 # Bot options (optional)
 # SESSIONS_LIST_LIMIT=10
+# HIDE_SUBSESSIONS=false  # Hide child sessions from /sessions list
 # BOT_LOCALE=en    # en or ru
 
 # File output options (optional)
@@ -274,6 +275,7 @@ OPENCODE_MODEL_ID=big-pickle
 | `OPENCODE_SERVER_PASSWORD` | OpenCode auth password            | No       | empty                   |
 | `LOG_LEVEL`                | Logging level                     | No       | `info`                  |
 | `SESSIONS_LIST_LIMIT`      | Max sessions shown in `/sessions` | No       | `10`                    |
+| `HIDE_SUBSESSIONS`         | Hide child sessions from list     | No       | `false`                 |
 | `BOT_LOCALE`               | Bot locale (`en` or `ru`)         | No       | `en`                    |
 | `CODE_FILE_MAX_SIZE_KB`    | Max code file size to send        | No       | `100`                   |
 

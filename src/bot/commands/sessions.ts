@@ -36,7 +36,23 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
       logger.debug(`[Sessions] Session: ${session.title} | ${session.directory}`);
     });
 
-    if (sessions.length === 0) {
+    let filteredSessions = sessions;
+    if (config.bot.hideSubsessions) {
+      filteredSessions = sessions.filter((session) => {
+        const isSubsession = (session as { parentID?: string }).parentID != null;
+        if (isSubsession) {
+          logger.debug(
+            `[Sessions] Filtering out subsession: ${session.title} (parentID: ${(session as { parentID?: string }).parentID})`,
+          );
+        }
+        return !isSubsession;
+      });
+      logger.debug(
+        `[Sessions] Filtered ${sessions.length - filteredSessions.length} subsessions, showing ${filteredSessions.length} top-level sessions`,
+      );
+    }
+
+    if (filteredSessions.length === 0) {
       await ctx.reply(t("sessions.empty"));
       return;
     }
@@ -44,7 +60,7 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
     const keyboard = new InlineKeyboard();
     const localeForDate = getLocale() === "ru" ? "ru-RU" : "en-US";
 
-    sessions.forEach((session, index) => {
+    filteredSessions.forEach((session, index) => {
       const date = new Date(session.time.created).toLocaleDateString(localeForDate);
       const label = `${index + 1}. ${session.title} (${date})`;
       keyboard.text(label, `session:${session.id}`).row();
