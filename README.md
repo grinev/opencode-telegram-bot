@@ -117,6 +117,7 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | -------------------------- | -------------------------------------------- | :------: | ----------------------- |
 | `TELEGRAM_BOT_TOKEN`       | Bot token from @BotFather                    |   Yes    | —                       |
 | `TELEGRAM_ALLOWED_USER_ID` | Your numeric Telegram user ID                |   Yes    | —                       |
+| `TELEGRAM_PROXY_URL`       | Proxy URL for Telegram API (SOCKS5/HTTP)     |    No    | —                       |
 | `OPENCODE_API_URL`         | OpenCode server URL                          |    No    | `http://localhost:4096` |
 | `OPENCODE_SERVER_USERNAME` | Server auth username                         |    No    | `opencode`              |
 | `OPENCODE_SERVER_PASSWORD` | Server auth password                         |    No    | —                       |

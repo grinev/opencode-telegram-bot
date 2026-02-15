@@ -267,6 +267,7 @@ OPENCODE_MODEL_ID=big-pickle
 | -------------------------- | --------------------------------- | -------- | ----------------------- |
 | `TELEGRAM_BOT_TOKEN`       | Bot token from @BotFather         | Yes      | -                       |
 | `TELEGRAM_ALLOWED_USER_ID` | Allowed Telegram user ID          | Yes      | -                       |
+| `TELEGRAM_PROXY_URL`       | Proxy URL for Telegram API        | No       | -                       |
 | `OPENCODE_MODEL_PROVIDER`  | Default model provider            | Yes      | -                       |
 | `OPENCODE_MODEL_ID`        | Default model ID                  | Yes      | -                       |
 | `OPENCODE_API_URL`         | OpenCode API URL                  | No       | `http://localhost:4096` |
