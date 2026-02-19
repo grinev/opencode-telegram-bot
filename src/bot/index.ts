@@ -6,6 +6,7 @@ import { SocksProxyAgent } from "socks-proxy-agent";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import { config } from "../config.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { interactionGuardMiddleware } from "./middleware/interaction-guard.js";
 import { BOT_COMMANDS } from "./commands/definitions.js";
 import { startCommand } from "./commands/start.js";
 import { helpCommand } from "./commands/help.js";
@@ -36,6 +37,7 @@ import {
 } from "./handlers/context.js";
 import { questionManager } from "../question/manager.js";
 import { permissionManager } from "../permission/manager.js";
+import { interactionManager } from "../interaction/manager.js";
 import { keyboardManager } from "../keyboard/manager.js";
 import { stopEventListening, subscribeToEvents } from "../opencode/events.js";
 import { summaryAggregator } from "../summary/aggregator.js";
@@ -355,6 +357,7 @@ async function resetMismatchedSessionContext(): Promise<void> {
   summaryAggregator.clear();
   questionManager.clear();
   permissionManager.clear();
+  interactionManager.clear("session_mismatch_reset");
   clearSession();
   keyboardManager.clearContext();
 
@@ -430,6 +433,7 @@ export function createBot(): Bot<Context> {
 
   bot.use(authMiddleware);
   bot.use(ensureCommandsInitialized);
+  bot.use(interactionGuardMiddleware);
 
   bot.command("start", startCommand);
   bot.command("help", helpCommand);

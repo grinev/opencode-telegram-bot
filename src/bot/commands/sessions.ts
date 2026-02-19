@@ -3,6 +3,7 @@ import { InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
+import { interactionManager } from "../../interaction/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { logger } from "../../utils/logger.js";
@@ -95,6 +96,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       directory: currentProject.worktree,
     };
     setCurrentSession(sessionInfo);
+    interactionManager.clear("session_switched");
 
     await ctx.answerCallbackQuery();
 

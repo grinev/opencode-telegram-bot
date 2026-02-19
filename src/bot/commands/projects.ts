@@ -5,6 +5,7 @@ import { getProjects } from "../../project/manager.js";
 import { syncSessionDirectoryCache } from "../../session/cache-manager.js";
 import { clearSession } from "../../session/manager.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
+import { interactionManager } from "../../interaction/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { getStoredAgent } from "../../agent/manager.js";
@@ -90,6 +91,7 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     setCurrentProject(selectedProject);
     clearSession();
     summaryAggregator.clear();
+    interactionManager.clear("project_switched");
 
     // Clear pinned message when switching projects
     try {

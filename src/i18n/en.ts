@@ -19,6 +19,13 @@ export const en = {
   "error.context_button": "❌ Failed to process context button",
   "error.generic": "🔴 Something went wrong.",
 
+  "interaction.blocked.expired": "⚠️ This interaction has expired. Please start it again.",
+  "interaction.blocked.expected_callback": "⚠️ Please use the inline buttons for this step.",
+  "interaction.blocked.expected_text": "⚠️ Please send a text message for this step.",
+  "interaction.blocked.expected_command": "⚠️ Please send a command for this step.",
+  "interaction.blocked.command_not_allowed":
+    "⚠️ This command is not available in the current step.",
+
   "common.unknown": "unknown",
   "common.unknown_error": "unknown error",
 
