@@ -20,11 +20,16 @@ export const en = {
   "error.generic": "🔴 Something went wrong.",
 
   "interaction.blocked.expired": "⚠️ This interaction has expired. Please start it again.",
-  "interaction.blocked.expected_callback": "⚠️ Please use the inline buttons for this step.",
+  "interaction.blocked.expected_callback":
+    "⚠️ Please use the inline buttons for this step or tap Cancel.",
   "interaction.blocked.expected_text": "⚠️ Please send a text message for this step.",
   "interaction.blocked.expected_command": "⚠️ Please send a command for this step.",
   "interaction.blocked.command_not_allowed":
     "⚠️ This command is not available in the current step.",
+
+  "inline.button.cancel": "❌ Cancel",
+  "inline.inactive_callback": "This menu is inactive",
+  "inline.cancelled_callback": "Cancelled",
 
   "common.unknown": "unknown",
   "common.unknown_error": "unknown error",
@@ -160,7 +165,6 @@ export const en = {
   "variant.menu.error": "🔴 Failed to get variants list",
 
   "context.button.confirm": "✅ Yes, compact context",
-  "context.button.cancel": "❌ Cancel",
   "context.no_active_session": "⚠️ No active session. Create a session with /new",
   "context.confirm_text":
     '📊 Context compaction for session "{title}"\n\nThis will reduce context usage by removing old messages from history. Current task will not be interrupted.\n\nContinue?',
@@ -169,7 +173,6 @@ export const en = {
   "context.progress": "⏳ Compacting context...",
   "context.error": "❌ Context compaction failed",
   "context.success": "✅ Context compacted successfully",
-  "context.callback_cancelled": "Cancelled",
 
   "permission.inactive_callback": "Permission request is inactive",
   "permission.processing_error_callback": "Processing error",

@@ -30,11 +30,8 @@ import { handlePermissionCallback, showPermissionRequest } from "./handlers/perm
 import { handleAgentSelect, showAgentSelectionMenu } from "./handlers/agent.js";
 import { handleModelSelect, showModelSelectionMenu } from "./handlers/model.js";
 import { handleVariantSelect, showVariantSelectionMenu } from "./handlers/variant.js";
-import {
-  handleContextButtonPress,
-  handleCompactConfirm,
-  handleCompactCancel,
-} from "./handlers/context.js";
+import { handleContextButtonPress, handleCompactConfirm } from "./handlers/context.js";
+import { handleInlineMenuCancel } from "./handlers/inline-menu.js";
 import { questionManager } from "../question/manager.js";
 import { permissionManager } from "../permission/manager.js";
 import { interactionManager } from "../interaction/manager.js";
@@ -453,6 +450,7 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Callback context: from=${ctx.from?.id}, chat=${ctx.chat?.id}`);
 
     try {
+      const handledInlineCancel = await handleInlineMenuCancel(ctx);
       const handledSession = await handleSessionSelect(ctx);
       const handledProject = await handleProjectSelect(ctx);
       const handledQuestion = await handleQuestionCallback(ctx);
@@ -461,14 +459,14 @@ export function createBot(): Bot<Context> {
       const handledModel = await handleModelSelect(ctx);
       const handledVariant = await handleVariantSelect(ctx);
       const handledCompactConfirm = await handleCompactConfirm(ctx);
-      const handledCompactCancel = await handleCompactCancel(ctx);
       const handledRenameCancel = await handleRenameCancel(ctx);
 
       logger.debug(
-        `[Bot] Callback handled: session=${handledSession}, project=${handledProject}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compact=${handledCompactConfirm || handledCompactCancel}, rename=${handledRenameCancel}`,
+        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, rename=${handledRenameCancel}`,
       );
 
       if (
+        !handledInlineCancel &&
         !handledSession &&
         !handledProject &&
         !handledQuestion &&
@@ -477,7 +475,6 @@ export function createBot(): Bot<Context> {
         !handledModel &&
         !handledVariant &&
         !handledCompactConfirm &&
-        !handledCompactCancel &&
         !handledRenameCancel
       ) {
         logger.debug("Unknown callback query:", ctx.callbackQuery?.data);

@@ -5,13 +5,17 @@ import { getProjects } from "../../project/manager.js";
 import { syncSessionDirectoryCache } from "../../session/cache-manager.js";
 import { clearSession } from "../../session/manager.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
-import { interactionManager } from "../../interaction/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { getStoredAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
+import {
+  clearActiveInlineMenu,
+  ensureActiveInlineMenu,
+  replyWithInlineMenu,
+} from "../handlers/inline-menu.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 
@@ -54,14 +58,17 @@ export async function projectsCommand(ctx: CommandContext<Context>) {
       keyboard.text(labelWithCheck, `project:${project.id}`).row();
     });
 
-    if (currentProject) {
-      const projectName = currentProject.name || currentProject.worktree;
-      await ctx.reply(t("projects.select_with_current", { project: projectName }), {
-        reply_markup: keyboard,
-      });
-    } else {
-      await ctx.reply(t("projects.select"), { reply_markup: keyboard });
-    }
+    const text = currentProject
+      ? t("projects.select_with_current", {
+          project: currentProject.name || currentProject.worktree,
+        })
+      : t("projects.select");
+
+    await replyWithInlineMenu(ctx, {
+      menuKind: "project",
+      text,
+      keyboard,
+    });
   } catch (error) {
     logger.error("[Bot] Error fetching projects:", error);
     await ctx.reply(t("projects.fetch_error"));
@@ -75,6 +82,11 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
   }
 
   const projectId = callbackQuery.data.replace("project:", "");
+
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "project");
+  if (!isActiveMenu) {
+    return true;
+  }
 
   try {
     const projects = await getProjects();
@@ -91,7 +103,7 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     setCurrentProject(selectedProject);
     clearSession();
     summaryAggregator.clear();
-    interactionManager.clear("project_switched");
+    clearActiveInlineMenu("project_switched");
 
     // Clear pinned message when switching projects
     try {
@@ -128,6 +140,7 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
 
     await ctx.deleteMessage();
   } catch (error) {
+    clearActiveInlineMenu("project_select_error");
     logger.error("[Bot] Error selecting project:", error);
     await ctx.answerCallbackQuery();
     await ctx.reply(t("projects.select_error"));

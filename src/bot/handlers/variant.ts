@@ -12,6 +12,11 @@ import { logger } from "../../utils/logger.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
+import {
+  clearActiveInlineMenu,
+  ensureActiveInlineMenu,
+  replyWithInlineMenu,
+} from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
 
 /**
@@ -24,6 +29,11 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
 
   if (!callbackQuery?.data || !callbackQuery.data.startsWith("variant:")) {
     return false;
+  }
+
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "variant");
+  if (!isActiveMenu) {
+    return true;
   }
 
   logger.debug(`[VariantHandler] Received callback: ${callbackQuery.data}`);
@@ -82,6 +92,8 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
     // Send confirmation message with updated keyboard
     const displayName = formatVariantForDisplay(variantId);
 
+    clearActiveInlineMenu("variant_selected");
+
     await ctx.answerCallbackQuery({ text: t("variant.changed_callback", { name: displayName }) });
     await ctx.reply(t("variant.changed_message", { name: displayName }), {
       reply_markup: keyboard,
@@ -92,6 +104,7 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
 
     return true;
   } catch (err) {
+    clearActiveInlineMenu("variant_select_error");
     logger.error("[VariantHandler] Error handling variant select:", err);
     await ctx.answerCallbackQuery({ text: t("variant.change_error_callback") }).catch(() => {});
     return false;
@@ -168,7 +181,11 @@ export async function showVariantSelectionMenu(ctx: Context): Promise<void> {
     const displayName = formatVariantForDisplay(currentVariant);
     const text = t("variant.menu.current", { name: displayName });
 
-    await ctx.reply(text, { reply_markup: keyboard });
+    await replyWithInlineMenu(ctx, {
+      menuKind: "variant",
+      text,
+      keyboard,
+    });
   } catch (err) {
     logger.error("[VariantHandler] Error showing variant menu:", err);
     await ctx.reply(t("variant.menu.error"));

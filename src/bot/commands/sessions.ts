@@ -3,9 +3,13 @@ import { InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
-import { interactionManager } from "../../interaction/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
+import {
+  clearActiveInlineMenu,
+  ensureActiveInlineMenu,
+  replyWithInlineMenu,
+} from "../handlers/inline-menu.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
@@ -51,8 +55,10 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
       keyboard.text(label, `session:${session.id}`).row();
     });
 
-    await ctx.reply(t("sessions.select"), {
-      reply_markup: keyboard,
+    await replyWithInlineMenu(ctx, {
+      menuKind: "session",
+      text: t("sessions.select"),
+      keyboard,
     });
   } catch (error) {
     logger.error("[Sessions] Error fetching sessions:", error);
@@ -68,10 +74,16 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
 
   const sessionId = callbackQuery.data.replace("session:", "");
 
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "session");
+  if (!isActiveMenu) {
+    return true;
+  }
+
   try {
     const currentProject = getCurrentProject();
 
     if (!currentProject) {
+      clearActiveInlineMenu("session_select_project_missing");
       await ctx.answerCallbackQuery();
       await ctx.reply(t("sessions.select_project_first"));
       return true;
@@ -96,7 +108,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       directory: currentProject.worktree,
     };
     setCurrentSession(sessionInfo);
-    interactionManager.clear("session_switched");
+    clearActiveInlineMenu("session_switched");
 
     await ctx.answerCallbackQuery();
 
@@ -178,6 +190,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
 
     await ctx.deleteMessage();
   } catch (error) {
+    clearActiveInlineMenu("session_select_error");
     logger.error("[Sessions] Error selecting session:", error);
     await ctx.answerCallbackQuery();
     await ctx.reply(t("sessions.select_error"));
