@@ -18,6 +18,8 @@ No open ports, no exposed APIs. The bot runs on your machine alongside OpenCode 
 ## Features
 
 - **Remote coding** — send prompts to OpenCode from anywhere, receive complete results with code sent as files
+- **Media support** — send photos, documents, videos, audio, and voice messages directly to the agent
+- **Voice transcription** — optionally auto-transcribe voice messages via a configurable shell command before sending to the agent
 - **Session management** — create new sessions or continue existing ones, just like in the TUI
 - **Live status** — pinned message with current project, model, context usage, and changed files list, updated in real time
 - **Model switching** — pick any model from your OpenCode favorites directly in the chat
@@ -126,6 +128,8 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `SESSIONS_LIST_LIMIT`      | Max sessions shown in `/sessions`            |    No    | `10`                    |
 | `CODE_FILE_MAX_SIZE_KB`    | Max file size (KB) to send as document       |    No    | `100`                   |
 | `LOG_LEVEL`                | Log level (`debug`, `info`, `warn`, `error`) |    No    | `info`                  |
+| `MEDIA_DIR`                | Directory to store received media files      |    No    | system temp dir         |
+| `TRANSCRIBE_VOICE_COMMAND` | Shell command to transcribe voice messages   |    No    | —                       |
 
 > **Keep your `.env` file private.** It contains your bot token. Never commit it to version control.
 
@@ -140,6 +144,19 @@ The bot picks up your **favorite models** from OpenCode. To add a model to favor
 These favorites will appear in the `/model` command menu in Telegram.
 
 A free model (`opencode/big-pickle`) is configured as the default fallback — if you haven't set up any favorites yet, the bot will use it automatically.
+
+### Voice Transcription
+
+Voice messages are saved to `MEDIA_DIR` and optionally auto-transcribed before being sent to the agent. Configure a shell command via `TRANSCRIBE_VOICE_COMMAND` — the placeholder `{voice-message-file}` is replaced with the absolute path to the downloaded audio file. The command must print the transcript to stdout.
+
+```bash
+# .env
+TRANSCRIBE_VOICE_COMMAND=your-transcribe.sh {voice-message-file}
+```
+
+An Example transcription script using `whisper.cpp` can be found [here](https://gist.github.com/GammelSami/e1e895a42d036d28dd6286df5b3fbb81).
+
+If transcription fails or is not configured, the bot passes the file path and error details to the agent and user. Use `TRANSCRIBE_VOICE_COMMAND=false` to only pass the file path to your agent without attempting transcription.
 
 ## Security
 

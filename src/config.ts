@@ -1,4 +1,6 @@
 import dotenv from "dotenv";
+import * as os from "os";
+import * as path from "path";
 import { getRuntimePaths } from "./runtime/paths.js";
 
 const runtimePaths = getRuntimePaths();
@@ -48,6 +50,18 @@ function getOptionalLocaleEnvVar(key: string, defaultValue: "en" | "ru"): "en" |
   return defaultValue;
 }
 
+function getDefaultMediaDir(): string {
+  const envMediaDir = getEnvVar("MEDIA_DIR", false);
+  if (envMediaDir) {
+    return envMediaDir;
+  }
+
+  const tmpDir = os.tmpdir();
+  return path.join(tmpDir, "opencode-telegram-bot", "media");
+}
+
+export const envFilePath = runtimePaths.envFilePath;
+
 export const config = {
   telegram: {
     token: getEnvVar("TELEGRAM_BOT_TOKEN"),
@@ -71,5 +85,11 @@ export const config = {
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),
+  },
+  media: {
+    dir: getDefaultMediaDir(),
+  },
+  transcription: {
+    command: getEnvVar("TRANSCRIBE_VOICE_COMMAND", false) || "",
   },
 };

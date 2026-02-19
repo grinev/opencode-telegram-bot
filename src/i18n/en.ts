@@ -40,6 +40,12 @@ export const en = {
     "⚠️ Active session does not match the selected project, so it was reset. Use /sessions to pick one or /new to create a new session.",
   "bot.prompt_send_error_detailed": "🔴 Failed to send request.\n\nDetails: {details}",
   "bot.prompt_send_error": "🔴 An error occurred while sending request to OpenCode.",
+  "bot.media_error": "🔴 Failed to process media file.",
+  "bot.voice_transcribing": "🎤 Transcribing...",
+  "bot.voice_not_configured":
+    "🎤 Voice message received: `{filePath}`\n\nℹ️ Configure `TRANSCRIBE_VOICE_COMMAND` in `{envPath}` to enable auto-transcription.\n[How to set up voice transcription](https://github.com/grinev/opencode-telegram-bot#voice-transcription)",
+  "bot.voice_transcription_failed":
+    "🎤 Voice message received: `{filePath}`\n\n🔴 Telegram bot tried to auto-transcribe a voice message, but `TRANSCRIBE_VOICE_COMMAND` failed. Check `{envPath}`\n\n```\n{details}\n```",
 
   "status.header_running": "🟢 **OpenCode Server is running**",
   "status.health.healthy": "Healthy",

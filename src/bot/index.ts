@@ -2,7 +2,7 @@ import { Bot, Context, InputFile, NextFunction } from "grammy";
 import { promises as fs } from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { config } from "../config.js";
+import { config, envFilePath } from "../config.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { BOT_COMMANDS } from "./commands/definitions.js";
 import { startCommand } from "./commands/start.js";
@@ -49,6 +49,7 @@ import { logger } from "../utils/logger.js";
 import { safeBackgroundTask } from "../utils/safe-background-task.js";
 import { formatErrorDetails } from "../utils/error-format.js";
 import { pinnedMessageManager } from "../pinned/manager.js";
+import { saveTelegramFile, transcribeAudioFile } from "../media/manager.js";
 import { t } from "../i18n/index.js";
 
 let botInstance: Bot<Context> | null = null;
@@ -728,6 +729,281 @@ export function createBot(): Bot<Context> {
 
     logger.debug("[Bot] message:text handler completed (prompt sent in background)");
   });
+
+  async function handleMediaMessage(
+    ctx: Context & {
+      message?: {
+        photo?: { file_id: string }[];
+        document?: { file_id: string; file_name?: string };
+        video?: { file_id: string; file_name?: string };
+        audio?: { file_id: string; file_name?: string };
+        voice?: { file_id: string };
+        caption?: string;
+      };
+    },
+    mediaType: "photo" | "document" | "video" | "audio" | "voice",
+  ): Promise<void> {
+    const message = ctx.message;
+    if (!message || !ctx.chat) return;
+
+    let fileId: string | undefined;
+    let fileName = `file_${Date.now()}`;
+
+    switch (mediaType) {
+      case "photo":
+        const photos = message.photo;
+        if (photos && photos.length > 0) {
+          fileId = photos[photos.length - 1].file_id;
+          fileName = `photo_${Date.now()}.jpg`;
+        }
+        break;
+      case "document":
+        if (message.document) {
+          fileId = message.document.file_id;
+          fileName = message.document.file_name || `document_${Date.now()}`;
+        }
+        break;
+      case "video":
+        if (message.video) {
+          fileId = message.video.file_id;
+          fileName = message.video.file_name || `video_${Date.now()}.mp4`;
+        }
+        break;
+      case "audio":
+        if (message.audio) {
+          fileId = message.audio.file_id;
+          fileName = message.audio.file_name || `audio_${Date.now()}.mp3`;
+        }
+        break;
+      case "voice":
+        if (message.voice) {
+          fileId = message.voice.file_id;
+          fileName = `voice_${Date.now()}.ogg`;
+        }
+        break;
+    }
+
+    if (!fileId) {
+      await ctx.reply(t("bot.media_error"));
+      return;
+    }
+
+    const caption = message.caption || "";
+
+    const currentProject = getCurrentProject();
+    if (!currentProject) {
+      await ctx.reply(t("bot.project_not_selected"));
+      return;
+    }
+
+    botInstance = bot;
+    chatIdInstance = ctx.chat.id;
+
+    if (!pinnedMessageManager.isInitialized()) {
+      pinnedMessageManager.initialize(bot.api, ctx.chat.id);
+    }
+
+    keyboardManager.initialize(bot.api, ctx.chat.id);
+
+    let currentSession = getCurrentSession();
+
+    if (currentSession && currentSession.directory !== currentProject.worktree) {
+      logger.warn(
+        `[Bot] Session/project mismatch detected. sessionDirectory=${currentSession.directory}, projectDirectory=${currentProject.worktree}. Resetting session context.`,
+      );
+      await resetMismatchedSessionContext();
+      await ctx.reply(t("bot.session_reset_project_mismatch"));
+      return;
+    }
+
+    if (!currentSession) {
+      await ctx.reply(t("bot.creating_session"));
+
+      const { data: session, error } = await opencodeClient.session.create({
+        directory: currentProject.worktree,
+      });
+
+      if (error || !session) {
+        await ctx.reply(t("bot.create_session_error"));
+        return;
+      }
+
+      logger.info(
+        `[Bot] Created new session: id=${session.id}, title="${session.title}", project=${currentProject.worktree}`,
+      );
+
+      currentSession = {
+        id: session.id,
+        title: session.title,
+        directory: currentProject.worktree,
+      };
+
+      setCurrentSession(currentSession);
+      await ingestSessionInfoForCache(session);
+
+      try {
+        await pinnedMessageManager.onSessionChange(session.id, session.title);
+      } catch (err) {
+        logger.error("[Bot] Error creating pinned message for new session:", err);
+      }
+
+      const currentAgent = getStoredAgent();
+      const currentModel = getStoredModel();
+      const contextInfo = pinnedMessageManager.getContextInfo();
+      const variantName = formatVariantForButton(currentModel.variant || "default");
+      const keyboard = createMainKeyboard(
+        currentAgent,
+        currentModel,
+        contextInfo ?? undefined,
+        variantName,
+      );
+
+      await ctx.reply(t("bot.session_created", { title: session.title }), {
+        reply_markup: keyboard,
+      });
+    } else {
+      logger.info(
+        `[Bot] Using existing session: id=${currentSession.id}, title="${currentSession.title}"`,
+      );
+
+      if (!pinnedMessageManager.getState().messageId) {
+        try {
+          await pinnedMessageManager.onSessionChange(currentSession.id, currentSession.title);
+        } catch (err) {
+          logger.error("[Bot] Error creating pinned message for existing session:", err);
+        }
+      }
+    }
+
+    await ensureEventSubscription(currentSession.directory);
+
+    summaryAggregator.setSession(currentSession.id);
+    summaryAggregator.setBotAndChatId(bot, ctx.chat.id);
+
+    const sessionIsBusy = await isSessionBusy(currentSession.id, currentSession.directory);
+    if (sessionIsBusy) {
+      logger.info(`[Bot] Ignoring new prompt: session ${currentSession.id} is busy`);
+      await ctx.reply(t("bot.session_busy"));
+      return;
+    }
+
+    try {
+      const saved = await saveTelegramFile(ctx.api, fileId, fileName);
+
+      const currentAgent = getStoredAgent();
+      const storedModel = getStoredModel();
+
+      const parts: Array<
+        | { type: "text"; text: string }
+        | { type: "file"; url: string; mime: string; filename?: string }
+      > = [];
+
+      if (caption) {
+        parts.push({ type: "text", text: caption });
+      }
+
+      // Handle voice messages with optional transcription
+      if (mediaType === "voice") {
+        if (config.transcription.command && config.transcription.command !== "false") {
+          await ctx.reply(t("bot.voice_transcribing"));
+        }
+        const transcription = await transcribeAudioFile(saved.filePath);
+        if (transcription.success && transcription.transcript) {
+          parts.push({
+            type: "text",
+            text: `[voice message, auto-transcribed by Telegram bot] ${transcription.transcript}`,
+          });
+        } else if (transcription.notConfigured) {
+          // TRANSCRIBE_VOICE_COMMAND not set — same message to user AND LLM
+          const msg = t("bot.voice_not_configured", {
+            filePath: saved.filePath,
+            envPath: envFilePath,
+          });
+          await ctx.reply(msg, { parse_mode: "Markdown" });
+          parts.push({ type: "text", text: msg });
+        } else {
+          // Command failed — same message to user AND LLM
+          logger.info(`[Bot] Transcription failed: ${transcription.error}`);
+          const failureDetails = transcription.details || transcription.error || "unknown";
+          const msg = t("bot.voice_transcription_failed", {
+            filePath: saved.filePath,
+            envPath: envFilePath,
+            details: failureDetails,
+          });
+          await ctx.reply(msg, { parse_mode: "Markdown" });
+          parts.push({ type: "text", text: msg });
+        }
+      } else {
+        parts.push({
+          type: "file",
+          url: saved.fileUrl,
+          mime: saved.mimeType,
+          filename: saved.fileName,
+        });
+      }
+
+      const promptOptions: {
+        sessionID: string;
+        directory: string;
+        parts: typeof parts;
+        model?: { providerID: string; modelID: string };
+        agent?: string;
+        variant?: string;
+      } = {
+        sessionID: currentSession.id,
+        directory: currentSession.directory,
+        parts,
+        agent: currentAgent,
+      };
+
+      if (storedModel.providerID && storedModel.modelID) {
+        promptOptions.model = {
+          providerID: storedModel.providerID,
+          modelID: storedModel.modelID,
+        };
+
+        if (storedModel.variant) {
+          promptOptions.variant = storedModel.variant;
+        }
+      }
+
+      logger.info(
+        `[Bot] Calling session.prompt with media: ${saved.fileName}, agent=${currentAgent}...`,
+      );
+
+      const chatId = ctx.chat.id;
+
+      safeBackgroundTask({
+        taskName: "session.prompt",
+        task: () => opencodeClient.session.prompt(promptOptions),
+        onSuccess: ({ error }) => {
+          if (error) {
+            const details = formatErrorDetails(error);
+            logger.error("OpenCode API error:", error);
+            void bot.api
+              .sendMessage(chatId, t("bot.prompt_send_error_detailed", { details }))
+              .catch(() => {});
+            return;
+          }
+
+          logger.info("[Bot] session.prompt completed");
+        },
+        onError: (error) => {
+          logger.error("[Bot] session.prompt background task failed:", error);
+          void bot.api.sendMessage(chatId, t("bot.prompt_send_error")).catch(() => {});
+        },
+      });
+    } catch (err) {
+      logger.error("[Bot] Error handling media message:", err);
+      await ctx.reply(t("bot.media_error"));
+    }
+  }
+
+  bot.on("message:photo", (ctx) => handleMediaMessage(ctx, "photo"));
+  bot.on("message:document", (ctx) => handleMediaMessage(ctx, "document"));
+  bot.on("message:video", (ctx) => handleMediaMessage(ctx, "video"));
+  bot.on("message:audio", (ctx) => handleMediaMessage(ctx, "audio"));
+  bot.on("message:voice", (ctx) => handleMediaMessage(ctx, "voice"));
 
   bot.catch((err) => {
     logger.error("[Bot] Unhandled error in bot:", err);
