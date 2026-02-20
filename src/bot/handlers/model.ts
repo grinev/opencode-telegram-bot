@@ -8,6 +8,11 @@ import { createMainKeyboard } from "../utils/keyboard.js";
 import { getStoredAgent } from "../../agent/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
+import {
+  clearActiveInlineMenu,
+  ensureActiveInlineMenu,
+  replyWithInlineMenu,
+} from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
 
 /**
@@ -22,6 +27,11 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     return false;
   }
 
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "model");
+  if (!isActiveMenu) {
+    return true;
+  }
+
   logger.debug(`[ModelHandler] Received callback: ${callbackQuery.data}`);
 
   try {
@@ -33,7 +43,9 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     const parts = callbackQuery.data.split(":");
     if (parts.length < 3) {
       logger.error(`[ModelHandler] Invalid callback data format: ${callbackQuery.data}`);
-      return false;
+      clearActiveInlineMenu("model_select_invalid_callback");
+      await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
+      return true;
     }
 
     const providerID = parts[1];
@@ -75,6 +87,8 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     );
     const displayName = formatModelForDisplay(modelInfo.providerID, modelInfo.modelID);
 
+    clearActiveInlineMenu("model_selected");
+
     // Send confirmation message with updated keyboard
     await ctx.answerCallbackQuery({ text: t("model.changed_callback", { name: displayName }) });
     await ctx.reply(t("model.changed_message", { name: displayName }), {
@@ -86,6 +100,7 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
 
     return true;
   } catch (err) {
+    clearActiveInlineMenu("model_select_error");
     logger.error("[ModelHandler] Error handling model select:", err);
     await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
     return false;
@@ -141,7 +156,11 @@ export async function showModelSelectionMenu(ctx: Context): Promise<void> {
 
     const text = t("model.menu.current", { name: displayName });
 
-    await ctx.reply(text, { reply_markup: keyboard });
+    await replyWithInlineMenu(ctx, {
+      menuKind: "model",
+      text,
+      keyboard,
+    });
   } catch (err) {
     logger.error("[ModelHandler] Error showing model menu:", err);
     await ctx.reply(t("model.menu.error"));

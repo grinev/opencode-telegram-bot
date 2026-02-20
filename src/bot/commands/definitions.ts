@@ -34,9 +34,11 @@ const COMMAND_DEFINITIONS: BotCommandI18nDefinition[] = [
   { command: "help", descriptionKey: "cmd.description.help" },
 ];
 
-export const BOT_COMMANDS: BotCommandDefinition[] = COMMAND_DEFINITIONS.map(
-  ({ command, descriptionKey }) => ({
+export function getLocalizedBotCommands(): BotCommandDefinition[] {
+  return COMMAND_DEFINITIONS.map(({ command, descriptionKey }) => ({
     command,
     description: t(descriptionKey),
-  }),
-);
+  }));
+}
+
+export const BOT_COMMANDS: BotCommandDefinition[] = getLocalizedBotCommands();

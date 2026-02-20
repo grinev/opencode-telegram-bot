@@ -2,18 +2,22 @@ import { Context, InlineKeyboard } from "grammy";
 import { getCurrentSession } from "../../session/manager.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { getStoredModel } from "../../model/manager.js";
+import {
+  clearActiveInlineMenu,
+  ensureActiveInlineMenu,
+  replyWithInlineMenu,
+} from "./inline-menu.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 
 /**
  * Build inline keyboard with compact confirmation menu
- * @returns InlineKeyboard with "Yes" and "Cancel" buttons
+ * @returns InlineKeyboard with confirmation button
  */
 export function buildCompactConfirmationMenu(): InlineKeyboard {
   const keyboard = new InlineKeyboard();
 
-  keyboard.text(t("context.button.confirm"), "compact:confirm").row();
-  keyboard.text(t("context.button.cancel"), "compact:cancel").row();
+  keyboard.text(t("context.button.confirm"), "compact:confirm");
 
   return keyboard;
 }
@@ -35,7 +39,11 @@ export async function handleContextButtonPress(ctx: Context): Promise<void> {
 
   const keyboard = buildCompactConfirmationMenu();
 
-  await ctx.reply(t("context.confirm_text", { title: session.title }), { reply_markup: keyboard });
+  await replyWithInlineMenu(ctx, {
+    menuKind: "context",
+    text: t("context.confirm_text", { title: session.title }),
+    keyboard,
+  });
 }
 
 /**
@@ -50,12 +58,18 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
     return false;
   }
 
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "context");
+  if (!isActiveMenu) {
+    return true;
+  }
+
   logger.debug("[ContextHandler] Compact confirmed");
 
   try {
     const session = getCurrentSession();
 
     if (!session) {
+      clearActiveInlineMenu("context_session_missing");
       await ctx.answerCallbackQuery({ text: t("context.callback_session_not_found") });
       await ctx.reply(t("context.no_active_session"));
       await ctx.deleteMessage().catch(() => {});
@@ -64,6 +78,7 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
 
     // Answer callback query and delete menu immediately
     await ctx.answerCallbackQuery({ text: t("context.callback_compacting") });
+    clearActiveInlineMenu("context_compact_confirmed");
     await ctx.deleteMessage().catch(() => {});
 
     // Send progress message
@@ -103,36 +118,11 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
 
     return true;
   } catch (err) {
+    clearActiveInlineMenu("context_compact_error");
     logger.error("[ContextHandler] Compact exception:", err);
     await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     await ctx.reply(t("context.error"));
     await ctx.deleteMessage().catch(() => {});
-    return false;
-  }
-}
-
-/**
- * Handle compact cancel callback
- * @param ctx grammY context
- */
-export async function handleCompactCancel(ctx: Context): Promise<boolean> {
-  const callbackQuery = ctx.callbackQuery;
-
-  if (!callbackQuery?.data || callbackQuery.data !== "compact:cancel") {
-    return false;
-  }
-
-  logger.debug("[ContextHandler] Compact cancelled");
-
-  try {
-    await ctx.answerCallbackQuery({ text: t("context.callback_cancelled") });
-
-    // Delete the inline menu message
-    await ctx.deleteMessage().catch(() => {});
-
-    return true;
-  } catch (err) {
-    logger.error("[ContextHandler] Cancel error:", err);
     return false;
   }
 }

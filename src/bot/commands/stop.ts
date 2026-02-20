@@ -2,8 +2,7 @@ import { CommandContext, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { stopEventListening } from "../../opencode/events.js";
 import { getCurrentSession } from "../../session/manager.js";
-import { permissionManager } from "../../permission/manager.js";
-import { questionManager } from "../../question/manager.js";
+import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
@@ -15,8 +14,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 function stopLocalStreaming(): void {
   stopEventListening();
   summaryAggregator.clear();
-  questionManager.clear();
-  permissionManager.clear();
+  clearAllInteractionState("stop_command");
 }
 
 async function pollSessionStatus(
@@ -60,14 +58,14 @@ async function pollSessionStatus(
 
 export async function stopCommand(ctx: CommandContext<Context>) {
   try {
+    stopLocalStreaming();
+
     const currentSession = getCurrentSession();
 
     if (!currentSession) {
       await ctx.reply(t("stop.no_active_session"));
       return;
     }
-
-    stopLocalStreaming();
 
     const waitingMessage = await ctx.reply(t("stop.in_progress"));
 
