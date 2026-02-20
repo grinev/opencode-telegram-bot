@@ -98,7 +98,15 @@ Current command set:
 - [x] `/opencode_stop` - stop local OpenCode server
 - [x] `/help` - show command help
 
-Text messages (non-commands) are treated as prompts for OpenCode, except when an active question expects a custom text answer.
+Text messages (non-commands) are treated as prompts for OpenCode only when no blocking interaction is active.
+
+Interaction routing rules:
+
+- Only one interactive flow can be active at a time (inline menu, permission, question, rename)
+- While an interaction is active, unrelated input is blocked with a contextual hint
+- Allowed utility commands during active interactions: `/help`, `/status`, `/stop`
+- Unknown slash commands return an explicit fallback message
+- Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/stop`, reset/cleanup)
 
 ### Main features already implemented
 
@@ -107,6 +115,7 @@ Text messages (non-commands) are treated as prompts for OpenCode, except when an
 - [x] Session management (list/switch/create) with inline menus
 - [x] Prompt execution through OpenCode with SSE-based event handling
 - [x] Interactive question and permission flows (buttons + custom text answers)
+- [x] Single-active interaction routing with contextual blocking and cleanup recovery
 - [x] Pinned status updates (session, project, model, context usage, changed files)
 - [x] Model and agent selection from Telegram
 - [x] Context/variant controls from Telegram keyboard
