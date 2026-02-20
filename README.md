@@ -100,7 +100,15 @@ opencode-telegram config
 | `/opencode_stop`  | Stop the OpenCode server remotely                       |
 | `/help`           | Show available commands                                 |
 
-Any regular text message is sent as a prompt to the coding agent.
+Any regular text message is sent as a prompt to the coding agent only when no blocking interaction is active.
+
+### Interaction Rules
+
+- Only one interactive flow can be active at a time (inline menus, permission request, question flow, rename)
+- While an interaction is active, the bot accepts only relevant input for that flow and blocks unrelated actions
+- Allowed utility commands remain available during active interactions: `/help`, `/status`, `/stop`
+- Unknown slash commands return an explicit fallback message instead of being silently ignored
+- Interaction flows do not expire automatically and wait until explicit completion (`answer`, `cancel`, `/stop`, or reset/cleanup)
 
 > `/opencode_start` and `/opencode_stop` are intended as emergency commands — for example, if you need to restart a stuck server while away from your computer. Under normal usage, start `opencode serve` yourself before launching the bot.
 

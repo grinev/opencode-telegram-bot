@@ -36,6 +36,12 @@ class RenameManager {
     return this.state.messageId;
   }
 
+  isActiveMessage(messageId: number | null): boolean {
+    return (
+      this.state.isWaiting && this.state.messageId !== null && this.state.messageId === messageId
+    );
+  }
+
   isWaitingForName(): boolean {
     return this.state.isWaiting;
   }

@@ -4,11 +4,64 @@ import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { getCurrentSession } from "../../session/manager.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
+import { interactionManager } from "../../interaction/manager.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { t } from "../../i18n/index.js";
 
 const MAX_BUTTON_LENGTH = 60;
+
+function getCallbackMessageId(ctx: Context): number | null {
+  const message = ctx.callbackQuery?.message;
+  if (!message || !("message_id" in message)) {
+    return null;
+  }
+
+  const messageId = (message as { message_id?: number }).message_id;
+  return typeof messageId === "number" ? messageId : null;
+}
+
+function clearQuestionInteraction(reason: string): void {
+  const state = interactionManager.getSnapshot();
+  if (state?.kind === "question") {
+    interactionManager.clear(reason);
+  }
+}
+
+function syncQuestionInteractionState(
+  expectedInput: "callback" | "mixed",
+  questionIndex: number,
+  messageId: number | null,
+): void {
+  const metadata: Record<string, unknown> = {
+    questionIndex,
+    inputMode: expectedInput === "mixed" ? "custom" : "options",
+  };
+
+  const requestID = questionManager.getRequestID();
+  if (requestID) {
+    metadata.requestID = requestID;
+  }
+
+  if (messageId !== null) {
+    metadata.messageId = messageId;
+  }
+
+  const state = interactionManager.getSnapshot();
+  if (state?.kind === "question") {
+    interactionManager.transition({
+      expectedInput,
+      metadata,
+    });
+    return;
+  }
+
+  interactionManager.start({
+    kind: "question",
+    expectedInput,
+    metadata,
+  });
+}
 
 export async function handleQuestionCallback(ctx: Context): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
@@ -21,6 +74,13 @@ export async function handleQuestionCallback(ctx: Context): Promise<boolean> {
   logger.debug(`[QuestionHandler] Received callback: ${data}`);
 
   if (!questionManager.isActive()) {
+    clearQuestionInteraction("question_inactive_callback");
+    await ctx.answerCallbackQuery({ text: t("question.inactive_callback"), show_alert: true });
+    return true;
+  }
+
+  const callbackMessageId = getCallbackMessageId(ctx);
+  if (!questionManager.isActiveMessage(callbackMessageId)) {
     await ctx.answerCallbackQuery({ text: t("question.inactive_callback"), show_alert: true });
     return true;
   }
@@ -29,10 +89,26 @@ export async function handleQuestionCallback(ctx: Context): Promise<boolean> {
   const action = parts[1];
   const questionIndex = parseInt(parts[2], 10);
 
+  if (Number.isNaN(questionIndex) || questionIndex !== questionManager.getCurrentIndex()) {
+    await ctx.answerCallbackQuery({ text: t("question.inactive_callback"), show_alert: true });
+    return true;
+  }
+
   try {
     switch (action) {
       case "select":
-        await handleSelectOption(ctx, questionIndex, parseInt(parts[3], 10));
+        {
+          const optionIndex = parseInt(parts[3], 10);
+          if (Number.isNaN(optionIndex)) {
+            await ctx.answerCallbackQuery({
+              text: t("question.processing_error_callback"),
+              show_alert: true,
+            });
+            break;
+          }
+
+          await handleSelectOption(ctx, questionIndex, optionIndex);
+        }
         break;
       case "submit":
         await handleSubmitAnswer(ctx, questionIndex);
@@ -42,6 +118,12 @@ export async function handleQuestionCallback(ctx: Context): Promise<boolean> {
         break;
       case "cancel":
         await handleCancelPoll(ctx);
+        break;
+      default:
+        await ctx.answerCallbackQuery({
+          text: t("question.processing_error_callback"),
+          show_alert: true,
+        });
         break;
     }
   } catch (err) {
@@ -70,6 +152,11 @@ async function handleSelectOption(
     return;
   }
 
+  if (questionManager.isWaitingForCustomInput(questionIndex)) {
+    questionManager.clearCustomInput();
+    syncQuestionInteractionState("callback", questionIndex, questionManager.getActiveMessageId());
+  }
+
   questionManager.selectOption(questionIndex, optionIndex);
 
   if (question.multiple) {
@@ -93,6 +180,11 @@ async function handleSelectOption(
 }
 
 async function handleSubmitAnswer(ctx: Context, questionIndex: number): Promise<void> {
+  if (questionManager.isWaitingForCustomInput(questionIndex)) {
+    questionManager.clearCustomInput();
+    syncQuestionInteractionState("callback", questionIndex, questionManager.getActiveMessageId());
+  }
+
   const answer = questionManager.getSelectedAnswer(questionIndex);
 
   if (!answer) {
@@ -115,7 +207,10 @@ async function handleSubmitAnswer(ctx: Context, questionIndex: number): Promise<
   await showNextQuestion(ctx);
 }
 
-async function handleCustomAnswer(ctx: Context, _questionIndex: number): Promise<void> {
+async function handleCustomAnswer(ctx: Context, questionIndex: number): Promise<void> {
+  questionManager.startCustomInput(questionIndex);
+  syncQuestionInteractionState("mixed", questionIndex, questionManager.getActiveMessageId());
+
   await ctx.answerCallbackQuery({
     text: t("question.enter_custom_callback"),
     show_alert: true,
@@ -124,9 +219,12 @@ async function handleCustomAnswer(ctx: Context, _questionIndex: number): Promise
 
 async function handleCancelPoll(ctx: Context): Promise<void> {
   questionManager.cancel();
+  clearQuestionInteraction("question_cancelled");
 
-  await ctx.editMessageText(t("question.cancelled"));
+  await ctx.editMessageText(t("question.cancelled")).catch(() => {});
   await ctx.answerCallbackQuery();
+
+  questionManager.clear();
 }
 
 async function updateQuestionMessage(ctx: Context): Promise<void> {
@@ -181,9 +279,18 @@ export async function showCurrentQuestion(bot: Context["api"], chatId: number): 
     logger.debug(`[QuestionHandler] Message sent, messageId=${message.message_id}`);
 
     questionManager.addMessageId(message.message_id);
+    questionManager.setActiveMessageId(message.message_id);
+    syncQuestionInteractionState(
+      "callback",
+      questionManager.getCurrentIndex(),
+      questionManager.getActiveMessageId(),
+    );
 
     summaryAggregator.stopTypingIndicator();
   } catch (err) {
+    questionManager.clear();
+    clearQuestionInteraction("question_message_send_failed");
+
     logger.error("[QuestionHandler] Failed to send question message:", err);
     throw err;
   }
@@ -195,6 +302,11 @@ export async function handleQuestionTextAnswer(ctx: Context): Promise<void> {
 
   const currentIndex = questionManager.getCurrentIndex();
 
+  if (!questionManager.isWaitingForCustomInput(currentIndex)) {
+    await ctx.reply(t("question.use_custom_button_first"));
+    return;
+  }
+
   if (questionManager.hasCustomAnswer(currentIndex)) {
     await ctx.reply(t("question.answer_already_received"));
     return;
@@ -203,12 +315,12 @@ export async function handleQuestionTextAnswer(ctx: Context): Promise<void> {
   logger.debug(`[QuestionHandler] Custom text answer for question ${currentIndex}: ${text}`);
 
   questionManager.setCustomAnswer(currentIndex, text);
+  questionManager.clearCustomInput();
 
   // Delete the previous question message
-  const messageIds = questionManager.getMessageIds();
-  if (messageIds.length > 0 && ctx.chat) {
-    const lastMessageId = messageIds[messageIds.length - 1];
-    await ctx.api.deleteMessage(ctx.chat.id, lastMessageId).catch(() => {});
+  const activeMessageId = questionManager.getActiveMessageId();
+  if (activeMessageId !== null && ctx.chat) {
+    await ctx.api.deleteMessage(ctx.chat.id, activeMessageId).catch(() => {});
   }
 
   // DO NOT send the answer immediately - move to the next question
@@ -248,6 +360,7 @@ async function showPollSummary(bot: Context["api"], chatId: number): Promise<voi
     await bot.sendMessage(chatId, summary);
   }
 
+  clearQuestionInteraction("question_completed");
   questionManager.clear();
   logger.debug("[QuestionHandler] Poll completed and cleared");
 }
@@ -357,11 +470,11 @@ function buildQuestionKeyboard(
   });
 
   if (question.multiple) {
-    keyboard.text(t("question.button.submit"), `question:submit:${questionIndex}`);
+    keyboard.text(t("question.button.submit"), `question:submit:${questionIndex}`).row();
     logger.debug(`[QuestionHandler] Added submit button`);
   }
 
-  keyboard.text(t("question.button.custom"), `question:custom:${questionIndex}`);
+  keyboard.text(t("question.button.custom"), `question:custom:${questionIndex}`).row();
   logger.debug(`[QuestionHandler] Added custom answer button`);
 
   keyboard.text(t("question.button.cancel"), `question:cancel:${questionIndex}`);

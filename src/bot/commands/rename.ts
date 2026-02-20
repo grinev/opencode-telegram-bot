@@ -2,9 +2,27 @@ import { CommandContext, Context, InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentSession, setCurrentSession } from "../../session/manager.js";
 import { renameManager } from "../../rename/manager.js";
+import { interactionManager } from "../../interaction/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+
+function getCallbackMessageId(ctx: Context): number | null {
+  const message = ctx.callbackQuery?.message;
+  if (!message || !("message_id" in message)) {
+    return null;
+  }
+
+  const messageId = (message as { message_id?: number }).message_id;
+  return typeof messageId === "number" ? messageId : null;
+}
+
+function clearRenameInteraction(reason: string): void {
+  const state = interactionManager.getSnapshot();
+  if (state?.kind === "rename") {
+    interactionManager.clear(reason);
+  }
+}
 
 export async function renameCommand(ctx: CommandContext<Context>): Promise<void> {
   try {
@@ -23,6 +41,14 @@ export async function renameCommand(ctx: CommandContext<Context>): Promise<void>
 
     renameManager.startWaiting(currentSession.id, currentSession.directory, currentSession.title);
     renameManager.setMessageId(message.message_id);
+    interactionManager.start({
+      kind: "rename",
+      expectedInput: "text",
+      metadata: {
+        sessionId: currentSession.id,
+        messageId: message.message_id,
+      },
+    });
 
     logger.info(`[RenameCommand] Waiting for new title for session: ${currentSession.id}`);
   } catch (error) {
@@ -39,10 +65,30 @@ export async function handleRenameCancel(ctx: Context): Promise<boolean> {
 
   logger.debug("[RenameHandler] Cancel callback received");
 
+  if (!renameManager.isWaitingForName()) {
+    clearRenameInteraction("rename_cancel_inactive");
+    await ctx.answerCallbackQuery({ text: t("rename.inactive_callback"), show_alert: true });
+    return true;
+  }
+
+  const interactionState = interactionManager.getSnapshot();
+  if (interactionState?.kind !== "rename") {
+    renameManager.clear();
+    await ctx.answerCallbackQuery({ text: t("rename.inactive_callback"), show_alert: true });
+    return true;
+  }
+
+  const callbackMessageId = getCallbackMessageId(ctx);
+  if (!renameManager.isActiveMessage(callbackMessageId)) {
+    await ctx.answerCallbackQuery({ text: t("rename.inactive_callback"), show_alert: true });
+    return true;
+  }
+
   renameManager.clear();
+  clearRenameInteraction("rename_cancelled");
 
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText(t("rename.cancelled"));
+  await ctx.editMessageText(t("rename.cancelled")).catch(() => {});
 
   return true;
 }
@@ -61,9 +107,17 @@ export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
     return false;
   }
 
+  const interactionState = interactionManager.getSnapshot();
+  if (interactionState?.kind !== "rename") {
+    renameManager.clear();
+    await ctx.reply(t("rename.inactive"));
+    return true;
+  }
+
   const sessionInfo = renameManager.getSessionInfo();
   if (!sessionInfo) {
     renameManager.clear();
+    clearRenameInteraction("rename_missing_session_info");
     return false;
   }
 
@@ -110,5 +164,6 @@ export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
   }
 
   renameManager.clear();
+  clearRenameInteraction("rename_completed");
   return true;
 }

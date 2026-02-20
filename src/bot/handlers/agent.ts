@@ -7,6 +7,11 @@ import { logger } from "../../utils/logger.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
+import {
+  clearActiveInlineMenu,
+  ensureActiveInlineMenu,
+  replyWithInlineMenu,
+} from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
 
 /**
@@ -19,6 +24,11 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
 
   if (!callbackQuery?.data || !callbackQuery.data.startsWith("agent:")) {
     return false;
+  }
+
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "agent");
+  if (!isActiveMenu) {
+    return true;
   }
 
   logger.debug(`[AgentHandler] Received callback: ${callbackQuery.data}`);
@@ -64,6 +74,8 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
     );
     const displayName = getAgentDisplayName(agentName);
 
+    clearActiveInlineMenu("agent_selected");
+
     // Send confirmation message with updated keyboard
     await ctx.answerCallbackQuery({ text: t("agent.changed_callback", { name: displayName }) });
     await ctx.reply(t("agent.changed_message", { name: displayName }), {
@@ -75,6 +87,7 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
 
     return true;
   } catch (err) {
+    clearActiveInlineMenu("agent_select_error");
     logger.error("[AgentHandler] Error handling agent select:", err);
     await ctx.answerCallbackQuery({ text: t("agent.change_error_callback") }).catch(() => {});
     return false;
@@ -121,5 +134,9 @@ export async function showAgentSelectionMenu(ctx: Context): Promise<void> {
     ? t("agent.menu.current", { name: getAgentDisplayName(currentAgent) })
     : t("agent.menu.select");
 
-  await ctx.reply(text, { reply_markup: keyboard });
+  await replyWithInlineMenu(ctx, {
+    menuKind: "agent",
+    text,
+    keyboard,
+  });
 }

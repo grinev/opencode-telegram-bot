@@ -19,6 +19,29 @@ export const en = {
   "error.context_button": "❌ Failed to process context button",
   "error.generic": "🔴 Something went wrong.",
 
+  "interaction.blocked.expired": "⚠️ This interaction has expired. Please start it again.",
+  "interaction.blocked.expected_callback":
+    "⚠️ Please use the inline buttons for this step or tap Cancel.",
+  "interaction.blocked.expected_text": "⚠️ Please send a text message for this step.",
+  "interaction.blocked.expected_command": "⚠️ Please send a command for this step.",
+  "interaction.blocked.command_not_allowed":
+    "⚠️ This command is not available in the current step.",
+  "interaction.blocked.finish_current":
+    "⚠️ Finish the current interaction first (answer or cancel), then open another menu.",
+
+  "inline.blocked.expected_choice": "⚠️ Choose an option using the inline buttons or tap Cancel.",
+  "inline.blocked.command_not_allowed":
+    "⚠️ This command is not available while inline menu is active.",
+
+  "question.blocked.expected_answer":
+    "⚠️ Answer the current question using buttons, Custom answer, or Cancel.",
+  "question.blocked.command_not_allowed":
+    "⚠️ This command is not available until current question flow is completed.",
+
+  "inline.button.cancel": "❌ Cancel",
+  "inline.inactive_callback": "This menu is inactive",
+  "inline.cancelled_callback": "Cancelled",
+
   "common.unknown": "unknown",
   "common.unknown_error": "unknown error",
 
@@ -40,6 +63,7 @@ export const en = {
     "⚠️ Active session does not match the selected project, so it was reset. Use /sessions to pick one or /new to create a new session.",
   "bot.prompt_send_error_detailed": "🔴 Failed to send request.\n\nDetails: {details}",
   "bot.prompt_send_error": "🔴 An error occurred while sending request to OpenCode.",
+  "bot.unknown_command": "⚠️ Unknown command: {command}. Use /help to see available commands.",
 
   "status.header_running": "🟢 **OpenCode Server is running**",
   "status.health.healthy": "Healthy",
@@ -153,7 +177,6 @@ export const en = {
   "variant.menu.error": "🔴 Failed to get variants list",
 
   "context.button.confirm": "✅ Yes, compact context",
-  "context.button.cancel": "❌ Cancel",
   "context.no_active_session": "⚠️ No active session. Create a session with /new",
   "context.confirm_text":
     '📊 Context compaction for session "{title}"\n\nThis will reduce context usage by removing old messages from history. Current task will not be interrupted.\n\nContinue?',
@@ -162,7 +185,6 @@ export const en = {
   "context.progress": "⏳ Compacting context...",
   "context.error": "❌ Context compaction failed",
   "context.success": "✅ Context compacted successfully",
-  "context.callback_cancelled": "Cancelled",
 
   "permission.inactive_callback": "Permission request is inactive",
   "permission.processing_error_callback": "Processing error",
@@ -171,9 +193,13 @@ export const en = {
   "permission.reply.always": "Always allowed",
   "permission.reply.reject": "Rejected",
   "permission.send_reply_error": "❌ Failed to send permission reply",
+  "permission.blocked.expected_reply":
+    "⚠️ Please answer the permission request first using the buttons above.",
+  "permission.blocked.command_not_allowed":
+    "⚠️ This command is not available until you answer the permission request.",
   "permission.header": "{emoji} **Permission request: {name}**\n\n",
-  "permission.button.allow": "✅ Allow",
-  "permission.button.always": "🔓 Always",
+  "permission.button.allow": "✅ Allow once",
+  "permission.button.always": "🔓 Allow always",
   "permission.button.reject": "❌ Reject",
   "permission.name.bash": "Bash",
   "permission.name.edit": "Edit",
@@ -201,6 +227,8 @@ export const en = {
   "question.button.submit": "✅ Done",
   "question.button.custom": "🔤 Custom answer",
   "question.button.cancel": "❌ Cancel",
+  "question.use_custom_button_first":
+    '⚠️ To send text, tap "Custom answer" for the current question first.',
   "question.summary.title": "✅ Poll completed!\n\n",
   "question.summary.question": "Question {index}:\n{question}\n\n",
   "question.summary.answer": "Answer:\n{answer}\n\n",
@@ -250,6 +278,12 @@ export const en = {
   "rename.success": "✅ Session renamed to: {title}",
   "rename.error": "🔴 Failed to rename session.",
   "rename.cancelled": "❌ Rename cancelled.",
+  "rename.inactive_callback": "Rename request is inactive",
+  "rename.inactive": "⚠️ Rename request is not active. Run /rename again.",
+  "rename.blocked.expected_name":
+    "⚠️ Enter a new session name as text or tap Cancel in rename message.",
+  "rename.blocked.command_not_allowed":
+    "⚠️ This command is not available while rename is waiting for a new name.",
   "rename.button.cancel": "❌ Cancel",
 
   "cmd.description.rename": "Rename current session",

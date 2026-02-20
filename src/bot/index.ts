@@ -6,6 +6,8 @@ import { SocksProxyAgent } from "socks-proxy-agent";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import { config } from "../config.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { interactionGuardMiddleware } from "./middleware/interaction-guard.js";
+import { unknownCommandMiddleware } from "./middleware/unknown-command.js";
 import { BOT_COMMANDS } from "./commands/definitions.js";
 import { startCommand } from "./commands/start.js";
 import { helpCommand } from "./commands/help.js";
@@ -29,13 +31,11 @@ import { handlePermissionCallback, showPermissionRequest } from "./handlers/perm
 import { handleAgentSelect, showAgentSelectionMenu } from "./handlers/agent.js";
 import { handleModelSelect, showModelSelectionMenu } from "./handlers/model.js";
 import { handleVariantSelect, showVariantSelectionMenu } from "./handlers/variant.js";
-import {
-  handleContextButtonPress,
-  handleCompactConfirm,
-  handleCompactCancel,
-} from "./handlers/context.js";
+import { handleContextButtonPress, handleCompactConfirm } from "./handlers/context.js";
+import { handleInlineMenuCancel } from "./handlers/inline-menu.js";
 import { questionManager } from "../question/manager.js";
-import { permissionManager } from "../permission/manager.js";
+import { interactionManager } from "../interaction/manager.js";
+import { clearAllInteractionState } from "../interaction/cleanup.js";
 import { keyboardManager } from "../keyboard/manager.js";
 import { stopEventListening, subscribeToEvents } from "../opencode/events.js";
 import { summaryAggregator } from "../summary/aggregator.js";
@@ -198,6 +198,17 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       return;
     }
 
+    if (questionManager.isActive()) {
+      logger.warn("[Bot] Replacing active poll with a new one");
+
+      const previousMessageIds = questionManager.getMessageIds();
+      for (const messageId of previousMessageIds) {
+        await botInstance.api.deleteMessage(chatIdInstance, messageId).catch(() => {});
+      }
+
+      clearAllInteractionState("question_replaced_by_new_poll");
+    }
+
     logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
     questionManager.startQuestions(questions, requestID);
     await showCurrentQuestion(botInstance.api, chatIdInstance);
@@ -216,7 +227,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       }
     }
 
-    questionManager.clear();
+    clearAllInteractionState("question_error");
   });
 
   summaryAggregator.setOnPermission(async (request) => {
@@ -353,8 +364,7 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
 async function resetMismatchedSessionContext(): Promise<void> {
   stopEventListening();
   summaryAggregator.clear();
-  questionManager.clear();
-  permissionManager.clear();
+  clearAllInteractionState("session_mismatch_reset");
   clearSession();
   keyboardManager.clearContext();
 
@@ -370,6 +380,8 @@ async function resetMismatchedSessionContext(): Promise<void> {
 }
 
 export function createBot(): Bot<Context> {
+  clearAllInteractionState("bot_startup");
+
   const botOptions: ConstructorParameters<typeof Bot<Context>>[1] = {};
 
   if (config.telegram.proxyUrl) {
@@ -430,6 +442,20 @@ export function createBot(): Bot<Context> {
 
   bot.use(authMiddleware);
   bot.use(ensureCommandsInitialized);
+  bot.use(interactionGuardMiddleware);
+
+  const blockMenuWhileInteractionActive = async (ctx: Context): Promise<boolean> => {
+    const activeInteraction = interactionManager.getSnapshot();
+    if (!activeInteraction) {
+      return false;
+    }
+
+    logger.debug(
+      `[Bot] Blocking menu open while interaction active: kind=${activeInteraction.kind}, expectedInput=${activeInteraction.expectedInput}`,
+    );
+    await ctx.reply(t("interaction.blocked.finish_current"));
+    return true;
+  };
 
   bot.command("start", startCommand);
   bot.command("help", helpCommand);
@@ -444,11 +470,14 @@ export function createBot(): Bot<Context> {
   bot.command("stop", stopCommand);
   bot.command("rename", renameCommand);
 
+  bot.on("message:text", unknownCommandMiddleware);
+
   bot.on("callback_query:data", async (ctx) => {
     logger.debug(`[Bot] Received callback_query:data: ${ctx.callbackQuery?.data}`);
     logger.debug(`[Bot] Callback context: from=${ctx.from?.id}, chat=${ctx.chat?.id}`);
 
     try {
+      const handledInlineCancel = await handleInlineMenuCancel(ctx);
       const handledSession = await handleSessionSelect(ctx);
       const handledProject = await handleProjectSelect(ctx);
       const handledQuestion = await handleQuestionCallback(ctx);
@@ -457,14 +486,14 @@ export function createBot(): Bot<Context> {
       const handledModel = await handleModelSelect(ctx);
       const handledVariant = await handleVariantSelect(ctx);
       const handledCompactConfirm = await handleCompactConfirm(ctx);
-      const handledCompactCancel = await handleCompactCancel(ctx);
       const handledRenameCancel = await handleRenameCancel(ctx);
 
       logger.debug(
-        `[Bot] Callback handled: session=${handledSession}, project=${handledProject}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compact=${handledCompactConfirm || handledCompactCancel}, rename=${handledRenameCancel}`,
+        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, rename=${handledRenameCancel}`,
       );
 
       if (
+        !handledInlineCancel &&
         !handledSession &&
         !handledProject &&
         !handledQuestion &&
@@ -473,7 +502,6 @@ export function createBot(): Bot<Context> {
         !handledModel &&
         !handledVariant &&
         !handledCompactConfirm &&
-        !handledCompactCancel &&
         !handledRenameCancel
       ) {
         logger.debug("Unknown callback query:", ctx.callbackQuery?.data);
@@ -481,6 +509,7 @@ export function createBot(): Bot<Context> {
       }
     } catch (err) {
       logger.error("[Bot] Error handling callback:", err);
+      clearAllInteractionState("callback_handler_error");
       await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     }
   });
@@ -490,6 +519,10 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Agent mode button pressed: ${ctx.message?.text}`);
 
     try {
+      if (await blockMenuWhileInteractionActive(ctx)) {
+        return;
+      }
+
       await showAgentSelectionMenu(ctx);
     } catch (err) {
       logger.error("[Bot] Error showing agent menu:", err);
@@ -503,6 +536,10 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Model button pressed: ${ctx.message?.text}`);
 
     try {
+      if (await blockMenuWhileInteractionActive(ctx)) {
+        return;
+      }
+
       await showModelSelectionMenu(ctx);
     } catch (err) {
       logger.error("[Bot] Error showing model menu:", err);
@@ -515,6 +552,10 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Context button pressed: ${ctx.message?.text}`);
 
     try {
+      if (await blockMenuWhileInteractionActive(ctx)) {
+        return;
+      }
+
       await handleContextButtonPress(ctx);
     } catch (err) {
       logger.error("[Bot] Error handling context button:", err);
@@ -528,6 +569,10 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Variant button pressed: ${ctx.message?.text}`);
 
     try {
+      if (await blockMenuWhileInteractionActive(ctx)) {
+        return;
+      }
+
       await showVariantSelectionMenu(ctx);
     } catch (err) {
       logger.error("[Bot] Error showing variant menu:", err);
@@ -756,6 +801,9 @@ export function createBot(): Bot<Context> {
       });
     } catch (err) {
       logger.error("Error in prompt handler:", err);
+      if (interactionManager.getSnapshot()) {
+        clearAllInteractionState("message_handler_error");
+      }
       await ctx.reply(t("error.generic"));
     }
 
@@ -764,6 +812,7 @@ export function createBot(): Bot<Context> {
 
   bot.catch((err) => {
     logger.error("[Bot] Unhandled error in bot:", err);
+    clearAllInteractionState("bot_unhandled_error");
     if (err.ctx) {
       logger.error(
         "[Bot] Error context - update type:",

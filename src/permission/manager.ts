@@ -68,6 +68,15 @@ class PermissionManager {
   }
 
   /**
+   * Check if callback message ID belongs to active permission request
+   */
+  isActiveMessage(messageId: number | null): boolean {
+    return (
+      this.state.isActive && this.state.messageId !== null && messageId === this.state.messageId
+    );
+  }
+
+  /**
    * Get Telegram message ID
    */
   getMessageId(): number | null {

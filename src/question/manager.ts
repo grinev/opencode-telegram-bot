@@ -7,6 +7,8 @@ class QuestionManager {
     currentIndex: 0,
     selectedOptions: new Map(),
     customAnswers: new Map(),
+    customInputQuestionIndex: null,
+    activeMessageId: null,
     messageIds: [],
     isActive: false,
     requestID: null,
@@ -31,6 +33,8 @@ class QuestionManager {
       currentIndex: 0,
       selectedOptions: new Map(),
       customAnswers: new Map(),
+      customInputQuestionIndex: null,
+      activeMessageId: null,
       messageIds: [],
       isActive: true,
       requestID,
@@ -114,6 +118,8 @@ class QuestionManager {
 
   nextQuestion(): void {
     this.state.currentIndex++;
+    this.state.customInputQuestionIndex = null;
+    this.state.activeMessageId = null;
 
     logger.debug(
       `[QuestionManager] Moving to next question: ${this.state.currentIndex}/${this.state.questions.length}`,
@@ -136,6 +142,38 @@ class QuestionManager {
     this.state.messageIds.push(messageId);
   }
 
+  setActiveMessageId(messageId: number): void {
+    this.state.activeMessageId = messageId;
+  }
+
+  getActiveMessageId(): number | null {
+    return this.state.activeMessageId;
+  }
+
+  isActiveMessage(messageId: number | null): boolean {
+    return (
+      this.state.isActive &&
+      this.state.activeMessageId !== null &&
+      messageId === this.state.activeMessageId
+    );
+  }
+
+  startCustomInput(questionIndex: number): void {
+    if (!this.state.isActive || !this.state.questions[questionIndex]) {
+      return;
+    }
+
+    this.state.customInputQuestionIndex = questionIndex;
+  }
+
+  clearCustomInput(): void {
+    this.state.customInputQuestionIndex = null;
+  }
+
+  isWaitingForCustomInput(questionIndex: number): boolean {
+    return this.state.customInputQuestionIndex === questionIndex;
+  }
+
   getMessageIds(): number[] {
     return [...this.state.messageIds];
   }
@@ -150,6 +188,8 @@ class QuestionManager {
   cancel(): void {
     logger.info("[QuestionManager] Poll cancelled");
     this.state.isActive = false;
+    this.state.customInputQuestionIndex = null;
+    this.state.activeMessageId = null;
   }
 
   clear(): void {
@@ -158,6 +198,8 @@ class QuestionManager {
       currentIndex: 0,
       selectedOptions: new Map(),
       customAnswers: new Map(),
+      customInputQuestionIndex: null,
+      activeMessageId: null,
       messageIds: [],
       isActive: false,
       requestID: null,
