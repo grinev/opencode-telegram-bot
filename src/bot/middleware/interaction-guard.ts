@@ -20,6 +20,30 @@ function getInteractionBlockedMessage(
     }
   }
 
+  if (interactionKind === "inline") {
+    switch (reason) {
+      case "command_not_allowed":
+        return t("inline.blocked.command_not_allowed");
+      case "expected_callback":
+      case "expected_command":
+      case "expected_text":
+      default:
+        return t("inline.blocked.expected_choice");
+    }
+  }
+
+  if (interactionKind === "question") {
+    switch (reason) {
+      case "command_not_allowed":
+        return t("question.blocked.command_not_allowed");
+      case "expected_callback":
+      case "expected_command":
+      case "expected_text":
+      default:
+        return t("question.blocked.expected_answer");
+    }
+  }
+
   if (interactionKind === "rename") {
     switch (reason) {
       case "command_not_allowed":

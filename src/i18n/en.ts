@@ -29,6 +29,15 @@ export const en = {
   "interaction.blocked.finish_current":
     "⚠️ Finish the current interaction first (answer or cancel), then open another menu.",
 
+  "inline.blocked.expected_choice": "⚠️ Choose an option using the inline buttons or tap Cancel.",
+  "inline.blocked.command_not_allowed":
+    "⚠️ This command is not available while inline menu is active.",
+
+  "question.blocked.expected_answer":
+    "⚠️ Answer the current question using buttons, Custom answer, or Cancel.",
+  "question.blocked.command_not_allowed":
+    "⚠️ This command is not available until current question flow is completed.",
+
   "inline.button.cancel": "❌ Cancel",
   "inline.inactive_callback": "This menu is inactive",
   "inline.cancelled_callback": "Cancelled",
@@ -54,6 +63,7 @@ export const en = {
     "⚠️ Active session does not match the selected project, so it was reset. Use /sessions to pick one or /new to create a new session.",
   "bot.prompt_send_error_detailed": "🔴 Failed to send request.\n\nDetails: {details}",
   "bot.prompt_send_error": "🔴 An error occurred while sending request to OpenCode.",
+  "bot.unknown_command": "⚠️ Unknown command: {command}. Use /help to see available commands.",
 
   "status.header_running": "🟢 **OpenCode Server is running**",
   "status.health.healthy": "Healthy",

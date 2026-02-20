@@ -48,7 +48,7 @@ describe("interactionGuardMiddleware", () => {
     await interactionGuardMiddleware(ctx, next);
 
     expect(next).not.toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.expected_callback"));
+    expect(ctx.reply).toHaveBeenCalledWith(t("inline.blocked.expected_choice"));
   });
 
   it("blocks callback and answers callback query when text is expected", async () => {
@@ -98,7 +98,7 @@ describe("interactionGuardMiddleware", () => {
     await interactionGuardMiddleware(ctx, next);
 
     expect(next).not.toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.command_not_allowed"));
+    expect(ctx.reply).toHaveBeenCalledWith(t("inline.blocked.command_not_allowed"));
   });
 
   it("shows permission-specific message for blocked text", async () => {
@@ -146,5 +146,36 @@ describe("interactionGuardMiddleware", () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.blocked.command_not_allowed"));
+  });
+
+  it("shows question-specific message for blocked text", async () => {
+    interactionManager.start({
+      kind: "question",
+      expectedInput: "callback",
+    });
+
+    const ctx = createTextContext("hello");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(ctx.reply).toHaveBeenCalledWith(t("question.blocked.expected_answer"));
+  });
+
+  it("shows question-specific message for disallowed command", async () => {
+    interactionManager.start({
+      kind: "question",
+      expectedInput: "callback",
+      allowedCommands: ["/status"],
+    });
+
+    const ctx = createTextContext("/new");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(ctx.reply).toHaveBeenCalledWith(t("question.blocked.command_not_allowed"));
   });
 });

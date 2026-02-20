@@ -7,6 +7,7 @@ import { HttpsProxyAgent } from "https-proxy-agent";
 import { config } from "../config.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { interactionGuardMiddleware } from "./middleware/interaction-guard.js";
+import { unknownCommandMiddleware } from "./middleware/unknown-command.js";
 import { BOT_COMMANDS } from "./commands/definitions.js";
 import { startCommand } from "./commands/start.js";
 import { helpCommand } from "./commands/help.js";
@@ -474,6 +475,8 @@ export function createBot(): Bot<Context> {
   bot.command("model", handleModelCommand);
   bot.command("stop", stopCommand);
   bot.command("rename", renameCommand);
+
+  bot.on("message:text", unknownCommandMiddleware);
 
   bot.on("callback_query:data", async (ctx) => {
     logger.debug(`[Bot] Received callback_query:data: ${ctx.callbackQuery?.data}`);
