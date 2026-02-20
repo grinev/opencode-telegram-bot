@@ -57,14 +57,14 @@ describe("interactionGuardMiddleware", () => {
       expectedInput: "text",
     });
 
-    const ctx = createCallbackContext("rename:cancel");
+    const ctx = createCallbackContext("project:123");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
     await interactionGuardMiddleware(ctx, next);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
-      text: t("interaction.blocked.expected_text"),
+      text: t("rename.blocked.expected_name"),
     });
     expect(ctx.reply).not.toHaveBeenCalled();
   });
@@ -130,5 +130,21 @@ describe("interactionGuardMiddleware", () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("permission.blocked.command_not_allowed"));
+  });
+
+  it("shows rename-specific message for disallowed command", async () => {
+    interactionManager.start({
+      kind: "rename",
+      expectedInput: "text",
+      allowedCommands: ["/status"],
+    });
+
+    const ctx = createTextContext("/new");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(ctx.reply).toHaveBeenCalledWith(t("rename.blocked.command_not_allowed"));
   });
 });

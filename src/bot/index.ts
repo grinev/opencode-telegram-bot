@@ -449,6 +449,19 @@ export function createBot(): Bot<Context> {
   bot.use(ensureCommandsInitialized);
   bot.use(interactionGuardMiddleware);
 
+  const blockMenuWhileInteractionActive = async (ctx: Context): Promise<boolean> => {
+    const activeInteraction = interactionManager.getSnapshot();
+    if (!activeInteraction) {
+      return false;
+    }
+
+    logger.debug(
+      `[Bot] Blocking menu open while interaction active: kind=${activeInteraction.kind}, expectedInput=${activeInteraction.expectedInput}`,
+    );
+    await ctx.reply(t("interaction.blocked.finish_current"));
+    return true;
+  };
+
   bot.command("start", startCommand);
   bot.command("help", helpCommand);
   bot.command("status", statusCommand);
@@ -508,6 +521,10 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Agent mode button pressed: ${ctx.message?.text}`);
 
     try {
+      if (await blockMenuWhileInteractionActive(ctx)) {
+        return;
+      }
+
       await showAgentSelectionMenu(ctx);
     } catch (err) {
       logger.error("[Bot] Error showing agent menu:", err);
@@ -521,6 +538,10 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Model button pressed: ${ctx.message?.text}`);
 
     try {
+      if (await blockMenuWhileInteractionActive(ctx)) {
+        return;
+      }
+
       await showModelSelectionMenu(ctx);
     } catch (err) {
       logger.error("[Bot] Error showing model menu:", err);
@@ -533,6 +554,10 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Context button pressed: ${ctx.message?.text}`);
 
     try {
+      if (await blockMenuWhileInteractionActive(ctx)) {
+        return;
+      }
+
       await handleContextButtonPress(ctx);
     } catch (err) {
       logger.error("[Bot] Error handling context button:", err);
@@ -546,6 +571,10 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Variant button pressed: ${ctx.message?.text}`);
 
     try {
+      if (await blockMenuWhileInteractionActive(ctx)) {
+        return;
+      }
+
       await showVariantSelectionMenu(ctx);
     } catch (err) {
       logger.error("[Bot] Error showing variant menu:", err);

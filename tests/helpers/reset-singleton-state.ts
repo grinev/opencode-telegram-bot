@@ -53,6 +53,7 @@ export async function resetSingletonState(): Promise<void> {
   const [
     { questionManager },
     { permissionManager },
+    { renameManager },
     { interactionManager },
     { summaryAggregator },
     { keyboardManager },
@@ -63,6 +64,7 @@ export async function resetSingletonState(): Promise<void> {
   ] = await Promise.all([
     import("../../src/question/manager.js"),
     import("../../src/permission/manager.js"),
+    import("../../src/rename/manager.js"),
     import("../../src/interaction/manager.js"),
     import("../../src/summary/aggregator.js"),
     import("../../src/keyboard/manager.js"),
@@ -75,6 +77,7 @@ export async function resetSingletonState(): Promise<void> {
   stopEventListening();
   questionManager.clear();
   permissionManager.clear();
+  renameManager.clear();
   interactionManager.clear("test_reset");
   summaryAggregator.clear();
 

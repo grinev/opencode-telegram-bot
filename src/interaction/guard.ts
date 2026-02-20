@@ -85,6 +85,14 @@ function createBlockDecision(
   };
 }
 
+function isAllowedRenameCancelCallback(ctx: Context, state: InteractionState): boolean {
+  return (
+    state.kind === "rename" &&
+    state.expectedInput === "text" &&
+    ctx.callbackQuery?.data === "rename:cancel"
+  );
+}
+
 export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
   const state = interactionManager.getSnapshot();
   const { inputType, command } = classifyIncomingInput(ctx);
@@ -107,6 +115,10 @@ export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
   }
 
   if (state.expectedInput === "mixed") {
+    return createAllowDecision(inputType, state, command);
+  }
+
+  if (inputType === "callback" && isAllowedRenameCancelCallback(ctx, state)) {
     return createAllowDecision(inputType, state, command);
   }
 

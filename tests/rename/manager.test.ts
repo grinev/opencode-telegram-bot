@@ -23,6 +23,8 @@ describe("renameManager", () => {
     renameManager.setMessageId(42);
 
     expect(renameManager.getMessageId()).toBe(42);
+    expect(renameManager.isActiveMessage(42)).toBe(true);
+    expect(renameManager.isActiveMessage(99)).toBe(false);
   });
 
   it("clears state completely", () => {

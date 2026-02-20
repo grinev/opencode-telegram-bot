@@ -20,6 +20,18 @@ function getInteractionBlockedMessage(
     }
   }
 
+  if (interactionKind === "rename") {
+    switch (reason) {
+      case "command_not_allowed":
+        return t("rename.blocked.command_not_allowed");
+      case "expected_callback":
+      case "expected_command":
+      case "expected_text":
+      default:
+        return t("rename.blocked.expected_name");
+    }
+  }
+
   switch (reason) {
     case "expired":
       return t("interaction.blocked.expired");

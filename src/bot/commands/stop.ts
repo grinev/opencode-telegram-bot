@@ -4,6 +4,7 @@ import { stopEventListening } from "../../opencode/events.js";
 import { getCurrentSession } from "../../session/manager.js";
 import { permissionManager } from "../../permission/manager.js";
 import { questionManager } from "../../question/manager.js";
+import { renameManager } from "../../rename/manager.js";
 import { interactionManager } from "../../interaction/manager.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { logger } from "../../utils/logger.js";
@@ -18,6 +19,7 @@ function stopLocalStreaming(): void {
   summaryAggregator.clear();
   questionManager.clear();
   permissionManager.clear();
+  renameManager.clear();
   interactionManager.clear("stop_command");
 }
 

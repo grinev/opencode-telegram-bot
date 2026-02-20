@@ -26,6 +26,8 @@ export const en = {
   "interaction.blocked.expected_command": "⚠️ Please send a command for this step.",
   "interaction.blocked.command_not_allowed":
     "⚠️ This command is not available in the current step.",
+  "interaction.blocked.finish_current":
+    "⚠️ Finish the current interaction first (answer or cancel), then open another menu.",
 
   "inline.button.cancel": "❌ Cancel",
   "inline.inactive_callback": "This menu is inactive",
@@ -266,6 +268,12 @@ export const en = {
   "rename.success": "✅ Session renamed to: {title}",
   "rename.error": "🔴 Failed to rename session.",
   "rename.cancelled": "❌ Rename cancelled.",
+  "rename.inactive_callback": "Rename request is inactive",
+  "rename.inactive": "⚠️ Rename request is not active. Run /rename again.",
+  "rename.blocked.expected_name":
+    "⚠️ Enter a new session name as text or tap Cancel in rename message.",
+  "rename.blocked.command_not_allowed":
+    "⚠️ This command is not available while rename is waiting for a new name.",
   "rename.button.cancel": "❌ Cancel",
 
   "cmd.description.rename": "Rename current session",

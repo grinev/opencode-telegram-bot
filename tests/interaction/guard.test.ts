@@ -150,4 +150,34 @@ describe("interaction guard", () => {
     expect(decision.reason).toBe("command_not_allowed");
     expect(decision.state?.kind).toBe("question");
   });
+
+  it("allows rename cancel callback when rename expects text", () => {
+    interactionManager.start({
+      kind: "rename",
+      expectedInput: "text",
+    });
+
+    const decision = resolveInteractionGuardDecision(
+      createContext({ callbackData: "rename:cancel" }),
+    );
+
+    expect(decision.allow).toBe(true);
+    expect(decision.inputType).toBe("callback");
+    expect(decision.state?.kind).toBe("rename");
+  });
+
+  it("blocks non-rename callback while rename expects text", () => {
+    interactionManager.start({
+      kind: "rename",
+      expectedInput: "text",
+    });
+
+    const decision = resolveInteractionGuardDecision(
+      createContext({ callbackData: "project:abc" }),
+    );
+
+    expect(decision.allow).toBe(false);
+    expect(decision.reason).toBe("expected_text");
+    expect(decision.state?.kind).toBe("rename");
+  });
 });

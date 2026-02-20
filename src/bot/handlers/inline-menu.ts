@@ -6,7 +6,6 @@ import { t } from "../../i18n/index.js";
 
 const INLINE_MENU_CANCEL_PREFIX = "inline:cancel:";
 const LEGACY_CONTEXT_CANCEL_CALLBACK = "compact:cancel";
-const INLINE_MENU_EXPIRES_IN_MS = 10 * 60 * 1000;
 
 const INLINE_MENU_KINDS = ["project", "session", "model", "agent", "variant", "context"] as const;
 
@@ -110,11 +109,10 @@ export async function replyWithInlineMenu(
       menuKind: options.menuKind,
       messageId: message.message_id,
     },
-    expiresInMs: INLINE_MENU_EXPIRES_IN_MS,
   });
 
   logger.debug(
-    `[InlineMenu] Opened menu: kind=${options.menuKind}, messageId=${message.message_id}, expiresInMs=${INLINE_MENU_EXPIRES_IN_MS}`,
+    `[InlineMenu] Opened menu: kind=${options.menuKind}, messageId=${message.message_id}`,
   );
 
   return message.message_id;
