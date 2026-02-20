@@ -186,8 +186,8 @@ export const en = {
   "permission.blocked.command_not_allowed":
     "⚠️ This command is not available until you answer the permission request.",
   "permission.header": "{emoji} **Permission request: {name}**\n\n",
-  "permission.button.allow": "✅ Allow",
-  "permission.button.always": "🔓 Always",
+  "permission.button.allow": "✅ Allow once",
+  "permission.button.always": "🔓 Allow always",
   "permission.button.reject": "❌ Reject",
   "permission.name.bash": "Bash",
   "permission.name.edit": "Edit",

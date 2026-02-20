@@ -251,11 +251,9 @@ function formatPermissionText(request: PermissionRequest): string {
 function buildPermissionKeyboard(): InlineKeyboard {
   const keyboard = new InlineKeyboard();
 
-  // Single row with all 3 buttons
-  keyboard
-    .text(t("permission.button.allow"), "permission:once")
-    .text(t("permission.button.always"), "permission:always")
-    .text(t("permission.button.reject"), "permission:reject");
+  keyboard.text(t("permission.button.allow"), "permission:once").row();
+  keyboard.text(t("permission.button.always"), "permission:always").row();
+  keyboard.text(t("permission.button.reject"), "permission:reject");
 
   return keyboard;
 }

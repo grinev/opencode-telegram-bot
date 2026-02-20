@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Context } from "grammy";
+import type { Context, InlineKeyboard } from "grammy";
 import type { PermissionRequest } from "../../../src/permission/types.js";
 import { permissionManager } from "../../../src/permission/manager.js";
 import { interactionManager } from "../../../src/interaction/manager.js";
@@ -94,6 +94,15 @@ function createPermissionCallbackContext(data: string, messageId: number): Conte
   } as unknown as Context;
 }
 
+function getCallbackData(button: unknown): string | undefined {
+  if (!button || typeof button !== "object") {
+    return undefined;
+  }
+
+  const maybeButton = button as { callback_data?: string };
+  return maybeButton.callback_data;
+}
+
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -119,6 +128,18 @@ describe("bot/handlers/permission", () => {
     const request = createPermissionRequest("perm-1");
 
     await showPermissionRequest(botApi, 777, request);
+
+    const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
+    const [, , options] = sendMessageMock.mock.calls[0];
+    const replyMarkup = (options as { reply_markup: InlineKeyboard }).reply_markup;
+
+    expect(replyMarkup.inline_keyboard).toHaveLength(3);
+    expect(replyMarkup.inline_keyboard[0]?.[0]?.text).toBe(t("permission.button.allow"));
+    expect(getCallbackData(replyMarkup.inline_keyboard[0]?.[0])).toBe("permission:once");
+    expect(replyMarkup.inline_keyboard[1]?.[0]?.text).toBe(t("permission.button.always"));
+    expect(getCallbackData(replyMarkup.inline_keyboard[1]?.[0])).toBe("permission:always");
+    expect(replyMarkup.inline_keyboard[2]?.[0]?.text).toBe(t("permission.button.reject"));
+    expect(getCallbackData(replyMarkup.inline_keyboard[2]?.[0])).toBe("permission:reject");
 
     expect(permissionManager.isActive()).toBe(true);
     expect(permissionManager.getRequestID()).toBe("perm-1");
