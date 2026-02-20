@@ -90,3 +90,15 @@ Quick decision rule:
 - Keep PRs focused and small when possible.
 - Use clear titles that match the change intent.
 - Ensure CI passes before requesting review.
+
+### PR Quality Bar
+
+**MUST**
+- PR branch must be up to date with `main` HEAD and conflict-free.
+- CI must pass (`npm run lint`, `npm run build`, `npm test`).
+- Changes must be compatible with both macOS and Windows (our primary supported platforms).
+**SHOULD**
+- Keep PRs focused and small.
+- Add or update tests for behavior changes.
+- Describe user-visible impact in 1-2 lines.
+- If you could not test on one platform locally, mention it in the PR description.
