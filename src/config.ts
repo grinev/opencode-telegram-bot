@@ -69,6 +69,7 @@ export const config = {
   bot: {
     sessionsListLimit: getOptionalPositiveIntEnvVar("SESSIONS_LIST_LIMIT", 10),
     locale: getOptionalLocaleEnvVar("BOT_LOCALE", "en"),
+    hideSubsessions: getEnvVar("HIDE_SUBSESSIONS", false) === "true",
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),
