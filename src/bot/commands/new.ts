@@ -3,7 +3,7 @@ import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
-import { interactionManager } from "../../interaction/manager.js";
+import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { getStoredAgent } from "../../agent/manager.js";
@@ -42,7 +42,7 @@ export async function newCommand(ctx: CommandContext<Context>) {
       directory: currentProject.worktree,
     };
     setCurrentSession(sessionInfo);
-    interactionManager.clear("session_created");
+    clearAllInteractionState("session_created");
     await ingestSessionInfoForCache(session);
 
     // Initialize pinned message manager and create pinned message

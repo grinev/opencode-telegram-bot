@@ -34,8 +34,8 @@ import { handleVariantSelect, showVariantSelectionMenu } from "./handlers/varian
 import { handleContextButtonPress, handleCompactConfirm } from "./handlers/context.js";
 import { handleInlineMenuCancel } from "./handlers/inline-menu.js";
 import { questionManager } from "../question/manager.js";
-import { permissionManager } from "../permission/manager.js";
 import { interactionManager } from "../interaction/manager.js";
+import { clearAllInteractionState } from "../interaction/cleanup.js";
 import { keyboardManager } from "../keyboard/manager.js";
 import { stopEventListening, subscribeToEvents } from "../opencode/events.js";
 import { summaryAggregator } from "../summary/aggregator.js";
@@ -206,10 +206,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
         await botInstance.api.deleteMessage(chatIdInstance, messageId).catch(() => {});
       }
 
-      questionManager.clear();
-      if (interactionManager.getSnapshot()?.kind === "question") {
-        interactionManager.clear("question_replaced_by_new_poll");
-      }
+      clearAllInteractionState("question_replaced_by_new_poll");
     }
 
     logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
@@ -230,10 +227,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       }
     }
 
-    questionManager.clear();
-    if (interactionManager.getSnapshot()?.kind === "question") {
-      interactionManager.clear("question_error");
-    }
+    clearAllInteractionState("question_error");
   });
 
   summaryAggregator.setOnPermission(async (request) => {
@@ -370,9 +364,7 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
 async function resetMismatchedSessionContext(): Promise<void> {
   stopEventListening();
   summaryAggregator.clear();
-  questionManager.clear();
-  permissionManager.clear();
-  interactionManager.clear("session_mismatch_reset");
+  clearAllInteractionState("session_mismatch_reset");
   clearSession();
   keyboardManager.clearContext();
 
@@ -388,6 +380,8 @@ async function resetMismatchedSessionContext(): Promise<void> {
 }
 
 export function createBot(): Bot<Context> {
+  clearAllInteractionState("bot_startup");
+
   const botOptions: ConstructorParameters<typeof Bot<Context>>[1] = {};
 
   if (config.telegram.proxyUrl) {
@@ -515,6 +509,7 @@ export function createBot(): Bot<Context> {
       }
     } catch (err) {
       logger.error("[Bot] Error handling callback:", err);
+      clearAllInteractionState("callback_handler_error");
       await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     }
   });
@@ -806,6 +801,9 @@ export function createBot(): Bot<Context> {
       });
     } catch (err) {
       logger.error("Error in prompt handler:", err);
+      if (interactionManager.getSnapshot()) {
+        clearAllInteractionState("message_handler_error");
+      }
       await ctx.reply(t("error.generic"));
     }
 
@@ -814,6 +812,7 @@ export function createBot(): Bot<Context> {
 
   bot.catch((err) => {
     logger.error("[Bot] Unhandled error in bot:", err);
+    clearAllInteractionState("bot_unhandled_error");
     if (err.ctx) {
       logger.error(
         "[Bot] Error context - update type:",

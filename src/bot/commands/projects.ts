@@ -10,12 +10,9 @@ import { keyboardManager } from "../../keyboard/manager.js";
 import { getStoredAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
+import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
-import {
-  clearActiveInlineMenu,
-  ensureActiveInlineMenu,
-  replyWithInlineMenu,
-} from "../handlers/inline-menu.js";
+import { ensureActiveInlineMenu, replyWithInlineMenu } from "../handlers/inline-menu.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 
@@ -103,7 +100,7 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     setCurrentProject(selectedProject);
     clearSession();
     summaryAggregator.clear();
-    clearActiveInlineMenu("project_switched");
+    clearAllInteractionState("project_switched");
 
     // Clear pinned message when switching projects
     try {
@@ -140,7 +137,7 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
 
     await ctx.deleteMessage();
   } catch (error) {
-    clearActiveInlineMenu("project_select_error");
+    clearAllInteractionState("project_select_error");
     logger.error("[Bot] Error selecting project:", error);
     await ctx.answerCallbackQuery();
     await ctx.reply(t("projects.select_error"));

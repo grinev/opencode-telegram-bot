@@ -3,13 +3,10 @@ import { InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
+import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
-import {
-  clearActiveInlineMenu,
-  ensureActiveInlineMenu,
-  replyWithInlineMenu,
-} from "../handlers/inline-menu.js";
+import { ensureActiveInlineMenu, replyWithInlineMenu } from "../handlers/inline-menu.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
@@ -83,7 +80,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
     const currentProject = getCurrentProject();
 
     if (!currentProject) {
-      clearActiveInlineMenu("session_select_project_missing");
+      clearAllInteractionState("session_select_project_missing");
       await ctx.answerCallbackQuery();
       await ctx.reply(t("sessions.select_project_first"));
       return true;
@@ -108,7 +105,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       directory: currentProject.worktree,
     };
     setCurrentSession(sessionInfo);
-    clearActiveInlineMenu("session_switched");
+    clearAllInteractionState("session_switched");
 
     await ctx.answerCallbackQuery();
 
@@ -190,7 +187,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
 
     await ctx.deleteMessage();
   } catch (error) {
-    clearActiveInlineMenu("session_select_error");
+    clearAllInteractionState("session_select_error");
     logger.error("[Sessions] Error selecting session:", error);
     await ctx.answerCallbackQuery();
     await ctx.reply(t("sessions.select_error"));
