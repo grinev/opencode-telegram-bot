@@ -215,6 +215,8 @@ export const en = {
   "question.button.submit": "✅ Done",
   "question.button.custom": "🔤 Custom answer",
   "question.button.cancel": "❌ Cancel",
+  "question.use_custom_button_first":
+    '⚠️ To send text, tap "Custom answer" for the current question first.',
   "question.summary.title": "✅ Poll completed!\n\n",
   "question.summary.question": "Question {index}:\n{question}\n\n",
   "question.summary.answer": "Answer:\n{answer}\n\n",

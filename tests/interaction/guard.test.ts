@@ -136,4 +136,18 @@ describe("interaction guard", () => {
     expect(decision.command).toBe("/status");
     expect(decision.state?.kind).toBe("permission");
   });
+
+  it("blocks disallowed command while question mixed interaction is active", () => {
+    interactionManager.start({
+      kind: "question",
+      expectedInput: "mixed",
+      allowedCommands: ["/status"],
+    });
+
+    const decision = resolveInteractionGuardDecision(createContext({ text: "/new" }));
+
+    expect(decision.allow).toBe(false);
+    expect(decision.reason).toBe("command_not_allowed");
+    expect(decision.state?.kind).toBe("question");
+  });
 });

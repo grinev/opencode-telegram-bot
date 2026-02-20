@@ -215,6 +215,8 @@ export const ru: I18nDictionary = {
   "question.button.submit": "✅ Готово",
   "question.button.custom": "🔤 Свой ответ",
   "question.button.cancel": "❌ Отмена",
+  "question.use_custom_button_first":
+    '⚠️ Чтобы отправить текст, сначала нажмите кнопку "Свой ответ" для текущего вопроса.',
   "question.summary.title": "✅ Опрос завершен!\n\n",
   "question.summary.question": "Вопрос {index}:\n{question}\n\n",
   "question.summary.answer": "Ответ:\n{answer}\n\n",

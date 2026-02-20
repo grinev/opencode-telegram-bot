@@ -85,6 +85,24 @@ describe("questionManager", () => {
     ]);
   });
 
+  it("tracks custom input mode and active message id", () => {
+    questionManager.startQuestions([SINGLE_QUESTION, MULTIPLE_QUESTION], "req-3b");
+
+    expect(questionManager.getActiveMessageId()).toBeNull();
+    expect(questionManager.isWaitingForCustomInput(0)).toBe(false);
+
+    questionManager.setActiveMessageId(123);
+    expect(questionManager.isActiveMessage(123)).toBe(true);
+    expect(questionManager.isActiveMessage(999)).toBe(false);
+
+    questionManager.startCustomInput(0);
+    expect(questionManager.isWaitingForCustomInput(0)).toBe(true);
+
+    questionManager.nextQuestion();
+    expect(questionManager.getActiveMessageId()).toBeNull();
+    expect(questionManager.isWaitingForCustomInput(0)).toBe(false);
+  });
+
   it("returns copied message IDs and supports cancel/clear", () => {
     questionManager.startQuestions([SINGLE_QUESTION], "req-4");
     questionManager.addMessageId(10);

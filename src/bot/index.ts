@@ -197,6 +197,20 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       return;
     }
 
+    if (questionManager.isActive()) {
+      logger.warn("[Bot] Replacing active poll with a new one");
+
+      const previousMessageIds = questionManager.getMessageIds();
+      for (const messageId of previousMessageIds) {
+        await botInstance.api.deleteMessage(chatIdInstance, messageId).catch(() => {});
+      }
+
+      questionManager.clear();
+      if (interactionManager.getSnapshot()?.kind === "question") {
+        interactionManager.clear("question_replaced_by_new_poll");
+      }
+    }
+
     logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
     questionManager.startQuestions(questions, requestID);
     await showCurrentQuestion(botInstance.api, chatIdInstance);
@@ -216,6 +230,9 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
 
     questionManager.clear();
+    if (interactionManager.getSnapshot()?.kind === "question") {
+      interactionManager.clear("question_error");
+    }
   });
 
   summaryAggregator.setOnPermission(async (request) => {
