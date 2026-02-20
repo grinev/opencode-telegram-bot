@@ -4,6 +4,7 @@ import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { getCurrentSession } from "../../session/manager.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
+import { interactionManager } from "../../interaction/manager.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { PermissionRequest, PermissionReply } from "../../permission/types.js";
@@ -40,6 +41,23 @@ const PERMISSION_EMOJIS: Record<string, string> = {
   lsp: "🔧",
 };
 
+function getCallbackMessageId(ctx: Context): number | null {
+  const message = ctx.callbackQuery?.message;
+  if (!message || !("message_id" in message)) {
+    return null;
+  }
+
+  const messageId = (message as { message_id?: number }).message_id;
+  return typeof messageId === "number" ? messageId : null;
+}
+
+function clearPermissionInteraction(reason: string): void {
+  const state = interactionManager.getSnapshot();
+  if (state?.kind === "permission") {
+    interactionManager.clear(reason);
+  }
+}
+
 /**
  * Handle permission callback from inline buttons
  */
@@ -54,6 +72,13 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
   logger.debug(`[PermissionHandler] Received callback: ${data}`);
 
   if (!permissionManager.isActive()) {
+    clearPermissionInteraction("permission_inactive_callback");
+    await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
+    return true;
+  }
+
+  const callbackMessageId = getCallbackMessageId(ctx);
+  if (!permissionManager.isActiveMessage(callbackMessageId)) {
     await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
     return true;
   }
@@ -85,6 +110,9 @@ async function handlePermissionReply(ctx: Context, reply: PermissionReply): Prom
   const directory = currentSession?.directory ?? currentProject?.worktree;
 
   if (!requestID || !directory || !chatId) {
+    permissionManager.clear();
+    clearPermissionInteraction("permission_invalid_runtime_context");
+
     await ctx.answerCallbackQuery({
       text: t("permission.no_active_request_callback"),
       show_alert: true,
@@ -132,6 +160,7 @@ async function handlePermissionReply(ctx: Context, reply: PermissionReply): Prom
   });
 
   permissionManager.clear();
+  clearPermissionInteraction("permission_replied");
 }
 
 /**
@@ -144,7 +173,26 @@ export async function showPermissionRequest(
 ): Promise<void> {
   logger.debug(`[PermissionHandler] Showing permission request: ${request.permission}`);
 
+  const previousMessageId = permissionManager.getMessageId();
+  const hadActivePermission = permissionManager.isActive();
+
+  if (hadActivePermission && previousMessageId !== null) {
+    logger.debug(
+      `[PermissionHandler] Replacing active permission request, deleting previous message: ${previousMessageId}`,
+    );
+    await bot.deleteMessage(chatId, previousMessageId).catch((err) => {
+      logger.debug("[PermissionHandler] Failed to delete previous permission message:", err);
+    });
+  }
+
   permissionManager.startPermission(request);
+  interactionManager.start({
+    kind: "permission",
+    expectedInput: "callback",
+    metadata: {
+      requestID: request.id,
+    },
+  });
 
   const text = formatPermissionText(request);
   const keyboard = buildPermissionKeyboard();
@@ -158,8 +206,18 @@ export async function showPermissionRequest(
     logger.debug(`[PermissionHandler] Message sent, messageId=${message.message_id}`);
     permissionManager.setMessageId(message.message_id);
 
+    interactionManager.transition({
+      metadata: {
+        requestID: request.id,
+        messageId: message.message_id,
+      },
+    });
+
     summaryAggregator.stopTypingIndicator();
   } catch (err) {
+    permissionManager.clear();
+    clearPermissionInteraction("permission_message_send_failed");
+
     logger.error("[PermissionHandler] Failed to send permission message:", err);
     throw err;
   }

@@ -110,4 +110,30 @@ describe("interaction guard", () => {
     expect(decisionText.allow).toBe(true);
     expect(decisionCallback.allow).toBe(true);
   });
+
+  it("blocks text while permission interaction is active", () => {
+    interactionManager.start({
+      kind: "permission",
+      expectedInput: "callback",
+    });
+
+    const decision = resolveInteractionGuardDecision(createContext({ text: "some text" }));
+
+    expect(decision.allow).toBe(false);
+    expect(decision.reason).toBe("expected_callback");
+    expect(decision.state?.kind).toBe("permission");
+  });
+
+  it("allows default status command while permission interaction is active", () => {
+    interactionManager.start({
+      kind: "permission",
+      expectedInput: "callback",
+    });
+
+    const decision = resolveInteractionGuardDecision(createContext({ text: "/status" }));
+
+    expect(decision.allow).toBe(true);
+    expect(decision.command).toBe("/status");
+    expect(decision.state?.kind).toBe("permission");
+  });
 });

@@ -1,10 +1,25 @@
 import type { Context, NextFunction } from "grammy";
 import { resolveInteractionGuardDecision } from "../../interaction/guard.js";
-import type { BlockReason } from "../../interaction/types.js";
+import type { BlockReason, InteractionKind } from "../../interaction/types.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 
-function getInteractionBlockedMessage(reason: BlockReason | undefined): string {
+function getInteractionBlockedMessage(
+  reason: BlockReason | undefined,
+  interactionKind: InteractionKind | undefined,
+): string {
+  if (interactionKind === "permission") {
+    switch (reason) {
+      case "command_not_allowed":
+        return t("permission.blocked.command_not_allowed");
+      case "expected_callback":
+      case "expected_command":
+      case "expected_text":
+      default:
+        return t("permission.blocked.expected_reply");
+    }
+  }
+
   switch (reason) {
     case "expired":
       return t("interaction.blocked.expired");
@@ -28,7 +43,7 @@ export async function interactionGuardMiddleware(ctx: Context, next: NextFunctio
     return;
   }
 
-  const message = getInteractionBlockedMessage(decision.reason);
+  const message = getInteractionBlockedMessage(decision.reason, decision.state?.kind);
 
   logger.debug(
     `[InteractionGuard] Blocked input: interactionKind=${decision.state?.kind || "none"}, inputType=${decision.inputType}, reason=${decision.reason || "unknown"}, command=${decision.command || "-"}`,

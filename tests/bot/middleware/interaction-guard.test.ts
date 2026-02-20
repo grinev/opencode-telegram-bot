@@ -100,4 +100,35 @@ describe("interactionGuardMiddleware", () => {
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.command_not_allowed"));
   });
+
+  it("shows permission-specific message for blocked text", async () => {
+    interactionManager.start({
+      kind: "permission",
+      expectedInput: "callback",
+    });
+
+    const ctx = createTextContext("hello");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(ctx.reply).toHaveBeenCalledWith(t("permission.blocked.expected_reply"));
+  });
+
+  it("shows permission-specific message for disallowed command", async () => {
+    interactionManager.start({
+      kind: "permission",
+      expectedInput: "callback",
+      allowedCommands: ["/status"],
+    });
+
+    const ctx = createTextContext("/new");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(ctx.reply).toHaveBeenCalledWith(t("permission.blocked.command_not_allowed"));
+  });
 });

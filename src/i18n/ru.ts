@@ -182,6 +182,9 @@ export const ru: I18nDictionary = {
   "permission.reply.always": "Разрешено всегда",
   "permission.reply.reject": "Отклонено",
   "permission.send_reply_error": "❌ Не удалось отправить ответ на запрос разрешения",
+  "permission.blocked.expected_reply": "⚠️ Сначала ответьте на запрос разрешения кнопками выше.",
+  "permission.blocked.command_not_allowed":
+    "⚠️ Эта команда недоступна, пока вы не ответите на запрос разрешения.",
   "permission.header": "{emoji} **Запрос разрешения: {name}**\n\n",
   "permission.button.allow": "✅ Разрешить",
   "permission.button.always": "🔓 Всегда",

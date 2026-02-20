@@ -181,6 +181,10 @@ export const en = {
   "permission.reply.always": "Always allowed",
   "permission.reply.reject": "Rejected",
   "permission.send_reply_error": "❌ Failed to send permission reply",
+  "permission.blocked.expected_reply":
+    "⚠️ Please answer the permission request first using the buttons above.",
+  "permission.blocked.command_not_allowed":
+    "⚠️ This command is not available until you answer the permission request.",
   "permission.header": "{emoji} **Permission request: {name}**\n\n",
   "permission.button.allow": "✅ Allow",
   "permission.button.always": "🔓 Always",
