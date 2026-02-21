@@ -58,6 +58,39 @@ function clearPermissionInteraction(reason: string): void {
   }
 }
 
+function syncPermissionInteractionState(metadata: Record<string, unknown> = {}): void {
+  const pendingCount = permissionManager.getPendingCount();
+
+  if (pendingCount === 0) {
+    clearPermissionInteraction("permission_no_pending_requests");
+    return;
+  }
+
+  const nextMetadata: Record<string, unknown> = {
+    pendingCount,
+    ...metadata,
+  };
+
+  const state = interactionManager.getSnapshot();
+  if (state?.kind === "permission") {
+    interactionManager.transition({
+      expectedInput: "callback",
+      metadata: nextMetadata,
+    });
+    return;
+  }
+
+  interactionManager.start({
+    kind: "permission",
+    expectedInput: "callback",
+    metadata: nextMetadata,
+  });
+}
+
+function isPermissionReply(value: string): value is PermissionReply {
+  return value === "once" || value === "always" || value === "reject";
+}
+
 /**
  * Handle permission callback from inline buttons
  */
@@ -83,11 +116,25 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
     return true;
   }
 
+  const requestID = permissionManager.getRequestID(callbackMessageId);
+  if (!requestID) {
+    await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
+    return true;
+  }
+
   const parts = data.split(":");
-  const action = parts[1] as PermissionReply;
+  const action = parts[1];
+
+  if (!isPermissionReply(action)) {
+    await ctx.answerCallbackQuery({
+      text: t("permission.processing_error_callback"),
+      show_alert: true,
+    });
+    return true;
+  }
 
   try {
-    await handlePermissionReply(ctx, action);
+    await handlePermissionReply(ctx, action, requestID, callbackMessageId);
   } catch (err) {
     logger.error("[PermissionHandler] Error handling callback:", err);
     await ctx.answerCallbackQuery({
@@ -102,14 +149,18 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
 /**
  * Handle permission reply (once/always/reject)
  */
-async function handlePermissionReply(ctx: Context, reply: PermissionReply): Promise<void> {
-  const requestID = permissionManager.getRequestID();
+async function handlePermissionReply(
+  ctx: Context,
+  reply: PermissionReply,
+  requestID: string,
+  callbackMessageId: number | null,
+): Promise<void> {
   const currentProject = getCurrentProject();
   const currentSession = getCurrentSession();
   const chatId = ctx.chat?.id;
   const directory = currentSession?.directory ?? currentProject?.worktree;
 
-  if (!requestID || !directory || !chatId) {
+  if (!directory || !chatId) {
     permissionManager.clear();
     clearPermissionInteraction("permission_invalid_runtime_context");
 
@@ -159,8 +210,16 @@ async function handlePermissionReply(ctx: Context, reply: PermissionReply): Prom
     },
   });
 
-  permissionManager.clear();
-  clearPermissionInteraction("permission_replied");
+  permissionManager.removeByMessageId(callbackMessageId);
+
+  if (!permissionManager.isActive()) {
+    clearPermissionInteraction("permission_replied");
+    return;
+  }
+
+  syncPermissionInteractionState({
+    lastRepliedRequestID: requestID,
+  });
 }
 
 /**
@@ -173,27 +232,6 @@ export async function showPermissionRequest(
 ): Promise<void> {
   logger.debug(`[PermissionHandler] Showing permission request: ${request.permission}`);
 
-  const previousMessageId = permissionManager.getMessageId();
-  const hadActivePermission = permissionManager.isActive();
-
-  if (hadActivePermission && previousMessageId !== null) {
-    logger.debug(
-      `[PermissionHandler] Replacing active permission request, deleting previous message: ${previousMessageId}`,
-    );
-    await bot.deleteMessage(chatId, previousMessageId).catch((err) => {
-      logger.debug("[PermissionHandler] Failed to delete previous permission message:", err);
-    });
-  }
-
-  permissionManager.startPermission(request);
-  interactionManager.start({
-    kind: "permission",
-    expectedInput: "callback",
-    metadata: {
-      requestID: request.id,
-    },
-  });
-
   const text = formatPermissionText(request);
   const keyboard = buildPermissionKeyboard();
 
@@ -204,20 +242,15 @@ export async function showPermissionRequest(
     });
 
     logger.debug(`[PermissionHandler] Message sent, messageId=${message.message_id}`);
-    permissionManager.setMessageId(message.message_id);
+    permissionManager.startPermission(request, message.message_id);
 
-    interactionManager.transition({
-      metadata: {
-        requestID: request.id,
-        messageId: message.message_id,
-      },
+    syncPermissionInteractionState({
+      requestID: request.id,
+      messageId: message.message_id,
     });
 
     summaryAggregator.stopTypingIndicator();
   } catch (err) {
-    permissionManager.clear();
-    clearPermissionInteraction("permission_message_send_failed");
-
     logger.error("[PermissionHandler] Failed to send permission message:", err);
     throw err;
   }

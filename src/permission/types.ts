@@ -20,10 +20,8 @@ export interface PermissionRequest {
 export type PermissionReply = "once" | "always" | "reject";
 
 /**
- * State for active permission request
+ * State for active permission requests
  */
 export interface PermissionState {
-  request: PermissionRequest | null;
-  messageId: number | null; // Telegram message ID with buttons
-  isActive: boolean;
+  requestsByMessageId: Map<number, PermissionRequest>; // Telegram message ID -> request
 }

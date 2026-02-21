@@ -49,7 +49,7 @@ const TEST_PERMISSION: PermissionRequest = {
 
 function activateInteractionState(): void {
   questionManager.startQuestions([TEST_QUESTION], "req-stop");
-  permissionManager.startPermission(TEST_PERMISSION);
+  permissionManager.startPermission(TEST_PERMISSION, 101);
   renameManager.startWaiting("session-1", "D:/repo", "Old title");
   interactionManager.start({
     kind: "rename",

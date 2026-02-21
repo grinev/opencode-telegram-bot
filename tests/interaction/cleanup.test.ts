@@ -32,7 +32,7 @@ describe("interaction/cleanup", () => {
 
   it("clears all interaction-related managers", () => {
     questionManager.startQuestions([TEST_QUESTION], "req-1");
-    permissionManager.startPermission(TEST_PERMISSION);
+    permissionManager.startPermission(TEST_PERMISSION, 101);
     renameManager.startWaiting("session-1", "D:/repo", "Old title");
     interactionManager.start({
       kind: "rename",
