@@ -159,6 +159,10 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnTool(async (toolInfo) => {
+    if (config.bot.hideToolCallMessages) {
+      return;
+    }
+
     if (!botInstance || !chatIdInstance) {
       logger.error("Bot or chat ID not available for sending tool notification");
       return;
@@ -273,6 +277,10 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnThinking(async (sessionId) => {
+    if (config.bot.hideThinkingMessages) {
+      return;
+    }
+
     if (!botInstance || !chatIdInstance) {
       return;
     }

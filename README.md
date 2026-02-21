@@ -135,6 +135,8 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `BOT_LOCALE`                    | Bot UI language (`en` or `ru`)                                                                               |    No    | `en`                    |
 | `SESSIONS_LIST_LIMIT`           | Max sessions shown in `/sessions`                                                                            |    No    | `10`                    |
 | `SERVICE_MESSAGES_INTERVAL_SEC` | Service messages interval (thinking + tool calls); keep `>=2` to avoid Telegram rate limits, `0` = immediate |    No    | `5`                     |
+| `HIDE_THINKING_MESSAGES`        | Hide `💭 Thinking...` service messages                                                                       |    No    | `false`                 |
+| `HIDE_TOOL_CALL_MESSAGES`       | Hide tool-call service messages (`💻 bash ...`, `📖 read ...`, etc.)                                         |    No    | `false`                 |
 | `CODE_FILE_MAX_SIZE_KB`         | Max file size (KB) to send as document                                                                       |    No    | `100`                   |
 | `LOG_LEVEL`                     | Log level (`debug`, `info`, `warn`, `error`)                                                                 |    No    | `info`                  |
 

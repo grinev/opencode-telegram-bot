@@ -66,6 +66,26 @@ function getOptionalLocaleEnvVar(key: string, defaultValue: "en" | "ru"): "en" |
   return defaultValue;
 }
 
+function getOptionalBooleanEnvVar(key: string, defaultValue: boolean): boolean {
+  const value = getEnvVar(key, false);
+
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+}
+
 export const config = {
   telegram: {
     token: getEnvVar("TELEGRAM_BOT_TOKEN"),
@@ -91,6 +111,8 @@ export const config = {
       ["SERVICE_MESSAGES_INTERVAL_SEC", "TOOL_MESSAGES_INTERVAL_SEC"],
       5,
     ),
+    hideThinkingMessages: getOptionalBooleanEnvVar("HIDE_THINKING_MESSAGES", false),
+    hideToolCallMessages: getOptionalBooleanEnvVar("HIDE_TOOL_CALL_MESSAGES", false),
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),

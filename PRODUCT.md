@@ -78,6 +78,7 @@ No public inbound ports are required for normal usage.
 - Selected project persisted in `settings.json`
 - Configurable sessions list size (default: 10)
 - Configurable bot locale
+- Configurable visibility for service messages (thinking/tool calls)
 - Configurable max code file size in KB (default: 100)
 
 ## Current Product Scope
@@ -121,6 +122,7 @@ Interaction routing rules:
 - [x] Context/variant controls from Telegram keyboard
 - [x] Sending code blocks as files when needed
 - [x] Configurable batching of service messages (thinking + tool updates): recommended `>=2` sec for Telegram rate limits; `0` = immediate
+- [x] Configurable service message visibility via env flags (`HIDE_THINKING_MESSAGES`, `HIDE_TOOL_CALL_MESSAGES`)
 - [x] Single-user security model (allowed Telegram user ID)
 - [x] Persistent bot settings (`settings.json`) between restarts
 - [x] EN/RU localization structure via dedicated i18n files
@@ -130,7 +132,7 @@ Interaction routing rules:
 Open tasks for upcoming iterations:
 
 - [ ] Display MCP servers, formatters, and plugins in bot status/details
-- [ ] Configure visibility level for thinking and intermediate steps
+- [x] Configure visibility level for thinking and intermediate steps
 - [ ] Add server crash notifications in Telegram
 - [ ] Add periodic health checks and optional auto-restart for OpenCode server
 - [ ] Improve Telegram-compatible message formatting for richer outputs
