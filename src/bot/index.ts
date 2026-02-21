@@ -71,7 +71,9 @@ const toolMessageBatcher = new ToolMessageBatcher({
       return;
     }
 
-    await botInstance.api.sendMessage(chatIdInstance, text);
+    await botInstance.api.sendMessage(chatIdInstance, text, {
+      disable_notification: true,
+    });
   },
 });
 
@@ -210,6 +212,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
       await botInstance.api.sendDocument(chatIdInstance, new InputFile(tempFilePath), {
         caption: fileData.caption,
+        disable_notification: true,
       });
 
       await fs.unlink(tempFilePath);
