@@ -122,20 +122,21 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 - **Windows:** `%APPDATA%\opencode-telegram-bot\.env`
 - **Linux:** `~/.config/opencode-telegram-bot/.env`
 
-| Variable                   | Description                                  | Required | Default                 |
-| -------------------------- | -------------------------------------------- | :------: | ----------------------- |
-| `TELEGRAM_BOT_TOKEN`       | Bot token from @BotFather                    |   Yes    | —                       |
-| `TELEGRAM_ALLOWED_USER_ID` | Your numeric Telegram user ID                |   Yes    | —                       |
-| `TELEGRAM_PROXY_URL`       | Proxy URL for Telegram API (SOCKS5/HTTP)     |    No    | —                       |
-| `OPENCODE_API_URL`         | OpenCode server URL                          |    No    | `http://localhost:4096` |
-| `OPENCODE_SERVER_USERNAME` | Server auth username                         |    No    | `opencode`              |
-| `OPENCODE_SERVER_PASSWORD` | Server auth password                         |    No    | —                       |
-| `OPENCODE_MODEL_PROVIDER`  | Default model provider                       |   Yes    | `opencode`              |
-| `OPENCODE_MODEL_ID`        | Default model ID                             |   Yes    | `big-pickle`            |
-| `BOT_LOCALE`               | Bot UI language (`en` or `ru`)               |    No    | `en`                    |
-| `SESSIONS_LIST_LIMIT`      | Max sessions shown in `/sessions`            |    No    | `10`                    |
-| `CODE_FILE_MAX_SIZE_KB`    | Max file size (KB) to send as document       |    No    | `100`                   |
-| `LOG_LEVEL`                | Log level (`debug`, `info`, `warn`, `error`) |    No    | `info`                  |
+| Variable                        | Description                                                                                                  | Required | Default                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ | :------: | ----------------------- |
+| `TELEGRAM_BOT_TOKEN`            | Bot token from @BotFather                                                                                    |   Yes    | —                       |
+| `TELEGRAM_ALLOWED_USER_ID`      | Your numeric Telegram user ID                                                                                |   Yes    | —                       |
+| `TELEGRAM_PROXY_URL`            | Proxy URL for Telegram API (SOCKS5/HTTP)                                                                     |    No    | —                       |
+| `OPENCODE_API_URL`              | OpenCode server URL                                                                                          |    No    | `http://localhost:4096` |
+| `OPENCODE_SERVER_USERNAME`      | Server auth username                                                                                         |    No    | `opencode`              |
+| `OPENCODE_SERVER_PASSWORD`      | Server auth password                                                                                         |    No    | —                       |
+| `OPENCODE_MODEL_PROVIDER`       | Default model provider                                                                                       |   Yes    | `opencode`              |
+| `OPENCODE_MODEL_ID`             | Default model ID                                                                                             |   Yes    | `big-pickle`            |
+| `BOT_LOCALE`                    | Bot UI language (`en` or `ru`)                                                                               |    No    | `en`                    |
+| `SESSIONS_LIST_LIMIT`           | Max sessions shown in `/sessions`                                                                            |    No    | `10`                    |
+| `SERVICE_MESSAGES_INTERVAL_SEC` | Service messages interval (thinking + tool calls); keep `>=2` to avoid Telegram rate limits, `0` = immediate |    No    | `5`                     |
+| `CODE_FILE_MAX_SIZE_KB`         | Max file size (KB) to send as document                                                                       |    No    | `100`                   |
+| `LOG_LEVEL`                     | Log level (`debug`, `info`, `warn`, `error`)                                                                 |    No    | `info`                  |
 
 > **Keep your `.env` file private.** It contains your bot token. Never commit it to version control.
 

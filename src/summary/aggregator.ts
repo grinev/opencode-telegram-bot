@@ -18,6 +18,7 @@ export interface SummaryInfo {
 type MessageCompleteCallback = (sessionId: string, messageText: string) => void;
 
 export interface ToolInfo {
+  sessionId: string;
   messageId: string;
   callId: string;
   tool: string;
@@ -35,7 +36,7 @@ type QuestionCallback = (questions: Question[], requestID: string) => void;
 
 type QuestionErrorCallback = () => void;
 
-type ThinkingCallback = () => void;
+type ThinkingCallback = (sessionId: string) => void;
 
 export interface TokensInfo {
   input: number;
@@ -55,6 +56,8 @@ type SessionDiffCallback = (sessionId: string, diffs: FileChange[]) => void;
 
 type FileChangeCallback = (change: FileChange) => void;
 
+type ClearedCallback = () => void;
+
 class SummaryAggregator {
   private currentSessionId: string | null = null;
   private currentMessageParts: Map<string, string[]> = new Map();
@@ -73,6 +76,7 @@ class SummaryAggregator {
   private onPermissionCallback: PermissionCallback | null = null;
   private onSessionDiffCallback: SessionDiffCallback | null = null;
   private onFileChangeCallback: FileChangeCallback | null = null;
+  private onClearedCallback: ClearedCallback | null = null;
   private processedToolStates: Set<string> = new Set();
   private bot: Bot | null = null;
   private chatId: number | null = null;
@@ -126,6 +130,10 @@ class SummaryAggregator {
 
   setOnFileChange(callback: FileChangeCallback): void {
     this.onFileChangeCallback = callback;
+  }
+
+  setOnCleared(callback: ClearedCallback): void {
+    this.onClearedCallback = callback;
   }
 
   private startTypingIndicator(): void {
@@ -226,6 +234,14 @@ class SummaryAggregator {
     this.processedToolStates.clear();
     this.messageCount = 0;
     this.lastUpdated = 0;
+
+    if (this.onClearedCallback) {
+      try {
+        this.onClearedCallback();
+      } catch (err) {
+        logger.error("[Aggregator] Error in clear callback:", err);
+      }
+    }
   }
 
   private handleMessageUpdated(
@@ -252,7 +268,7 @@ class SummaryAggregator {
         // Notify that agent started thinking
         if (this.onThinkingCallback) {
           setImmediate(() => {
-            this.onThinkingCallback!();
+            this.onThinkingCallback!(info.sessionID);
           });
         }
       }
@@ -407,6 +423,7 @@ class SummaryAggregator {
           this.processedToolStates.add(notifiedKey);
 
           const toolData = {
+            sessionId: part.sessionID,
             messageId: messageID,
             callId: part.callID,
             tool: part.tool,

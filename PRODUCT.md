@@ -120,6 +120,7 @@ Interaction routing rules:
 - [x] Model and agent selection from Telegram
 - [x] Context/variant controls from Telegram keyboard
 - [x] Sending code blocks as files when needed
+- [x] Configurable batching of service messages (thinking + tool updates): recommended `>=2` sec for Telegram rate limits; `0` = immediate
 - [x] Single-user security model (allowed Telegram user ID)
 - [x] Persistent bot settings (`settings.json`) between restarts
 - [x] EN/RU localization structure via dedicated i18n files
@@ -135,6 +136,7 @@ Open tasks for upcoming iterations:
 - [ ] Improve Telegram-compatible message formatting for richer outputs
 - [ ] Support sending files from Telegram to OpenCode (screenshots, documents)
 - [ ] Provide a Docker image and basic container deployment guide
+- [ ] Add voice transcription
 
 ## Possible Improvements
 

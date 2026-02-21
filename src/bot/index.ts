@@ -40,6 +40,7 @@ import { keyboardManager } from "../keyboard/manager.js";
 import { stopEventListening, subscribeToEvents } from "../opencode/events.js";
 import { summaryAggregator } from "../summary/aggregator.js";
 import { formatSummary, formatToolInfo } from "../summary/formatter.js";
+import { ToolMessageBatcher } from "../summary/tool-message-batcher.js";
 import { opencodeClient } from "../opencode/client.js";
 import { clearSession, getCurrentSession, setCurrentSession } from "../session/manager.js";
 import { ingestSessionInfoForCache } from "../session/cache-manager.js";
@@ -57,6 +58,22 @@ import { t } from "../i18n/index.js";
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
 let commandsInitialized = false;
+
+const toolMessageBatcher = new ToolMessageBatcher({
+  intervalSeconds: 5,
+  sendMessage: async (sessionId, text) => {
+    if (!botInstance || !chatIdInstance) {
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
+      return;
+    }
+
+    await botInstance.api.sendMessage(chatIdInstance, text);
+  },
+});
 
 async function ensureCommandsInitialized(ctx: Context, next: NextFunction): Promise<void> {
   if (commandsInitialized || !ctx.from || ctx.from.id !== config.telegram.allowedUserId) {
@@ -93,6 +110,11 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     return;
   }
 
+  toolMessageBatcher.setIntervalSeconds(config.bot.serviceMessagesIntervalSec);
+  summaryAggregator.setOnCleared(() => {
+    toolMessageBatcher.clearAll("summary_aggregator_clear");
+  });
+
   summaryAggregator.setOnComplete(async (sessionId, messageText) => {
     if (!botInstance || !chatIdInstance) {
       logger.error("Bot or chat ID not available for sending message");
@@ -103,6 +125,8 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     if (currentSession?.id !== sessionId) {
       return;
     }
+
+    await toolMessageBatcher.flushSession(sessionId, "assistant_message_completed");
 
     try {
       const parts = formatSummary(messageText);
@@ -141,15 +165,14 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
 
     const currentSession = getCurrentSession();
-    const sessionId = summaryAggregator["currentSessionId"];
-    if (!currentSession || currentSession.id !== sessionId) {
+    if (!currentSession || currentSession.id !== toolInfo.sessionId) {
       return;
     }
 
     try {
       const message = formatToolInfo(toolInfo);
       if (message) {
-        await botInstance.api.sendMessage(chatIdInstance, message);
+        toolMessageBatcher.enqueue(toolInfo.sessionId, message);
       }
     } catch (err) {
       logger.error("Failed to send tool notification to Telegram:", err);
@@ -198,6 +221,11 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       return;
     }
 
+    const currentSession = getCurrentSession();
+    if (currentSession) {
+      await toolMessageBatcher.flushSession(currentSession.id, "question_asked");
+    }
+
     if (questionManager.isActive()) {
       logger.warn("[Bot] Replacing active poll with a new one");
 
@@ -236,22 +264,27 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       return;
     }
 
+    await toolMessageBatcher.flushSession(request.sessionID, "permission_asked");
+
     logger.info(
       `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}`,
     );
     await showPermissionRequest(botInstance.api, chatIdInstance, request);
   });
 
-  summaryAggregator.setOnThinking(async () => {
+  summaryAggregator.setOnThinking(async (sessionId) => {
     if (!botInstance || !chatIdInstance) {
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
       return;
     }
 
     logger.debug("[Bot] Agent started thinking");
 
-    await botInstance.api.sendMessage(chatIdInstance, t("bot.thinking")).catch((err) => {
-      logger.error("[Bot] Failed to send thinking message:", err);
-    });
+    toolMessageBatcher.enqueue(sessionId, t("bot.thinking"));
   });
 
   summaryAggregator.setOnTokens(async (tokens) => {
@@ -381,6 +414,8 @@ async function resetMismatchedSessionContext(): Promise<void> {
 
 export function createBot(): Bot<Context> {
   clearAllInteractionState("bot_startup");
+  toolMessageBatcher.setIntervalSeconds(config.bot.serviceMessagesIntervalSec);
+  logger.info(`[ToolBatcher] Service messages interval: ${config.bot.serviceMessagesIntervalSec}s`);
 
   const botOptions: ConstructorParameters<typeof Bot<Context>>[1] = {};
 

@@ -4,6 +4,7 @@ import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
+import { summaryAggregator } from "../../summary/aggregator.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { ensureActiveInlineMenu, replyWithInlineMenu } from "../handlers/inline-menu.js";
@@ -105,6 +106,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       directory: currentProject.worktree,
     };
     setCurrentSession(sessionInfo);
+    summaryAggregator.clear();
     clearAllInteractionState("session_switched");
 
     await ctx.answerCallbackQuery();

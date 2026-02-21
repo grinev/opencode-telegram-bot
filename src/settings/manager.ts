@@ -183,5 +183,14 @@ export function __resetSettingsForTests(): void {
 }
 
 export async function loadSettings(): Promise<void> {
-  currentSettings = await readSettingsFile();
+  const loadedSettings = (await readSettingsFile()) as Settings & {
+    toolMessagesIntervalSec?: unknown;
+  };
+
+  if ("toolMessagesIntervalSec" in loadedSettings) {
+    delete loadedSettings.toolMessagesIntervalSec;
+    void writeSettingsFile(loadedSettings);
+  }
+
+  currentSettings = loadedSettings;
 }

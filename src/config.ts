@@ -29,6 +29,24 @@ function getOptionalPositiveIntEnvVar(key: string, defaultValue: number): number
   return parsedValue;
 }
 
+function getOptionalNonNegativeIntEnvVarFromKeys(keys: string[], defaultValue: number): number {
+  for (const key of keys) {
+    const value = getEnvVar(key, false);
+    if (!value) {
+      continue;
+    }
+
+    const parsedValue = Number.parseInt(value, 10);
+    if (Number.isNaN(parsedValue) || parsedValue < 0) {
+      return defaultValue;
+    }
+
+    return parsedValue;
+  }
+
+  return defaultValue;
+}
+
 function getOptionalLocaleEnvVar(key: string, defaultValue: "en" | "ru"): "en" | "ru" {
   const value = getEnvVar(key, false);
 
@@ -69,6 +87,10 @@ export const config = {
   bot: {
     sessionsListLimit: getOptionalPositiveIntEnvVar("SESSIONS_LIST_LIMIT", 10),
     locale: getOptionalLocaleEnvVar("BOT_LOCALE", "en"),
+    serviceMessagesIntervalSec: getOptionalNonNegativeIntEnvVarFromKeys(
+      ["SERVICE_MESSAGES_INTERVAL_SEC", "TOOL_MESSAGES_INTERVAL_SEC"],
+      5,
+    ),
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),

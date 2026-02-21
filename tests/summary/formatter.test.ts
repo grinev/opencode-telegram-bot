@@ -15,6 +15,7 @@ describe("summary/formatter", () => {
 
   it("formats todowrite tool metadata", () => {
     const text = formatToolInfo({
+      sessionId: "s1",
       messageId: "m1",
       callId: "c1",
       tool: "todowrite",
@@ -33,6 +34,7 @@ describe("summary/formatter", () => {
 
   it("formats write/edit tool details with line counters", () => {
     const writeText = formatToolInfo({
+      sessionId: "s1",
       messageId: "m2",
       callId: "c2",
       tool: "write",
@@ -46,6 +48,7 @@ describe("summary/formatter", () => {
     expect(writeText).toContain("✍️ write src/example.ts (+2)");
 
     const editText = formatToolInfo({
+      sessionId: "s1",
       messageId: "m3",
       callId: "c3",
       tool: "edit",
@@ -66,6 +69,7 @@ describe("summary/formatter", () => {
 
   it("formats bash tool using description and command", () => {
     const text = formatToolInfo({
+      sessionId: "s1",
       messageId: "m4",
       callId: "c4",
       tool: "bash",
