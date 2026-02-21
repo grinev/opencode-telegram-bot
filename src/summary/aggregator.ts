@@ -1,7 +1,7 @@
 import { Event, ToolState } from "@opencode-ai/sdk/v2";
 import type { Bot } from "grammy";
 import type { CodeFileData } from "./formatter.js";
-import { prepareCodeFile } from "./formatter.js";
+import { normalizePathForDisplay, prepareCodeFile } from "./formatter.js";
 import type { Question } from "../question/types.js";
 import type { PermissionRequest } from "../permission/types.js";
 import type { FileChange } from "../pinned/types.js";
@@ -57,6 +57,34 @@ type SessionDiffCallback = (sessionId: string, diffs: FileChange[]) => void;
 type FileChangeCallback = (change: FileChange) => void;
 
 type ClearedCallback = () => void;
+
+function extractFirstUpdatedFileFromTitle(title: string): string {
+  for (const rawLine of title.split("\n")) {
+    const line = rawLine.trim();
+    if (line.length >= 3 && line[1] === " " && /[AMDURC]/.test(line[0])) {
+      return line.slice(2).trim();
+    }
+  }
+  return "";
+}
+
+function countDiffChangesFromText(text: string): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+
+  for (const line of text.split("\n")) {
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      additions++;
+      continue;
+    }
+
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      deletions++;
+    }
+  }
+
+  return { additions, deletions };
+}
 
 class SummaryAggregator {
   private currentSessionId: string | null = null;
@@ -267,8 +295,11 @@ class SummaryAggregator {
 
         // Notify that agent started thinking
         if (this.onThinkingCallback) {
+          const callback = this.onThinkingCallback;
           setImmediate(() => {
-            this.onThinkingCallback!(info.sessionID);
+            if (typeof callback === "function") {
+              callback(info.sessionID);
+            }
           });
         }
       }
@@ -450,11 +481,8 @@ class SummaryAggregator {
           this.processedToolStates.add(fileKey);
 
           if (part.tool === "write" && input && "content" in input && "filePath" in input) {
-            const fileData = prepareCodeFile(
-              input.content as string,
-              input.filePath as string,
-              "write",
-            );
+            const filePath = normalizePathForDisplay(input.filePath as string);
+            const fileData = prepareCodeFile(input.content as string, filePath, "write");
             if (fileData && this.onToolFileCallback) {
               logger.debug(
                 `[Aggregator] Sending write file: ${fileData.filename} (${fileData.buffer.length} bytes)`,
@@ -466,7 +494,7 @@ class SummaryAggregator {
             if (this.onFileChangeCallback) {
               const lines = (input.content as string).split("\n").length;
               this.onFileChangeCallback({
-                file: input.filePath as string,
+                file: filePath,
                 additions: lines,
                 deletions: 0,
               });
@@ -482,13 +510,13 @@ class SummaryAggregator {
                 filediff: { file?: string; additions?: number; deletions?: number };
               }
             ).filediff;
-            const filePath = filediff.file;
+            const filePath = filediff.file ? normalizePathForDisplay(filediff.file) : undefined;
             const diff = (state.metadata as { diff: string }).diff;
             if (filePath && diff) {
               const fileData = prepareCodeFile(diff, filePath, "edit");
               if (fileData && this.onToolFileCallback) {
                 logger.debug(
-                  `[Aggregator] Sending edit file: ${fileData.filename} (${fileData.buffer.length} bytes)`,
+                  `[Aggregator] Sending ${part.tool} file: ${fileData.filename} (${fileData.buffer.length} bytes)`,
                 );
                 this.onToolFileCallback(fileData);
               }
@@ -499,6 +527,59 @@ class SummaryAggregator {
                   file: filePath,
                   additions: filediff.additions || 0,
                   deletions: filediff.deletions || 0,
+                });
+              }
+            }
+          } else if (part.tool === "apply_patch") {
+            const metadata = state.metadata as
+              | {
+                  filediff?: { file?: string; additions?: number; deletions?: number };
+                  diff?: string;
+                }
+              | undefined;
+
+            const filePathFromInput =
+              input && typeof input.filePath === "string"
+                ? normalizePathForDisplay(input.filePath)
+                : input && typeof input.path === "string"
+                  ? normalizePathForDisplay(input.path)
+                  : "";
+            const filePathFromTitle = title ? extractFirstUpdatedFileFromTitle(title) : "";
+
+            const filePath =
+              (metadata?.filediff?.file && normalizePathForDisplay(metadata.filediff.file)) ||
+              filePathFromInput ||
+              normalizePathForDisplay(filePathFromTitle);
+            const diffText =
+              typeof metadata?.diff === "string"
+                ? metadata.diff
+                : input && typeof input.patchText === "string"
+                  ? input.patchText
+                  : "";
+
+            if (filePath && diffText) {
+              const fileData = prepareCodeFile(diffText, filePath, "edit");
+              if (fileData && this.onToolFileCallback) {
+                logger.debug(
+                  `[Aggregator] Sending apply_patch file: ${fileData.filename} (${fileData.buffer.length} bytes)`,
+                );
+                this.onToolFileCallback(fileData);
+              }
+            }
+
+            if (filePath && this.onFileChangeCallback) {
+              if (metadata?.filediff) {
+                this.onFileChangeCallback({
+                  file: filePath,
+                  additions: metadata.filediff.additions || 0,
+                  deletions: metadata.filediff.deletions || 0,
+                });
+              } else if (diffText) {
+                const changes = countDiffChangesFromText(diffText);
+                this.onFileChangeCallback({
+                  file: filePath,
+                  additions: changes.additions,
+                  deletions: changes.deletions,
                 });
               }
             }

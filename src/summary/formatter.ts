@@ -3,6 +3,7 @@ import * as path from "path";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { t } from "../i18n/index.js";
+import { getCurrentProject } from "../settings/manager.js";
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 
@@ -28,6 +29,36 @@ function splitText(text: string, maxLength: number): string[] {
   }
 
   return parts;
+}
+
+export function normalizePathForDisplay(filePath: string): string {
+  const normalizedPath = filePath.replace(/\\/g, "/");
+  const project = getCurrentProject();
+
+  if (!project?.worktree) {
+    return normalizedPath;
+  }
+
+  const normalizedWorktree = project.worktree.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!normalizedWorktree) {
+    return normalizedPath;
+  }
+
+  const pathForCompare =
+    process.platform === "win32" ? normalizedPath.toLowerCase() : normalizedPath;
+  const worktreeForCompare =
+    process.platform === "win32" ? normalizedWorktree.toLowerCase() : normalizedWorktree;
+
+  if (pathForCompare === worktreeForCompare) {
+    return ".";
+  }
+
+  const worktreePrefix = `${worktreeForCompare}/`;
+  if (pathForCompare.startsWith(worktreePrefix)) {
+    return normalizedPath.slice(normalizedWorktree.length + 1);
+  }
+
+  return normalizedPath;
 }
 
 export function formatSummary(text: string): string[] {
@@ -64,8 +95,9 @@ function getToolDetails(tool: string, input?: { [key: string]: unknown }): strin
     case "read":
     case "edit":
     case "write":
-      const path = input.path || input.filePath;
-      if (typeof path === "string") return path;
+    case "apply_patch":
+      const filePath = input.path || input.filePath;
+      if (typeof filePath === "string") return normalizePathForDisplay(filePath);
       break;
     case "bash":
       if (typeof input.command === "string") return input.command;
@@ -103,6 +135,8 @@ function getToolIcon(tool: string): string {
       return "✍️";
     case "edit":
       return "✏️";
+    case "apply_patch":
+      return "🩹";
     case "bash":
       return "💻";
     case "glob":
@@ -156,6 +190,41 @@ function formatTodos(todos: Array<{ id: string; content: string; status: string 
   return result;
 }
 
+function formatDiffLineInfo(filediff: { additions?: number; deletions?: number }): string {
+  const parts = [];
+  if (filediff.additions && filediff.additions > 0) parts.push(`+${filediff.additions}`);
+  if (filediff.deletions && filediff.deletions > 0) parts.push(`-${filediff.deletions}`);
+  return parts.length > 0 ? ` (${parts.join(" ")})` : "";
+}
+
+function countDiffChangesFromText(text: string): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+
+  for (const line of text.split("\n")) {
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      additions++;
+      continue;
+    }
+
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      deletions++;
+    }
+  }
+
+  return { additions, deletions };
+}
+
+function extractFirstUpdatedFileFromTitle(title: string): string {
+  for (const rawLine of title.split("\n")) {
+    const line = rawLine.trim();
+    if (line.length >= 3 && line[1] === " " && /[AMDURC]/.test(line[0])) {
+      return line.slice(2).trim();
+    }
+  }
+  return "";
+}
+
 export function formatToolInfo(toolInfo: ToolInfo): string | null {
   const { tool, input, title } = toolInfo;
   logger.debug(
@@ -186,6 +255,21 @@ export function formatToolInfo(toolInfo: ToolInfo): string | null {
     details = input.command;
   }
 
+  if (tool === "apply_patch") {
+    const filediff =
+      toolInfo.metadata && "filediff" in toolInfo.metadata
+        ? (toolInfo.metadata.filediff as { file?: string })
+        : undefined;
+    if (filediff?.file) {
+      details = normalizePathForDisplay(filediff.file);
+    } else if (title) {
+      const fileFromTitle = extractFirstUpdatedFileFromTitle(title);
+      if (fileFromTitle) {
+        details = normalizePathForDisplay(fileFromTitle);
+      }
+    }
+  }
+
   const detailsStr = details ? ` ${details}` : "";
   let lineInfo = "";
 
@@ -194,14 +278,26 @@ export function formatToolInfo(toolInfo: ToolInfo): string | null {
     lineInfo = ` (+${lines})`;
   }
 
-  if (tool === "edit" && toolInfo.metadata && "filediff" in toolInfo.metadata) {
+  if (
+    (tool === "edit" || tool === "apply_patch") &&
+    toolInfo.metadata &&
+    "filediff" in toolInfo.metadata
+  ) {
     const filediff = toolInfo.metadata.filediff as { additions?: number; deletions?: number };
-    logger.debug("[Formatter] Edit metadata:", JSON.stringify(toolInfo.metadata, null, 2));
-    const parts = [];
-    if (filediff.additions && filediff.additions > 0) parts.push(`+${filediff.additions}`);
-    if (filediff.deletions && filediff.deletions > 0) parts.push(`-${filediff.deletions}`);
-    if (parts.length > 0) {
-      lineInfo = ` (${parts.join(" ")})`;
+    logger.debug("[Formatter] Diff metadata:", JSON.stringify(toolInfo.metadata, null, 2));
+    lineInfo = formatDiffLineInfo(filediff);
+  }
+
+  if (tool === "apply_patch" && !lineInfo) {
+    const diffText =
+      toolInfo.metadata && typeof toolInfo.metadata.diff === "string"
+        ? toolInfo.metadata.diff
+        : input && typeof input.patchText === "string"
+          ? input.patchText
+          : "";
+
+    if (diffText) {
+      lineInfo = formatDiffLineInfo(countDiffChangesFromText(diffText));
     }
   }
 
@@ -258,6 +354,7 @@ export function prepareCodeFile(
   filePath: string,
   operation: "write" | "edit",
 ): CodeFileData | null {
+  const displayPath = normalizePathForDisplay(filePath);
   let processedContent = content;
 
   if (operation === "edit") {
@@ -268,15 +365,15 @@ export function prepareCodeFile(
 
   if (sizeKb > config.files.maxFileSizeKb) {
     logger.debug(
-      `[Formatter] File too large: ${filePath} (${sizeKb.toFixed(2)} KB > ${config.files.maxFileSizeKb} KB)`,
+      `[Formatter] File too large: ${displayPath} (${sizeKb.toFixed(2)} KB > ${config.files.maxFileSizeKb} KB)`,
     );
     return null;
   }
 
   const header =
     operation === "write"
-      ? t("tool.file_header.write", { path: filePath })
-      : t("tool.file_header.edit", { path: filePath });
+      ? t("tool.file_header.write", { path: displayPath })
+      : t("tool.file_header.edit", { path: displayPath });
   const fullContent = header + processedContent;
 
   const buffer = Buffer.from(fullContent, "utf8");

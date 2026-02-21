@@ -339,7 +339,7 @@ class PinnedMessageManager {
       const filesMap = new Map<string, FileChange>();
 
       let toolCount = 0;
-      let editWriteCount = 0;
+      let fileToolCount = 0;
 
       for (const { parts } of messagesData) {
         for (const part of parts) {
@@ -357,12 +357,16 @@ class PinnedMessageManager {
 
           if (toolPart.state.status !== "completed") continue;
 
-          if (toolPart.tool === "edit" || toolPart.tool === "write") {
-            editWriteCount++;
+          if (
+            toolPart.tool === "edit" ||
+            toolPart.tool === "write" ||
+            toolPart.tool === "apply_patch"
+          ) {
+            fileToolCount++;
           }
 
           if (
-            toolPart.tool === "edit" &&
+            (toolPart.tool === "edit" || toolPart.tool === "apply_patch") &&
             toolPart.state.metadata &&
             "filediff" in toolPart.state.metadata
           ) {
@@ -408,7 +412,7 @@ class PinnedMessageManager {
       }
 
       logger.debug(
-        `[PinnedManager] loadDiffsFromMessages: found ${toolCount} tool parts, ${editWriteCount} edit/write`,
+        `[PinnedManager] loadDiffsFromMessages: found ${toolCount} tool parts, ${fileToolCount} file tools`,
       );
 
       if (filesMap.size > 0) {
