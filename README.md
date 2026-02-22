@@ -10,9 +10,7 @@ Control your [OpenCode](https://opencode.ai) coding agent from your phone. Send 
 No open ports, no exposed APIs. The bot runs on your machine alongside OpenCode and communicates exclusively through the Telegram Bot API.
 
 <p align="center">
-  <img src="assets/Screenshot-1.png" width="32%" alt="Sending a coding task and receiving file edit results" />
-  <img src="assets/Screenshot-2.png" width="32%" alt="Live session status with context usage and changed files" />
-  <img src="assets/Screenshot-3.png" width="32%" alt="Switching between AI models from favorites" />
+  <img src="assets/screencast.gif" width="80%" alt="OpenCode Telegram Bot screencast" />
 </p>
 
 ## Features
