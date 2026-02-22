@@ -59,9 +59,27 @@ let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
 let commandsInitialized = false;
 
+const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const TEMP_DIR = path.join(__dirname, "..", ".tmp");
+
+function prepareDocumentCaption(caption: string): string {
+  const normalizedCaption = caption.trim();
+  if (!normalizedCaption) {
+    return "";
+  }
+
+  if (normalizedCaption.length <= TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH) {
+    return normalizedCaption;
+  }
+
+  return `${normalizedCaption.slice(0, TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH - 3)}...`;
+}
+
 const toolMessageBatcher = new ToolMessageBatcher({
   intervalSeconds: 5,
-  sendMessage: async (sessionId, text) => {
+  sendText: async (sessionId, text) => {
     if (!botInstance || !chatIdInstance) {
       return;
     }
@@ -74,6 +92,34 @@ const toolMessageBatcher = new ToolMessageBatcher({
     await botInstance.api.sendMessage(chatIdInstance, text, {
       disable_notification: true,
     });
+  },
+  sendFile: async (sessionId, fileData) => {
+    if (!botInstance || !chatIdInstance) {
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
+      return;
+    }
+
+    const tempFilePath = path.join(TEMP_DIR, fileData.filename);
+
+    try {
+      logger.debug(
+        `[Bot] Sending code file: ${fileData.filename} (${fileData.buffer.length} bytes, session=${sessionId})`,
+      );
+
+      await fs.mkdir(TEMP_DIR, { recursive: true });
+      await fs.writeFile(tempFilePath, fileData.buffer);
+
+      await botInstance.api.sendDocument(chatIdInstance, new InputFile(tempFilePath), {
+        caption: fileData.caption,
+        disable_notification: true,
+      });
+    } finally {
+      await fs.unlink(tempFilePath).catch(() => {});
+    }
   },
 });
 
@@ -161,10 +207,6 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnTool(async (toolInfo) => {
-    if (config.bot.hideToolCallMessages) {
-      return;
-    }
-
     if (!botInstance || !chatIdInstance) {
       logger.error("Bot or chat ID not available for sending tool notification");
       return;
@@ -172,6 +214,14 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
     const currentSession = getCurrentSession();
     if (!currentSession || currentSession.id !== toolInfo.sessionId) {
+      return;
+    }
+
+    const shouldIncludeToolInfoInFileCaption =
+      toolInfo.hasFileAttachment &&
+      (toolInfo.tool === "write" || toolInfo.tool === "edit" || toolInfo.tool === "apply_patch");
+
+    if (config.bot.hideToolCallMessages || shouldIncludeToolInfoInFileCaption) {
       return;
     }
 
@@ -185,38 +235,25 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
   });
 
-  summaryAggregator.setOnToolFile(async (fileData) => {
+  summaryAggregator.setOnToolFile(async (fileInfo) => {
     if (!botInstance || !chatIdInstance) {
       logger.error("Bot or chat ID not available for sending file");
       return;
     }
 
     const currentSession = getCurrentSession();
-    if (!currentSession) {
+    if (!currentSession || currentSession.id !== fileInfo.sessionId) {
       return;
     }
 
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const tempDir = path.join(__dirname, "..", ".tmp");
-
     try {
-      logger.debug(
-        `[Bot] Sending code file: ${fileData.filename} (${fileData.buffer.length} bytes)`,
-      );
+      const toolMessage = formatToolInfo(fileInfo);
+      const caption = prepareDocumentCaption(toolMessage || fileInfo.fileData.caption);
 
-      await fs.mkdir(tempDir, { recursive: true });
-
-      const tempFilePath = path.join(tempDir, fileData.filename);
-      await fs.writeFile(tempFilePath, fileData.buffer);
-
-      await botInstance.api.sendDocument(chatIdInstance, new InputFile(tempFilePath), {
-        caption: fileData.caption,
-        disable_notification: true,
+      toolMessageBatcher.enqueueFile(fileInfo.sessionId, {
+        ...fileInfo.fileData,
+        caption,
       });
-
-      await fs.unlink(tempFilePath);
-      logger.debug(`[Bot] Temporary file deleted: ${fileData.filename}`);
     } catch (err) {
       logger.error("Failed to send file to Telegram:", err);
     }

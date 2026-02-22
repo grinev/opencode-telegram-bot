@@ -26,11 +26,17 @@ export interface ToolInfo {
   input?: { [key: string]: unknown };
   title?: string;
   metadata?: { [key: string]: unknown };
+  hasFileAttachment?: boolean;
+}
+
+export interface ToolFileInfo extends ToolInfo {
+  hasFileAttachment: true;
+  fileData: CodeFileData;
 }
 
 type ToolCallback = (toolInfo: ToolInfo) => void;
 
-type ToolFileCallback = (fileData: CodeFileData) => void;
+type ToolFileCallback = (fileInfo: ToolFileInfo) => void;
 
 type QuestionCallback = (questions: Question[], requestID: string) => void;
 
@@ -57,6 +63,11 @@ type SessionDiffCallback = (sessionId: string, diffs: FileChange[]) => void;
 type FileChangeCallback = (change: FileChange) => void;
 
 type ClearedCallback = () => void;
+
+interface PreparedToolFileContext {
+  fileData: CodeFileData | null;
+  fileChange: FileChange | null;
+}
 
 function extractFirstUpdatedFileFromTitle(title: string): string {
   for (const rawLine of title.split("\n")) {
@@ -448,12 +459,19 @@ class SummaryAggregator {
           JSON.stringify(state, null, 2),
         );
 
-        const notifiedKey = `notified-${part.callID}`;
+        const completedKey = `completed-${part.callID}`;
 
-        if (!this.processedToolStates.has(notifiedKey)) {
-          this.processedToolStates.add(notifiedKey);
+        if (!this.processedToolStates.has(completedKey)) {
+          this.processedToolStates.add(completedKey);
 
-          const toolData = {
+          const preparedFileContext = this.prepareToolFileContext(
+            part.tool,
+            input,
+            title,
+            state.metadata as { [key: string]: unknown } | undefined,
+          );
+
+          const toolData: ToolInfo = {
             sessionId: part.sessionID,
             messageId: messageID,
             callId: part.callID,
@@ -462,6 +480,7 @@ class SummaryAggregator {
             input,
             title,
             metadata: state.metadata as { [key: string]: unknown },
+            hasFileAttachment: !!preparedFileContext.fileData,
           };
 
           logger.debug(
@@ -471,124 +490,133 @@ class SummaryAggregator {
           if (this.onToolCallback) {
             this.onToolCallback(toolData);
           }
-        }
-      }
 
-      if ("status" in state && state.status === "completed") {
-        const fileKey = `file-${part.callID}`;
+          if (preparedFileContext.fileData && this.onToolFileCallback) {
+            logger.debug(
+              `[Aggregator] Sending ${part.tool} file: ${preparedFileContext.fileData.filename} (${preparedFileContext.fileData.buffer.length} bytes)`,
+            );
+            this.onToolFileCallback({
+              ...toolData,
+              hasFileAttachment: true,
+              fileData: preparedFileContext.fileData,
+            });
+          }
 
-        if (!this.processedToolStates.has(fileKey)) {
-          this.processedToolStates.add(fileKey);
-
-          if (part.tool === "write" && input && "content" in input && "filePath" in input) {
-            const filePath = normalizePathForDisplay(input.filePath as string);
-            const fileData = prepareCodeFile(input.content as string, filePath, "write");
-            if (fileData && this.onToolFileCallback) {
-              logger.debug(
-                `[Aggregator] Sending write file: ${fileData.filename} (${fileData.buffer.length} bytes)`,
-              );
-              this.onToolFileCallback(fileData);
-            }
-
-            // Notify about file change for pinned message
-            if (this.onFileChangeCallback) {
-              const lines = (input.content as string).split("\n").length;
-              this.onFileChangeCallback({
-                file: filePath,
-                additions: lines,
-                deletions: 0,
-              });
-            }
-          } else if (
-            part.tool === "edit" &&
-            state.metadata &&
-            "diff" in state.metadata &&
-            "filediff" in state.metadata
-          ) {
-            const filediff = (
-              state.metadata as {
-                filediff: { file?: string; additions?: number; deletions?: number };
-              }
-            ).filediff;
-            const filePath = filediff.file ? normalizePathForDisplay(filediff.file) : undefined;
-            const diff = (state.metadata as { diff: string }).diff;
-            if (filePath && diff) {
-              const fileData = prepareCodeFile(diff, filePath, "edit");
-              if (fileData && this.onToolFileCallback) {
-                logger.debug(
-                  `[Aggregator] Sending ${part.tool} file: ${fileData.filename} (${fileData.buffer.length} bytes)`,
-                );
-                this.onToolFileCallback(fileData);
-              }
-
-              // Notify about file change for pinned message
-              if (this.onFileChangeCallback) {
-                this.onFileChangeCallback({
-                  file: filePath,
-                  additions: filediff.additions || 0,
-                  deletions: filediff.deletions || 0,
-                });
-              }
-            }
-          } else if (part.tool === "apply_patch") {
-            const metadata = state.metadata as
-              | {
-                  filediff?: { file?: string; additions?: number; deletions?: number };
-                  diff?: string;
-                }
-              | undefined;
-
-            const filePathFromInput =
-              input && typeof input.filePath === "string"
-                ? normalizePathForDisplay(input.filePath)
-                : input && typeof input.path === "string"
-                  ? normalizePathForDisplay(input.path)
-                  : "";
-            const filePathFromTitle = title ? extractFirstUpdatedFileFromTitle(title) : "";
-
-            const filePath =
-              (metadata?.filediff?.file && normalizePathForDisplay(metadata.filediff.file)) ||
-              filePathFromInput ||
-              normalizePathForDisplay(filePathFromTitle);
-            const diffText =
-              typeof metadata?.diff === "string"
-                ? metadata.diff
-                : input && typeof input.patchText === "string"
-                  ? input.patchText
-                  : "";
-
-            if (filePath && diffText) {
-              const fileData = prepareCodeFile(diffText, filePath, "edit");
-              if (fileData && this.onToolFileCallback) {
-                logger.debug(
-                  `[Aggregator] Sending apply_patch file: ${fileData.filename} (${fileData.buffer.length} bytes)`,
-                );
-                this.onToolFileCallback(fileData);
-              }
-            }
-
-            if (filePath && this.onFileChangeCallback) {
-              if (metadata?.filediff) {
-                this.onFileChangeCallback({
-                  file: filePath,
-                  additions: metadata.filediff.additions || 0,
-                  deletions: metadata.filediff.deletions || 0,
-                });
-              } else if (diffText) {
-                const changes = countDiffChangesFromText(diffText);
-                this.onFileChangeCallback({
-                  file: filePath,
-                  additions: changes.additions,
-                  deletions: changes.deletions,
-                });
-              }
-            }
+          if (preparedFileContext.fileChange && this.onFileChangeCallback) {
+            this.onFileChangeCallback(preparedFileContext.fileChange);
           }
         }
       }
     }
 
     this.lastUpdated = Date.now();
+  }
+
+  private prepareToolFileContext(
+    tool: string,
+    input: { [key: string]: unknown } | undefined,
+    title: string | undefined,
+    metadata: { [key: string]: unknown } | undefined,
+  ): PreparedToolFileContext {
+    if (tool === "write" && input) {
+      const filePath =
+        typeof input.filePath === "string" ? normalizePathForDisplay(input.filePath) : "";
+      const hasContent = typeof input.content === "string";
+      const content = hasContent ? (input.content as string) : "";
+
+      if (!filePath || !hasContent) {
+        return { fileData: null, fileChange: null };
+      }
+
+      return {
+        fileData: prepareCodeFile(content, filePath, "write"),
+        fileChange: {
+          file: filePath,
+          additions: content.split("\n").length,
+          deletions: 0,
+        },
+      };
+    }
+
+    if (tool === "edit" && metadata) {
+      const editMetadata = metadata as {
+        diff?: unknown;
+        filediff?: { file?: string; additions?: number; deletions?: number };
+      };
+      const filePath = editMetadata.filediff?.file
+        ? normalizePathForDisplay(editMetadata.filediff.file)
+        : "";
+      const diffText = typeof editMetadata.diff === "string" ? editMetadata.diff : "";
+
+      if (!filePath || !diffText) {
+        return { fileData: null, fileChange: null };
+      }
+
+      return {
+        fileData: prepareCodeFile(diffText, filePath, "edit"),
+        fileChange: {
+          file: filePath,
+          additions: editMetadata.filediff?.additions || 0,
+          deletions: editMetadata.filediff?.deletions || 0,
+        },
+      };
+    }
+
+    if (tool === "apply_patch") {
+      const patchMetadata = metadata as
+        | {
+            filediff?: { file?: string; additions?: number; deletions?: number };
+            diff?: string;
+          }
+        | undefined;
+
+      const filePathFromInput =
+        input && typeof input.filePath === "string"
+          ? normalizePathForDisplay(input.filePath)
+          : input && typeof input.path === "string"
+            ? normalizePathForDisplay(input.path)
+            : "";
+      const filePathFromTitle = title ? extractFirstUpdatedFileFromTitle(title) : "";
+
+      const filePath =
+        (patchMetadata?.filediff?.file && normalizePathForDisplay(patchMetadata.filediff.file)) ||
+        filePathFromInput ||
+        normalizePathForDisplay(filePathFromTitle);
+      const diffText =
+        typeof patchMetadata?.diff === "string"
+          ? patchMetadata.diff
+          : input && typeof input.patchText === "string"
+            ? input.patchText
+            : "";
+
+      if (!filePath) {
+        return { fileData: null, fileChange: null };
+      }
+
+      const fileChange = patchMetadata?.filediff
+        ? {
+            file: filePath,
+            additions: patchMetadata.filediff.additions || 0,
+            deletions: patchMetadata.filediff.deletions || 0,
+          }
+        : diffText
+          ? (() => {
+              const changes = countDiffChangesFromText(diffText);
+              return {
+                file: filePath,
+                additions: changes.additions,
+                deletions: changes.deletions,
+              };
+            })()
+          : null;
+
+      return {
+        fileData: diffText ? prepareCodeFile(diffText, filePath, "edit") : null,
+        fileChange,
+      };
+    }
+
+    return { fileData: null, fileChange: null };
   }
 
   private hashString(str: string): string {

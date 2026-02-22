@@ -67,8 +67,60 @@ describe("summary/aggregator", () => {
         sessionId: "session-1",
         callId: "call-1",
         tool: "bash",
+        hasFileAttachment: false,
       }),
     );
+  });
+
+  it("marks write tool without file attachment when payload is oversized", () => {
+    const onTool = vi.fn();
+    const onToolFile = vi.fn();
+    summaryAggregator.setOnTool(onTool);
+    summaryAggregator.setOnToolFile(onToolFile);
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "message-oversized",
+          sessionID: "session-1",
+          role: "assistant",
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-oversized",
+          sessionID: "session-1",
+          messageID: "message-oversized",
+          type: "tool",
+          callID: "call-oversized",
+          tool: "write",
+          state: {
+            status: "completed",
+            input: {
+              filePath: "src/huge.ts",
+              content: "x".repeat(101 * 1024),
+            },
+            metadata: {},
+          },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onTool).toHaveBeenCalledTimes(1);
+    expect(onTool.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        tool: "write",
+        hasFileAttachment: false,
+      }),
+    );
+    expect(onToolFile).not.toHaveBeenCalled();
   });
 
   it("passes sessionId to thinking callback", async () => {
@@ -149,12 +201,20 @@ describe("summary/aggregator", () => {
     expect(onToolFile).toHaveBeenCalledTimes(1);
 
     const filePayload = onToolFile.mock.calls[0][0] as {
-      filename: string;
-      buffer: Buffer;
+      sessionId: string;
+      tool: string;
+      hasFileAttachment: boolean;
+      fileData: {
+        filename: string;
+        buffer: Buffer;
+      };
     };
 
-    expect(filePayload.filename).toBe("edit_one.ts.txt");
-    expect(filePayload.buffer.toString("utf8")).toContain("Edit File/Path: src/one.ts");
+    expect(filePayload.sessionId).toBe("session-1");
+    expect(filePayload.tool).toBe("apply_patch");
+    expect(filePayload.hasFileAttachment).toBe(true);
+    expect(filePayload.fileData.filename).toBe("edit_one.ts.txt");
+    expect(filePayload.fileData.buffer.toString("utf8")).toContain("Edit File/Path: src/one.ts");
   });
 
   it("sends apply_patch file using title and patchText fallback", () => {
@@ -205,11 +265,15 @@ describe("summary/aggregator", () => {
     expect(onToolFile).toHaveBeenCalledTimes(1);
 
     const filePayload = onToolFile.mock.calls[0][0] as {
-      filename: string;
-      buffer: Buffer;
+      hasFileAttachment: boolean;
+      fileData: {
+        filename: string;
+        buffer: Buffer;
+      };
     };
 
-    expect(filePayload.filename).toBe("edit_README.md.txt");
-    expect(filePayload.buffer.toString("utf8")).toContain("Edit File/Path: README.md");
+    expect(filePayload.hasFileAttachment).toBe(true);
+    expect(filePayload.fileData.filename).toBe("edit_README.md.txt");
+    expect(filePayload.fileData.buffer.toString("utf8")).toContain("Edit File/Path: README.md");
   });
 });

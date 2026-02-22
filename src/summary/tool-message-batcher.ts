@@ -1,14 +1,37 @@
+import type { CodeFileData } from "./formatter.js";
 import { logger } from "../utils/logger.js";
 
 const DEFAULT_INTERVAL_SECONDS = 5;
 const TELEGRAM_MESSAGE_MAX_LENGTH = 4096;
 
-type SendMessageCallback = (sessionId: string, text: string) => Promise<void>;
+type SendTextCallback = (sessionId: string, text: string) => Promise<void>;
+type SendFileCallback = (sessionId: string, fileData: CodeFileData) => Promise<void>;
 
 interface ToolMessageBatcherOptions {
   intervalSeconds: number;
-  sendMessage: SendMessageCallback;
+  sendText: SendTextCallback;
+  sendFile: SendFileCallback;
 }
+
+type QueueItem =
+  | {
+      kind: "text";
+      text: string;
+    }
+  | {
+      kind: "file";
+      fileData: CodeFileData;
+    };
+
+type FlushItem =
+  | {
+      kind: "text";
+      text: string;
+    }
+  | {
+      kind: "file";
+      fileData: CodeFileData;
+    };
 
 function normalizeIntervalSeconds(value: number): number {
   if (!Number.isFinite(value)) {
@@ -25,14 +48,17 @@ function normalizeIntervalSeconds(value: number): number {
 
 export class ToolMessageBatcher {
   private intervalSeconds: number;
-  private readonly sendMessage: SendMessageCallback;
-  private readonly queues: Map<string, string[]> = new Map();
+  private readonly sendText: SendTextCallback;
+  private readonly sendFile: SendFileCallback;
+  private readonly queues: Map<string, QueueItem[]> = new Map();
   private readonly timers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  private readonly sessionTasks: Map<string, Promise<void>> = new Map();
   private generation = 0;
 
   constructor(options: ToolMessageBatcherOptions) {
     this.intervalSeconds = normalizeIntervalSeconds(options.intervalSeconds);
-    this.sendMessage = options.sendMessage;
+    this.sendText = options.sendText;
+    this.sendFile = options.sendFile;
   }
 
   setIntervalSeconds(nextIntervalSeconds: number): void {
@@ -67,40 +93,49 @@ export class ToolMessageBatcher {
 
     if (this.intervalSeconds === 0) {
       const expectedGeneration = this.generation;
-      logger.debug(`[ToolBatcher] Sending immediate message: session=${sessionId}`);
-      void this.sendMessageSafe(sessionId, normalizedMessage, "immediate", expectedGeneration);
+      logger.debug(`[ToolBatcher] Sending immediate text message: session=${sessionId}`);
+      void this.enqueueTask(sessionId, () =>
+        this.sendTextSafe(sessionId, normalizedMessage, "immediate", expectedGeneration),
+      );
       return;
     }
 
     const queue = this.queues.get(sessionId) ?? [];
-    queue.push(normalizedMessage);
+    queue.push({ kind: "text", text: normalizedMessage });
     this.queues.set(sessionId, queue);
     logger.debug(
-      `[ToolBatcher] Queued message: session=${sessionId}, queueSize=${queue.length}, interval=${this.intervalSeconds}s`,
+      `[ToolBatcher] Queued text message: session=${sessionId}, queueSize=${queue.length}, interval=${this.intervalSeconds}s`,
+    );
+
+    this.ensureTimer(sessionId);
+  }
+
+  enqueueFile(sessionId: string, fileData: CodeFileData): void {
+    if (!sessionId) {
+      return;
+    }
+
+    if (this.intervalSeconds === 0) {
+      const expectedGeneration = this.generation;
+      logger.debug(`[ToolBatcher] Sending immediate file message: session=${sessionId}`);
+      void this.enqueueTask(sessionId, () =>
+        this.sendFileSafe(sessionId, fileData, "immediate", expectedGeneration),
+      );
+      return;
+    }
+
+    const queue = this.queues.get(sessionId) ?? [];
+    queue.push({ kind: "file", fileData });
+    this.queues.set(sessionId, queue);
+    logger.debug(
+      `[ToolBatcher] Queued file message: session=${sessionId}, queueSize=${queue.length}, interval=${this.intervalSeconds}s`,
     );
 
     this.ensureTimer(sessionId);
   }
 
   async flushSession(sessionId: string, reason: string): Promise<void> {
-    const expectedGeneration = this.generation;
-    this.clearTimer(sessionId);
-
-    const queuedMessages = this.queues.get(sessionId);
-    if (!queuedMessages || queuedMessages.length === 0) {
-      return;
-    }
-
-    this.queues.delete(sessionId);
-
-    const batches = this.packMessages(queuedMessages);
-    logger.debug(
-      `[ToolBatcher] Flushing ${queuedMessages.length} tool messages as ${batches.length} Telegram messages (session=${sessionId}, reason=${reason})`,
-    );
-
-    for (const batchMessage of batches) {
-      await this.sendMessageSafe(sessionId, batchMessage, reason, expectedGeneration);
-    }
+    await this.enqueueTask(sessionId, () => this.flushSessionInternal(sessionId, reason));
   }
 
   async flushAll(reason: string): Promise<void> {
@@ -170,7 +205,47 @@ export class ToolMessageBatcher {
     this.timers.set(sessionId, timer);
   }
 
-  private async sendMessageSafe(
+  private enqueueTask(sessionId: string, task: () => Promise<void>): Promise<void> {
+    const previousTask = this.sessionTasks.get(sessionId) ?? Promise.resolve();
+    const nextTask = previousTask
+      .catch(() => undefined)
+      .then(task)
+      .finally(() => {
+        if (this.sessionTasks.get(sessionId) === nextTask) {
+          this.sessionTasks.delete(sessionId);
+        }
+      });
+
+    this.sessionTasks.set(sessionId, nextTask);
+    return nextTask;
+  }
+
+  private async flushSessionInternal(sessionId: string, reason: string): Promise<void> {
+    const expectedGeneration = this.generation;
+    this.clearTimer(sessionId);
+
+    const queuedItems = this.queues.get(sessionId);
+    if (!queuedItems || queuedItems.length === 0) {
+      return;
+    }
+
+    this.queues.delete(sessionId);
+
+    const flushItems = this.buildFlushItems(queuedItems);
+    logger.debug(
+      `[ToolBatcher] Flushing ${queuedItems.length} queued items as ${flushItems.length} Telegram sends (session=${sessionId}, reason=${reason})`,
+    );
+
+    for (const item of flushItems) {
+      if (item.kind === "text") {
+        await this.sendTextSafe(sessionId, item.text, reason, expectedGeneration);
+      } else {
+        await this.sendFileSafe(sessionId, item.fileData, reason, expectedGeneration);
+      }
+    }
+  }
+
+  private async sendTextSafe(
     sessionId: string,
     text: string,
     reason: string,
@@ -178,19 +253,72 @@ export class ToolMessageBatcher {
   ): Promise<void> {
     if (this.generation !== expectedGeneration) {
       logger.debug(
-        `[ToolBatcher] Dropping stale tool batch message: session=${sessionId}, reason=${reason}`,
+        `[ToolBatcher] Dropping stale tool text message: session=${sessionId}, reason=${reason}`,
       );
       return;
     }
 
     try {
-      await this.sendMessage(sessionId, text);
+      await this.sendText(sessionId, text);
     } catch (err) {
       logger.error(
-        `[ToolBatcher] Failed to send tool batch message: session=${sessionId}, reason=${reason}`,
+        `[ToolBatcher] Failed to send tool text message: session=${sessionId}, reason=${reason}`,
         err,
       );
     }
+  }
+
+  private async sendFileSafe(
+    sessionId: string,
+    fileData: CodeFileData,
+    reason: string,
+    expectedGeneration: number,
+  ): Promise<void> {
+    if (this.generation !== expectedGeneration) {
+      logger.debug(
+        `[ToolBatcher] Dropping stale tool file message: session=${sessionId}, reason=${reason}`,
+      );
+      return;
+    }
+
+    try {
+      await this.sendFile(sessionId, fileData);
+    } catch (err) {
+      logger.error(
+        `[ToolBatcher] Failed to send tool file message: session=${sessionId}, reason=${reason}`,
+        err,
+      );
+    }
+  }
+
+  private buildFlushItems(entries: QueueItem[]): FlushItem[] {
+    const result: FlushItem[] = [];
+    const textBuffer: string[] = [];
+
+    const flushTextBuffer = () => {
+      if (textBuffer.length === 0) {
+        return;
+      }
+
+      const packedTextMessages = this.packMessages(textBuffer);
+      for (const text of packedTextMessages) {
+        result.push({ kind: "text", text });
+      }
+
+      textBuffer.length = 0;
+    };
+
+    for (const entry of entries) {
+      if (entry.kind === "text") {
+        textBuffer.push(entry.text);
+      } else {
+        flushTextBuffer();
+        result.push({ kind: "file", fileData: entry.fileData });
+      }
+    }
+
+    flushTextBuffer();
+    return result;
   }
 
   private packMessages(messages: string[]): string[] {
