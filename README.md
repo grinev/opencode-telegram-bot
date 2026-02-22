@@ -5,9 +5,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
-Control your [OpenCode](https://opencode.ai) coding agent from your phone. Send tasks, switch models, monitor progress — all through Telegram.
+OpenCode Telegram Bot is a secure Telegram client for [OpenCode](https://opencode.ai) CLI that runs on your local machine.
 
-No open ports, no exposed APIs. The bot runs on your machine alongside OpenCode and communicates exclusively through the Telegram Bot API.
+Run AI coding tasks, monitor progress, switch models, and manage sessions from your phone.
+
+No open ports, no exposed APIs. The bot communicates with your local OpenCode server and the Telegram Bot API only.
+
+Quick start: `npx @grinev/opencode-telegram-bot`
 
 <p align="center">
   <img src="assets/screencast.gif" width="45%" alt="OpenCode Telegram Bot screencast" />
