@@ -738,13 +738,12 @@ class SummaryAggregator {
     const { id, sessionID, questions } = event.properties;
 
     if (sessionID !== this.currentSessionId) {
-      logger.debug(
-        `[Aggregator] Ignoring question.asked for different session: ${sessionID} (current: ${this.currentSessionId})`,
+      logger.info(
+        `[Aggregator] Question from untracked session ${sessionID} (current: ${this.currentSessionId ?? "none"}) — forwarding for unattended mode`,
       );
-      return;
+    } else {
+      logger.info(`[Aggregator] Question asked: requestID=${id}, questions=${questions.length}`);
     }
-
-    logger.info(`[Aggregator] Question asked: requestID=${id}, questions=${questions.length}`);
 
     if (this.onQuestionCallback) {
       const callback = this.onQuestionCallback;

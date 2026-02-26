@@ -56,7 +56,9 @@ import { getStoredModel } from "../model/manager.js";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
 
 let botInstance: Bot<Context> | null = null;
-let chatIdInstance: number | null = null;
+// Initialize with allowedUserId as fallback so unattended questions can be sent
+// even before the user sends a message. For private chats, chatId === userId.
+let chatIdInstance: number | null = config.telegram.allowedUserId;
 let commandsInitialized = false;
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
@@ -473,6 +475,10 @@ export function createBot(): Bot<Context> {
   }
 
   const bot = new Bot(config.telegram.token, botOptions);
+
+  // Initialize botInstance immediately so unattended questions can be sent
+  // even before the user sends a first message.
+  botInstance = bot;
 
   // Heartbeat for diagnostics: verify the event loop is not blocked
   let heartbeatCounter = 0;
