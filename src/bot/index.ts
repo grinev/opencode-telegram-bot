@@ -58,6 +58,20 @@ import type { FilePartInput } from "@opencode-ai/sdk/v2";
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
 let commandsInitialized = false;
+const BOT_COMMAND_NAMES = new Set([
+  "start",
+  "help",
+  "status",
+  "opencode_start",
+  "opencode_stop",
+  "projects",
+  "sessions",
+  "new",
+  "agent",
+  "model",
+  "stop",
+  "rename",
+]);
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
 const __filename = fileURLToPath(import.meta.url);
@@ -771,7 +785,12 @@ export function createBot(): Bot<Context> {
     }
 
     if (text.startsWith("/")) {
-      return;
+      const commandToken = text.trim().split(/\s+/)[0] || "";
+      const commandName = commandToken.replace(/^\//, "").split("@")[0];
+      const isKnownBotCommand = BOT_COMMAND_NAMES.has(commandName);
+      if (isKnownBotCommand) {
+        return;
+      }
     }
 
     if (questionManager.isActive()) {
@@ -788,7 +807,8 @@ export function createBot(): Bot<Context> {
     chatIdInstance = ctx.chat.id;
 
     const promptDeps = { bot, ensureEventSubscription };
-    await processUserPrompt(ctx, text, promptDeps);
+    const forwardedPrompt = text === "/oc" ? "" : text.startsWith("/oc ") ? text.slice(4) : text;
+    await processUserPrompt(ctx, forwardedPrompt, promptDeps);
 
     logger.debug("[Bot] message:text handler completed (prompt sent in background)");
   });
