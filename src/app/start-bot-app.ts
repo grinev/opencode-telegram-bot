@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 
-import { createBot } from "../bot/index.js";
+import { createBot, ensureEventSubscription } from "../bot/index.js";
 import { config } from "../config.js";
-import { loadSettings } from "../settings/manager.js";
+import { loadSettings, getCurrentProject } from "../settings/manager.js";
 import { processManager } from "../process/manager.js";
 import { warmupSessionDirectoryCache } from "../session/cache-manager.js";
 import { getRuntimeMode } from "../runtime/mode.js";
@@ -40,6 +40,16 @@ export async function startBotApp(): Promise<void> {
     logger.info(`[Bot] Webhook detected: ${webhookInfo.url}, removing...`);
     await bot.api.deleteWebhook();
     logger.info("[Bot] Webhook removed, switching to long polling");
+  }
+
+  // Subscribe to events for the stored project at startup so questions from
+  // TUI-initiated sessions are forwarded to Telegram without needing a first message.
+  const currentProject = getCurrentProject();
+  if (currentProject?.worktree) {
+    logger.info(`[App] Auto-subscribing to events for project: ${currentProject.worktree}`);
+    await ensureEventSubscription(currentProject.worktree);
+  } else {
+    logger.warn("[App] No stored project found, event subscription skipped until first message");
   }
 
   await bot.start({

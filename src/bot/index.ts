@@ -154,7 +154,7 @@ async function ensureCommandsInitialized(ctx: Context, next: NextFunction): Prom
   await next();
 }
 
-async function ensureEventSubscription(directory: string): Promise<void> {
+export async function ensureEventSubscription(directory: string): Promise<void> {
   if (!directory) {
     logger.error("No directory found for event subscription");
     return;
