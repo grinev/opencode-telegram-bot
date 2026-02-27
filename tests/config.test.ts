@@ -77,4 +77,28 @@ describe("config boolean env parsing", () => {
 
     expect(config.bot.messageFormatMode).toBe("markdown");
   });
+
+  it("parses supported locale from BOT_LOCALE", async () => {
+    vi.stubEnv("BOT_LOCALE", "ru");
+
+    const config = await loadConfig();
+
+    expect(config.bot.locale).toBe("ru");
+  });
+
+  it("normalizes regional locale tags", async () => {
+    vi.stubEnv("BOT_LOCALE", "ru-RU");
+
+    const config = await loadConfig();
+
+    expect(config.bot.locale).toBe("ru");
+  });
+
+  it("falls back to default locale on unsupported value", async () => {
+    vi.stubEnv("BOT_LOCALE", "fr");
+
+    const config = await loadConfig();
+
+    expect(config.bot.locale).toBe("en");
+  });
 });

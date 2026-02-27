@@ -31,6 +31,12 @@ const SYNC_SAFETY_WINDOW_MS = 60_000;
 const SYNC_COOLDOWN_MS = 60_000;
 const STORAGE_FALLBACK_SCAN_LIMIT = 200;
 const SQLITE_FALLBACK_QUERY_LIMIT = 200;
+const SERVER_UNAVAILABLE_ERROR_MARKERS = [
+  "fetch failed",
+  "econnrefused",
+  "connection refused",
+  "connect refused",
+];
 
 const EMPTY_CACHE: SessionDirectoryCacheData = {
   version: CACHE_VERSION,
@@ -201,6 +207,69 @@ function buildListParams(): { limit: number; start?: number } {
 function createVirtualProjectId(worktree: string): string {
   const hash = createHash("sha1").update(worktree).digest("hex").slice(0, 16);
   return `dir_${hash}`;
+}
+
+function hasServerUnavailableMarker(value: string): boolean {
+  const lower = value.toLowerCase();
+  return SERVER_UNAVAILABLE_ERROR_MARKERS.some((marker) => lower.includes(marker));
+}
+
+function isServerUnavailableError(error: unknown): boolean {
+  const queue: unknown[] = [error];
+  const seen = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.pop();
+
+    if (!current || seen.has(current)) {
+      continue;
+    }
+
+    seen.add(current);
+
+    if (typeof current === "string") {
+      if (hasServerUnavailableMarker(current)) {
+        return true;
+      }
+
+      continue;
+    }
+
+    if (current instanceof Error) {
+      if (hasServerUnavailableMarker(`${current.name}: ${current.message}`)) {
+        return true;
+      }
+
+      const errorWithCause = current as Error & { cause?: unknown };
+      if (errorWithCause.cause) {
+        queue.push(errorWithCause.cause);
+      }
+
+      continue;
+    }
+
+    if (typeof current === "object") {
+      const value = current as {
+        code?: unknown;
+        message?: unknown;
+        cause?: unknown;
+      };
+
+      if (typeof value.code === "string" && hasServerUnavailableMarker(value.code)) {
+        return true;
+      }
+
+      if (typeof value.message === "string" && hasServerUnavailableMarker(value.message)) {
+        return true;
+      }
+
+      if (value.cause) {
+        queue.push(value.cause);
+      }
+    }
+  }
+
+  return false;
 }
 
 async function runSync(): Promise<void> {
@@ -494,7 +563,12 @@ export async function syncSessionDirectoryCache(options?: { force?: boolean }): 
       lastSyncAttemptAt = Date.now();
     })
     .catch((error) => {
-      logger.warn("[SessionCache] Failed to sync sessions cache", error);
+      if (isServerUnavailableError(error)) {
+        logger.warn("[SessionCache] OpenCode server is not running. Start it with: opencode serve");
+      } else {
+        logger.warn("[SessionCache] Failed to sync sessions cache", error);
+      }
+
       lastSyncAttemptAt = 0;
     })
     .finally(() => {

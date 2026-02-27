@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import { getRuntimePaths } from "./runtime/paths.js";
+import { normalizeLocale, type Locale } from "./i18n/index.js";
 
 const runtimePaths = getRuntimePaths();
 dotenv.config({ path: runtimePaths.envFilePath });
@@ -49,23 +50,9 @@ function getOptionalNonNegativeIntEnvVarFromKeys(keys: string[], defaultValue: n
   return defaultValue;
 }
 
-function getOptionalLocaleEnvVar(key: string, defaultValue: "en" | "ru"): "en" | "ru" {
+function getOptionalLocaleEnvVar(key: string, defaultValue: Locale): Locale {
   const value = getEnvVar(key, false);
-
-  if (!value) {
-    return defaultValue;
-  }
-
-  const normalized = value.trim().toLowerCase().split("-")[0];
-  if (normalized === "ru") {
-    return "ru";
-  }
-
-  if (normalized === "en") {
-    return "en";
-  }
-
-  return defaultValue;
+  return normalizeLocale(value, defaultValue);
 }
 
 function getOptionalBooleanEnvVar(key: string, defaultValue: boolean): boolean {

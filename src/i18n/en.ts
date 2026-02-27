@@ -262,6 +262,11 @@ export const en = {
     "Edit File/Path: {path}\n============================================================\n\n",
 
   "runtime.wizard.ask_token": "Enter Telegram bot token (get it from @BotFather).\n> ",
+  "runtime.wizard.ask_language":
+    "Select interface language.\nEnter the language number from the list or locale code.\nPress Enter to keep default language: {defaultLocale}\n{options}\n> ",
+  "runtime.wizard.language_invalid":
+    "Enter a language number from the list or a supported locale code.\n",
+  "runtime.wizard.language_selected": "Selected language: {language}\n",
   "runtime.wizard.token_required": "Token is required. Please try again.\n",
   "runtime.wizard.token_invalid":
     "Token looks invalid (expected format <id>:<secret>). Please try again.\n",
@@ -271,7 +276,7 @@ export const en = {
   "runtime.wizard.ask_api_url":
     "Enter OpenCode API URL (optional).\nPress Enter to use default: {defaultUrl}\n> ",
   "runtime.wizard.api_url_invalid": "Enter a valid URL (http/https) or press Enter for default.\n",
-  "runtime.wizard.start": "Starting first-run wizard for OpenCode Telegram Bot.\n",
+  "runtime.wizard.start": "OpenCode Telegram Bot setup.\n",
   "runtime.wizard.saved": "Configuration saved:\n- {envPath}\n- {settingsPath}\n",
   "runtime.wizard.not_configured_starting":
     "Application is not configured yet. Starting wizard...\n",

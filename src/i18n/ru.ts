@@ -262,6 +262,11 @@ export const ru: I18nDictionary = {
     "Edit File/Path: {path}\n============================================================\n\n",
 
   "runtime.wizard.ask_token": "Введите токен Telegram-бота (получить у @BotFather).\n> ",
+  "runtime.wizard.ask_language":
+    "Выберите язык интерфейса.\nВведите номер языка из списка или код локали.\nНажмите Enter, чтобы оставить язык по умолчанию: {defaultLocale}\n{options}\n> ",
+  "runtime.wizard.language_invalid":
+    "Введите номер языка из списка или поддерживаемый код локали.\n",
+  "runtime.wizard.language_selected": "Выбран язык: {language}\n",
   "runtime.wizard.token_required": "Токен обязателен. Попробуйте еще раз.\n",
   "runtime.wizard.token_invalid":
     "Похоже на невалидный токен (ожидается формат <id>:<secret>). Попробуйте еще раз.\n",
@@ -271,7 +276,7 @@ export const ru: I18nDictionary = {
     "Введите URL OpenCode API (опционально).\nНажмите Enter для значения по умолчанию: {defaultUrl}\n> ",
   "runtime.wizard.api_url_invalid":
     "Введите корректный URL (http/https) или нажмите Enter для значения по умолчанию.\n",
-  "runtime.wizard.start": "Запуск first-run wizard для настройки OpenCode Telegram Bot.\n",
+  "runtime.wizard.start": "Настройка OpenCode Telegram Bot.\n",
   "runtime.wizard.saved": "Конфигурация сохранена:\n- {envPath}\n- {settingsPath}\n",
   "runtime.wizard.not_configured_starting":
     "Приложение еще не сконфигурировано. Запускаю wizard...\n",

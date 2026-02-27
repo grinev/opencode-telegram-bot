@@ -5,7 +5,14 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { getRuntimePaths, type RuntimePaths } from "./paths.js";
-import { t } from "../i18n/index.js";
+import {
+  getLocale,
+  getLocaleOptions,
+  resolveSupportedLocale,
+  setRuntimeLocale,
+  t,
+  type Locale,
+} from "../i18n/index.js";
 
 const DEFAULT_API_URL = "http://localhost:4096";
 const FALLBACK_MODEL_PROVIDER = "opencode";
@@ -22,12 +29,14 @@ interface EnvValidationResult {
 }
 
 interface WizardCollectedValues {
+  locale: Locale;
   token: string;
   allowedUserId: string;
   apiUrl?: string;
 }
 
 export interface WizardEnvValues {
+  BOT_LOCALE: Locale;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_ALLOWED_USER_ID: string;
   OPENCODE_API_URL?: string;
@@ -100,6 +109,7 @@ export function buildEnvFileContent(existingContent: string, values: WizardEnvVa
   let lines = normalizeEnvLineEndings(existingContent);
 
   const orderedUpdates: Array<[keyof WizardEnvValues, string | undefined]> = [
+    ["BOT_LOCALE", values.BOT_LOCALE],
     ["TELEGRAM_BOT_TOKEN", values.TELEGRAM_BOT_TOKEN],
     ["TELEGRAM_ALLOWED_USER_ID", values.TELEGRAM_ALLOWED_USER_ID],
     ["OPENCODE_API_URL", values.OPENCODE_API_URL],
@@ -257,6 +267,43 @@ async function askToken(): Promise<string> {
   }
 }
 
+async function askLocale(): Promise<Locale> {
+  const localeOptions = getLocaleOptions();
+  const defaultLocale = getLocale();
+  const defaultLocaleOption =
+    localeOptions.find((localeOption) => localeOption.code === defaultLocale) ?? localeOptions[0];
+  const optionsText = localeOptions
+    .map((localeOption, index) => `${index + 1} - ${localeOption.label} (${localeOption.code})`)
+    .join("\n");
+
+  const prompt = t("runtime.wizard.ask_language", {
+    options: optionsText,
+    defaultLocale: `${defaultLocaleOption.label} (${defaultLocaleOption.code})`,
+  });
+
+  for (;;) {
+    const answer = await askVisible(prompt);
+
+    if (!answer) {
+      return defaultLocaleOption.code;
+    }
+
+    if (/^\d+$/.test(answer)) {
+      const index = Number.parseInt(answer, 10) - 1;
+      if (index >= 0 && index < localeOptions.length) {
+        return localeOptions[index].code;
+      }
+    }
+
+    const localeByCode = resolveSupportedLocale(answer);
+    if (localeByCode) {
+      return localeByCode;
+    }
+
+    process.stdout.write(t("runtime.wizard.language_invalid"));
+  }
+}
+
 async function askAllowedUserId(): Promise<string> {
   for (;;) {
     const allowedUserId = await askVisible(t("runtime.wizard.ask_user_id"));
@@ -290,6 +337,21 @@ async function askApiUrl(): Promise<string | undefined> {
 }
 
 async function collectWizardValues(): Promise<WizardCollectedValues> {
+  const locale = await askLocale();
+  setRuntimeLocale(locale);
+  const selectedLocaleOption =
+    getLocaleOptions().find((localeOption) => localeOption.code === locale) ?? null;
+
+  process.stdout.write("\n");
+  process.stdout.write(
+    t("runtime.wizard.language_selected", {
+      language:
+        selectedLocaleOption !== null
+          ? `${selectedLocaleOption.label} (${selectedLocaleOption.code})`
+          : locale,
+    }),
+  );
+  process.stdout.write("\n");
   process.stdout.write(t("runtime.wizard.start"));
   process.stdout.write("\n");
 
@@ -300,6 +362,7 @@ async function collectWizardValues(): Promise<WizardCollectedValues> {
   process.stdout.write("\n");
 
   return {
+    locale,
     token,
     allowedUserId,
     apiUrl,
@@ -337,6 +400,7 @@ async function runWizardAndPersist(runtimePaths: RuntimePaths): Promise<void> {
   const modelId = existingParsed.OPENCODE_MODEL_ID || modelDefaults.modelId;
 
   const envValues: WizardEnvValues = {
+    BOT_LOCALE: wizardValues.locale,
     TELEGRAM_BOT_TOKEN: wizardValues.token,
     TELEGRAM_ALLOWED_USER_ID: wizardValues.allowedUserId,
     OPENCODE_API_URL: wizardValues.apiUrl,

@@ -128,7 +128,7 @@ Interaction routing rules:
 - [x] Voice/audio transcription via Whisper-compatible APIs (OpenAI/Groq/Together and compatible providers)
 - [x] Single-user security model (allowed Telegram user ID)
 - [x] Persistent bot settings (`settings.json`) between restarts
-- [x] EN/RU localization structure via dedicated i18n files
+- [x] Localization structure via dedicated i18n files
 
 ## Current Task List
 

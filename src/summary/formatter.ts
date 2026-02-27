@@ -308,17 +308,17 @@ function formatTodos(todos: Array<{ id: string; content: string; status: string 
   const MAX_TODOS = 20;
 
   const statusToMarker: Record<string, string> = {
-    completed: "x",
-    in_progress: "~",
-    pending: "  ",
+    completed: "✅",
+    in_progress: "🔄",
+    pending: "🔲",
   };
 
   const formattedTodos: string[] = [];
 
   for (let i = 0; i < Math.min(todos.length, MAX_TODOS); i++) {
     const todo = todos[i];
-    const marker = statusToMarker[todo.status] ?? " ";
-    formattedTodos.push(`[${marker}] ${todo.content}`);
+    const marker = statusToMarker[todo.status] ?? "🔲";
+    formattedTodos.push(`${marker} ${todo.content}`);
   }
 
   let result = formattedTodos.join("\n");

@@ -11,7 +11,7 @@ import { ensureActiveInlineMenu, replyWithInlineMenu } from "../handlers/inline-
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
-import { getLocale, t } from "../../i18n/index.js";
+import { getDateLocale, t } from "../../i18n/index.js";
 
 export async function sessionsCommand(ctx: CommandContext<Context>) {
   try {
@@ -45,7 +45,7 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
     }
 
     const keyboard = new InlineKeyboard();
-    const localeForDate = getLocale() === "ru" ? "ru-RU" : "en-US";
+    const localeForDate = getDateLocale();
 
     sessions.forEach((session, index) => {
       const date = new Date(session.time.created).toLocaleDateString(localeForDate);

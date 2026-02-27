@@ -11,6 +11,8 @@ Run AI coding tasks, monitor progress, switch models, and manage sessions from y
 
 No open ports, no exposed APIs. The bot communicates with your local OpenCode server and the Telegram Bot API only.
 
+Languages: English (`en`), Deutsch (`de`), Español (`es`), Русский (`ru`), 简体中文 (`zh`)
+
 Quick start: `npx @grinev/opencode-telegram-bot`
 
 <p align="center">
@@ -30,7 +32,7 @@ Quick start: `npx @grinev/opencode-telegram-bot`
 - **Input flow control** — when an interactive flow is active, the bot accepts only relevant input to keep context consistent and avoid accidental actions
 - **Configurable reply formatting** — assistant replies use Telegram MarkdownV2 by default, with optional raw mode (`MESSAGE_FORMAT_MODE=markdown|raw`)
 - **Security** — strict user ID whitelist; no one else can access your bot, even if they find it
-- **Localization** — English and Russian UI (`BOT_LOCALE=en|ru`)
+- **Localization** — English, German, Spanish, Russian, and Simplified Chinese UI (`BOT_LOCALE=en|de|es|ru|zh`)
 
 ## Prerequisites
 
@@ -66,7 +68,7 @@ The fastest way — run directly with `npx`:
 npx @grinev/opencode-telegram-bot
 ```
 
-On first launch, an interactive wizard will guide you through the configuration — it will ask for your bot token, user ID, and OpenCode API URL. After that, you're ready to go. Open your bot in Telegram and start sending tasks.
+On first launch, an interactive wizard will guide you through the configuration — it asks for interface language first, then your bot token, user ID, and OpenCode API URL. After that, you're ready to go. Open your bot in Telegram and start sending tasks.
 
 #### Alternative: Global Install
 
@@ -114,6 +116,12 @@ Any regular text message is sent as a prompt to the coding agent only when no bl
 
 ## Configuration
 
+### Localization
+
+- Supported locales: `en`, `de`, `es`, `ru`, `zh`
+- The setup wizard asks for language first
+- You can change locale later with `BOT_LOCALE`
+
 ### Environment Variables
 
 When installed via npm, the configuration wizard handles the initial setup. The `.env` file is stored in your platform's app data directory:
@@ -132,7 +140,7 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `OPENCODE_SERVER_PASSWORD`      | Server auth password                                                                                         |    No    | —                        |
 | `OPENCODE_MODEL_PROVIDER`       | Default model provider                                                                                       |   Yes    | `opencode`               |
 | `OPENCODE_MODEL_ID`             | Default model ID                                                                                             |   Yes    | `big-pickle`             |
-| `BOT_LOCALE`                    | Bot UI language (`en` or `ru`)                                                                               |    No    | `en`                     |
+| `BOT_LOCALE`                    | Bot UI language (supported locale code, e.g. `en`, `de`, `es`, `ru`, `zh`)                                   |    No    | `en`                     |
 | `SESSIONS_LIST_LIMIT`           | Max sessions shown in `/sessions`                                                                            |    No    | `10`                     |
 | `PROJECTS_LIST_LIMIT`           | Max projects shown in `/projects`                                                                            |    No    | `10`                     |
 | `SERVICE_MESSAGES_INTERVAL_SEC` | Service messages interval (thinking + tool calls); keep `>=2` to avoid Telegram rate limits, `0` = immediate |    No    | `5`                      |

@@ -44,7 +44,7 @@ Functional requirements, features, and development status are in [PRODUCT.md](./
 4. **Summary Pipeline** - event aggregation and Telegram-friendly formatting
 5. **Process Manager** - local OpenCode server process start/stop/status
 6. **Runtime/CLI Layer** - runtime mode, config bootstrap, CLI commands
-7. **I18n Layer** - localized bot and CLI strings (`en`, `ru`)
+7. **I18n Layer** - localized bot and CLI strings to multiple languages
 
 ### Data flow
 

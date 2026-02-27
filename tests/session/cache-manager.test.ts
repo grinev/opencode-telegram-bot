@@ -12,15 +12,29 @@ import {
   warmupSessionDirectoryCache,
 } from "../../src/session/cache-manager.js";
 
-const { sessionListMock } = vi.hoisted(() => ({
-  sessionListMock: vi.fn(),
-}));
+const { sessionListMock, loggerWarnMock, loggerDebugMock, loggerInfoMock, loggerErrorMock } =
+  vi.hoisted(() => ({
+    sessionListMock: vi.fn(),
+    loggerWarnMock: vi.fn(),
+    loggerDebugMock: vi.fn(),
+    loggerInfoMock: vi.fn(),
+    loggerErrorMock: vi.fn(),
+  }));
 
 vi.mock("../../src/opencode/client.js", () => ({
   opencodeClient: {
     session: {
       list: sessionListMock,
     },
+  },
+}));
+
+vi.mock("../../src/utils/logger.js", () => ({
+  logger: {
+    debug: loggerDebugMock,
+    info: loggerInfoMock,
+    warn: loggerWarnMock,
+    error: loggerErrorMock,
   },
 }));
 
@@ -48,6 +62,7 @@ describe("session/cache-manager", () => {
     setRuntimeMode("installed");
     await loadSettings();
     sessionListMock.mockReset();
+    loggerWarnMock.mockReset();
     __resetSessionDirectoryCacheForTests();
   });
 
@@ -116,6 +131,20 @@ describe("session/cache-manager", () => {
 
     const directories = await getCachedSessionDirectories();
     expect(directories.map((item) => item.worktree)).toEqual(["D:/repo-c", "D:/repo-a"]);
+  });
+
+  it("logs friendly message when server is not running during warmup sync", async () => {
+    sessionListMock.mockResolvedValueOnce({
+      data: null,
+      error: new TypeError("fetch failed"),
+    });
+
+    await warmupSessionDirectoryCache();
+
+    expect(loggerWarnMock).toHaveBeenCalledTimes(1);
+    expect(loggerWarnMock).toHaveBeenCalledWith(
+      "[SessionCache] OpenCode server is not running. Start it with: opencode serve",
+    );
   });
 
   it("updates existing directory with newer timestamp", async () => {
