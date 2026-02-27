@@ -87,6 +87,9 @@ export const zh: I18nDictionary = {
     "📭 未找到项目。\n\n在 OpenCode 中打开一个目录并至少创建一个会话，然后它会出现在这里。",
   "projects.select": "请选择一个项目：",
   "projects.select_with_current": "请选择一个项目：\n\n当前：🏗 {project}",
+  "projects.page_indicator": "第 {current}/{total} 页",
+  "projects.prev_page": "⬅️ 上一页",
+  "projects.next_page": "下一页 ➡️",
   "projects.fetch_error": "🔴 OpenCode 服务器不可用，或加载项目时发生错误。",
   "projects.selected":
     "✅ 已选择项目：{project}\n\n📋 会话已重置。请在此项目中使用 /sessions 或 /new。",

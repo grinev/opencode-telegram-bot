@@ -103,6 +103,9 @@ export const es: I18nDictionary = {
     "📭 No se encontraron proyectos.\n\nAbre un directorio en OpenCode y crea al menos una sesión; entonces aparecerá aquí.",
   "projects.select": "Selecciona un proyecto:",
   "projects.select_with_current": "Selecciona un proyecto:\n\nActual: 🏗 {project}",
+  "projects.page_indicator": "Página {current}/{total}",
+  "projects.prev_page": "⬅️ Anterior",
+  "projects.next_page": "Siguiente ➡️",
   "projects.fetch_error":
     "🔴 OpenCode Server no está disponible u ocurrió un error al cargar los proyectos.",
   "projects.selected":
