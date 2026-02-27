@@ -97,6 +97,9 @@ export const en = {
     "📭 No projects found.\n\nOpen a directory in OpenCode and create at least one session, then it will appear here.",
   "projects.select": "Select a project:",
   "projects.select_with_current": "Select a project:\n\nCurrent: 🏗 {project}",
+  "projects.page_indicator": "Page {current}/{total}",
+  "projects.prev_page": "⬅️ Previous",
+  "projects.next_page": "Next ➡️",
   "projects.fetch_error":
     "🔴 OpenCode Server is unavailable or an error occurred while loading projects.",
   "projects.selected":
