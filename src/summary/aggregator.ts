@@ -58,6 +58,15 @@ type SessionCompactedCallback = (sessionId: string, directory: string) => void;
 
 type SessionErrorCallback = (sessionId: string, message: string) => void;
 
+export interface SessionRetryInfo {
+  sessionId: string;
+  attempt?: number;
+  message: string;
+  next?: number;
+}
+
+type SessionRetryCallback = (retryInfo: SessionRetryInfo) => void;
+
 type PermissionCallback = (request: PermissionRequest) => void;
 
 type SessionDiffCallback = (sessionId: string, diffs: FileChange[]) => void;
@@ -115,6 +124,7 @@ class SummaryAggregator {
   private onTokensCallback: TokensCallback | null = null;
   private onSessionCompactedCallback: SessionCompactedCallback | null = null;
   private onSessionErrorCallback: SessionErrorCallback | null = null;
+  private onSessionRetryCallback: SessionRetryCallback | null = null;
   private onPermissionCallback: PermissionCallback | null = null;
   private onSessionDiffCallback: SessionDiffCallback | null = null;
   private onFileChangeCallback: FileChangeCallback | null = null;
@@ -165,6 +175,10 @@ class SummaryAggregator {
 
   setOnSessionError(callback: SessionErrorCallback): void {
     this.onSessionErrorCallback = callback;
+  }
+
+  setOnSessionRetry(callback: SessionRetryCallback): void {
+    this.onSessionRetryCallback = callback;
   }
 
   setOnPermission(callback: PermissionCallback): void {
@@ -649,11 +663,39 @@ class SummaryAggregator {
       type: "session.status";
     },
   ): void {
-    const { sessionID } = event.properties;
+    const { sessionID, status } = event.properties as {
+      sessionID: string;
+      status?: {
+        type?: string;
+        attempt?: number;
+        message?: string;
+        next?: number;
+      };
+    };
 
     if (sessionID !== this.currentSessionId) {
       return;
     }
+
+    if (status?.type !== "retry" || !this.onSessionRetryCallback) {
+      return;
+    }
+
+    const callback = this.onSessionRetryCallback;
+    const message = status.message?.trim() || "Unknown retry error";
+
+    logger.warn(
+      `[Aggregator] Session retry: session=${sessionID}, attempt=${status.attempt ?? "n/a"}, message=${message}`,
+    );
+
+    setImmediate(() => {
+      callback({
+        sessionId: sessionID,
+        attempt: status.attempt,
+        message,
+        next: status.next,
+      });
+    });
   }
 
   private handleSessionIdle(

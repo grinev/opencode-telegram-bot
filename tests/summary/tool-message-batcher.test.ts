@@ -74,6 +74,27 @@ describe("summary/tool-message-batcher", () => {
     expect(sendFile).not.toHaveBeenCalled();
   });
 
+  it("keeps only one queued retry message by prefix and updates it", async () => {
+    vi.useFakeTimers();
+
+    const sendText = vi.fn().mockResolvedValue(undefined);
+    const sendFile = vi.fn().mockResolvedValue(undefined);
+    const batcher = new ToolMessageBatcher({
+      intervalSeconds: 5,
+      sendText,
+      sendFile,
+    });
+
+    batcher.enqueueUniqueByPrefix("s1", "🔁 Retry attempt 1", "🔁");
+    batcher.enqueueUniqueByPrefix("s1", "🔁 Retry attempt 2", "🔁");
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenCalledWith("s1", "🔁 Retry attempt 2");
+    expect(sendFile).not.toHaveBeenCalled();
+  });
+
   it("flushes session queue immediately and cancels timer", async () => {
     vi.useFakeTimers();
 

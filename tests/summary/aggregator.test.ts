@@ -27,6 +27,7 @@ describe("summary/aggregator", () => {
     summaryAggregator.setOnToolFile(() => {});
     summaryAggregator.setOnThinking(() => {});
     summaryAggregator.setOnSessionError(() => {});
+    summaryAggregator.setOnSessionRetry(() => {});
   });
 
   it("invokes onCleared callback when aggregator is cleared", () => {
@@ -271,6 +272,34 @@ describe("summary/aggregator", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(onSessionError).toHaveBeenCalledWith("session-1", "Model not found: opencode/foo.");
+  });
+
+  it("reports session.status retry through callback", async () => {
+    const onSessionRetry = vi.fn();
+    summaryAggregator.setOnSessionRetry(onSessionRetry);
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "session.status",
+      properties: {
+        sessionID: "session-1",
+        status: {
+          type: "retry",
+          attempt: 2,
+          message: "Your current subscription plan does not yet include access to GLM-5",
+          next: 1772203141283,
+        },
+      },
+    } as unknown as Event);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(onSessionRetry).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      attempt: 2,
+      message: "Your current subscription plan does not yet include access to GLM-5",
+      next: 1772203141283,
+    });
   });
 
   it("sends apply_patch payload as tool file", () => {

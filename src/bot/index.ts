@@ -58,6 +58,7 @@ let chatIdInstance: number | null = null;
 let commandsInitialized = false;
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
+const SESSION_RETRY_PREFIX = "🔁";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEMP_DIR = path.join(__dirname, "..", ".tmp");
@@ -391,6 +392,26 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       .catch((err) => {
         logger.error("[Bot] Failed to send session.error message:", err);
       });
+  });
+
+  summaryAggregator.setOnSessionRetry(async ({ sessionId, message }) => {
+    if (!botInstance || !chatIdInstance) {
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
+      return;
+    }
+
+    const normalizedMessage = message.trim() || t("common.unknown_error");
+    const truncatedMessage =
+      normalizedMessage.length > 3500
+        ? `${normalizedMessage.slice(0, 3497)}...`
+        : normalizedMessage;
+
+    const retryMessage = t("bot.session_retry", { message: truncatedMessage });
+    toolMessageBatcher.enqueueUniqueByPrefix(sessionId, retryMessage, SESSION_RETRY_PREFIX);
   });
 
   summaryAggregator.setOnSessionDiff(async (_sessionId, diffs) => {

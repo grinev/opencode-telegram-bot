@@ -86,28 +86,11 @@ export class ToolMessageBatcher {
   }
 
   enqueue(sessionId: string, message: string): void {
-    const normalizedMessage = message.trim();
-    if (!sessionId || normalizedMessage.length === 0) {
-      return;
-    }
+    this.enqueueTextInternal(sessionId, message);
+  }
 
-    if (this.intervalSeconds === 0) {
-      const expectedGeneration = this.generation;
-      logger.debug(`[ToolBatcher] Sending immediate text message: session=${sessionId}`);
-      void this.enqueueTask(sessionId, () =>
-        this.sendTextSafe(sessionId, normalizedMessage, "immediate", expectedGeneration),
-      );
-      return;
-    }
-
-    const queue = this.queues.get(sessionId) ?? [];
-    queue.push({ kind: "text", text: normalizedMessage });
-    this.queues.set(sessionId, queue);
-    logger.debug(
-      `[ToolBatcher] Queued text message: session=${sessionId}, queueSize=${queue.length}, interval=${this.intervalSeconds}s`,
-    );
-
-    this.ensureTimer(sessionId);
+  enqueueUniqueByPrefix(sessionId: string, message: string, prefix: string): void {
+    this.enqueueTextInternal(sessionId, message, prefix);
   }
 
   enqueueFile(sessionId: string, fileData: CodeFileData): void {
@@ -218,6 +201,50 @@ export class ToolMessageBatcher {
 
     this.sessionTasks.set(sessionId, nextTask);
     return nextTask;
+  }
+
+  private enqueueTextInternal(sessionId: string, message: string, uniquePrefix?: string): void {
+    const normalizedMessage = message.trim();
+    if (!sessionId || normalizedMessage.length === 0) {
+      return;
+    }
+
+    if (this.intervalSeconds === 0) {
+      const expectedGeneration = this.generation;
+      logger.debug(`[ToolBatcher] Sending immediate text message: session=${sessionId}`);
+      void this.enqueueTask(sessionId, () =>
+        this.sendTextSafe(sessionId, normalizedMessage, "immediate", expectedGeneration),
+      );
+      return;
+    }
+
+    const normalizedPrefix = uniquePrefix?.trim();
+    const queue = this.queues.get(sessionId) ?? [];
+
+    if (normalizedPrefix) {
+      const existingUniqueMessage = queue.find(
+        (item): item is Extract<QueueItem, { kind: "text" }> =>
+          item.kind === "text" && item.text.startsWith(normalizedPrefix),
+      );
+
+      if (existingUniqueMessage) {
+        existingUniqueMessage.text = normalizedMessage;
+        this.queues.set(sessionId, queue);
+        logger.debug(
+          `[ToolBatcher] Updated queued unique text message: session=${sessionId}, prefix=${normalizedPrefix}, interval=${this.intervalSeconds}s`,
+        );
+        this.ensureTimer(sessionId);
+        return;
+      }
+    }
+
+    queue.push({ kind: "text", text: normalizedMessage });
+    this.queues.set(sessionId, queue);
+    logger.debug(
+      `[ToolBatcher] Queued text message: session=${sessionId}, queueSize=${queue.length}, interval=${this.intervalSeconds}s`,
+    );
+
+    this.ensureTimer(sessionId);
   }
 
   private async flushSessionInternal(sessionId: string, reason: string): Promise<void> {
