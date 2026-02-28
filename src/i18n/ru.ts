@@ -178,8 +178,14 @@ export const ru: I18nDictionary = {
   "model.changed_message": "✅ Модель изменена на: {name}",
   "model.change_error_callback": "Ошибка при смене модели",
   "model.menu.empty": "⚠️ Нет доступных моделей",
+  "model.menu.select": "Выберите модель:",
   "model.menu.current": "Текущая модель: {name}\n\nВыберите модель:",
-  "model.menu.favorites_hint": "ℹ️ Список моделей формируется из favorites в OpenCode CLI.",
+  "model.menu.favorites_title": "⭐ Избранное (Добавляйте модели в избранное через OpenCode CLI)",
+  "model.menu.favorites_empty": "— Список пуст.",
+  "model.menu.recent_title": "🕘 Недавние",
+  "model.menu.recent_empty": "— Список пуст.",
+  "model.menu.favorites_hint":
+    "ℹ️ Добавляйте модели в избранное через OpenCode CLI, чтобы они были вверху списка.",
   "model.menu.error": "🔴 Не удалось получить список моделей",
 
   "variant.model_not_selected_callback": "Ошибка: модель не выбрана",

@@ -1,14 +1,13 @@
 import { Context, InlineKeyboard } from "grammy";
-import { selectModel, getFavoriteModels, fetchCurrentModel } from "../../model/manager.js";
+import { selectModel, fetchCurrentModel, getModelSelectionLists } from "../../model/manager.js";
 import { formatModelForDisplay } from "../../model/types.js";
-import type { FavoriteModel, ModelInfo } from "../../model/types.js";
+import type { FavoriteModel, ModelInfo, ModelSelectionLists } from "../../model/types.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { logger } from "../../utils/logger.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
 import { getStoredAgent } from "../../agent/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
-import { config } from "../../config.js";
 import {
   clearActiveInlineMenu,
   ensureActiveInlineMenu,
@@ -16,19 +15,20 @@ import {
 } from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
 
-function isOnlyConfigDefaultModel(models: FavoriteModel[]): boolean {
-  if (models.length !== 1) {
-    return false;
+function buildModelSelectionMenuText(modelLists: ModelSelectionLists): string {
+  const lines = [t("model.menu.select"), t("model.menu.favorites_title")];
+
+  if (modelLists.favorites.length === 0) {
+    lines.push(t("model.menu.favorites_empty"));
   }
 
-  const defaultProviderID = config.opencode.model.provider;
-  const defaultModelID = config.opencode.model.modelId;
+  lines.push(t("model.menu.recent_title"));
 
-  if (!defaultProviderID || !defaultModelID) {
-    return false;
+  if (modelLists.recent.length === 0) {
+    lines.push(t("model.menu.recent_empty"));
   }
 
-  return models[0].providerID === defaultProviderID && models[0].modelID === defaultModelID;
+  return lines.join("\n");
 }
 
 /**
@@ -124,35 +124,39 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
 }
 
 /**
- * Build inline keyboard with favorite models
+ * Build inline keyboard with favorite and recent models
  * @param currentModel Current model for highlighting
  * @returns InlineKeyboard with model selection buttons
  */
 export async function buildModelSelectionMenu(
   currentModel?: ModelInfo,
-  favoriteModels?: FavoriteModel[],
+  modelLists?: ModelSelectionLists,
 ): Promise<InlineKeyboard> {
   const keyboard = new InlineKeyboard();
-  const favorites = favoriteModels ?? (await getFavoriteModels());
+  const lists = modelLists ?? (await getModelSelectionLists());
+  const favorites = lists.favorites;
+  const recent = lists.recent;
 
-  if (favorites.length === 0) {
-    logger.warn("[ModelHandler] No favorite models found");
+  if (favorites.length === 0 && recent.length === 0) {
+    logger.warn("[ModelHandler] No model choices found in favorites/recent");
     return keyboard;
   }
 
-  // Add button for each favorite model
-  favorites.forEach((model) => {
+  const addButton = (model: FavoriteModel, prefix: string): void => {
     const isActive =
       currentModel &&
       model.providerID === currentModel.providerID &&
       model.modelID === currentModel.modelID;
 
     // Inline buttons use full model ID without truncation
-    const label = `${model.providerID}/${model.modelID}`;
+    const label = `${prefix} ${model.providerID}/${model.modelID}`;
     const labelWithCheck = isActive ? `✅ ${label}` : label;
 
     keyboard.text(labelWithCheck, `model:${model.providerID}:${model.modelID}`).row();
-  });
+  };
+
+  favorites.forEach((model) => addButton(model, "⭐"));
+  recent.forEach((model) => addButton(model, "🕘"));
 
   return keyboard;
 }
@@ -164,27 +168,21 @@ export async function buildModelSelectionMenu(
 export async function showModelSelectionMenu(ctx: Context): Promise<void> {
   try {
     const currentModel = fetchCurrentModel();
-    const favorites = await getFavoriteModels();
-    const keyboard = await buildModelSelectionMenu(currentModel, favorites);
+    const modelLists = await getModelSelectionLists();
+    const keyboard = await buildModelSelectionMenu(currentModel, modelLists);
 
     if (keyboard.inline_keyboard.length === 0) {
       await ctx.reply(t("model.menu.empty"));
       return;
     }
 
-    const displayName = formatModelForDisplay(currentModel.providerID, currentModel.modelID);
-
-    const text = t("model.menu.current", { name: displayName });
+    const text = buildModelSelectionMenuText(modelLists);
 
     await replyWithInlineMenu(ctx, {
       menuKind: "model",
       text,
       keyboard,
     });
-
-    if (isOnlyConfigDefaultModel(favorites)) {
-      await ctx.reply(t("model.menu.favorites_hint"));
-    }
   } catch (err) {
     logger.error("[ModelHandler] Error showing model menu:", err);
     await ctx.reply(t("model.menu.error"));

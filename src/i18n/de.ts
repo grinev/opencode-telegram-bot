@@ -187,8 +187,15 @@ export const de: I18nDictionary = {
   "model.changed_message": "✅ Modell geändert zu: {name}",
   "model.change_error_callback": "Modell konnte nicht geändert werden",
   "model.menu.empty": "⚠️ Keine verfügbaren Modelle",
+  "model.menu.select": "Modell auswählen:",
   "model.menu.current": "Aktuelles Modell: {name}\n\nModell auswählen:",
-  "model.menu.favorites_hint": "ℹ️ Die Modellliste wird aus Favoriten in OpenCode CLI erstellt.",
+  "model.menu.favorites_title":
+    "⭐ Favoriten (Füge Modelle in OpenCode CLI zu den Favoriten hinzu)",
+  "model.menu.favorites_empty": "— Leer.",
+  "model.menu.recent_title": "🕘 Zuletzt verwendet",
+  "model.menu.recent_empty": "— Leer.",
+  "model.menu.favorites_hint":
+    "ℹ️ Füge Modelle in OpenCode CLI zu den Favoriten hinzu, damit sie oben angezeigt werden.",
   "model.menu.error": "🔴 Modellliste konnte nicht geladen werden",
 
   "variant.model_not_selected_callback": "Fehler: Modell ist nicht ausgewählt",
