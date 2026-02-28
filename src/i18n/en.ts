@@ -102,6 +102,7 @@ export const en = {
   "projects.next_page": "Next ➡️",
   "projects.fetch_error":
     "🔴 OpenCode Server is unavailable or an error occurred while loading projects.",
+  "projects.page_load_error": "Cannot load this page. Please try again.",
   "projects.selected":
     "✅ Project selected: {project}\n\n📋 Session was reset. Use /sessions or /new for this project.",
   "projects.select_error": "🔴 Failed to select project.",

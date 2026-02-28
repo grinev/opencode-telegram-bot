@@ -78,5 +78,39 @@ describe("bot/commands/projects", () => {
         endIndex: 0,
       });
     });
+
+    it("applies < pageSize boundary semantics using provided pageSize (not fixed 10)", () => {
+      expect(calculateProjectsPaginationRange(6, 0, 7)).toEqual({
+        page: 0,
+        totalPages: 1,
+        startIndex: 0,
+        endIndex: 6,
+      });
+    });
+
+    it("applies == pageSize boundary semantics using provided pageSize (single full page)", () => {
+      expect(calculateProjectsPaginationRange(7, 99, 7)).toEqual({
+        page: 0,
+        totalPages: 1,
+        startIndex: 0,
+        endIndex: 7,
+      });
+    });
+
+    it("applies > pageSize boundary semantics using provided pageSize with overflow on next page", () => {
+      expect(calculateProjectsPaginationRange(8, 0, 7)).toEqual({
+        page: 0,
+        totalPages: 2,
+        startIndex: 0,
+        endIndex: 7,
+      });
+
+      expect(calculateProjectsPaginationRange(8, 1, 7)).toEqual({
+        page: 1,
+        totalPages: 2,
+        startIndex: 7,
+        endIndex: 8,
+      });
+    });
   });
 });

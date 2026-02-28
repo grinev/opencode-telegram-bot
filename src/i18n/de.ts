@@ -108,6 +108,7 @@ export const de: I18nDictionary = {
   "projects.next_page": "Weiter ➡️",
   "projects.fetch_error":
     "🔴 OpenCode-Server ist nicht verfügbar oder beim Laden der Projekte ist ein Fehler aufgetreten.",
+  "projects.page_load_error": "Diese Seite konnte nicht geladen werden. Bitte versuche es erneut.",
   "projects.selected":
     "✅ Projekt ausgewählt: {project}\n\n📋 Sitzung wurde zurückgesetzt. Nutze /sessions oder /new für dieses Projekt.",
   "projects.select_error": "🔴 Projekt konnte nicht ausgewählt werden.",

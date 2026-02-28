@@ -91,6 +91,7 @@ export const zh: I18nDictionary = {
   "projects.prev_page": "⬅️ 上一页",
   "projects.next_page": "下一页 ➡️",
   "projects.fetch_error": "🔴 OpenCode 服务器不可用，或加载项目时发生错误。",
+  "projects.page_load_error": "无法加载此页面。请重试。",
   "projects.selected":
     "✅ 已选择项目：{project}\n\n📋 会话已重置。请在此项目中使用 /sessions 或 /new。",
   "projects.select_error": "🔴 选择项目失败。",

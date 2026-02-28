@@ -221,8 +221,7 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
       });
     } catch (error) {
       logger.error("[Bot] Error switching projects page:", error);
-      await ctx.answerCallbackQuery();
-      await ctx.reply(t("projects.fetch_error"));
+      await ctx.answerCallbackQuery({ text: t("projects.page_load_error") });
     }
 
     return true;
