@@ -136,7 +136,7 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `OPENCODE_MODEL_PROVIDER`       | Default model provider                                                                                       |   Yes    | `opencode`               |
 | `OPENCODE_MODEL_ID`             | Default model ID                                                                                             |   Yes    | `big-pickle`             |
 | `BOT_LOCALE`                    | Bot UI language (supported locale code, e.g. `en`, `de`, `es`, `ru`, `zh`)                                   |    No    | `en`                     |
-| `SESSIONS_LIST_LIMIT`           | Max sessions shown in `/sessions`                                                                            |    No    | `10`                     |
+| `SESSIONS_LIST_LIMIT`           | Sessions per page in `/sessions`                                                                             |    No    | `10`                     |
 | `PROJECTS_LIST_LIMIT`           | Projects per page shown in `/projects`                                                                       |    No    | `10`                     |
 | `SERVICE_MESSAGES_INTERVAL_SEC` | Service messages interval (thinking + tool calls); keep `>=2` to avoid Telegram rate limits, `0` = immediate |    No    | `5`                      |
 | `HIDE_THINKING_MESSAGES`        | Hide `💭 Thinking...` service messages                                                                       |    No    | `false`                  |
