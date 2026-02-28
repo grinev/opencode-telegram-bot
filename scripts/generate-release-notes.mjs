@@ -3,14 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
-const SECTION_ORDER = [
-  "Major Changes",
-  "Changes",
-  "Fixes",
-  "Technical",
-  "Documentation",
-  "Other",
-];
+const SECTION_ORDER = ["Major Changes", "Changes", "Fixes", "Technical", "Documentation", "Other"];
 
 const TECHNICAL_TYPES = new Set(["refactor", "chore", "ci", "build", "test", "style"]);
 
@@ -67,6 +60,19 @@ function normalizeText(text) {
 
 function isReleaseCommit(subject) {
   return /^chore\(release\):\s*v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/i.test(subject.trim());
+}
+
+function extractPrNumber(subject) {
+  const match = subject.match(/\s*\(#(\d+)\)$/);
+
+  if (!match) {
+    return { subject, prNumber: null };
+  }
+
+  return {
+    subject: subject.slice(0, subject.length - match[0].length),
+    prNumber: Number.parseInt(match[1], 10),
+  };
 }
 
 function classifyCommit(subject) {
@@ -136,12 +142,61 @@ function buildTitle(version, kind) {
   return `## Release v${version}`;
 }
 
-function main() {
+async function fetchPrAuthor(repository, prNumber) {
+  const url = `https://api.github.com/repos/${repository}/pulls/${prNumber}`;
+
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "generate-release-notes",
+  };
+
+  const githubToken = process.env.GITHUB_TOKEN;
+
+  if (githubToken) {
+    headers["Authorization"] = `Bearer ${githubToken}`;
+  }
+
+  try {
+    const response = await fetch(url, { headers });
+
+    if (!response.ok) {
+      process.stderr.write(`Warning: GitHub API returned ${response.status} for PR #${prNumber}\n`);
+      return null;
+    }
+
+    const data = await response.json();
+    return data?.user?.login ?? null;
+  } catch (error) {
+    process.stderr.write(`Warning: Failed to fetch PR #${prNumber} author: ${error.message}\n`);
+    return null;
+  }
+}
+
+async function resolveAuthors(repository, ownerLogin, prNumbers) {
+  const cache = new Map();
+  const uniquePrNumbers = [...new Set(prNumbers.filter((n) => n !== null))];
+
+  await Promise.all(
+    uniquePrNumbers.map(async (prNumber) => {
+      const login = await fetchPrAuthor(repository, prNumber);
+
+      if (login && login !== ownerLogin) {
+        cache.set(prNumber, login);
+      }
+    }),
+  );
+
+  return cache;
+}
+
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const version = args.version;
   const kind = args.kind;
   const repository = args.repo;
   const outputPath = args.output;
+  const token = args.token;
 
   if (!version || !kind || !repository || !outputPath) {
     process.stderr.write(
@@ -149,6 +204,12 @@ function main() {
     );
     process.exit(2);
   }
+
+  if (token) {
+    process.env.GITHUB_TOKEN = token;
+  }
+
+  const ownerLogin = repository.split("/")[0];
 
   const lastTag = runGit(["describe", "--tags", "--abbrev=0", "HEAD^"], true);
   const range = lastTag ? `${lastTag}..HEAD` : "HEAD";
@@ -161,32 +222,41 @@ function main() {
           const tabIndex = line.indexOf("\t");
 
           if (tabIndex === -1) {
-            return {
-              timestamp: 0,
-              subject: line.trim(),
-            };
+            const { subject, prNumber } = extractPrNumber(line.trim());
+            return { timestamp: 0, subject, prNumber };
           }
 
           const timestamp = Number.parseInt(line.slice(0, tabIndex), 10);
-          const subject = line.slice(tabIndex + 1).trim();
+          const rawSubject = line.slice(tabIndex + 1).trim();
+          const { subject, prNumber } = extractPrNumber(rawSubject);
 
           return {
             timestamp: Number.isNaN(timestamp) ? 0 : timestamp,
             subject,
+            prNumber,
           };
         })
         .filter((entry) => entry.subject.length > 0)
         .filter((entry) => !isReleaseCommit(entry.subject))
     : [];
 
+  const authorCache = await resolveAuthors(
+    repository,
+    ownerLogin,
+    commits.map((c) => c.prNumber),
+  );
+
   const sections = createEmptySections();
 
   commits.forEach((commit, index) => {
     const { section, text } = classifyCommit(commit.subject);
+    const authorLogin = commit.prNumber !== null ? authorCache.get(commit.prNumber) : undefined;
+
     sections[section].push({
       text,
       timestamp: commit.timestamp,
       order: index,
+      authorLogin: authorLogin ?? null,
     });
   });
 
@@ -204,7 +274,10 @@ function main() {
     lines.push(`### ${section}`);
 
     for (const item of sortByCommitTime(items)) {
-      lines.push(`- ${item.text}`);
+      const attribution = item.authorLogin
+        ? ` ([@${item.authorLogin}](https://github.com/${item.authorLogin}))`
+        : "";
+      lines.push(`- ${item.text}${attribution}`);
     }
 
     lines.push("");

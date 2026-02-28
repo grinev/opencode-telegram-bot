@@ -111,9 +111,15 @@ export const ru: I18nDictionary = {
     "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
   "sessions.empty": "📭 Сессий нет.\n\nСоздайте новую сессию командой /new.",
   "sessions.select": "Выберите сессию:",
+  "sessions.select_page": "Выберите сессию (страница {page}):",
   "sessions.fetch_error":
     "🔴 OpenCode Server недоступен или произошла ошибка при получении списка сессий.",
   "sessions.select_project_first": "🔴 Проект не выбран. Используйте /projects.",
+  "sessions.page_empty_callback": "На этой странице нет сессий",
+  "sessions.page_load_error_callback":
+    "Не удалось загрузить эту страницу. Пожалуйста, попробуйте снова.",
+  "sessions.button.prev_page": "⬅️ Назад",
+  "sessions.button.next_page": "Вперёд ➡️",
   "sessions.loading_context": "⏳ Загружаю контекст и последние сообщения...",
   "sessions.selected": "✅ Сессия выбрана: {title}",
   "sessions.select_error": "🔴 Ошибка при выборе сессии.",
@@ -176,8 +182,14 @@ export const ru: I18nDictionary = {
   "model.changed_message": "✅ Модель изменена на: {name}",
   "model.change_error_callback": "Ошибка при смене модели",
   "model.menu.empty": "⚠️ Нет доступных моделей",
+  "model.menu.select": "Выберите модель:",
   "model.menu.current": "Текущая модель: {name}\n\nВыберите модель:",
-  "model.menu.favorites_hint": "ℹ️ Список моделей формируется из favorites в OpenCode CLI.",
+  "model.menu.favorites_title": "⭐ Избранное (Добавляйте модели в избранное через OpenCode CLI)",
+  "model.menu.favorites_empty": "— Список пуст.",
+  "model.menu.recent_title": "🕘 Недавние",
+  "model.menu.recent_empty": "— Список пуст.",
+  "model.menu.favorites_hint":
+    "ℹ️ Добавляйте модели в избранное через OpenCode CLI, чтобы они были вверху списка.",
   "model.menu.error": "🔴 Не удалось получить список моделей",
 
   "variant.model_not_selected_callback": "Ошибка: модель не выбрана",

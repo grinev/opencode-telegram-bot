@@ -18,6 +18,11 @@ export interface FavoriteModel {
   modelID: string;
 }
 
+export interface ModelSelectionLists {
+  favorites: FavoriteModel[];
+  recent: FavoriteModel[];
+}
+
 /**
  * Format model for button display (compact format)
  * @param providerID Provider ID

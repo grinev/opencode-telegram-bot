@@ -87,18 +87,39 @@ Quick decision rule:
 
 ## Pull Requests
 
-- Keep PRs focused and small when possible.
-- Use clear titles that match the change intent.
-- Ensure CI passes before requesting review.
+### One change per PR
+
+Each PR must contain exactly one logically complete change: one feature, one fix, one refactor, etc.
+
+If your contribution covers multiple unrelated things, split it into separate PRs. This keeps reviews focused, makes history readable, and ensures release notes stay accurate.
+
+### PR title format
+
+The PR title is used as the commit message after squash merge and becomes a line in the release notes. It must follow the same Conventional Commits format as regular commit messages:
+
+`<type>(<scope>)?: <description>`
+
+Examples:
+
+- `feat(keyboard): add robot icon for model button`
+- `fix(model): handle model IDs with colons`
+- `docs(readme): clarify setup steps`
+- `feat(ui)!: redesign keyboard layout`
+
+A PR with a title that does not follow this format will not be merged until it is corrected.
 
 ### PR Quality Bar
 
 **MUST**
+
+- PR title must follow the Conventional Commits format (see above).
+- PR must contain exactly one logically complete change (see above).
 - PR branch must be up to date with `main` HEAD and conflict-free.
 - CI must pass (`npm run lint`, `npm run build`, `npm test`).
 - Changes must be compatible with both macOS and Windows (our primary supported platforms).
+
 **SHOULD**
-- Keep PRs focused and small.
+
 - Add or update tests for behavior changes.
-- Describe user-visible impact in 1-2 lines.
+- Describe user-visible impact in 1-2 lines in the PR description.
 - If you could not test on one platform locally, mention it in the PR description.

@@ -24,7 +24,7 @@ Quick start: `npx @grinev/opencode-telegram-bot`
 - **Remote coding** — send prompts to OpenCode from anywhere, receive complete results with code sent as files
 - **Session management** — create new sessions or continue existing ones, just like in the TUI
 - **Live status** — pinned message with current project, model, context usage, and changed files list, updated in real time
-- **Model switching** — pick any model from your OpenCode favorites directly in the chat
+- **Model switching** — pick models from OpenCode favorites and recent history directly in the chat (favorites are shown first)
 - **Agent modes** — switch between Plan and Build modes on the fly
 - **Interactive Q&A** — answer agent questions and approve permissions via inline buttons
 - **Voice prompts** — send voice/audio messages, transcribe them via a Whisper-compatible API, then forward recognized text to OpenCode
@@ -137,7 +137,7 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `OPENCODE_MODEL_ID`             | Default model ID                                                                                             |   Yes    | `big-pickle`             |
 | `BOT_LOCALE`                    | Bot UI language (supported locale code, e.g. `en`, `de`, `es`, `ru`, `zh`)                                   |    No    | `en`                     |
 | `SESSIONS_LIST_LIMIT`           | Sessions per page in `/sessions`                                                                             |    No    | `10`                     |
-| `PROJECTS_LIST_LIMIT`           | Projects per page shown in `/projects`                                                                       |    No    | `10`                     |
+| `PROJECTS_LIST_LIMIT`           | Projects per page in `/projects`                                                                             |    No    | `10`                     |
 | `SERVICE_MESSAGES_INTERVAL_SEC` | Service messages interval (thinking + tool calls); keep `>=2` to avoid Telegram rate limits, `0` = immediate |    No    | `5`                      |
 | `HIDE_THINKING_MESSAGES`        | Hide `💭 Thinking...` service messages                                                                       |    No    | `false`                  |
 | `HIDE_TOOL_CALL_MESSAGES`       | Hide tool-call service messages (`💻 bash ...`, `📖 read ...`, etc.)                                         |    No    | `false`                  |
@@ -176,15 +176,14 @@ If STT variables are not set, voice/audio transcription is disabled and the bot 
 
 ### Model Configuration
 
-The bot picks up your **favorite models** from OpenCode. To add a model to favorites:
+The model picker uses OpenCode local model state (`favorite` + `recent`):
 
-1. Open OpenCode TUI (`opencode`)
-2. Go to model selection
-3. Hover over the model you want and press **Ctrl+F** to add it to favorites
+- Favorites are shown first, then recent
+- Models already in favorites are not duplicated in recent
+- Current model is marked with `✅`
+- Default model from `OPENCODE_MODEL_PROVIDER` + `OPENCODE_MODEL_ID` is always included in favorites
 
-These favorites will appear in the model picker opened from the bottom Telegram keyboard.
-
-A free model (`opencode/big-pickle`) is configured as the default fallback — if you haven't set up any favorites yet, the bot will use it automatically.
+To add a model to favorites, open OpenCode TUI (`opencode`), go to model selection, and press **Cmd+F/Ctrl+F** on the model.
 
 ## Security
 
@@ -240,6 +239,7 @@ npm run dev
 **No models in model picker**
 
 - Add models to your OpenCode favorites: open OpenCode TUI, go to model selection, press **Ctrl+F** on desired models
+- Verify `OPENCODE_MODEL_PROVIDER` and `OPENCODE_MODEL_ID` point to an available model in your setup
 
 **Linux: permission denied errors**
 

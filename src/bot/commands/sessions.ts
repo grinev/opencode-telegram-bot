@@ -7,15 +7,134 @@ import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
-import { ensureActiveInlineMenu, replyWithInlineMenu } from "../handlers/inline-menu.js";
+import {
+  appendInlineMenuCancelButton,
+  ensureActiveInlineMenu,
+  replyWithInlineMenu,
+} from "../handlers/inline-menu.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { getDateLocale, t } from "../../i18n/index.js";
 
+const SESSION_CALLBACK_PREFIX = "session:";
+const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
+const SESSION_FETCH_EXTRA_COUNT = 1;
+
+type SessionListItem = {
+  id: string;
+  title: string;
+  directory: string;
+  time: {
+    created: number;
+  };
+};
+
+type SessionPage = {
+  sessions: SessionListItem[];
+  hasNext: boolean;
+  page: number;
+};
+
+function buildSessionPageCallback(page: number): string {
+  return `${SESSION_PAGE_CALLBACK_PREFIX}${page}`;
+}
+
+function parseSessionPageCallback(data: string): number | null {
+  if (!data.startsWith(SESSION_PAGE_CALLBACK_PREFIX)) {
+    return null;
+  }
+
+  const rawPage = data.slice(SESSION_PAGE_CALLBACK_PREFIX.length);
+  const page = Number(rawPage);
+  if (!Number.isInteger(page) || page < 0) {
+    return null;
+  }
+
+  return page;
+}
+
+function parseSessionIdCallback(data: string): string | null {
+  if (!data.startsWith(SESSION_CALLBACK_PREFIX)) {
+    return null;
+  }
+
+  if (data.startsWith(SESSION_PAGE_CALLBACK_PREFIX)) {
+    return null;
+  }
+
+  const sessionId = data.slice(SESSION_CALLBACK_PREFIX.length);
+  return sessionId.length > 0 ? sessionId : null;
+}
+
+function formatSessionsSelectText(page: number): string {
+  if (page === 0) {
+    return t("sessions.select");
+  }
+
+  return t("sessions.select_page", { page: page + 1 });
+}
+
+async function loadSessionPage(
+  directory: string,
+  page: number,
+  pageSize: number,
+): Promise<SessionPage> {
+  const startIndex = page * pageSize;
+  const endExclusive = startIndex + pageSize;
+
+  const { data: sessions, error } = await opencodeClient.session.list({
+    directory,
+    limit: endExclusive + SESSION_FETCH_EXTRA_COUNT,
+  });
+
+  if (error || !sessions) {
+    throw error || new Error("No data received from server");
+  }
+
+  const hasNext = sessions.length > endExclusive;
+  const pagedSessions = sessions.slice(startIndex, endExclusive);
+
+  logger.debug(
+    `[Sessions] Loaded page=${page + 1}, startIndex=${startIndex}, endExclusive=${endExclusive}, pageSize=${pageSize}, items=${pagedSessions.length}, hasNext=${hasNext}`,
+  );
+
+  return {
+    sessions: pagedSessions as SessionListItem[],
+    hasNext,
+    page,
+  };
+}
+
+function buildSessionsKeyboard(pageData: SessionPage, pageSize: number): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  const localeForDate = getDateLocale();
+  const pageStartIndex = pageData.page * pageSize;
+
+  pageData.sessions.forEach((session, index) => {
+    const date = new Date(session.time.created).toLocaleDateString(localeForDate);
+    const label = `${pageStartIndex + index + 1}. ${session.title} (${date})`;
+    keyboard.text(label, `${SESSION_CALLBACK_PREFIX}${session.id}`).row();
+  });
+
+  if (pageData.page > 0) {
+    keyboard.text(t("sessions.button.prev_page"), buildSessionPageCallback(pageData.page - 1));
+  }
+
+  if (pageData.hasNext) {
+    keyboard.text(t("sessions.button.next_page"), buildSessionPageCallback(pageData.page + 1));
+  }
+
+  if (pageData.page > 0 || pageData.hasNext) {
+    keyboard.row();
+  }
+
+  return keyboard;
+}
+
 export async function sessionsCommand(ctx: CommandContext<Context>) {
   try {
-    const maxSessions = config.bot.sessionsListLimit;
+    const pageSize = config.bot.sessionsListLimit;
     const currentProject = getCurrentProject();
 
     if (!currentProject) {
@@ -25,37 +144,23 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
 
     logger.debug(`[Sessions] Fetching sessions for directory: ${currentProject.worktree}`);
 
-    const { data: sessions, error } = await opencodeClient.session.list({
-      directory: currentProject.worktree,
-      limit: maxSessions,
-    });
+    const firstPage = await loadSessionPage(currentProject.worktree, 0, pageSize);
 
-    if (error || !sessions) {
-      throw error || new Error("No data received from server");
-    }
-
-    logger.debug(`[Sessions] Found ${sessions.length} sessions`);
-    sessions.forEach((session) => {
+    logger.debug(`[Sessions] Found ${firstPage.sessions.length} sessions on page 1`);
+    firstPage.sessions.forEach((session) => {
       logger.debug(`[Sessions] Session: ${session.title} | ${session.directory}`);
     });
 
-    if (sessions.length === 0) {
+    if (firstPage.sessions.length === 0) {
       await ctx.reply(t("sessions.empty"));
       return;
     }
 
-    const keyboard = new InlineKeyboard();
-    const localeForDate = getDateLocale();
-
-    sessions.forEach((session, index) => {
-      const date = new Date(session.time.created).toLocaleDateString(localeForDate);
-      const label = `${index + 1}. ${session.title} (${date})`;
-      keyboard.text(label, `session:${session.id}`).row();
-    });
+    const keyboard = buildSessionsKeyboard(firstPage, pageSize);
 
     await replyWithInlineMenu(ctx, {
       menuKind: "session",
-      text: t("sessions.select"),
+      text: formatSessionsSelectText(firstPage.page),
       keyboard,
     });
   } catch (error) {
@@ -66,11 +171,12 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
 
 export async function handleSessionSelect(ctx: Context): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
-  if (!callbackQuery?.data || !callbackQuery.data.startsWith("session:")) {
+  if (!callbackQuery?.data || !callbackQuery.data.startsWith(SESSION_CALLBACK_PREFIX)) {
     return false;
   }
 
-  const sessionId = callbackQuery.data.replace("session:", "");
+  const page = parseSessionPageCallback(callbackQuery.data);
+  const sessionId = parseSessionIdCallback(callbackQuery.data);
 
   const isActiveMenu = await ensureActiveInlineMenu(ctx, "session");
   if (!isActiveMenu) {
@@ -84,6 +190,34 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       clearAllInteractionState("session_select_project_missing");
       await ctx.answerCallbackQuery();
       await ctx.reply(t("sessions.select_project_first"));
+      return true;
+    }
+
+    if (page !== null) {
+      try {
+        const pageSize = config.bot.sessionsListLimit;
+        const pageData = await loadSessionPage(currentProject.worktree, page, pageSize);
+        if (pageData.sessions.length === 0) {
+          await ctx.answerCallbackQuery({ text: t("sessions.page_empty_callback") });
+          return true;
+        }
+
+        const keyboard = buildSessionsKeyboard(pageData, pageSize);
+        appendInlineMenuCancelButton(keyboard, "session");
+        await ctx.editMessageText(formatSessionsSelectText(pageData.page), {
+          reply_markup: keyboard,
+        });
+        await ctx.answerCallbackQuery();
+      } catch (error) {
+        logger.error("[Sessions] Error loading sessions page:", error);
+        await ctx.answerCallbackQuery({ text: t("sessions.page_load_error_callback") });
+      }
+
+      return true;
+    }
+
+    if (!sessionId) {
+      await ctx.answerCallbackQuery({ text: t("callback.processing_error") });
       return true;
     }
 

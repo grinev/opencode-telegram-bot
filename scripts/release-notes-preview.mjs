@@ -56,6 +56,7 @@ function main() {
   const kind = args.kind || resolveKind(version);
   const repository =
     args.repo || process.env.GITHUB_REPOSITORY || resolveRepositoryFromPackage(packageJson);
+  const token = args.token || process.env.GITHUB_TOKEN;
 
   if (!version || !kind || !repository) {
     process.stderr.write(
@@ -80,6 +81,7 @@ function main() {
       repository,
       "--output",
       outputFile,
+      ...(token ? ["--token", token] : []),
     ],
     { stdio: "inherit" },
   );

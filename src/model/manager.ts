@@ -1,11 +1,12 @@
 import { getCurrentModel, setCurrentModel } from "../settings/manager.js";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
-import type { ModelInfo, FavoriteModel } from "./types.js";
+import type { ModelInfo, FavoriteModel, ModelSelectionLists } from "./types.js";
 import path from "node:path";
 
 interface OpenCodeModelState {
   favorite?: Array<{ providerID?: string; modelID?: string }>;
+  recent?: Array<{ providerID?: string; modelID?: string }>;
 }
 
 function getEnvDefaultModel(): FavoriteModel | null {
@@ -51,6 +52,25 @@ function normalizeFavoriteModels(state: OpenCodeModelState): FavoriteModel[] {
     }));
 }
 
+function normalizeRecentModels(state: OpenCodeModelState): FavoriteModel[] {
+  if (!Array.isArray(state.recent)) {
+    return [];
+  }
+
+  return state.recent
+    .filter(
+      (model): model is { providerID: string; modelID: string } =>
+        typeof model?.providerID === "string" &&
+        model.providerID.length > 0 &&
+        typeof model.modelID === "string" &&
+        model.modelID.length > 0,
+    )
+    .map((model) => ({
+      providerID: model.providerID,
+      modelID: model.modelID,
+    }));
+}
+
 function getOpenCodeModelStatePath(): string {
   const xdgStateHome = process.env.XDG_STATE_HOME;
 
@@ -63,10 +83,10 @@ function getOpenCodeModelStatePath(): string {
 }
 
 /**
- * Get list of favorite models from OpenCode local state file
- * Falls back to env default model if file is unavailable or empty
+ * Get favorite and recent models from OpenCode local state file.
+ * Config model is always treated as favorite.
  */
-export async function getFavoriteModels(): Promise<FavoriteModel[]> {
+export async function getModelSelectionLists(): Promise<ModelSelectionLists> {
   const envDefaultModel = getEnvDefaultModel();
 
   try {
@@ -75,34 +95,59 @@ export async function getFavoriteModels(): Promise<FavoriteModel[]> {
     const stateFilePath = getOpenCodeModelStatePath();
     const content = await fs.readFile(stateFilePath, "utf-8");
     const state = JSON.parse(content) as OpenCodeModelState;
-    const favorites = normalizeFavoriteModels(state);
 
-    if (favorites.length === 0) {
-      if (envDefaultModel) {
-        logger.info(`[ModelManager] No favorites in ${stateFilePath}, using env default model`);
-        return [envDefaultModel];
-      }
+    const rawFavorites = normalizeFavoriteModels(state);
+    const favorites = envDefaultModel
+      ? dedupeModels([...rawFavorites, envDefaultModel])
+      : rawFavorites;
 
-      logger.warn(`[ModelManager] No favorites in ${stateFilePath}`);
-      return [];
+    if (rawFavorites.length === 0 && envDefaultModel) {
+      logger.info(
+        `[ModelManager] No favorites in ${stateFilePath}, using config model as favorite`,
+      );
     }
 
-    const merged = envDefaultModel ? dedupeModels([...favorites, envDefaultModel]) : favorites;
+    if (favorites.length === 0) {
+      logger.warn(`[ModelManager] No favorites in ${stateFilePath}`);
+    }
 
-    logger.debug(`[ModelManager] Loaded ${merged.length} favorite models from ${stateFilePath}`);
-    return merged;
+    const favoriteKeys = new Set(favorites.map((model) => `${model.providerID}/${model.modelID}`));
+    const recent = dedupeModels(normalizeRecentModels(state)).filter(
+      (model) => !favoriteKeys.has(`${model.providerID}/${model.modelID}`),
+    );
+
+    logger.debug(
+      `[ModelManager] Loaded model selection lists from ${stateFilePath}: favorites=${favorites.length}, recent=${recent.length}`,
+    );
+
+    return { favorites, recent };
   } catch (err) {
     if (envDefaultModel) {
       logger.warn(
-        "[ModelManager] Failed to load OpenCode favorites, using env default model:",
+        "[ModelManager] Failed to load OpenCode model state, using config model as favorite:",
         err,
       );
-      return [envDefaultModel];
+      return {
+        favorites: [envDefaultModel],
+        recent: [],
+      };
     }
 
-    logger.error("[ModelManager] Failed to load OpenCode favorites:", err);
-    return [];
+    logger.error("[ModelManager] Failed to load OpenCode model state:", err);
+    return {
+      favorites: [],
+      recent: [],
+    };
   }
+}
+
+/**
+ * Get list of favorite models from OpenCode local state file
+ * Falls back to env default model if file is unavailable or empty
+ */
+export async function getFavoriteModels(): Promise<FavoriteModel[]> {
+  const { favorites } = await getModelSelectionLists();
+  return favorites;
 }
 
 /**

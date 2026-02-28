@@ -111,6 +111,13 @@ Interaction routing rules:
 - Unknown slash commands return an explicit fallback message
 - Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/stop`, reset/cleanup)
 
+Model picker behavior:
+
+- Uses OpenCode local model state (`favorite` + `recent`)
+- Favorites are shown first, recent models are shown after favorites
+- Models already present in favorites are not duplicated in recent
+- Default configured model (`OPENCODE_MODEL_PROVIDER` + `OPENCODE_MODEL_ID`) is treated as favorite
+
 ### Main features already implemented
 
 - [x] OpenCode server control and health checks via bot commands
@@ -120,7 +127,7 @@ Interaction routing rules:
 - [x] Interactive question and permission flows (buttons + custom text answers)
 - [x] Single-active interaction routing with contextual blocking and cleanup recovery
 - [x] Pinned status updates (session, project, model, context usage, changed files)
-- [x] Model and agent selection from Telegram
+- [x] Model and agent selection from Telegram (favorites first, recent next, no duplicates)
 - [x] Context/variant controls from Telegram keyboard
 - [x] Sending code blocks as files when needed
 - [x] Configurable batching of service messages (thinking + tool updates): recommended `>=2` sec for Telegram rate limits; `0` = immediate
