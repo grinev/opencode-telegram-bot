@@ -123,7 +123,11 @@ async function downloadTelegramFile(
     const buffer = await downloadTelegramFileByUrl(fileUrl);
 
     // Extract filename from file_path (e.g., "voice/file_123.oga" -> "file_123.oga")
-    const filename = file.file_path.split("/").pop() || "audio.ogg";
+    let filename = file.file_path.split("/").pop() || "audio.ogg";
+
+    if (filename.endsWith(".oga")) {
+      filename = filename.slice(0, -4) + ".ogg";
+    }
 
     logger.debug(`[Voice] Downloaded file: ${filename} (${buffer.length} bytes)`);
     return { buffer, filename };
