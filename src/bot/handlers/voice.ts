@@ -219,8 +219,24 @@ export async function handleVoiceMessage(ctx: Context, deps: VoiceMessageDeps): 
 
     logger.info(`[Voice] Transcribed audio: ${recognizedText.length} chars`);
 
+    // --- NEW LOGIC: Inject Prompt for LLM ---
+    let textForLLM = recognizedText;
+    const injectionSetting = config.stt.promptInjection;
+
+    if (injectionSetting) {
+      const normalizedSetting = injectionSetting.trim().toLowerCase();
+      if (normalizedSetting === "true" || normalizedSetting === "1") {
+        const defaultPrompt =
+          "[Note: The following text is transcribed from voice. There may be homophone or mispronunciation errors. Please interpret the intended meaning based on context.]";
+        textForLLM = `${defaultPrompt}\n${recognizedText}`;
+      } else if (normalizedSetting !== "false" && normalizedSetting !== "0") {
+        textForLLM = `${injectionSetting}\n${recognizedText}`;
+      }
+    }
+
     // Process the recognized text as a prompt
-    await processPrompt(ctx, recognizedText, deps);
+    await processPrompt(ctx, textForLLM, deps);
+
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "unknown error";
     logger.error("[Voice] Error processing voice message:", err);
