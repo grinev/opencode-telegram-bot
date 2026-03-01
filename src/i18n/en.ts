@@ -343,7 +343,22 @@ export const en = {
   "stt.not_configured":
     "🎤 Voice recognition is not configured.\n\nSet STT_API_URL and STT_API_KEY in .env to enable it.",
   "stt.error": "🔴 Failed to recognize audio: {error}",
-  "stt.empty_result": "🎤 No speech detected in the audio message.",
+  "stt.empty_result": "🎤 No speech detected in audio message.",
+
+  "skills.no_session":
+    "⚠️ No active session.\n\nSelect a session with /sessions or create a new one with /new.",
+  "skills.empty": "📭 No skills available for this project.",
+  "skills.select": "🎓 Select a skill:",
+  "skills.page_indicator": "Page {current}/{total}",
+  "skills.prev_page": "⬅️ Previous",
+  "skills.next_page": "Next ➡️",
+  "skills.fetch_error":
+    "🔴 OpenCode Server is unavailable or an error occurred while loading skills.",
+  "skills.page_load_error": "Cannot load this page. Please try again.",
+  "skills.run_started": "🚀 Starting skill...",
+  "skills.run_success": "✅ Skill started: {skill}",
+  "skills.run_error": "🔴 Failed to run skill.",
+  "skills.not_found": "⚠️ Skill not found.",
 } as const;
 
 export type I18nKey = keyof typeof en;

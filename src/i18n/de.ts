@@ -358,4 +358,19 @@ export const de: I18nDictionary = {
     "🎤 Spracherkennung ist nicht konfiguriert.\n\nSetze STT_API_URL und STT_API_KEY in .env, um sie zu aktivieren.",
   "stt.error": "🔴 Audio konnte nicht erkannt werden: {error}",
   "stt.empty_result": "🎤 Keine Sprache in der Audionachricht erkannt.",
+
+  "skills.no_session":
+    "⚠️ Keine aktive Sitzung.\n\nWähle eine Sitzung mit /sessions oder erstelle eine neue mit /new.",
+  "skills.empty": "📭 Keine Skills für dieses Projekt verfügbar.",
+  "skills.select": "🎓 Skill auswählen:",
+  "skills.page_indicator": "Seite {current}/{total}",
+  "skills.prev_page": "⬅️ Zurück",
+  "skills.next_page": "Weiter ➡️",
+  "skills.fetch_error":
+    "🔴 OpenCode-Server ist nicht verfügbar oder beim Laden der Skills ist ein Fehler aufgetreten.",
+  "skills.page_load_error": "Diese Seite kann nicht geladen werden. Bitte versuche es erneut.",
+  "skills.run_started": "🚀 Skill wird gestartet...",
+  "skills.run_success": "✅ Skill gestartet: {skill}",
+  "skills.run_error": "🔴 Skill konnte nicht gestartet werden.",
+  "skills.not_found": "⚠️ Skill nicht gefunden.",
 };

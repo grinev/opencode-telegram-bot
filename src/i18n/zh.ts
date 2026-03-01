@@ -312,4 +312,17 @@ export const zh: I18nDictionary = {
     "🎤 语音识别尚未配置。\n\n在 .env 中设置 STT_API_URL 和 STT_API_KEY 以启用。",
   "stt.error": "🔴 识别音频失败：{error}",
   "stt.empty_result": "🎤 音频消息中未检测到语音。",
+
+  "skills.no_session": "⚠️ 没有活动会话。\n\n使用 /sessions 选择会话或使用 /new 创建新会话。",
+  "skills.empty": "📭 此项目没有可用的技能。",
+  "skills.select": "🎓 选择技能：",
+  "skills.page_indicator": "第 {current}/{total} 页",
+  "skills.prev_page": "⬅️ 上一页",
+  "skills.next_page": "下一页 ➡️",
+  "skills.fetch_error": "🔴 OpenCode 服务器不可用或加载技能时出错。",
+  "skills.page_load_error": "无法加载此页面。请重试。",
+  "skills.run_started": "🚀 正在启动技能...",
+  "skills.run_success": "✅ 技能已启动：{skill}",
+  "skills.run_error": "🔴 启动技能失败。",
+  "skills.not_found": "⚠️ 未找到技能。",
 };

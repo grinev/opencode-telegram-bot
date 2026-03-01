@@ -357,4 +357,19 @@ export const es: I18nDictionary = {
     "🎤 El reconocimiento de voz no está configurado.\n\nConfigura STT_API_URL y STT_API_KEY en .env para habilitarlo.",
   "stt.error": "🔴 No se pudo reconocer el audio: {error}",
   "stt.empty_result": "🎤 No se detectó voz en el mensaje de audio.",
+
+  "skills.no_session":
+    "⚠️ No hay sesión activa.\n\nSelecciona una sesión con /sessions o crea una nueva con /new.",
+  "skills.empty": "📭 No hay habilidades disponibles para este proyecto.",
+  "skills.select": "🎓 Selecciona una habilidad:",
+  "skills.page_indicator": "Página {current}/{total}",
+  "skills.prev_page": "⬅️ Anterior",
+  "skills.next_page": "Siguiente ➡️",
+  "skills.fetch_error":
+    "🔴 El servidor de OpenCode no está disponible o hubo un error al cargar las habilidades.",
+  "skills.page_load_error": "No se puede cargar esta página. Inténtalo de nuevo.",
+  "skills.run_started": "🚀 Iniciando habilidad...",
+  "skills.run_success": "✅ Habilidad iniciada: {skill}",
+  "skills.run_error": "🔴 No se pudo ejecutar la habilidad.",
+  "skills.not_found": "⚠️ Habilidad no encontrada.",
 };

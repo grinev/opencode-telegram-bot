@@ -346,4 +346,18 @@ export const ru: I18nDictionary = {
     "🎤 Распознавание голоса не настроено.\n\nУстановите STT_API_URL и STT_API_KEY в .env для включения.",
   "stt.error": "🔴 Не удалось распознать аудио: {error}",
   "stt.empty_result": "🎤 В аудиосообщении не обнаружена речь.",
+
+  "skills.no_session":
+    "⚠️ Нет активной сессии.\n\nВыберите сессию через /sessions или создайте новую через /new.",
+  "skills.empty": "📭 Нет доступных навыков для этого проекта.",
+  "skills.select": "🎓 Выберите навык:",
+  "skills.page_indicator": "Страница {current}/{total}",
+  "skills.prev_page": "⬅️ Назад",
+  "skills.next_page": "Вперёд ➡️",
+  "skills.fetch_error": "🔴 Сервер OpenCode недоступен или произошла ошибка при загрузке навыков.",
+  "skills.page_load_error": "Не удалось загрузить эту страницу. Попробуйте ещё раз.",
+  "skills.run_started": "🚀 Запуск навыка...",
+  "skills.run_success": "✅ Навык запущен: {skill}",
+  "skills.run_error": "🔴 Не удалось запустить навык.",
+  "skills.not_found": "⚠️ Навык не найден.",
 };

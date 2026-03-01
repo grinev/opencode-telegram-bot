@@ -16,6 +16,7 @@ import { MODEL_BUTTON_TEXT_PATTERN, VARIANT_BUTTON_TEXT_PATTERN } from "./messag
 import { sessionsCommand, handleSessionSelect } from "./commands/sessions.js";
 import { newCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
+import { skillsCommand, handleSkillsSelect } from "./commands/skills.js";
 import { stopCommand } from "./commands/stop.js";
 import { opencodeStartCommand } from "./commands/opencode-start.js";
 import { opencodeStopCommand } from "./commands/opencode-stop.js";
@@ -554,6 +555,7 @@ export function createBot(): Bot<Context> {
   bot.command("new", newCommand);
   bot.command("stop", stopCommand);
   bot.command("rename", renameCommand);
+  bot.command("skills", skillsCommand);
 
   bot.on("message:text", unknownCommandMiddleware);
 
@@ -565,6 +567,7 @@ export function createBot(): Bot<Context> {
       const handledInlineCancel = await handleInlineMenuCancel(ctx);
       const handledSession = await handleSessionSelect(ctx);
       const handledProject = await handleProjectSelect(ctx);
+      const handledSkills = await handleSkillsSelect(ctx);
       const handledQuestion = await handleQuestionCallback(ctx);
       const handledPermission = await handlePermissionCallback(ctx);
       const handledAgent = await handleAgentSelect(ctx);
@@ -574,13 +577,14 @@ export function createBot(): Bot<Context> {
       const handledRenameCancel = await handleRenameCancel(ctx);
 
       logger.debug(
-        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, rename=${handledRenameCancel}`,
+        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, skills=${handledSkills}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, rename=${handledRenameCancel}`,
       );
 
       if (
         !handledInlineCancel &&
         !handledSession &&
         !handledProject &&
+        !handledSkills &&
         !handledQuestion &&
         !handledPermission &&
         !handledAgent &&
