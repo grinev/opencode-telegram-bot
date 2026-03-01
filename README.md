@@ -85,11 +85,11 @@ opencode-telegram config
 
 ## Supported Platforms
 
-| Platform | Status                                                                                                                               |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| macOS    | Fully supported                                                                                                                      |
-| Windows  | Fully supported                                                                                                                      |
-| Linux    | Experimental — should work, but has not been extensively tested. You may need additional steps such as granting execute permissions. |
+| Platform | Status                                       |
+| -------- | -------------------------------------------- |
+| macOS    | Fully supported                              |
+| Windows  | Fully supported                              |
+| Linux    | Fully supported (tested on Ubuntu 24.04 LTS) |
 
 ## Bot Commands
 
