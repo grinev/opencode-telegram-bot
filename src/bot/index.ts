@@ -477,13 +477,13 @@ export function createBot(): Bot<Context> {
 
   if (config.telegram.proxyUrl) {
     const proxyUrl = config.telegram.proxyUrl;
-    const agent = proxyUrl.startsWith("socks")
-      ? new SocksProxyAgent(proxyUrl)
-      : new HttpsProxyAgent(proxyUrl);
+    let agent: SocksProxyAgent | HttpsProxyAgent<string>;
 
     if (proxyUrl.startsWith("socks")) {
+      agent = new SocksProxyAgent(proxyUrl);
       logger.info(`[Bot] Using SOCKS proxy: ${proxyUrl.replace(/\/\/.*@/, "//***@")}`);
     } else {
+      agent = new HttpsProxyAgent(proxyUrl);
       logger.info(`[Bot] Using HTTP/HTTPS proxy: ${proxyUrl.replace(/\/\/.*@/, "//***@")}`);
     }
 
