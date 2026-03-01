@@ -2,6 +2,7 @@ import type { I18nDictionary } from "./en.js";
 
 export const zh: I18nDictionary = {
   "cmd.description.status": "服务器和会话状态",
+  "cmd.description.skills": "列出 opencode 可用的技能",
   "cmd.description.new": "创建新会话",
   "cmd.description.stop": "停止当前操作",
   "cmd.description.sessions": "列出会话",

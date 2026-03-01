@@ -2,6 +2,7 @@ import type { I18nDictionary } from "./en.js";
 
 export const ru: I18nDictionary = {
   "cmd.description.status": "Статус сервера и сессии",
+  "cmd.description.skills": "Список доступных умений от opencode",
   "cmd.description.new": "Создать новую сессию",
   "cmd.description.stop": "Прервать текущее действие",
   "cmd.description.sessions": "Список сессий",

@@ -2,6 +2,7 @@ import type { I18nDictionary } from "./en.js";
 
 export const de: I18nDictionary = {
   "cmd.description.status": "Server- und Sitzungsstatus",
+  "cmd.description.skills": "Verfügbare Fähigkeiten von opencode auflisten",
   "cmd.description.new": "Neue Sitzung erstellen",
   "cmd.description.stop": "Aktuelle Aktion stoppen",
   "cmd.description.sessions": "Sitzungen auflisten",
