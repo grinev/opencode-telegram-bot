@@ -12,7 +12,11 @@ import { BOT_COMMANDS } from "./commands/definitions.js";
 import { startCommand } from "./commands/start.js";
 import { helpCommand } from "./commands/help.js";
 import { statusCommand } from "./commands/status.js";
-import { MODEL_BUTTON_TEXT_PATTERN, VARIANT_BUTTON_TEXT_PATTERN } from "./message-patterns.js";
+import {
+  AGENT_BUTTON_TEXT_PATTERN,
+  MODEL_BUTTON_TEXT_PATTERN,
+  VARIANT_BUTTON_TEXT_PATTERN,
+} from "./message-patterns.js";
 import { sessionsCommand, handleSessionSelect } from "./commands/sessions.js";
 import { newCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
@@ -473,13 +477,13 @@ export function createBot(): Bot<Context> {
 
   if (config.telegram.proxyUrl) {
     const proxyUrl = config.telegram.proxyUrl;
-    let agent;
+    const agent = proxyUrl.startsWith("socks")
+      ? new SocksProxyAgent(proxyUrl)
+      : new HttpsProxyAgent(proxyUrl);
 
     if (proxyUrl.startsWith("socks")) {
-      agent = new SocksProxyAgent(proxyUrl);
       logger.info(`[Bot] Using SOCKS proxy: ${proxyUrl.replace(/\/\/.*@/, "//***@")}`);
     } else {
-      agent = new HttpsProxyAgent(proxyUrl);
       logger.info(`[Bot] Using HTTP/HTTPS proxy: ${proxyUrl.replace(/\/\/.*@/, "//***@")}`);
     }
 
@@ -600,7 +604,7 @@ export function createBot(): Bot<Context> {
   });
 
   // Handle Reply Keyboard button press (agent mode indicator)
-  bot.hears(/^(📋|🛠️|💬|🔍|📝|📄|📦|🤖) \w+ Mode$/, async (ctx) => {
+  bot.hears(AGENT_BUTTON_TEXT_PATTERN, async (ctx) => {
     logger.debug(`[Bot] Agent mode button pressed: ${ctx.message?.text}`);
 
     try {

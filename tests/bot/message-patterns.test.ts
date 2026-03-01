@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMainKeyboard } from "../../src/bot/utils/keyboard.js";
 import {
+  AGENT_BUTTON_TEXT_PATTERN,
   MODEL_BUTTON_TEXT_PATTERN,
   VARIANT_BUTTON_TEXT_PATTERN,
 } from "../../src/bot/message-patterns.js";
@@ -34,5 +35,22 @@ describe("bot/message-patterns", () => {
   it("does not match plain prompt text", () => {
     expect("Create a migration plan").not.toMatch(MODEL_BUTTON_TEXT_PATTERN);
     expect("Create a migration plan").not.toMatch(VARIANT_BUTTON_TEXT_PATTERN);
+    expect("Create a migration plan").not.toMatch(AGENT_BUTTON_TEXT_PATTERN);
+  });
+
+  it("matches agent button text with punctuation", () => {
+    const withParentheses = "🤖 Sisyphus(Ultraworker) Mode";
+
+    expect(withParentheses).toMatch(AGENT_BUTTON_TEXT_PATTERN);
+  });
+
+  it("does not treat agent mode labels as model buttons", () => {
+    expect("🤖 Sisyphus(Ultraworker) Mode").not.toMatch(MODEL_BUTTON_TEXT_PATTERN);
+  });
+
+  it("still matches provider/model format for model buttons", () => {
+    expect("🤖 cliproxyapi/gpt-5.3-codex").toMatch(MODEL_BUTTON_TEXT_PATTERN);
+    expect("🤖 very-long-provider-name/ver...").toMatch(MODEL_BUTTON_TEXT_PATTERN);
+    expect("🤖 cliproxyapi/Sisyphus(Ultraworker) Mode").toMatch(MODEL_BUTTON_TEXT_PATTERN);
   });
 });
