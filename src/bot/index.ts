@@ -12,7 +12,11 @@ import { BOT_COMMANDS } from "./commands/definitions.js";
 import { startCommand } from "./commands/start.js";
 import { helpCommand } from "./commands/help.js";
 import { statusCommand } from "./commands/status.js";
-import { MODEL_BUTTON_TEXT_PATTERN, VARIANT_BUTTON_TEXT_PATTERN } from "./message-patterns.js";
+import {
+  AGENT_MODE_BUTTON_TEXT_PATTERN,
+  MODEL_BUTTON_TEXT_PATTERN,
+  VARIANT_BUTTON_TEXT_PATTERN,
+} from "./message-patterns.js";
 import { sessionsCommand, handleSessionSelect } from "./commands/sessions.js";
 import { newCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
@@ -613,7 +617,7 @@ export function createBot(): Bot<Context> {
   });
 
   // Handle Reply Keyboard button press (agent mode indicator)
-  bot.hears(/^(📋|🛠️|💬|🔍|📝|📄|📦|🤖) \w+ Mode$/, async (ctx) => {
+  bot.hears(AGENT_MODE_BUTTON_TEXT_PATTERN, async (ctx) => {
     logger.debug(`[Bot] Agent mode button pressed: ${ctx.message?.text}`);
 
     try {

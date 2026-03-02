@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMainKeyboard } from "../../src/bot/utils/keyboard.js";
 import {
+  AGENT_MODE_BUTTON_TEXT_PATTERN,
   MODEL_BUTTON_TEXT_PATTERN,
   VARIANT_BUTTON_TEXT_PATTERN,
 } from "../../src/bot/message-patterns.js";
@@ -20,6 +21,10 @@ describe("bot/message-patterns", () => {
     expect(modelButtonText).toMatch(MODEL_BUTTON_TEXT_PATTERN);
   });
 
+  it("matches single-line model button text", () => {
+    expect("🤖 cliproxyapi2/gpt-5.3-codex").toMatch(MODEL_BUTTON_TEXT_PATTERN);
+  });
+
   it("matches current and legacy variant button prefixes", () => {
     const keyboard = createMainKeyboard("build", {
       providerID: "openrouter",
@@ -33,6 +38,12 @@ describe("bot/message-patterns", () => {
 
   it("does not match plain prompt text", () => {
     expect("Create a migration plan").not.toMatch(MODEL_BUTTON_TEXT_PATTERN);
+    expect("Create a migration plan").not.toMatch(AGENT_MODE_BUTTON_TEXT_PATTERN);
     expect("Create a migration plan").not.toMatch(VARIANT_BUTTON_TEXT_PATTERN);
+  });
+
+  it("matches agent mode labels with extra descriptors", () => {
+    expect("🤖 Sisyphus (Ultraworker) Mode").toMatch(AGENT_MODE_BUTTON_TEXT_PATTERN);
+    expect("🤖 Sisyphus (Ultraworker) Mode").not.toMatch(MODEL_BUTTON_TEXT_PATTERN);
   });
 });
