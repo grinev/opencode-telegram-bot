@@ -38,7 +38,7 @@ type ToolCallback = (toolInfo: ToolInfo) => void;
 
 type ToolFileCallback = (fileInfo: ToolFileInfo) => void;
 
-type QuestionCallback = (questions: Question[], requestID: string) => void;
+type QuestionCallback = (sessionId: string, questions: Question[], requestID: string) => void;
 
 type QuestionErrorCallback = () => void;
 
@@ -109,10 +109,10 @@ function countDiffChangesFromText(text: string): { additions: number; deletions:
 }
 
 class SummaryAggregator {
-  private currentSessionId: string | null = null;
+  private trackedSessionIds: Set<string> = new Set();
   private currentMessageParts: Map<string, string[]> = new Map();
   private pendingParts: Map<string, string[]> = new Map();
-  private messages: Map<string, { role: string }> = new Map();
+  private messages: Map<string, { role: string; sessionId: string }> = new Map();
   private messageCount = 0;
   private lastUpdated = 0;
   private onCompleteCallback: MessageCompleteCallback | null = null;
@@ -135,6 +135,14 @@ class SummaryAggregator {
   private chatId: number | null = null;
   private typingTimer: ReturnType<typeof setInterval> | null = null;
   private partHashes: Map<string, Set<string>> = new Map();
+
+  private getMessageKey(sessionId: string, messageId: string): string {
+    return `${sessionId}:${messageId}`;
+  }
+
+  private isTrackedSession(sessionId: string): boolean {
+    return this.trackedSessionIds.has(sessionId);
+  }
 
   setBotAndChatId(bot: Bot, chatId: number): void {
     this.bot = bot;
@@ -282,15 +290,28 @@ class SummaryAggregator {
   }
 
   setSession(sessionId: string): void {
-    if (this.currentSessionId !== sessionId) {
-      this.clear();
-      this.currentSessionId = sessionId;
+    this.trackedSessionIds.add(sessionId);
+  }
+
+  clearSession(sessionId: string): void {
+    this.trackedSessionIds.delete(sessionId);
+
+    for (const [messageKey, message] of this.messages.entries()) {
+      if (message.sessionId !== sessionId) {
+        continue;
+      }
+
+      this.messages.delete(messageKey);
+      this.currentMessageParts.delete(messageKey);
+      this.pendingParts.delete(messageKey);
+      this.partHashes.delete(messageKey);
+      this.thinkingFiredForMessages.delete(messageKey);
     }
   }
 
   clear(): void {
     this.stopTypingIndicator();
-    this.currentSessionId = null;
+    this.trackedSessionIds.clear();
     this.currentMessageParts.clear();
     this.pendingParts.clear();
     this.messages.clear();
@@ -316,35 +337,36 @@ class SummaryAggregator {
   ): void {
     const { info } = event.properties;
 
-    if (info.sessionID !== this.currentSessionId) {
+    if (!this.isTrackedSession(info.sessionID)) {
       return;
     }
 
     const messageID = info.id;
+    const messageKey = this.getMessageKey(info.sessionID, messageID);
 
-    this.messages.set(messageID, { role: info.role });
+    this.messages.set(messageKey, { role: info.role, sessionId: info.sessionID });
 
     if (info.role === "assistant") {
-      if (!this.currentMessageParts.has(messageID)) {
-        this.currentMessageParts.set(messageID, []);
+      if (!this.currentMessageParts.has(messageKey)) {
+        this.currentMessageParts.set(messageKey, []);
         this.messageCount++;
         this.startTypingIndicator();
       }
 
-      const pending = this.pendingParts.get(messageID) || [];
-      const current = this.currentMessageParts.get(messageID) || [];
-      this.currentMessageParts.set(messageID, [...current, ...pending]);
-      this.pendingParts.delete(messageID);
+      const pending = this.pendingParts.get(messageKey) || [];
+      const current = this.currentMessageParts.get(messageKey) || [];
+      this.currentMessageParts.set(messageKey, [...current, ...pending]);
+      this.pendingParts.delete(messageKey);
 
       const assistantMessage = info as { time?: { created: number; completed?: number } };
       const time = assistantMessage.time;
 
       if (time?.completed) {
-        const parts = this.currentMessageParts.get(messageID) || [];
+        const parts = this.currentMessageParts.get(messageKey) || [];
         const lastPart = parts[parts.length - 1] || "";
 
         logger.debug(
-          `[Aggregator] Message part completed: messageId=${messageID}, textLength=${lastPart.length}, totalParts=${parts.length}, session=${this.currentSessionId}`,
+          `[Aggregator] Message part completed: messageId=${messageID}, textLength=${lastPart.length}, totalParts=${parts.length}, session=${info.sessionID}`,
         );
 
         // Extract and report tokens BEFORE onComplete so keyboard context is updated
@@ -373,12 +395,12 @@ class SummaryAggregator {
         }
 
         if (this.onCompleteCallback && lastPart.length > 0) {
-          this.onCompleteCallback(this.currentSessionId!, lastPart);
+          this.onCompleteCallback(info.sessionID, lastPart);
         }
 
-        this.currentMessageParts.delete(messageID);
-        this.messages.delete(messageID);
-        this.partHashes.delete(messageID);
+        this.currentMessageParts.delete(messageKey);
+        this.messages.delete(messageKey);
+        this.partHashes.delete(messageKey);
 
         logger.debug(
           `[Aggregator] Message completed cleanup: remaining messages=${this.currentMessageParts.size}`,
@@ -401,18 +423,19 @@ class SummaryAggregator {
   ): void {
     const { part } = event.properties;
 
-    if (part.sessionID !== this.currentSessionId) {
+    if (!this.isTrackedSession(part.sessionID)) {
       return;
     }
 
     const messageID = part.messageID;
-    const messageInfo = this.messages.get(messageID);
+    const messageKey = this.getMessageKey(part.sessionID, messageID);
+    const messageInfo = this.messages.get(messageKey);
 
     if (part.type === "reasoning") {
       // Fire the thinking callback once per message on the first reasoning part.
       // This is the signal that the model is actually doing extended thinking.
-      if (!this.thinkingFiredForMessages.has(messageID) && this.onThinkingCallback) {
-        this.thinkingFiredForMessages.add(messageID);
+      if (!this.thinkingFiredForMessages.has(messageKey) && this.onThinkingCallback) {
+        this.thinkingFiredForMessages.add(messageKey);
         const callback = this.onThinkingCallback;
         const sessionID = part.sessionID;
         setImmediate(() => {
@@ -424,11 +447,11 @@ class SummaryAggregator {
     } else if (part.type === "text" && "text" in part && part.text) {
       const partHash = this.hashString(part.text);
 
-      if (!this.partHashes.has(messageID)) {
-        this.partHashes.set(messageID, new Set());
+      if (!this.partHashes.has(messageKey)) {
+        this.partHashes.set(messageKey, new Set());
       }
 
-      const hashes = this.partHashes.get(messageID)!;
+      const hashes = this.partHashes.get(messageKey)!;
 
       if (hashes.has(partHash)) {
         return;
@@ -437,19 +460,19 @@ class SummaryAggregator {
       hashes.add(partHash);
 
       if (messageInfo && messageInfo.role === "assistant") {
-        if (!this.currentMessageParts.has(messageID)) {
-          this.currentMessageParts.set(messageID, []);
+        if (!this.currentMessageParts.has(messageKey)) {
+          this.currentMessageParts.set(messageKey, []);
           this.startTypingIndicator();
         }
 
-        const parts = this.currentMessageParts.get(messageID)!;
+        const parts = this.currentMessageParts.get(messageKey)!;
         parts.push(part.text);
       } else {
-        if (!this.pendingParts.has(messageID)) {
-          this.pendingParts.set(messageID, []);
+        if (!this.pendingParts.has(messageKey)) {
+          this.pendingParts.set(messageKey, []);
         }
 
-        const pending = this.pendingParts.get(messageID)!;
+        const pending = this.pendingParts.get(messageKey)!;
         pending.push(part.text);
       }
     } else if (part.type === "tool") {
@@ -673,7 +696,7 @@ class SummaryAggregator {
       };
     };
 
-    if (sessionID !== this.currentSessionId) {
+    if (!this.isTrackedSession(sessionID)) {
       return;
     }
 
@@ -705,7 +728,7 @@ class SummaryAggregator {
   ): void {
     const { sessionID } = event.properties;
 
-    if (sessionID !== this.currentSessionId) {
+    if (!this.isTrackedSession(sessionID)) {
       return;
     }
 
@@ -723,7 +746,7 @@ class SummaryAggregator {
     const properties = event.properties as { sessionID: string };
     const { sessionID } = properties;
 
-    if (sessionID !== this.currentSessionId) {
+    if (!this.isTrackedSession(sessionID)) {
       return;
     }
 
@@ -754,7 +777,7 @@ class SummaryAggregator {
       };
     };
 
-    if (sessionID !== this.currentSessionId) {
+    if (!this.isTrackedSession(sessionID)) {
       return;
     }
 
@@ -779,10 +802,8 @@ class SummaryAggregator {
   ): void {
     const { id, sessionID, questions } = event.properties;
 
-    if (sessionID !== this.currentSessionId) {
-      logger.debug(
-        `[Aggregator] Ignoring question.asked for different session: ${sessionID} (current: ${this.currentSessionId})`,
-      );
+    if (!this.isTrackedSession(sessionID)) {
+      logger.debug(`[Aggregator] Ignoring question.asked for untracked session: ${sessionID}`);
       return;
     }
 
@@ -792,7 +813,7 @@ class SummaryAggregator {
       const callback = this.onQuestionCallback;
       setImmediate(async () => {
         try {
-          await callback(questions as Question[], id);
+          await callback(sessionID, questions as Question[], id);
         } catch (err) {
           logger.error("[Aggregator] Error in question callback:", err);
         }
@@ -806,7 +827,7 @@ class SummaryAggregator {
       diff: Array<{ file: string; additions: number; deletions: number }>;
     };
 
-    if (properties.sessionID !== this.currentSessionId) {
+    if (!this.isTrackedSession(properties.sessionID)) {
       return;
     }
 
@@ -833,9 +854,9 @@ class SummaryAggregator {
   ): void {
     const request = event.properties;
 
-    if (request.sessionID !== this.currentSessionId) {
+    if (!this.isTrackedSession(request.sessionID)) {
       logger.debug(
-        `[Aggregator] Ignoring permission.asked for different session: ${request.sessionID} (current: ${this.currentSessionId})`,
+        `[Aggregator] Ignoring permission.asked for untracked session: ${request.sessionID}`,
       );
       return;
     }

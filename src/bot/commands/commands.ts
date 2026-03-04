@@ -16,6 +16,7 @@ import { getStoredModel } from "../../model/manager.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 const COMMANDS_CALLBACK_PREFIX = "commands:";
 const COMMANDS_CALLBACK_SELECT_PREFIX = `${COMMANDS_CALLBACK_PREFIX}select:`;
@@ -248,14 +249,14 @@ async function ensureSessionForProject(
   ctx: Context,
   projectDirectory: string,
 ): Promise<SessionInfo | null> {
-  let currentSession = getCurrentSession();
+  const scopeKey = getScopeKeyFromContext(ctx);
+  let currentSession = getCurrentSession(scopeKey);
 
   if (currentSession && currentSession.directory !== projectDirectory) {
     logger.warn(
       `[Commands] Session/project mismatch detected. sessionDirectory=${currentSession.directory}, projectDirectory=${projectDirectory}. Resetting session context.`,
     );
-    clearSession();
-    summaryAggregator.clear();
+    clearSession(scopeKey);
     await ctx.reply(t("bot.session_reset_project_mismatch"));
     currentSession = null;
   }
@@ -281,7 +282,8 @@ async function ensureSessionForProject(
     directory: projectDirectory,
   };
 
-  setCurrentSession(sessionInfo);
+  setCurrentSession(sessionInfo, scopeKey);
+  summaryAggregator.setSession(sessionInfo.id);
   await ingestSessionInfoForCache(session);
   await ctx.reply(t("bot.session_created", { title: session.title }));
 

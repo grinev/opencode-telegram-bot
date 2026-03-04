@@ -12,9 +12,11 @@ import { pinnedMessageManager } from "../../pinned/manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { sendMessageWithMarkdownFallback } from "../utils/send-with-markdown-fallback.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 export async function statusCommand(ctx: CommandContext<Context>) {
   try {
+    const scopeKey = getScopeKeyFromContext(ctx);
     const { data, error } = await opencodeClient.global.health();
 
     if (error || !data) {
@@ -60,7 +62,7 @@ export async function statusCommand(ctx: CommandContext<Context>) {
       message += t("status.project_hint");
     }
 
-    const currentSession = getCurrentSession();
+    const currentSession = getCurrentSession(scopeKey);
     if (currentSession) {
       message += `\n${t("status.session_selected", { title: currentSession.title })}\n`;
     } else {

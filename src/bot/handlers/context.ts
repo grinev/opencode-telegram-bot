@@ -9,6 +9,7 @@ import {
 } from "./inline-menu.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 /**
  * Build inline keyboard with compact confirmation menu
@@ -29,8 +30,9 @@ export function buildCompactConfirmationMenu(): InlineKeyboard {
  */
 export async function handleContextButtonPress(ctx: Context): Promise<void> {
   logger.debug("[ContextHandler] Context button pressed");
+  const scopeKey = getScopeKeyFromContext(ctx);
 
-  const session = getCurrentSession();
+  const session = getCurrentSession(scopeKey);
 
   if (!session) {
     await ctx.reply(t("context.no_active_session"));
@@ -66,10 +68,11 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
   logger.debug("[ContextHandler] Compact confirmed");
 
   try {
-    const session = getCurrentSession();
+    const scopeKey = getScopeKeyFromContext(ctx);
+    const session = getCurrentSession(scopeKey);
 
     if (!session) {
-      clearActiveInlineMenu("context_session_missing");
+      clearActiveInlineMenu("context_session_missing", scopeKey);
       await ctx.answerCallbackQuery({ text: t("context.callback_session_not_found") });
       await ctx.reply(t("context.no_active_session"));
       await ctx.deleteMessage().catch(() => {});
@@ -78,7 +81,7 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
 
     // Answer callback query and delete menu immediately
     await ctx.answerCallbackQuery({ text: t("context.callback_compacting") });
-    clearActiveInlineMenu("context_compact_confirmed");
+    clearActiveInlineMenu("context_compact_confirmed", scopeKey);
     await ctx.deleteMessage().catch(() => {});
 
     // Send progress message
@@ -118,7 +121,7 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
 
     return true;
   } catch (err) {
-    clearActiveInlineMenu("context_compact_error");
+    clearActiveInlineMenu("context_compact_error", getScopeKeyFromContext(ctx));
     logger.error("[ContextHandler] Compact exception:", err);
     await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     await ctx.reply(t("context.error"));

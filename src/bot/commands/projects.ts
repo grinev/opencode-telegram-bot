@@ -4,7 +4,6 @@ import { setCurrentProject, getCurrentProject } from "../../settings/manager.js"
 import { getProjects } from "../../project/manager.js";
 import { syncSessionDirectoryCache } from "../../session/cache-manager.js";
 import { clearSession } from "../../session/manager.js";
-import { summaryAggregator } from "../../summary/aggregator.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { getStoredAgent } from "../../agent/manager.js";
@@ -21,6 +20,7 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { config } from "../../config.js";
 import { ProjectInfo } from "../../settings/manager.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 const PROJECT_PAGE_CALLBACK_PREFIX = "projects:page:";
@@ -170,6 +170,15 @@ function buildProjectsMenuView(
   };
 }
 
+function clearInteractionWithScope(reason: string, scopeKey: string): void {
+  if (scopeKey === "global") {
+    clearAllInteractionState(reason);
+    return;
+  }
+
+  clearAllInteractionState(reason, scopeKey);
+}
+
 export async function projectsCommand(ctx: CommandContext<Context>) {
   try {
     await syncSessionDirectoryCache();
@@ -194,6 +203,7 @@ export async function projectsCommand(ctx: CommandContext<Context>) {
 }
 
 export async function handleProjectSelect(ctx: Context): Promise<boolean> {
+  const scopeKey = getScopeKeyFromContext(ctx);
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data) {
     return false;
@@ -251,9 +261,8 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     );
 
     setCurrentProject(selectedProject);
-    clearSession();
-    summaryAggregator.clear();
-    clearAllInteractionState("project_switched");
+    clearSession(scopeKey);
+    clearInteractionWithScope("project_switched", scopeKey);
 
     // Clear pinned message when switching projects
     try {
@@ -290,7 +299,7 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
 
     await ctx.deleteMessage();
   } catch (error) {
-    clearAllInteractionState("project_select_error");
+    clearInteractionWithScope("project_select_error", scopeKey);
     logger.error("[Bot] Error selecting project:", error);
     await ctx.answerCallbackQuery();
     await ctx.reply(t("projects.select_error"));

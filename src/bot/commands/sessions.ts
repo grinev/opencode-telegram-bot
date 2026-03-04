@@ -16,6 +16,7 @@ import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { getDateLocale, t } from "../../i18n/index.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 const SESSION_CALLBACK_PREFIX = "session:";
 const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
@@ -73,6 +74,15 @@ function formatSessionsSelectText(page: number): string {
   }
 
   return t("sessions.select_page", { page: page + 1 });
+}
+
+function clearInteractionWithScope(reason: string, scopeKey: string): void {
+  if (scopeKey === "global") {
+    clearAllInteractionState(reason);
+    return;
+  }
+
+  clearAllInteractionState(reason, scopeKey);
 }
 
 async function loadSessionPage(
@@ -170,6 +180,7 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
 }
 
 export async function handleSessionSelect(ctx: Context): Promise<boolean> {
+  const scopeKey = getScopeKeyFromContext(ctx);
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data || !callbackQuery.data.startsWith(SESSION_CALLBACK_PREFIX)) {
     return false;
@@ -187,7 +198,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
     const currentProject = getCurrentProject();
 
     if (!currentProject) {
-      clearAllInteractionState("session_select_project_missing");
+      clearInteractionWithScope("session_select_project_missing", scopeKey);
       await ctx.answerCallbackQuery();
       await ctx.reply(t("sessions.select_project_first"));
       return true;
@@ -239,9 +250,9 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       title: session.title,
       directory: currentProject.worktree,
     };
-    setCurrentSession(sessionInfo);
-    summaryAggregator.clear();
-    clearAllInteractionState("session_switched");
+    setCurrentSession(sessionInfo, scopeKey);
+    summaryAggregator.setSession(session.id);
+    clearInteractionWithScope("session_switched", scopeKey);
 
     await ctx.answerCallbackQuery();
 
@@ -323,7 +334,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
 
     await ctx.deleteMessage();
   } catch (error) {
-    clearAllInteractionState("session_select_error");
+    clearInteractionWithScope("session_select_error", scopeKey);
     logger.error("[Sessions] Error selecting session:", error);
     await ctx.answerCallbackQuery();
     await ctx.reply(t("sessions.select_error"));

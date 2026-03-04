@@ -11,13 +11,13 @@ import { createMainKeyboard } from "../utils/keyboard.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
-import { stopEventListening } from "../../opencode/events.js";
 import { interactionManager } from "../../interaction/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { formatErrorDetails } from "../../utils/error-format.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { getScopeFromContext } from "../scope.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
@@ -53,22 +53,9 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
   }
 }
 
-async function resetMismatchedSessionContext(): Promise<void> {
-  stopEventListening();
-  summaryAggregator.clear();
-  clearAllInteractionState("session_mismatch_reset");
-  clearSession();
-  keyboardManager.clearContext();
-
-  if (!pinnedMessageManager.isInitialized()) {
-    return;
-  }
-
-  try {
-    await pinnedMessageManager.clear();
-  } catch (err) {
-    logger.error("[Bot] Failed to clear pinned message during session reset:", err);
-  }
+function resetMismatchedSessionContextForScope(scopeKey: string): void {
+  clearAllInteractionState("session_mismatch_reset", scopeKey);
+  clearSession(scopeKey);
 }
 
 export interface ProcessPromptDeps {
@@ -102,6 +89,8 @@ export async function processUserPrompt(
 
   botInstance = bot;
   chatIdInstance = ctx.chat!.id;
+  const scope = getScopeFromContext(ctx);
+  const scopeKey = scope?.key ?? "global";
 
   // Initialize pinned message manager if not already
   if (!pinnedMessageManager.isInitialized()) {
@@ -111,13 +100,13 @@ export async function processUserPrompt(
   // Initialize keyboard manager if not already
   keyboardManager.initialize(bot.api, ctx.chat!.id);
 
-  let currentSession = getCurrentSession();
+  let currentSession = getCurrentSession(scopeKey);
 
   if (currentSession && currentSession.directory !== currentProject.worktree) {
     logger.warn(
       `[Bot] Session/project mismatch detected. sessionDirectory=${currentSession.directory}, projectDirectory=${currentProject.worktree}. Resetting session context.`,
     );
-    await resetMismatchedSessionContext();
+    resetMismatchedSessionContextForScope(scopeKey);
     await ctx.reply(t("bot.session_reset_project_mismatch"));
     return false;
   }
@@ -144,7 +133,7 @@ export async function processUserPrompt(
       directory: currentProject.worktree,
     };
 
-    setCurrentSession(currentSession);
+    setCurrentSession(currentSession, scopeKey);
     await ingestSessionInfoForCache(session);
 
     // Create pinned message for new session
@@ -296,8 +285,8 @@ export async function processUserPrompt(
     return true;
   } catch (err) {
     logger.error("Error in prompt handler:", err);
-    if (interactionManager.getSnapshot()) {
-      clearAllInteractionState("message_handler_error");
+    if (interactionManager.getSnapshot(scopeKey)) {
+      clearAllInteractionState("message_handler_error", scopeKey);
     }
     await ctx.reply(t("error.generic"));
     return false;

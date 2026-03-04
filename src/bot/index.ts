@@ -48,7 +48,7 @@ import { subscribeToEvents } from "../opencode/events.js";
 import { summaryAggregator } from "../summary/aggregator.js";
 import { formatSummary, formatToolInfo, getAssistantParseMode } from "../summary/formatter.js";
 import { ToolMessageBatcher } from "../summary/tool-message-batcher.js";
-import { getCurrentSession } from "../session/manager.js";
+import { getScopeForSession } from "../session/manager.js";
 import { ingestSessionInfoForCache } from "../session/cache-manager.js";
 import { logger } from "../utils/logger.js";
 import { safeBackgroundTask } from "../utils/safe-background-task.js";
@@ -61,11 +61,44 @@ import { downloadTelegramFile, toDataUri } from "./utils/file-download.js";
 import { sendMessageWithMarkdownFallback } from "./utils/send-with-markdown-fallback.js";
 import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
 import { getStoredModel } from "../model/manager.js";
+import { getScopeFromContext, getThreadSendOptions } from "./scope.js";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
 
 let botInstance: Bot<Context> | null = null;
-let chatIdInstance: number | null = null;
 let commandsInitialized = false;
+
+const scopeTargets = new Map<string, { chatId: number; threadId: number | null }>();
+
+function rememberScopeTarget(ctx: Context): void {
+  const scope = getScopeFromContext(ctx);
+  if (!scope) {
+    return;
+  }
+
+  scopeTargets.set(scope.key, {
+    chatId: scope.chatId,
+    threadId: scope.threadId,
+  });
+}
+
+function getTargetBySessionId(
+  sessionId: string,
+): { chatId: number; threadId: number | null; scopeKey: string } | null {
+  const scopeKey = getScopeForSession(sessionId);
+  if (!scopeKey) {
+    return null;
+  }
+
+  const target = scopeTargets.get(scopeKey);
+  if (!target) {
+    return null;
+  }
+
+  return {
+    ...target,
+    scopeKey,
+  };
+}
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
 const SESSION_RETRY_PREFIX = "🔁";
@@ -89,26 +122,27 @@ function prepareDocumentCaption(caption: string): string {
 const toolMessageBatcher = new ToolMessageBatcher({
   intervalSeconds: 5,
   sendText: async (sessionId, text) => {
-    if (!botInstance || !chatIdInstance) {
+    if (!botInstance) {
       return;
     }
 
-    const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== sessionId) {
+    const target = getTargetBySessionId(sessionId);
+    if (!target) {
       return;
     }
 
-    await botInstance.api.sendMessage(chatIdInstance, text, {
+    await botInstance.api.sendMessage(target.chatId, text, {
       disable_notification: true,
+      ...getThreadSendOptions(target.threadId),
     });
   },
   sendFile: async (sessionId, fileData) => {
-    if (!botInstance || !chatIdInstance) {
+    if (!botInstance) {
       return;
     }
 
-    const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== sessionId) {
+    const target = getTargetBySessionId(sessionId);
+    if (!target) {
       return;
     }
 
@@ -122,9 +156,10 @@ const toolMessageBatcher = new ToolMessageBatcher({
       await fs.mkdir(TEMP_DIR, { recursive: true });
       await fs.writeFile(tempFilePath, fileData.buffer);
 
-      await botInstance.api.sendDocument(chatIdInstance, new InputFile(tempFilePath), {
+      await botInstance.api.sendDocument(target.chatId, new InputFile(tempFilePath), {
         caption: fileData.caption,
         disable_notification: true,
+        ...getThreadSendOptions(target.threadId),
       });
     } finally {
       await fs.unlink(tempFilePath).catch(() => {});
@@ -173,13 +208,13 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnComplete(async (sessionId, messageText) => {
-    if (!botInstance || !chatIdInstance) {
-      logger.error("Bot or chat ID not available for sending message");
+    if (!botInstance) {
+      logger.error("Bot not available for sending message");
       return;
     }
 
-    const currentSession = getCurrentSession();
-    if (currentSession?.id !== sessionId) {
+    const target = getTargetBySessionId(sessionId);
+    if (!target) {
       return;
     }
 
@@ -190,7 +225,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       const assistantParseMode = getAssistantParseMode();
 
       logger.debug(
-        `[Bot] Sending completed message to Telegram (chatId=${chatIdInstance}, parts=${parts.length})`,
+        `[Bot] Sending completed message to Telegram (chatId=${target.chatId}, parts=${parts.length})`,
       );
 
       for (let i = 0; i < parts.length; i++) {
@@ -201,9 +236,12 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
         await sendMessageWithMarkdownFallback({
           api: botInstance.api,
-          chatId: chatIdInstance,
+          chatId: target.chatId,
           text: parts[i],
-          options,
+          options: {
+            ...(options || {}),
+            ...getThreadSendOptions(target.threadId),
+          },
           parseMode: assistantParseMode,
         });
       }
@@ -216,13 +254,8 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnTool(async (toolInfo) => {
-    if (!botInstance || !chatIdInstance) {
+    if (!botInstance) {
       logger.error("Bot or chat ID not available for sending tool notification");
-      return;
-    }
-
-    const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== toolInfo.sessionId) {
       return;
     }
 
@@ -245,13 +278,8 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnToolFile(async (fileInfo) => {
-    if (!botInstance || !chatIdInstance) {
+    if (!botInstance) {
       logger.error("Bot or chat ID not available for sending file");
-      return;
-    }
-
-    const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== fileInfo.sessionId) {
       return;
     }
 
@@ -268,52 +296,59 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
   });
 
-  summaryAggregator.setOnQuestion(async (questions, requestID) => {
-    if (!botInstance || !chatIdInstance) {
+  summaryAggregator.setOnQuestion(async (sessionId, questions, requestID) => {
+    if (!botInstance) {
       logger.error("Bot or chat ID not available for showing questions");
       return;
     }
 
-    const currentSession = getCurrentSession();
-    if (currentSession) {
-      await toolMessageBatcher.flushSession(currentSession.id, "question_asked");
+    await toolMessageBatcher.flushSession(sessionId, "question_asked");
+
+    const target = getTargetBySessionId(sessionId);
+    if (!target) {
+      return;
     }
 
-    if (questionManager.isActive()) {
+    if (questionManager.isActive(target.scopeKey)) {
       logger.warn("[Bot] Replacing active poll with a new one");
 
-      const previousMessageIds = questionManager.getMessageIds();
+      const previousMessageIds = questionManager.getMessageIds(target.scopeKey);
       for (const messageId of previousMessageIds) {
-        await botInstance.api.deleteMessage(chatIdInstance, messageId).catch(() => {});
+        await botInstance.api.deleteMessage(target.chatId, messageId).catch(() => {});
       }
 
-      clearAllInteractionState("question_replaced_by_new_poll");
+      clearAllInteractionState("question_replaced_by_new_poll", target.scopeKey);
     }
 
     logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
-    questionManager.startQuestions(questions, requestID);
-    await showCurrentQuestion(botInstance.api, chatIdInstance);
+    questionManager.startQuestions(questions, requestID, target.scopeKey);
+    await showCurrentQuestion(botInstance.api, target.chatId, target.scopeKey, target.threadId);
   });
 
   summaryAggregator.setOnQuestionError(async () => {
     logger.info(`[Bot] Question tool failed, clearing active poll and deleting messages`);
 
     // Delete all messages from the invalid poll
-    const messageIds = questionManager.getMessageIds();
-    for (const messageId of messageIds) {
-      if (chatIdInstance) {
-        await botInstance?.api.deleteMessage(chatIdInstance, messageId).catch((err) => {
+    for (const [scopeKey, target] of scopeTargets.entries()) {
+      const messageIds = questionManager.getMessageIds(scopeKey);
+      for (const messageId of messageIds) {
+        await botInstance?.api.deleteMessage(target.chatId, messageId).catch((err) => {
           logger.error(`[Bot] Failed to delete question message ${messageId}:`, err);
         });
       }
-    }
 
-    clearAllInteractionState("question_error");
+      clearAllInteractionState("question_error", scopeKey);
+    }
   });
 
   summaryAggregator.setOnPermission(async (request) => {
-    if (!botInstance || !chatIdInstance) {
+    if (!botInstance) {
       logger.error("Bot or chat ID not available for showing permission request");
+      return;
+    }
+
+    const target = getTargetBySessionId(request.sessionID);
+    if (!target) {
       return;
     }
 
@@ -322,7 +357,13 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     logger.info(
       `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}`,
     );
-    await showPermissionRequest(botInstance.api, chatIdInstance, request);
+    await showPermissionRequest(
+      botInstance.api,
+      target.chatId,
+      request,
+      target.scopeKey,
+      target.threadId,
+    );
   });
 
   summaryAggregator.setOnThinking(async (sessionId) => {
@@ -330,12 +371,12 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       return;
     }
 
-    if (!botInstance || !chatIdInstance) {
+    if (!botInstance) {
       return;
     }
 
-    const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== sessionId) {
+    const target = getTargetBySessionId(sessionId);
+    if (!target) {
       return;
     }
 
@@ -380,12 +421,12 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnSessionError(async (sessionId, message) => {
-    if (!botInstance || !chatIdInstance) {
+    if (!botInstance) {
       return;
     }
 
-    const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== sessionId) {
+    const target = getTargetBySessionId(sessionId);
+    if (!target) {
       return;
     }
 
@@ -398,19 +439,16 @@ async function ensureEventSubscription(directory: string): Promise<void> {
         : normalizedMessage;
 
     await botInstance.api
-      .sendMessage(chatIdInstance, t("bot.session_error", { message: truncatedMessage }))
+      .sendMessage(target.chatId, t("bot.session_error", { message: truncatedMessage }), {
+        ...getThreadSendOptions(target.threadId),
+      })
       .catch((err) => {
         logger.error("[Bot] Failed to send session.error message:", err);
       });
   });
 
   summaryAggregator.setOnSessionRetry(async ({ sessionId, message }) => {
-    if (!botInstance || !chatIdInstance) {
-      return;
-    }
-
-    const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== sessionId) {
+    if (!botInstance) {
       return;
     }
 
@@ -542,7 +580,9 @@ export function createBot(): Bot<Context> {
   bot.use(interactionGuardMiddleware);
 
   const blockMenuWhileInteractionActive = async (ctx: Context): Promise<boolean> => {
-    const activeInteraction = interactionManager.getSnapshot();
+    const activeInteraction = interactionManager.getSnapshot(
+      getScopeFromContext(ctx)?.key ?? "global",
+    );
     if (!activeInteraction) {
       return false;
     }
@@ -574,7 +614,7 @@ export function createBot(): Bot<Context> {
 
     if (ctx.chat) {
       botInstance = bot;
-      chatIdInstance = ctx.chat.id;
+      rememberScopeTarget(ctx);
     }
 
     try {
@@ -612,7 +652,7 @@ export function createBot(): Bot<Context> {
       }
     } catch (err) {
       logger.error("[Bot] Error handling callback:", err);
-      clearAllInteractionState("callback_handler_error");
+      clearAllInteractionState("callback_handler_error", getScopeFromContext(ctx)?.key ?? "global");
       await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     }
   });
@@ -724,14 +764,14 @@ export function createBot(): Bot<Context> {
   bot.on("message:voice", async (ctx) => {
     logger.debug(`[Bot] Received voice message, chatId=${ctx.chat.id}`);
     botInstance = bot;
-    chatIdInstance = ctx.chat.id;
+    rememberScopeTarget(ctx);
     await handleVoiceMessage(ctx, voicePromptDeps);
   });
 
   bot.on("message:audio", async (ctx) => {
     logger.debug(`[Bot] Received audio message, chatId=${ctx.chat.id}`);
     botInstance = bot;
-    chatIdInstance = ctx.chat.id;
+    rememberScopeTarget(ctx);
     await handleVoiceMessage(ctx, voicePromptDeps);
   });
 
@@ -763,7 +803,7 @@ export function createBot(): Bot<Context> {
         // Fall back to caption-only if present
         if (caption.trim().length > 0) {
           botInstance = bot;
-          chatIdInstance = ctx.chat.id;
+          rememberScopeTarget(ctx);
           const promptDeps = { bot, ensureEventSubscription };
           await processUserPrompt(ctx, caption, promptDeps);
         }
@@ -788,7 +828,7 @@ export function createBot(): Bot<Context> {
       logger.info(`[Bot] Sending photo (${downloadedFile.buffer.length} bytes) with prompt`);
 
       botInstance = bot;
-      chatIdInstance = ctx.chat.id;
+      rememberScopeTarget(ctx);
 
       // Send via processUserPrompt with file part
       const promptDeps = { bot, ensureEventSubscription };
@@ -803,7 +843,7 @@ export function createBot(): Bot<Context> {
   bot.on("message:document", async (ctx) => {
     logger.debug(`[Bot] Received document message, chatId=${ctx.chat.id}`);
     botInstance = bot;
-    chatIdInstance = ctx.chat.id;
+    rememberScopeTarget(ctx);
     const deps = { bot, ensureEventSubscription };
     await handleDocumentMessage(ctx, deps);
   });
@@ -815,13 +855,15 @@ export function createBot(): Bot<Context> {
     }
 
     botInstance = bot;
-    chatIdInstance = ctx.chat.id;
+    rememberScopeTarget(ctx);
 
     if (text.startsWith("/")) {
       return;
     }
 
-    if (questionManager.isActive()) {
+    const scopeKey = getScopeFromContext(ctx)?.key ?? "global";
+
+    if (questionManager.isActive(scopeKey)) {
       await handleQuestionTextAnswer(ctx);
       return;
     }
@@ -844,7 +886,10 @@ export function createBot(): Bot<Context> {
 
   bot.catch((err) => {
     logger.error("[Bot] Unhandled error in bot:", err);
-    clearAllInteractionState("bot_unhandled_error");
+    clearAllInteractionState(
+      "bot_unhandled_error",
+      err.ctx ? (getScopeFromContext(err.ctx)?.key ?? "global") : "global",
+    );
     if (err.ctx) {
       logger.error(
         "[Bot] Error context - update type:",

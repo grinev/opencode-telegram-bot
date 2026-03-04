@@ -3,18 +3,17 @@ import { opencodeClient } from "../../opencode/client.js";
 import { stopEventListening } from "../../opencode/events.js";
 import { getCurrentSession } from "../../session/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
-import { summaryAggregator } from "../../summary/aggregator.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 type SessionState = "idle" | "busy" | "not-found";
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function stopLocalStreaming(): void {
+function stopLocalStreaming(scopeKey: string): void {
   stopEventListening();
-  summaryAggregator.clear();
-  clearAllInteractionState("stop_command");
+  clearAllInteractionState("stop_command", scopeKey);
 }
 
 async function pollSessionStatus(
@@ -58,9 +57,10 @@ async function pollSessionStatus(
 
 export async function stopCommand(ctx: CommandContext<Context>) {
   try {
-    stopLocalStreaming();
+    const scopeKey = getScopeKeyFromContext(ctx);
+    stopLocalStreaming(scopeKey);
 
-    const currentSession = getCurrentSession();
+    const currentSession = getCurrentSession(scopeKey);
 
     if (!currentSession) {
       await ctx.reply(t("stop.no_active_session"));

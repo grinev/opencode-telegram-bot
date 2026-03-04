@@ -10,6 +10,7 @@ import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { PermissionRequest, PermissionReply } from "../../permission/types.js";
 import type { I18nKey } from "../../i18n/en.js";
 import { t } from "../../i18n/index.js";
+import { getScopeKeyFromContext, getThreadSendOptions } from "../scope.js";
 
 // Permission type display names
 const PERMISSION_NAME_KEYS: Record<string, I18nKey> = {
@@ -51,18 +52,21 @@ function getCallbackMessageId(ctx: Context): number | null {
   return typeof messageId === "number" ? messageId : null;
 }
 
-function clearPermissionInteraction(reason: string): void {
-  const state = interactionManager.getSnapshot();
+function clearPermissionInteraction(reason: string, scopeKey: string): void {
+  const state = interactionManager.getSnapshot(scopeKey);
   if (state?.kind === "permission") {
-    interactionManager.clear(reason);
+    interactionManager.clear(reason, scopeKey);
   }
 }
 
-function syncPermissionInteractionState(metadata: Record<string, unknown> = {}): void {
-  const pendingCount = permissionManager.getPendingCount();
+function syncPermissionInteractionState(
+  scopeKey: string,
+  metadata: Record<string, unknown> = {},
+): void {
+  const pendingCount = permissionManager.getPendingCount(scopeKey);
 
   if (pendingCount === 0) {
-    clearPermissionInteraction("permission_no_pending_requests");
+    clearPermissionInteraction("permission_no_pending_requests", scopeKey);
     return;
   }
 
@@ -71,20 +75,26 @@ function syncPermissionInteractionState(metadata: Record<string, unknown> = {}):
     ...metadata,
   };
 
-  const state = interactionManager.getSnapshot();
+  const state = interactionManager.getSnapshot(scopeKey);
   if (state?.kind === "permission") {
-    interactionManager.transition({
-      expectedInput: "callback",
-      metadata: nextMetadata,
-    });
+    interactionManager.transition(
+      {
+        expectedInput: "callback",
+        metadata: nextMetadata,
+      },
+      scopeKey,
+    );
     return;
   }
 
-  interactionManager.start({
-    kind: "permission",
-    expectedInput: "callback",
-    metadata: nextMetadata,
-  });
+  interactionManager.start(
+    {
+      kind: "permission",
+      expectedInput: "callback",
+      metadata: nextMetadata,
+    },
+    scopeKey,
+  );
 }
 
 function isPermissionReply(value: string): value is PermissionReply {
@@ -103,20 +113,21 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
   }
 
   logger.debug(`[PermissionHandler] Received callback: ${data}`);
+  const scopeKey = getScopeKeyFromContext(ctx);
 
-  if (!permissionManager.isActive()) {
-    clearPermissionInteraction("permission_inactive_callback");
+  if (!permissionManager.isActive(scopeKey)) {
+    clearPermissionInteraction("permission_inactive_callback", scopeKey);
     await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
     return true;
   }
 
   const callbackMessageId = getCallbackMessageId(ctx);
-  if (!permissionManager.isActiveMessage(callbackMessageId)) {
+  if (!permissionManager.isActiveMessage(callbackMessageId, scopeKey)) {
     await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
     return true;
   }
 
-  const requestID = permissionManager.getRequestID(callbackMessageId);
+  const requestID = permissionManager.getRequestID(callbackMessageId, scopeKey);
   if (!requestID) {
     await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
     return true;
@@ -134,7 +145,7 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
   }
 
   try {
-    await handlePermissionReply(ctx, action, requestID, callbackMessageId);
+    await handlePermissionReply(ctx, action, requestID, callbackMessageId, scopeKey);
   } catch (err) {
     logger.error("[PermissionHandler] Error handling callback:", err);
     await ctx.answerCallbackQuery({
@@ -154,15 +165,16 @@ async function handlePermissionReply(
   reply: PermissionReply,
   requestID: string,
   callbackMessageId: number | null,
+  scopeKey: string,
 ): Promise<void> {
   const currentProject = getCurrentProject();
-  const currentSession = getCurrentSession();
+  const currentSession = getCurrentSession(scopeKey);
   const chatId = ctx.chat?.id;
   const directory = currentSession?.directory ?? currentProject?.worktree;
 
   if (!directory || !chatId) {
-    permissionManager.clear();
-    clearPermissionInteraction("permission_invalid_runtime_context");
+    permissionManager.clear(scopeKey);
+    clearPermissionInteraction("permission_invalid_runtime_context", scopeKey);
 
     await ctx.answerCallbackQuery({
       text: t("permission.no_active_request_callback"),
@@ -210,14 +222,14 @@ async function handlePermissionReply(
     },
   });
 
-  permissionManager.removeByMessageId(callbackMessageId);
+  permissionManager.removeByMessageId(callbackMessageId, scopeKey);
 
-  if (!permissionManager.isActive()) {
-    clearPermissionInteraction("permission_replied");
+  if (!permissionManager.isActive(scopeKey)) {
+    clearPermissionInteraction("permission_replied", scopeKey);
     return;
   }
 
-  syncPermissionInteractionState({
+  syncPermissionInteractionState(scopeKey, {
     lastRepliedRequestID: requestID,
   });
 }
@@ -229,6 +241,8 @@ export async function showPermissionRequest(
   bot: Context["api"],
   chatId: number,
   request: PermissionRequest,
+  scopeKey: string,
+  threadId: number | null,
 ): Promise<void> {
   logger.debug(`[PermissionHandler] Showing permission request: ${request.permission}`);
 
@@ -239,12 +253,13 @@ export async function showPermissionRequest(
     const message = await bot.sendMessage(chatId, text, {
       reply_markup: keyboard,
       parse_mode: "Markdown",
+      ...getThreadSendOptions(threadId),
     });
 
     logger.debug(`[PermissionHandler] Message sent, messageId=${message.message_id}`);
-    permissionManager.startPermission(request, message.message_id);
+    permissionManager.startPermission(request, message.message_id, scopeKey);
 
-    syncPermissionInteractionState({
+    syncPermissionInteractionState(scopeKey, {
       requestID: request.id,
       messageId: message.message_id,
     });

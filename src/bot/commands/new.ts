@@ -13,6 +13,7 @@ import { formatVariantForButton } from "../../variant/manager.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 export async function newCommand(ctx: CommandContext<Context>) {
   try {
@@ -37,14 +38,16 @@ export async function newCommand(ctx: CommandContext<Context>) {
       `[Bot] Created new session via /new command: id=${session.id}, title="${session.title}", project=${currentProject.worktree}`,
     );
 
+    const scopeKey = getScopeKeyFromContext(ctx);
+
     const sessionInfo: SessionInfo = {
       id: session.id,
       title: session.title,
       directory: currentProject.worktree,
     };
-    setCurrentSession(sessionInfo);
-    summaryAggregator.clear();
-    clearAllInteractionState("session_created");
+    setCurrentSession(sessionInfo, scopeKey);
+    summaryAggregator.setSession(session.id);
+    clearAllInteractionState("session_created", scopeKey);
     await ingestSessionInfoForCache(session);
 
     // Initialize pinned message manager and create pinned message
