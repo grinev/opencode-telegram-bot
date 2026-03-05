@@ -2,6 +2,7 @@ export const en = {
   "cmd.description.status": "Server and session status",
   "cmd.description.new": "Create a new session",
   "cmd.description.stop": "Stop current action",
+  "cmd.description.rename": "Rename current session",
   "cmd.description.sessions": "List sessions",
   "cmd.description.projects": "List projects",
   "cmd.description.commands": "Custom commands",
@@ -307,6 +308,13 @@ export const en = {
     "Application is not configured yet. Starting wizard...\n",
   "runtime.wizard.tty_required":
     "Interactive wizard requires a TTY terminal. Run `opencode-telegram config` in an interactive shell.",
+
+  "session.rename.no_session":
+    "📋 No active session.\n\nCreate a session with /new or select one via /sessions.",
+  "session.rename.prompt": "Enter a new name for the current session:",
+  "session.rename.empty": "⚠️ Session name cannot be empty. Please send a non-empty name.",
+  "session.rename.success": "✅ Session renamed to: {title}",
+  "session.rename.error": "🔴 Failed to rename session. Please try again.",
 
   "commands.select": "Choose an OpenCode command:",
   "commands.empty": "📭 No OpenCode commands are available for this project.",

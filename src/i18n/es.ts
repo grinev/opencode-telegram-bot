@@ -4,6 +4,7 @@ export const es: I18nDictionary = {
   "cmd.description.status": "Estado del servidor y de la sesión",
   "cmd.description.new": "Crear una sesión nueva",
   "cmd.description.stop": "Detener la acción actual",
+  "cmd.description.rename": "Renombrar la sesión actual",
   "cmd.description.sessions": "Listar sesiones",
   "cmd.description.projects": "Listar proyectos",
   "cmd.description.commands": "Comandos personalizados",
@@ -318,6 +319,14 @@ export const es: I18nDictionary = {
     "La aplicación aún no está configurada. Iniciando el asistente...\n",
   "runtime.wizard.tty_required":
     "El asistente interactivo requiere un terminal TTY. Ejecuta `opencode-telegram config` en una shell interactiva.",
+
+  "session.rename.no_session":
+    "📋 No hay ninguna sesión activa.\n\nCrea una sesión con /new o selecciona una con /sessions.",
+  "session.rename.prompt": "Escribe el nuevo nombre para la sesión actual:",
+  "session.rename.empty":
+    "⚠️ El nombre de la sesión no puede estar vacío. Por favor, envía un nombre válido.",
+  "session.rename.success": "✅ Sesión renombrada a: {title}",
+  "session.rename.error": "🔴 No se pudo renombrar la sesión. Por favor, inténtalo de nuevo.",
 
   "commands.select": "Elige un comando de OpenCode:",
   "commands.empty": "📭 No hay comandos de OpenCode disponibles para este proyecto.",

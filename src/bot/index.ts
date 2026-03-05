@@ -21,6 +21,11 @@ import { sessionsCommand, handleSessionSelect } from "./commands/sessions.js";
 import { newCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
 import { stopCommand } from "./commands/stop.js";
+import {
+  renameCommand,
+  handleRenameTextInput,
+  handleRenameCancelCallback,
+} from "./commands/rename.js";
 import { opencodeStartCommand } from "./commands/opencode-start.js";
 import { opencodeStopCommand } from "./commands/opencode-stop.js";
 import {
@@ -562,6 +567,7 @@ export function createBot(): Bot<Context> {
   bot.command("sessions", sessionsCommand);
   bot.command("new", newCommand);
   bot.command("stop", stopCommand);
+  bot.command("rename", renameCommand);
   bot.command("commands", commandsCommand);
 
   bot.on("message:text", unknownCommandMiddleware);
@@ -577,6 +583,7 @@ export function createBot(): Bot<Context> {
 
     try {
       const handledInlineCancel = await handleInlineMenuCancel(ctx);
+      const handledRenameCancel = await handleRenameCancelCallback(ctx);
       const handledSession = await handleSessionSelect(ctx);
       const handledProject = await handleProjectSelect(ctx);
       const handledQuestion = await handleQuestionCallback(ctx);
@@ -588,11 +595,12 @@ export function createBot(): Bot<Context> {
       const handledCommands = await handleCommandsCallback(ctx, { bot, ensureEventSubscription });
 
       logger.debug(
-        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, commands=${handledCommands}`,
+        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, renameCancel=${handledRenameCancel}, session=${handledSession}, project=${handledProject}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, commands=${handledCommands}`,
       );
 
       if (
         !handledInlineCancel &&
+        !handledRenameCancel &&
         !handledSession &&
         !handledProject &&
         !handledQuestion &&
@@ -819,6 +827,11 @@ export function createBot(): Bot<Context> {
 
     if (questionManager.isActive()) {
       await handleQuestionTextAnswer(ctx);
+      return;
+    }
+
+    const handledRenameInput = await handleRenameTextInput(ctx);
+    if (handledRenameInput) {
       return;
     }
 

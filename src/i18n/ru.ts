@@ -4,6 +4,7 @@ export const ru: I18nDictionary = {
   "cmd.description.status": "Статус сервера и сессии",
   "cmd.description.new": "Создать новую сессию",
   "cmd.description.stop": "Прервать текущее действие",
+  "cmd.description.rename": "Переименовать текущую сессию",
   "cmd.description.sessions": "Список сессий",
   "cmd.description.projects": "Список проектов",
   "cmd.description.commands": "Пользовательские команды",
@@ -308,6 +309,13 @@ export const ru: I18nDictionary = {
     "Приложение еще не сконфигурировано. Запускаю wizard...\n",
   "runtime.wizard.tty_required":
     "Интерактивный wizard требует TTY-терминал. Запустите `opencode-telegram config` в интерактивной оболочке.",
+
+  "session.rename.no_session":
+    "📋 Нет активной сессии.\n\nСоздайте сессию командой /new или выберите через /sessions.",
+  "session.rename.prompt": "Введите новое название для текущей сессии:",
+  "session.rename.empty": "⚠️ Название сессии не может быть пустым. Отправьте непустое название.",
+  "session.rename.success": "✅ Сессия переименована: {title}",
+  "session.rename.error": "🔴 Не удалось переименовать сессию. Попробуйте снова.",
 
   "commands.select": "Выберите команду OpenCode:",
   "commands.empty": "📭 Для этого проекта нет доступных команд OpenCode.",

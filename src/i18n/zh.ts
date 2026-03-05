@@ -4,6 +4,7 @@ export const zh: I18nDictionary = {
   "cmd.description.status": "服务器和会话状态",
   "cmd.description.new": "创建新会话",
   "cmd.description.stop": "停止当前操作",
+  "cmd.description.rename": "重命名当前会话",
   "cmd.description.sessions": "列出会话",
   "cmd.description.projects": "列出项目",
   "cmd.description.commands": "自定义命令",
@@ -277,6 +278,13 @@ export const zh: I18nDictionary = {
   "runtime.wizard.not_configured_starting": "应用尚未配置。正在启动向导...\n",
   "runtime.wizard.tty_required":
     "交互式向导需要 TTY 终端。请在交互式 shell 中运行 `opencode-telegram config`。",
+
+  "session.rename.no_session":
+    "📋 没有活跃的会话。\n\n请使用 /new 创建会话或通过 /sessions 选择一个。",
+  "session.rename.prompt": "请输入当前会话的新名称：",
+  "session.rename.empty": "⚠️ 会话名称不能为空，请发送一个有效的名称。",
+  "session.rename.success": "✅ 会话已重命名为：{title}",
+  "session.rename.error": "🔴 重命名会话失败，请重试。",
 
   "commands.select": "请选择一个 OpenCode 命令：",
   "commands.empty": "📭 当前项目没有可用的 OpenCode 命令。",
