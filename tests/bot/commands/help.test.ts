@@ -22,4 +22,21 @@ describe("bot/commands/help", () => {
       expect(helpText).toContain(item.description);
     }
   });
+
+  it("returns DM-specific help in private chat", async () => {
+    const replyMock = vi.fn().mockResolvedValue(undefined);
+    const ctx = {
+      chat: { id: 1, type: "private" },
+      reply: replyMock,
+    } as unknown as Context;
+
+    await helpCommand(ctx);
+
+    expect(replyMock).toHaveBeenCalledTimes(1);
+    const helpText = replyMock.mock.calls[0][0] as string;
+    expect(helpText).toContain("/status");
+    expect(helpText).toContain("/opencode_start");
+    expect(helpText).not.toContain("/projects");
+    expect(helpText).not.toContain("/sessions");
+  });
 });

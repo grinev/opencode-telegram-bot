@@ -12,7 +12,7 @@ import { pinnedMessageManager } from "../../pinned/manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { sendMessageWithMarkdownFallback } from "../utils/send-with-markdown-fallback.js";
-import { getScopeFromContext, getScopeKeyFromContext } from "../scope.js";
+import { getScopeFromContext, getScopeKeyFromContext, getThreadSendOptions } from "../scope.js";
 
 export async function statusCommand(ctx: CommandContext<Context>) {
   try {
@@ -131,7 +131,10 @@ export async function statusCommand(ctx: CommandContext<Context>) {
         api: ctx.api,
         chatId: ctx.chat.id,
         text: message,
-        options: { reply_markup: keyboard },
+        options: {
+          reply_markup: keyboard,
+          ...getThreadSendOptions(scope?.threadId ?? null),
+        },
         parseMode: "Markdown",
       });
     } else {

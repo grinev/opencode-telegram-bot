@@ -11,17 +11,23 @@ const mocked = vi.hoisted(() => ({
   } as { id: string; worktree: string; name?: string } | null,
   sessionListMock: vi.fn(),
   sessionGetMock: vi.fn(),
+  sessionMessagesMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
   clearSummaryMock: vi.fn(),
+  setSummarySessionMock: vi.fn(),
   clearInteractionMock: vi.fn(),
   keyboardInitializeMock: vi.fn(),
   keyboardGetKeyboardMock: vi.fn(() => ({ inline_keyboard: [] })),
   keyboardUpdateContextMock: vi.fn(),
+  keyboardGetContextInfoMock: vi.fn(() => null),
   pinnedIsInitializedMock: vi.fn(() => false),
   pinnedInitializeMock: vi.fn(),
   pinnedOnSessionChangeMock: vi.fn(),
   pinnedLoadContextFromHistoryMock: vi.fn(),
   pinnedGetContextInfoMock: vi.fn(() => null),
+  pinnedGetContextLimitMock: vi.fn(() => 0),
+  pinnedRefreshContextLimitMock: vi.fn(),
+  safeBackgroundTaskMock: vi.fn(),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -29,6 +35,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
     session: {
       list: mocked.sessionListMock,
       get: mocked.sessionGetMock,
+      messages: mocked.sessionMessagesMock,
     },
   },
 }));
@@ -44,6 +51,7 @@ vi.mock("../../../src/session/manager.js", () => ({
 vi.mock("../../../src/summary/aggregator.js", () => ({
   summaryAggregator: {
     clear: mocked.clearSummaryMock,
+    setSession: mocked.setSummarySessionMock,
   },
 }));
 
@@ -56,6 +64,7 @@ vi.mock("../../../src/keyboard/manager.js", () => ({
     initialize: mocked.keyboardInitializeMock,
     getKeyboard: mocked.keyboardGetKeyboardMock,
     updateContext: mocked.keyboardUpdateContextMock,
+    getContextInfo: mocked.keyboardGetContextInfoMock,
   },
 }));
 
@@ -66,11 +75,13 @@ vi.mock("../../../src/pinned/manager.js", () => ({
     onSessionChange: mocked.pinnedOnSessionChangeMock,
     loadContextFromHistory: mocked.pinnedLoadContextFromHistoryMock,
     getContextInfo: mocked.pinnedGetContextInfoMock,
+    getContextLimit: mocked.pinnedGetContextLimitMock,
+    refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
   },
 }));
 
 vi.mock("../../../src/utils/safe-background-task.js", () => ({
-  safeBackgroundTask: vi.fn(),
+  safeBackgroundTask: mocked.safeBackgroundTaskMock,
 }));
 
 type SessionStub = {
@@ -114,6 +125,7 @@ function createCallbackContext(data: string, messageId: number): Context {
       data,
       message: {
         message_id: messageId,
+        message_thread_id: 777,
       },
     } as Context["callbackQuery"],
     answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
@@ -126,6 +138,20 @@ function createCallbackContext(data: string, messageId: number): Context {
       editMessageText: vi.fn().mockResolvedValue(true),
     },
   } as unknown as Context;
+}
+
+function startActiveSessionInlineMenu(): void {
+  interactionManager.start(
+    {
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    },
+    "111:777",
+  );
 }
 
 function getKeyboardButtons(ctx: Context): Array<Array<{ text: string; callback_data?: string }>> {
@@ -146,13 +172,18 @@ describe("bot/commands/sessions", () => {
 
     mocked.sessionListMock.mockReset();
     mocked.sessionGetMock.mockReset();
+    mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock.mockResolvedValue({ data: [], error: null });
     mocked.setCurrentSessionMock.mockReset();
     mocked.clearSummaryMock.mockReset();
+    mocked.setSummarySessionMock.mockReset();
     mocked.clearInteractionMock.mockReset();
     mocked.keyboardInitializeMock.mockReset();
     mocked.keyboardGetKeyboardMock.mockReset();
     mocked.keyboardGetKeyboardMock.mockReturnValue({ inline_keyboard: [] });
     mocked.keyboardUpdateContextMock.mockReset();
+    mocked.keyboardGetContextInfoMock.mockReset();
+    mocked.keyboardGetContextInfoMock.mockReturnValue(null);
     mocked.pinnedIsInitializedMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReturnValue(false);
     mocked.pinnedInitializeMock.mockReset();
@@ -162,6 +193,11 @@ describe("bot/commands/sessions", () => {
     mocked.pinnedLoadContextFromHistoryMock.mockResolvedValue(undefined);
     mocked.pinnedGetContextInfoMock.mockReset();
     mocked.pinnedGetContextInfoMock.mockReturnValue(null);
+    mocked.pinnedGetContextLimitMock.mockReset();
+    mocked.pinnedGetContextLimitMock.mockReturnValue(0);
+    mocked.pinnedRefreshContextLimitMock.mockReset();
+    mocked.pinnedRefreshContextLimitMock.mockResolvedValue(undefined);
+    mocked.safeBackgroundTaskMock.mockReset();
   });
 
   it("shows next-page button when sessions exceed page size", async () => {
@@ -187,14 +223,7 @@ describe("bot/commands/sessions", () => {
     const pageTwoData = Array.from({ length: 12 }, (_, index) => createSession(index));
     mocked.sessionListMock.mockResolvedValueOnce({ data: pageTwoData, error: null });
 
-    interactionManager.start({
-      kind: "inline",
-      expectedInput: "callback",
-      metadata: {
-        menuKind: "session",
-        messageId: 456,
-      },
-    });
+    startActiveSessionInlineMenu();
 
     const ctx = createCallbackContext("session:page:1", 456);
     const handled = await handleSessionSelect(ctx);
@@ -222,14 +251,7 @@ describe("bot/commands/sessions", () => {
   it("returns page-empty callback message when requested page has no sessions", async () => {
     mocked.sessionListMock.mockResolvedValueOnce({ data: [], error: null });
 
-    interactionManager.start({
-      kind: "inline",
-      expectedInput: "callback",
-      metadata: {
-        menuKind: "session",
-        messageId: 456,
-      },
-    });
+    startActiveSessionInlineMenu();
 
     const ctx = createCallbackContext("session:page:2", 456);
     const handled = await handleSessionSelect(ctx);
@@ -247,14 +269,7 @@ describe("bot/commands/sessions", () => {
       error: new Error("session list failed"),
     });
 
-    interactionManager.start({
-      kind: "inline",
-      expectedInput: "callback",
-      metadata: {
-        menuKind: "session",
-        messageId: 456,
-      },
-    });
+    startActiveSessionInlineMenu();
 
     const ctx = createCallbackContext("session:page:1", 456);
     const handled = await handleSessionSelect(ctx);
@@ -274,21 +289,53 @@ describe("bot/commands/sessions", () => {
       error: new Error("session get failed"),
     });
 
-    interactionManager.start({
-      kind: "inline",
-      expectedInput: "callback",
-      metadata: {
-        menuKind: "session",
-        messageId: 456,
-      },
-    });
+    startActiveSessionInlineMenu();
 
     const ctx = createCallbackContext("session:session-1", 456);
     const handled = await handleSessionSelect(ctx);
 
     expect(handled).toBe(true);
-    expect(mocked.clearInteractionMock).toHaveBeenCalledWith("session_select_error");
+    expect(mocked.clearInteractionMock).toHaveBeenCalledWith("session_select_error", "111:777");
     expect(ctx.answerCallbackQuery).toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("sessions.select_error"));
+    expect(ctx.reply).toHaveBeenCalledWith(t("sessions.select_error"), {
+      message_thread_id: 777,
+    });
+  });
+
+  it("routes selected session confirmation and preview to current thread", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: {
+        id: "session-1",
+        title: "Thread Session",
+      },
+      error: null,
+    });
+
+    mocked.pinnedGetContextLimitMock.mockReturnValue(200000);
+
+    startActiveSessionInlineMenu();
+    const ctx = createCallbackContext("session:session-1", 456);
+    const handled = await handleSessionSelect(ctx);
+
+    expect(handled).toBe(true);
+
+    const sendMessageCalls = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls;
+    expect(sendMessageCalls.length).toBeGreaterThanOrEqual(2);
+    expect(sendMessageCalls[0]?.[2]).toMatchObject({ message_thread_id: 777 });
+
+    const selectedCall = sendMessageCalls.find(
+      (call) => typeof call[1] === "string" && (call[1] as string).includes("Thread Session"),
+    );
+    expect(selectedCall?.[2]).toMatchObject({ message_thread_id: 777 });
+
+    expect(mocked.safeBackgroundTaskMock).toHaveBeenCalledTimes(1);
+    const queued = mocked.safeBackgroundTaskMock.mock.calls[0]?.[0] as {
+      task: () => Promise<void>;
+    };
+    await queued.task();
+
+    const allCalls = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls;
+    const previewCall = allCalls[allCalls.length - 1];
+    expect(previewCall?.[2]).toMatchObject({ message_thread_id: 777 });
   });
 });
