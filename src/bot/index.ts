@@ -48,7 +48,6 @@ import { subscribeToEvents } from "../opencode/events.js";
 import { summaryAggregator } from "../summary/aggregator.js";
 import { formatSummary, formatToolInfo, getAssistantParseMode } from "../summary/formatter.js";
 import { ToolMessageBatcher } from "../summary/tool-message-batcher.js";
-import { getScopeForSession } from "../session/manager.js";
 import { ingestSessionInfoForCache } from "../session/cache-manager.js";
 import { logger } from "../utils/logger.js";
 import { safeBackgroundTask } from "../utils/safe-background-task.js";
@@ -67,16 +66,54 @@ import {
 import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
 import { getStoredModel } from "../model/manager.js";
 import { getCurrentProject } from "../settings/manager.js";
-import { getScopeFromContext, getThreadSendOptions } from "./scope.js";
+import {
+  GLOBAL_SCOPE_KEY,
+  SCOPE_CONTEXT,
+  getChatActionThreadOptions,
+  getScopeFromContext,
+  getThreadSendOptions,
+} from "./scope.js";
 import { TelegramRateLimiter } from "./telegram-rate-limiter.js";
-import type { FilePartInput } from "@opencode-ai/sdk/v2";
+import type { Event as OpenCodeEvent, FilePartInput } from "@opencode-ai/sdk/v2";
+import { getSessionRouteTarget, listAllTopicBindings } from "../topic/manager.js";
+import { BOT_COMMAND, DM_ALLOWED_COMMANDS } from "./commands/constants.js";
+import { INTERACTION_CLEAR_REASON } from "../interaction/constants.js";
+import { BOT_I18N_KEY, CHAT_TYPE, GENERAL_TOPIC, TELEGRAM_CHAT_FIELD } from "./constants.js";
+import { TELEGRAM_CHAT_ACTION } from "./telegram-constants.js";
+import { syncTopicTitleForSession } from "../topic/title-sync.js";
 
 let botInstance: Bot<Context> | null = null;
 const initializedCommandChats = new Set<number>();
-const DM_ALLOWED_COMMANDS = new Set(["start", "help", "status", "opencode_start", "opencode_stop"]);
+const renamedGeneralTopicChats = new Set<number>();
+const DM_ALLOWED_COMMAND_SET = new Set<string>(DM_ALLOWED_COMMANDS);
 const telegramRateLimiter = new TelegramRateLimiter();
+const eventCallbackByDirectory = new Map<string, (event: OpenCodeEvent) => void>();
 
-const scopeTargets = new Map<string, { chatId: number; threadId: number | null }>();
+async function ensureGeneralTopicName(ctx: Context): Promise<void> {
+  if (!ctx.chat || ctx.chat.type === CHAT_TYPE.PRIVATE) {
+    return;
+  }
+
+  if (renamedGeneralTopicChats.has(ctx.chat.id)) {
+    return;
+  }
+
+  const isForumEnabled = Reflect.get(ctx.chat, TELEGRAM_CHAT_FIELD.IS_FORUM) === true;
+  if (!isForumEnabled) {
+    return;
+  }
+
+  try {
+    await ctx.api.editGeneralForumTopic(ctx.chat.id, GENERAL_TOPIC.NAME);
+    renamedGeneralTopicChats.add(ctx.chat.id);
+    logger.info(`[Bot] Renamed General topic in chat ${ctx.chat.id} to "${GENERAL_TOPIC.NAME}"`);
+  } catch (error) {
+    logger.debug("[Bot] Failed to rename General topic", {
+      chatId: ctx.chat.id,
+      error,
+    });
+  }
+}
 
 function rememberScopeTarget(ctx: Context): void {
   const scope = getScopeFromContext(ctx);
@@ -85,30 +122,64 @@ function rememberScopeTarget(ctx: Context): void {
   }
 
   telegramRateLimiter.setActiveScopeKey(scope.key);
-
-  scopeTargets.set(scope.key, {
-    chatId: scope.chatId,
-    threadId: scope.threadId,
-  });
 }
 
 function getTargetBySessionId(
   sessionId: string,
 ): { chatId: number; threadId: number | null; scopeKey: string } | null {
-  const scopeKey = getScopeForSession(sessionId);
-  if (!scopeKey) {
-    return null;
-  }
-
-  const target = scopeTargets.get(scopeKey);
+  const target = getSessionRouteTarget(sessionId);
   if (!target) {
     return null;
   }
 
   return {
-    ...target,
-    scopeKey,
+    chatId: target.chatId,
+    threadId: target.threadId,
+    scopeKey: target.scopeKey,
   };
+}
+
+function extractSessionTitleUpdate(
+  event: OpenCodeEvent,
+): { sessionId: string; title: string } | null {
+  if (event.type !== "session.updated") {
+    return null;
+  }
+
+  const eventProperties = event.properties as {
+    info?: { id?: unknown; title?: unknown };
+    session?: { id?: unknown; title?: unknown };
+    sessionID?: unknown;
+    title?: unknown;
+  };
+
+  const infoSessionId =
+    typeof eventProperties.info?.id === "string" ? eventProperties.info.id : null;
+  const infoTitle =
+    typeof eventProperties.info?.title === "string" ? eventProperties.info.title : null;
+  if (infoSessionId && infoTitle) {
+    return { sessionId: infoSessionId, title: infoTitle };
+  }
+
+  const sessionId =
+    typeof eventProperties.session?.id === "string"
+      ? eventProperties.session.id
+      : typeof eventProperties.sessionID === "string"
+        ? eventProperties.sessionID
+        : null;
+
+  const title =
+    typeof eventProperties.session?.title === "string"
+      ? eventProperties.session.title
+      : typeof eventProperties.title === "string"
+        ? eventProperties.title
+        : null;
+
+  if (!sessionId || !title) {
+    return null;
+  }
+
+  return { sessionId, title };
 }
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
@@ -117,6 +188,22 @@ const sessionErrorThrottle = new SessionErrorThrottle(3000);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEMP_DIR = path.join(__dirname, "..", ".tmp");
+
+function isGroupGeneralControlScope(ctx: Context): boolean {
+  const scope = getScopeFromContext(ctx);
+  const isForumEnabled =
+    ctx.chat?.type === CHAT_TYPE.SUPERGROUP &&
+    Reflect.get(ctx.chat, TELEGRAM_CHAT_FIELD.IS_FORUM) === true;
+
+  return Boolean(isForumEnabled && scope?.context === SCOPE_CONTEXT.GROUP_GENERAL && ctx.chat);
+}
+
+async function replyGeneralControlPromptRestriction(ctx: Context): Promise<void> {
+  await ctx.reply(
+    t(BOT_I18N_KEY.GROUP_GENERAL_PROMPTS_DISABLED),
+    getThreadSendOptions(getScopeFromContext(ctx)?.threadId ?? null),
+  );
+}
 
 function prepareDocumentCaption(caption: string): string {
   const normalizedCaption = caption.trim();
@@ -197,7 +284,7 @@ async function ensureCommandsInitialized(ctx: Context, next: NextFunction): Prom
   }
 
   try {
-    if (ctx.chat.type === "private") {
+    if (ctx.chat.type === CHAT_TYPE.PRIVATE) {
       await ctx.api.setMyCommands(BOT_COMMANDS, {
         scope: {
           type: "chat",
@@ -278,9 +365,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       }
     } catch (err) {
       logger.error("Failed to send message to Telegram:", err);
-      // Stop processing events after critical error to prevent infinite loop
-      logger.error("[Bot] CRITICAL: Stopping event processing due to error");
-      summaryAggregator.clear();
+      logger.warn("[Bot] Assistant message delivery failed; keeping event processing active");
     }
   });
 
@@ -352,7 +437,10 @@ async function ensureEventSubscription(directory: string): Promise<void> {
         await botInstance.api.deleteMessage(target.chatId, messageId).catch(() => {});
       }
 
-      clearAllInteractionState("question_replaced_by_new_poll", target.scopeKey);
+      clearAllInteractionState(
+        INTERACTION_CLEAR_REASON.QUESTION_REPLACED_BY_NEW_POLL,
+        target.scopeKey,
+      );
     }
 
     logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
@@ -363,17 +451,19 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   summaryAggregator.setOnQuestionError(async () => {
     logger.info(`[Bot] Question tool failed, clearing active poll and deleting messages`);
 
-    // Delete all messages from the invalid poll
-    for (const [scopeKey, target] of scopeTargets.entries()) {
-      const messageIds = questionManager.getMessageIds(scopeKey);
+    const bindings = listAllTopicBindings();
+    for (const binding of bindings) {
+      const messageIds = questionManager.getMessageIds(binding.scopeKey);
       for (const messageId of messageIds) {
-        await botInstance?.api.deleteMessage(target.chatId, messageId).catch((err) => {
+        await botInstance?.api.deleteMessage(binding.chatId, messageId).catch((err) => {
           logger.error(`[Bot] Failed to delete question message ${messageId}:`, err);
         });
       }
 
-      clearAllInteractionState("question_error", scopeKey);
+      clearAllInteractionState(INTERACTION_CLEAR_REASON.QUESTION_ERROR, binding.scopeKey);
     }
+
+    clearAllInteractionState(INTERACTION_CLEAR_REASON.QUESTION_ERROR, GLOBAL_SCOPE_KEY);
   });
 
   summaryAggregator.setOnPermission(async (request) => {
@@ -399,6 +489,32 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       target.scopeKey,
       target.threadId,
     );
+  });
+
+  summaryAggregator.setOnTypingIndicator((sessionId) => {
+    if (!botInstance) {
+      return;
+    }
+
+    const target = getTargetBySessionId(sessionId);
+    if (!target) {
+      return;
+    }
+
+    void botInstance.api
+      .sendChatAction(
+        target.chatId,
+        TELEGRAM_CHAT_ACTION.TYPING,
+        getChatActionThreadOptions(target.threadId),
+      )
+      .catch((error) => {
+        logger.debug("[Bot] Failed to send typing indicator", {
+          sessionId,
+          chatId: target.chatId,
+          threadId: target.threadId,
+          error,
+        });
+      });
   });
 
   summaryAggregator.setOnThinking(async (sessionId) => {
@@ -543,29 +659,57 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
   });
 
-  logger.info(`[Bot] Subscribing to OpenCode events for project: ${directory}`);
-  subscribeToEvents(directory, (event) => {
-    if (event.type === "session.created" || event.type === "session.updated") {
-      const info = (
-        event.properties as { info?: { directory?: string; time?: { updated?: number } } }
-      ).info;
+  let eventCallback = eventCallbackByDirectory.get(directory);
 
-      if (info?.directory) {
+  if (!eventCallback) {
+    eventCallback = (event: OpenCodeEvent): void => {
+      if (event.type === "session.created" || event.type === "session.updated") {
+        const info = (
+          event.properties as { info?: { directory?: string; time?: { updated?: number } } }
+        ).info;
+
+        if (info?.directory) {
+          safeBackgroundTask({
+            taskName: `session.cache.${event.type}`,
+            task: () => ingestSessionInfoForCache(info),
+          });
+        }
+      }
+
+      const sessionTitleUpdate = extractSessionTitleUpdate(event);
+      if (sessionTitleUpdate && botInstance) {
+        const activeBot = botInstance;
         safeBackgroundTask({
-          taskName: `session.cache.${event.type}`,
-          task: () => ingestSessionInfoForCache(info),
+          taskName: "topic.title.sync_from_event",
+          task: () =>
+            syncTopicTitleForSession(
+              activeBot.api,
+              sessionTitleUpdate.sessionId,
+              sessionTitleUpdate.title,
+            ),
+          onError: (syncError) => {
+            logger.debug("[Bot] Failed to sync topic title from session.updated", {
+              sessionId: sessionTitleUpdate.sessionId,
+              syncError,
+            });
+          },
         });
       }
-    }
 
-    summaryAggregator.processEvent(event);
-  }).catch((err) => {
+      summaryAggregator.processEvent(event);
+    };
+
+    eventCallbackByDirectory.set(directory, eventCallback);
+    logger.info(`[Bot] Subscribing to OpenCode events for project: ${directory}`);
+  }
+
+  subscribeToEvents(directory, eventCallback).catch((err) => {
     logger.error("Failed to subscribe to events:", err);
   });
 }
 
 export function createBot(): Bot<Context> {
-  clearAllInteractionState("bot_startup");
+  clearAllInteractionState(INTERACTION_CLEAR_REASON.BOT_STARTUP);
   toolMessageBatcher.setIntervalSeconds(config.bot.serviceMessagesIntervalSec);
   logger.info(`[ToolBatcher] Service messages interval: ${config.bot.serviceMessagesIntervalSec}s`);
 
@@ -634,10 +778,17 @@ export function createBot(): Bot<Context> {
   });
 
   bot.use(authMiddleware);
+  bot.use(async (ctx, next) => {
+    if (ctx.message && ctx.chat?.type !== CHAT_TYPE.PRIVATE) {
+      await ensureGeneralTopicName(ctx);
+    }
+
+    await next();
+  });
   bot.use(ensureCommandsInitialized);
   bot.use(interactionGuardMiddleware);
   bot.use(async (ctx, next) => {
-    if (ctx.chat?.type !== "private") {
+    if (ctx.chat?.type !== CHAT_TYPE.PRIVATE) {
       await next();
       return;
     }
@@ -646,7 +797,7 @@ export function createBot(): Bot<Context> {
     if (text) {
       const commandName = extractCommandName(text);
       if (commandName) {
-        if (DM_ALLOWED_COMMANDS.has(commandName)) {
+        if (DM_ALLOWED_COMMAND_SET.has(commandName)) {
           await next();
           return;
         }
@@ -669,7 +820,7 @@ export function createBot(): Bot<Context> {
 
   const blockMenuWhileInteractionActive = async (ctx: Context): Promise<boolean> => {
     const activeInteraction = interactionManager.getSnapshot(
-      getScopeFromContext(ctx)?.key ?? "global",
+      getScopeFromContext(ctx)?.key ?? GLOBAL_SCOPE_KEY,
     );
     if (!activeInteraction) {
       return false;
@@ -682,17 +833,17 @@ export function createBot(): Bot<Context> {
     return true;
   };
 
-  bot.command("start", startCommand);
-  bot.command("help", helpCommand);
-  bot.command("status", statusCommand);
-  bot.command("opencode_start", opencodeStartCommand);
-  bot.command("opencode_stop", opencodeStopCommand);
-  bot.command("projects", projectsCommand);
-  bot.command("sessions", sessionsCommand);
-  bot.command("new", newCommand);
-  bot.command("stop", stopCommand);
-  bot.command("rename", renameCommand);
-  bot.command("commands", commandsCommand);
+  bot.command(BOT_COMMAND.START, startCommand);
+  bot.command(BOT_COMMAND.HELP, helpCommand);
+  bot.command(BOT_COMMAND.STATUS, statusCommand);
+  bot.command(BOT_COMMAND.OPENCODE_START, opencodeStartCommand);
+  bot.command(BOT_COMMAND.OPENCODE_STOP, opencodeStopCommand);
+  bot.command(BOT_COMMAND.PROJECTS, projectsCommand);
+  bot.command(BOT_COMMAND.SESSIONS, sessionsCommand);
+  bot.command(BOT_COMMAND.NEW, newCommand);
+  bot.command(BOT_COMMAND.STOP, stopCommand);
+  bot.command(BOT_COMMAND.RENAME, renameCommand);
+  bot.command(BOT_COMMAND.COMMANDS, commandsCommand);
 
   bot.on("message:text", unknownCommandMiddleware);
 
@@ -716,7 +867,7 @@ export function createBot(): Bot<Context> {
       const handledVariant = await handleVariantSelect(ctx);
       const handledCompactConfirm = await handleCompactConfirm(ctx);
       const handledRenameCancel = await handleRenameCancel(ctx);
-      const handledCommands = await handleCommandsCallback(ctx, { bot, ensureEventSubscription });
+      const handledCommands = await handleCommandsCallback(ctx, { ensureEventSubscription });
 
       logger.debug(
         `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, rename=${handledRenameCancel}, commands=${handledCommands}`,
@@ -740,7 +891,10 @@ export function createBot(): Bot<Context> {
       }
     } catch (err) {
       logger.error("[Bot] Error handling callback:", err);
-      clearAllInteractionState("callback_handler_error", getScopeFromContext(ctx)?.key ?? "global");
+      clearAllInteractionState(
+        INTERACTION_CLEAR_REASON.CALLBACK_HANDLER_ERROR,
+        getScopeFromContext(ctx)?.key ?? GLOBAL_SCOPE_KEY,
+      );
       await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     }
   });
@@ -776,6 +930,13 @@ export function createBot(): Bot<Context> {
       logger.error("[Bot] Error showing model menu:", err);
       await ctx.reply(t("error.load_models"));
     }
+  });
+
+  bot.hears(t("keyboard.general_defaults"), async (ctx) => {
+    await ctx.reply(
+      t("keyboard.general_defaults_info"),
+      getThreadSendOptions(getScopeFromContext(ctx)?.threadId ?? null),
+    );
   });
 
   // Handle Reply Keyboard button press (context button)
@@ -853,6 +1014,12 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Received voice message, chatId=${ctx.chat.id}`);
     botInstance = bot;
     rememberScopeTarget(ctx);
+
+    if (isGroupGeneralControlScope(ctx)) {
+      await replyGeneralControlPromptRestriction(ctx);
+      return;
+    }
+
     await handleVoiceMessage(ctx, voicePromptDeps);
   });
 
@@ -860,12 +1027,23 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Received audio message, chatId=${ctx.chat.id}`);
     botInstance = bot;
     rememberScopeTarget(ctx);
+
+    if (isGroupGeneralControlScope(ctx)) {
+      await replyGeneralControlPromptRestriction(ctx);
+      return;
+    }
+
     await handleVoiceMessage(ctx, voicePromptDeps);
   });
 
   // Photo message handler
   bot.on("message:photo", async (ctx) => {
     logger.debug(`[Bot] Received photo message, chatId=${ctx.chat.id}`);
+
+    if (isGroupGeneralControlScope(ctx)) {
+      await replyGeneralControlPromptRestriction(ctx);
+      return;
+    }
 
     const photos = ctx.message?.photo;
     if (!photos || photos.length === 0) {
@@ -879,7 +1057,7 @@ export function createBot(): Bot<Context> {
       const largestPhoto = photos[photos.length - 1];
 
       // Check model capabilities
-      const scopeKey = getScopeFromContext(ctx)?.key ?? "global";
+      const scopeKey = getScopeFromContext(ctx)?.key ?? GLOBAL_SCOPE_KEY;
       const storedModel = getStoredModel(scopeKey);
       const capabilities = await getModelCapabilities(storedModel.providerID, storedModel.modelID);
 
@@ -933,6 +1111,12 @@ export function createBot(): Bot<Context> {
     logger.debug(`[Bot] Received document message, chatId=${ctx.chat.id}`);
     botInstance = bot;
     rememberScopeTarget(ctx);
+
+    if (isGroupGeneralControlScope(ctx)) {
+      await replyGeneralControlPromptRestriction(ctx);
+      return;
+    }
+
     const deps = { bot, ensureEventSubscription };
     await handleDocumentMessage(ctx, deps);
   });
@@ -950,7 +1134,7 @@ export function createBot(): Bot<Context> {
       return;
     }
 
-    const scopeKey = getScopeFromContext(ctx)?.key ?? "global";
+    const scopeKey = getScopeFromContext(ctx)?.key ?? GLOBAL_SCOPE_KEY;
 
     if (questionManager.isActive(scopeKey)) {
       await handleQuestionTextAnswer(ctx);
@@ -968,6 +1152,11 @@ export function createBot(): Bot<Context> {
       return;
     }
 
+    if (isGroupGeneralControlScope(ctx)) {
+      await replyGeneralControlPromptRestriction(ctx);
+      return;
+    }
+
     await processUserPrompt(ctx, text, promptDeps);
 
     logger.debug("[Bot] message:text handler completed (prompt sent in background)");
@@ -977,7 +1166,7 @@ export function createBot(): Bot<Context> {
     logger.error("[Bot] Unhandled error in bot:", err);
     clearAllInteractionState(
       "bot_unhandled_error",
-      err.ctx ? (getScopeFromContext(err.ctx)?.key ?? "global") : "global",
+      err.ctx ? (getScopeFromContext(err.ctx)?.key ?? GLOBAL_SCOPE_KEY) : GLOBAL_SCOPE_KEY,
     );
     if (err.ctx) {
       logger.error(

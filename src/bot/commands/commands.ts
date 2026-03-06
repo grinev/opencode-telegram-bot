@@ -1,4 +1,4 @@
-import { Bot, CommandContext, Context, InlineKeyboard } from "grammy";
+import { CommandContext, Context, InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import {
@@ -16,7 +16,7 @@ import { getStoredModel } from "../../model/manager.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { getScopeKeyFromContext } from "../scope.js";
+import { getScopeFromContext, getScopeKeyFromContext, getThreadSendOptions } from "../scope.js";
 
 const COMMANDS_CALLBACK_PREFIX = "commands:";
 const COMMANDS_CALLBACK_SELECT_PREFIX = `${COMMANDS_CALLBACK_PREFIX}select:`;
@@ -54,7 +54,6 @@ interface ExecuteCommandParams {
 }
 
 export interface ExecuteCommandDeps {
-  bot: Bot<Context>;
   ensureEventSubscription: (directory: string) => Promise<void>;
 }
 
@@ -300,6 +299,7 @@ async function executeCommand(
   }
 
   const args = params.argumentsText.trim();
+  const threadId = getScopeFromContext(ctx)?.threadId ?? null;
   await ctx.reply(formatExecutingCommandMessage(params.commandName, args));
 
   const session = await ensureSessionForProject(ctx, params.projectDirectory);
@@ -309,7 +309,6 @@ async function executeCommand(
 
   await deps.ensureEventSubscription(session.directory);
   summaryAggregator.setSession(session.id);
-  summaryAggregator.setBotAndChatId(deps.bot, ctx.chat.id);
 
   const sessionIsBusy = await isSessionBusy(session.id, session.directory);
   if (sessionIsBusy) {
@@ -345,7 +344,9 @@ async function executeCommand(
           args,
         });
         logger.error("[Commands] session.command error details:", error);
-        void ctx.api.sendMessage(ctx.chat!.id, t("commands.execute_error")).catch(() => {});
+        void ctx.api
+          .sendMessage(ctx.chat!.id, t("commands.execute_error"), getThreadSendOptions(threadId))
+          .catch(() => {});
         return;
       }
 
@@ -360,7 +361,9 @@ async function executeCommand(
         args,
       });
       logger.error("[Commands] session.command background failure details:", error);
-      void ctx.api.sendMessage(ctx.chat!.id, t("commands.execute_error")).catch(() => {});
+      void ctx.api
+        .sendMessage(ctx.chat!.id, t("commands.execute_error"), getThreadSendOptions(threadId))
+        .catch(() => {});
     },
   });
 }

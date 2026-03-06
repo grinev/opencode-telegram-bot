@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createAgentKeyboard,
+  createDmKeyboard,
   createMainKeyboard,
   removeKeyboard,
 } from "../../../src/bot/utils/keyboard.js";
@@ -16,8 +17,8 @@ describe("bot/utils/keyboard", () => {
       modelID: "openai/gpt-4o",
     });
 
-    expect(getButtonText(keyboard.keyboard[0][0])).toBe("🛠️ Build Mode");
-    expect(getButtonText(keyboard.keyboard[0][1])).toBe("📊 0");
+    expect(getButtonText(keyboard.keyboard[0][0])).toBe("📊 Controls");
+    expect(getButtonText(keyboard.keyboard[0][1])).toBe("🛠️ Build Mode");
     expect(getButtonText(keyboard.keyboard[1][0])).toBe("🤖 openrouter\nopenai/gpt-4o");
     expect(getButtonText(keyboard.keyboard[1][1])).toBe("💡 Default");
     expect(keyboard.resize_keyboard).toBe(true);
@@ -38,8 +39,8 @@ describe("bot/utils/keyboard", () => {
       "⚡ Fast",
     );
 
-    expect(getButtonText(keyboard.keyboard[0][0])).toBe("📋 Plan Mode");
-    expect(getButtonText(keyboard.keyboard[0][1])).toBe("📊 150K / 1.5M (10%)");
+    expect(getButtonText(keyboard.keyboard[0][0])).toBe("📊 150K / 1.5M (10%)");
+    expect(getButtonText(keyboard.keyboard[0][1])).toBe("📋 Plan Mode");
     expect(getButtonText(keyboard.keyboard[1][1])).toBe("⚡ Fast");
   });
 
@@ -52,5 +53,16 @@ describe("bot/utils/keyboard", () => {
     expect(keyboard.is_persistent).toBe(true);
 
     expect(removeKeyboard()).toEqual({ remove_keyboard: true });
+  });
+
+  it("creates DM keyboard with utility commands", () => {
+    const keyboard = createDmKeyboard();
+
+    expect(getButtonText(keyboard.keyboard[0][0])).toBe("/status");
+    expect(getButtonText(keyboard.keyboard[0][1])).toBe("/help");
+    expect(getButtonText(keyboard.keyboard[1][0])).toBe("/opencode_start");
+    expect(getButtonText(keyboard.keyboard[1][1])).toBe("/opencode_stop");
+    expect(keyboard.resize_keyboard).toBe(true);
+    expect(keyboard.is_persistent).toBe(true);
   });
 });

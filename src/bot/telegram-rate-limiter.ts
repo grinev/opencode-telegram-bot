@@ -1,4 +1,5 @@
 import { logger } from "../utils/logger.js";
+import { createScopeKeyFromParams } from "./scope.js";
 
 const GLOBAL_MIN_INTERVAL_MS = 40;
 const PER_CHAT_MIN_INTERVAL_MS = 1100;
@@ -7,6 +8,7 @@ const GROUP_LIMIT_PER_WINDOW = 20;
 
 const RATE_LIMITED_METHODS = new Set<string>([
   "sendMessage",
+  "editMessageText",
   "sendDocument",
   "sendPhoto",
   "sendAudio",
@@ -21,6 +23,7 @@ interface QueueJob {
   scopeKey: string | null;
   chatId: number | null;
   isGroupLike: boolean;
+  notBefore: number;
   run: () => Promise<unknown>;
   resolve: (value: unknown) => void;
   reject: (error: unknown) => void;
@@ -59,12 +62,26 @@ function scopeKeyFromPayload(payload: unknown): string | null {
     return null;
   }
 
-  const threadId = parseThreadId(payload);
-  if (threadId !== null) {
-    return `${chatId}:${threadId}`;
+  if (chatId > 0) {
+    return createScopeKeyFromParams({
+      chatId,
+      context: "dm",
+    });
   }
 
-  return chatId > 0 ? `dm:${chatId}` : `chat:${chatId}`;
+  const threadId = parseThreadId(payload);
+  if (threadId !== null) {
+    return createScopeKeyFromParams({
+      chatId,
+      threadId,
+      context: threadId === 1 ? "group-general" : "group-topic",
+    });
+  }
+
+  return createScopeKeyFromParams({
+    chatId,
+    context: "group-general",
+  });
 }
 
 function isGroupLikeChat(chatId: number | null): boolean {
@@ -120,6 +137,7 @@ export class TelegramRateLimiter {
       scopeKey: scopeKeyFromPayload(payload),
       chatId,
       isGroupLike: isGroupLikeChat(chatId),
+      notBefore: 0,
       run,
       resolve: () => undefined,
       reject: () => undefined,
@@ -148,13 +166,50 @@ export class TelegramRateLimiter {
     void this.processLoop();
   }
 
-  private findNextIndex(): number {
-    if (!this.activeScopeKey) {
-      return 0;
+  private findNextIndex(now: number): { index: number; waitMs: number } {
+    let prioritizedReadyIndex = -1;
+    let firstReadyIndex = -1;
+    let minWaitMs = Number.POSITIVE_INFINITY;
+    let minWaitIndex = 0;
+
+    for (let index = 0; index < this.queue.length; index++) {
+      const job = this.queue[index];
+      const waitMs = this.getWaitMs(job, now);
+
+      if (waitMs <= 0) {
+        if (
+          this.activeScopeKey &&
+          prioritizedReadyIndex < 0 &&
+          job.scopeKey === this.activeScopeKey
+        ) {
+          prioritizedReadyIndex = index;
+        }
+
+        if (firstReadyIndex < 0) {
+          firstReadyIndex = index;
+        }
+
+        continue;
+      }
+
+      if (waitMs < minWaitMs) {
+        minWaitMs = waitMs;
+        minWaitIndex = index;
+      }
     }
 
-    const prioritized = this.queue.findIndex((job) => job.scopeKey === this.activeScopeKey);
-    return prioritized >= 0 ? prioritized : 0;
+    if (prioritizedReadyIndex >= 0) {
+      return { index: prioritizedReadyIndex, waitMs: 0 };
+    }
+
+    if (firstReadyIndex >= 0) {
+      return { index: firstReadyIndex, waitMs: 0 };
+    }
+
+    return {
+      index: minWaitIndex,
+      waitMs: Number.isFinite(minWaitMs) ? Math.max(1, minWaitMs) : 1,
+    };
   }
 
   private pruneGroupWindow(chatId: number, now: number): number[] {
@@ -164,9 +219,10 @@ export class TelegramRateLimiter {
     return pruned;
   }
 
-  private getWaitMs(job: QueueJob): number {
-    const now = Date.now();
+  private getWaitMs(job: QueueJob, now: number = Date.now()): number {
     const waits: number[] = [];
+
+    waits.push(job.notBefore - now);
 
     waits.push(this.lastGlobalSentAt + GLOBAL_MIN_INTERVAL_MS - now);
 
@@ -200,40 +256,44 @@ export class TelegramRateLimiter {
     }
   }
 
-  private async executeJob(job: QueueJob): Promise<void> {
-    while (true) {
-      const waitMs = this.getWaitMs(job);
-      if (waitMs > 0) {
-        await sleep(waitMs);
+  private async executeJob(job: QueueJob): Promise<"done" | "retry"> {
+    try {
+      const result = await job.run();
+      this.markSent(job);
+      job.resolve(result);
+      return "done";
+    } catch (error) {
+      const retryAfterMs = getRetryAfterMs(error);
+      if (!retryAfterMs) {
+        job.reject(error);
+        return "done";
       }
 
-      try {
-        const result = await job.run();
-        this.markSent(job);
-        job.resolve(result);
-        return;
-      } catch (error) {
-        const retryAfterMs = getRetryAfterMs(error);
-        if (!retryAfterMs) {
-          job.reject(error);
-          return;
-        }
-
-        const cappedDelay = Math.min(retryAfterMs + 100, 10_000);
-        logger.warn(
-          `[RateLimiter] Telegram 429 for ${job.method}; delaying ${cappedDelay}ms and retrying`,
-        );
-        await sleep(cappedDelay);
-      }
+      const cappedDelay = Math.min(retryAfterMs + 100, 10_000);
+      job.notBefore = Date.now() + cappedDelay;
+      logger.warn(
+        `[RateLimiter] Telegram 429 for ${job.method}; requeue in ${cappedDelay}ms (queue=${this.queue.length + 1})`,
+      );
+      return "retry";
     }
   }
 
   private async processLoop(): Promise<void> {
     try {
       while (this.queue.length > 0) {
-        const index = this.findNextIndex();
+        const now = Date.now();
+        const selection = this.findNextIndex(now);
+        if (selection.waitMs > 0) {
+          await sleep(selection.waitMs);
+          continue;
+        }
+
+        const index = selection.index;
         const [job] = this.queue.splice(index, 1);
-        await this.executeJob(job);
+        const outcome = await this.executeJob(job);
+        if (outcome === "retry") {
+          this.queue.push(job);
+        }
       }
     } finally {
       this.processing = false;

@@ -9,7 +9,29 @@ import {
 } from "./inline-menu.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { getScopeFromContext, getScopeKeyFromContext, getThreadSendOptions } from "../scope.js";
+import {
+  GENERAL_TOPIC_THREAD_ID,
+  SCOPE_CONTEXT,
+  getChatActionThreadOptions,
+  getScopeFromContext,
+  getScopeKeyFromContext,
+  getThreadSendOptions,
+} from "../scope.js";
+import { TELEGRAM_CHAT_ACTION } from "../telegram-constants.js";
+import { CHAT_TYPE, TELEGRAM_CHAT_FIELD } from "../constants.js";
+
+function isGeneralForumScope(ctx: Context): boolean {
+  const scope = getScopeFromContext(ctx);
+  const isForumEnabled =
+    ctx.chat?.type === CHAT_TYPE.SUPERGROUP &&
+    Reflect.get(ctx.chat, TELEGRAM_CHAT_FIELD.IS_FORUM) === true;
+
+  return Boolean(
+    isForumEnabled &&
+    scope?.context === SCOPE_CONTEXT.GROUP_GENERAL &&
+    (scope.threadId === null || scope.threadId === GENERAL_TOPIC_THREAD_ID),
+  );
+}
 
 /**
  * Build inline keyboard with compact confirmation menu
@@ -32,6 +54,14 @@ export async function handleContextButtonPress(ctx: Context): Promise<void> {
   logger.debug("[ContextHandler] Context button pressed");
   const scope = getScopeFromContext(ctx);
   const scopeKey = getScopeKeyFromContext(ctx);
+
+  if (isGeneralForumScope(ctx)) {
+    await ctx.reply(
+      t("context.general_not_available"),
+      getThreadSendOptions(scope?.threadId ?? null),
+    );
+    return;
+  }
 
   const session = getCurrentSession(scopeKey);
 
@@ -71,6 +101,14 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
   try {
     const scope = getScopeFromContext(ctx);
     const scopeKey = getScopeKeyFromContext(ctx);
+
+    if (isGeneralForumScope(ctx)) {
+      clearActiveInlineMenu("context_general_scope", scopeKey);
+      await ctx.answerCallbackQuery({ text: t("context.general_not_available_callback") });
+      await ctx.deleteMessage().catch(() => {});
+      return true;
+    }
+
     const session = getCurrentSession(scopeKey);
 
     if (!session) {
@@ -96,7 +134,11 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
     );
 
     // Show typing indicator
-    await ctx.api.sendChatAction(ctx.chat!.id, "typing");
+    await ctx.api.sendChatAction(
+      ctx.chat!.id,
+      TELEGRAM_CHAT_ACTION.TYPING,
+      getChatActionThreadOptions(scope?.threadId ?? null),
+    );
 
     const storedModel = getStoredModel(scopeKey);
 

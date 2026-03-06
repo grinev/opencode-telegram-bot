@@ -1,18 +1,21 @@
-import { opencodeClient } from "./client.js";
 import { Event } from "@opencode-ai/sdk/v2";
+import { opencodeClient } from "./client.js";
 import { logger } from "../utils/logger.js";
 
-type EventCallback = (event: Event) => void;
+type EventCallback = (event: Event) => void | Promise<void>;
+
+interface DirectoryStreamWorker {
+  directory: string;
+  callbacks: Set<EventCallback>;
+  abortController: AbortController;
+  loopPromise: Promise<void> | null;
+}
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 15000;
 const FATAL_NO_STREAM_ERROR = "No stream returned from event subscription";
 
-let eventStream: AsyncGenerator<Event, unknown, unknown> | null = null;
-let eventCallback: EventCallback | null = null;
-let isListening = false;
-let activeDirectory: string | null = null;
-let streamAbortController: AbortController | null = null;
+const workersByDirectory = new Map<string, DirectoryStreamWorker>();
 
 function getReconnectDelayMs(attempt: number): number {
   const exponentialDelay = RECONNECT_BASE_DELAY_MS * Math.pow(2, Math.max(0, attempt - 1));
@@ -27,12 +30,12 @@ function waitWithAbort(ms: number, signal: AbortSignal): Promise<boolean> {
     }
 
     const onAbort = () => {
-      clearTimeout(timeout);
+      clearTimeout(timeoutId);
       signal.removeEventListener("abort", onAbort);
       resolve(false);
     };
 
-    const timeout = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       signal.removeEventListener("abort", onAbort);
       resolve(true);
     }, ms);
@@ -41,137 +44,176 @@ function waitWithAbort(ms: number, signal: AbortSignal): Promise<boolean> {
   });
 }
 
-export async function subscribeToEvents(directory: string, callback: EventCallback): Promise<void> {
-  if (isListening && activeDirectory === directory) {
-    eventCallback = callback;
-    logger.debug(`Event listener already running for ${directory}`);
-    return;
+function getOrCreateWorker(directory: string): DirectoryStreamWorker {
+  const existingWorker = workersByDirectory.get(directory);
+  if (existingWorker) {
+    return existingWorker;
   }
 
-  if (isListening && activeDirectory !== directory) {
-    logger.info(`Stopping event listener for ${activeDirectory}, starting for ${directory}`);
-    streamAbortController?.abort();
-    streamAbortController = null;
-    isListening = false;
-    activeDirectory = null;
-  }
+  const nextWorker: DirectoryStreamWorker = {
+    directory,
+    callbacks: new Set<EventCallback>(),
+    abortController: new AbortController(),
+    loopPromise: null,
+  };
 
-  const controller = new AbortController();
+  workersByDirectory.set(directory, nextWorker);
+  return nextWorker;
+}
 
-  activeDirectory = directory;
-  eventCallback = callback;
-  isListening = true;
-  streamAbortController = controller;
-
-  try {
-    let reconnectAttempt = 0;
-
-    while (isListening && activeDirectory === directory && !controller.signal.aborted) {
+function dispatchEvent(worker: DirectoryStreamWorker, event: Event): void {
+  const callbacks = Array.from(worker.callbacks);
+  for (const callback of callbacks) {
+    setImmediate(() => {
       try {
-        const result = await opencodeClient.event.subscribe(
-          { directory },
-          { signal: controller.signal },
-        );
-
-        if (!result.stream) {
-          throw new Error(FATAL_NO_STREAM_ERROR);
-        }
-
-        reconnectAttempt = 0;
-        eventStream = result.stream;
-
-        for await (const event of eventStream) {
-          if (!isListening || activeDirectory !== directory || controller.signal.aborted) {
-            logger.debug(`Event listener stopped or changed directory, breaking loop`);
-            break;
-          }
-
-          // CRITICAL: Explicitly yield to the event loop BEFORE processing the event
-          // This allows grammY to handle getUpdates between SSE events
-          await new Promise<void>((resolve) => setImmediate(resolve));
-
-          if (eventCallback) {
-            // Use setImmediate to avoid blocking the event loop
-            // and let grammY process incoming Telegram updates
-            const callbackSnapshot = eventCallback;
-            setImmediate(() => callbackSnapshot(event));
-          }
-        }
-
-        eventStream = null;
-
-        if (!isListening || activeDirectory !== directory || controller.signal.aborted) {
-          break;
-        }
-
-        reconnectAttempt++;
-        const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
-        logger.warn(
-          `Event stream ended for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})`,
-        );
-
-        const shouldContinue = await waitWithAbort(reconnectDelay, controller.signal);
-        if (!shouldContinue) {
-          break;
+        const result = callback(event);
+        if (result && typeof (result as PromiseLike<unknown>).then === "function") {
+          void (result as PromiseLike<unknown>).then(undefined, (error) => {
+            logger.error(
+              "[Events] Async callback rejected",
+              { directory: worker.directory, eventType: event.type },
+              error,
+            );
+          });
         }
       } catch (error) {
-        eventStream = null;
-
-        if (controller.signal.aborted || !isListening || activeDirectory !== directory) {
-          logger.info("Event listener aborted");
-          return;
-        }
-
-        if (error instanceof Error && error.message === FATAL_NO_STREAM_ERROR) {
-          logger.error("Event stream fatal error:", error);
-          throw error;
-        }
-
-        reconnectAttempt++;
-        const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
         logger.error(
-          `Event stream error for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})`,
+          "[Events] Event callback failed",
+          { directory: worker.directory, eventType: event.type },
           error,
         );
+      }
+    });
+  }
+}
 
-        const shouldContinue = await waitWithAbort(reconnectDelay, controller.signal);
-        if (!shouldContinue) {
+async function runWorkerLoop(worker: DirectoryStreamWorker): Promise<void> {
+  let reconnectAttempt = 0;
+  const { directory, abortController } = worker;
+
+  while (!abortController.signal.aborted && worker.callbacks.size > 0) {
+    try {
+      const result = await opencodeClient.event.subscribe(
+        { directory },
+        { signal: abortController.signal },
+      );
+
+      if (!result.stream) {
+        throw new Error(FATAL_NO_STREAM_ERROR);
+      }
+
+      reconnectAttempt = 0;
+
+      for await (const event of result.stream) {
+        if (abortController.signal.aborted || worker.callbacks.size === 0) {
           break;
         }
-      }
-    }
-  } catch (error) {
-    if (controller.signal.aborted) {
-      logger.info("Event listener aborted");
-      return;
-    }
 
-    logger.error("Event stream error:", error);
-    isListening = false;
-    activeDirectory = null;
-    streamAbortController = null;
-    throw error;
-  } finally {
-    if (streamAbortController === controller) {
-      if (isListening && activeDirectory === directory && !controller.signal.aborted) {
-        logger.warn(`Event stream ended for ${directory}, listener marked as disconnected`);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        dispatchEvent(worker, event);
       }
 
-      streamAbortController = null;
-      eventStream = null;
-      eventCallback = null;
-      isListening = false;
-      activeDirectory = null;
+      if (abortController.signal.aborted || worker.callbacks.size === 0) {
+        break;
+      }
+
+      reconnectAttempt++;
+      const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
+      logger.warn(`[Events] Stream ended, reconnecting`, {
+        directory,
+        reconnectAttempt,
+        reconnectDelay,
+      });
+
+      const shouldContinue = await waitWithAbort(reconnectDelay, abortController.signal);
+      if (!shouldContinue) {
+        break;
+      }
+    } catch (error) {
+      if (abortController.signal.aborted || worker.callbacks.size === 0) {
+        break;
+      }
+
+      if (error instanceof Error && error.message === FATAL_NO_STREAM_ERROR) {
+        logger.error("[Events] Fatal event stream error", { directory }, error);
+        break;
+      }
+
+      reconnectAttempt++;
+      const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
+      logger.error(
+        `[Events] Stream failed, reconnecting`,
+        { directory, reconnectAttempt, reconnectDelay },
+        error,
+      );
+
+      const shouldContinue = await waitWithAbort(reconnectDelay, abortController.signal);
+      if (!shouldContinue) {
+        break;
+      }
     }
   }
 }
 
-export function stopEventListening(): void {
-  streamAbortController?.abort();
-  streamAbortController = null;
-  isListening = false;
-  eventCallback = null;
-  eventStream = null;
-  activeDirectory = null;
-  logger.info("Event listener stopped");
+function ensureWorkerStarted(worker: DirectoryStreamWorker): void {
+  if (worker.loopPromise) {
+    return;
+  }
+
+  worker.loopPromise = runWorkerLoop(worker)
+    .catch((error) => {
+      logger.error(
+        "[Events] Worker loop failed unexpectedly",
+        { directory: worker.directory },
+        error,
+      );
+    })
+    .finally(() => {
+      worker.loopPromise = null;
+      if (worker.callbacks.size === 0 || worker.abortController.signal.aborted) {
+        workersByDirectory.delete(worker.directory);
+      }
+    });
+}
+
+export async function subscribeToEvents(directory: string, callback: EventCallback): Promise<void> {
+  const worker = getOrCreateWorker(directory);
+  worker.callbacks.add(callback);
+  ensureWorkerStarted(worker);
+}
+
+export function unsubscribeFromEvents(directory: string, callback: EventCallback): void {
+  const worker = workersByDirectory.get(directory);
+  if (!worker) {
+    return;
+  }
+
+  worker.callbacks.delete(callback);
+  if (worker.callbacks.size > 0) {
+    return;
+  }
+
+  worker.abortController.abort();
+  workersByDirectory.delete(directory);
+}
+
+export function stopEventListening(directory?: string): void {
+  if (directory) {
+    const worker = workersByDirectory.get(directory);
+    if (!worker) {
+      return;
+    }
+
+    worker.abortController.abort();
+    workersByDirectory.delete(directory);
+    logger.info("[Events] Stopped event listener", { directory });
+    return;
+  }
+
+  for (const [workerDirectory, worker] of workersByDirectory.entries()) {
+    worker.abortController.abort();
+    workersByDirectory.delete(workerDirectory);
+  }
+
+  logger.info("[Events] Stopped all event listeners");
 }

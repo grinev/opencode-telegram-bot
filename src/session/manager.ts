@@ -5,6 +5,8 @@ import {
   clearSession as clearSettingsSession,
   SessionInfo,
 } from "../settings/manager.js";
+import { parseScopeKey, SCOPE_CONTEXT } from "../bot/scope.js";
+import { logger } from "../utils/logger.js";
 
 export type { SessionInfo };
 
@@ -13,6 +15,10 @@ const GLOBAL_SCOPE_KEY = "global";
 const sessionsByScope = new Map<string, SessionInfo>();
 const scopeBySessionId = new Map<string, string>();
 let hydrated = false;
+
+function isTopicScopeKey(scopeKey: string): boolean {
+  return parseScopeKey(scopeKey)?.context === SCOPE_CONTEXT.GROUP_TOPIC;
+}
 
 function ensureSessionsLoaded(): void {
   if (hydrated) {
@@ -43,8 +49,20 @@ export function setCurrentSession(
   ensureSessionsLoaded();
 
   const previous = sessionsByScope.get(scopeKey);
+  if (isTopicScopeKey(scopeKey) && previous && previous.id !== sessionInfo.id) {
+    logger.warn(
+      `[SessionManager] Rejecting session switch in immutable topic scope: scope=${scopeKey}, existing=${previous.id}, requested=${sessionInfo.id}`,
+    );
+    return;
+  }
+
   if (previous && previous.id !== sessionInfo.id) {
     scopeBySessionId.delete(previous.id);
+  }
+
+  const previousScopeForSession = scopeBySessionId.get(sessionInfo.id);
+  if (previousScopeForSession && previousScopeForSession !== scopeKey) {
+    sessionsByScope.delete(previousScopeForSession);
   }
 
   sessionsByScope.set(scopeKey, sessionInfo);

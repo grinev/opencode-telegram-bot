@@ -2,8 +2,15 @@ import { CommandContext, Context } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import {
+  TOPIC_SESSION_STATUS,
+  getCurrentProject,
+  setCurrentAgent,
+  setCurrentModel,
+  setCurrentProject,
+} from "../../settings/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
+import { INTERACTION_CLEAR_REASON } from "../../interaction/constants.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
@@ -16,7 +23,34 @@ import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { getDateLocale, t } from "../../i18n/index.js";
-import { getScopeFromContext, getScopeKeyFromContext, getThreadSendOptions } from "../scope.js";
+import { getStoredAgent } from "../../agent/manager.js";
+import { getStoredModel } from "../../model/manager.js";
+import { createMainKeyboard } from "../utils/keyboard.js";
+import { formatVariantForButton } from "../../variant/manager.js";
+import {
+  createScopeKeyFromParams,
+  GENERAL_TOPIC_THREAD_ID,
+  GLOBAL_SCOPE_KEY,
+  SCOPE_CONTEXT,
+  getScopeFromContext,
+  getScopeKeyFromContext,
+  getThreadSendOptions,
+  isTopicScope,
+} from "../scope.js";
+import {
+  BOT_I18N_KEY,
+  CHAT_TYPE,
+  TELEGRAM_CHAT_FIELD,
+  TELEGRAM_ERROR_MARKER,
+} from "../constants.js";
+import {
+  getTopicBindingBySessionId,
+  getTopicBindingsByChat,
+  registerTopicSessionBinding,
+} from "../../topic/manager.js";
+import { TOPIC_COLORS } from "../../topic/colors.js";
+import { formatTopicTitle } from "../../topic/title-format.js";
+import { buildTopicThreadLink } from "../utils/topic-link.js";
 
 const SESSION_CALLBACK_PREFIX = "session:";
 const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
@@ -76,8 +110,58 @@ function formatSessionsSelectText(page: number): string {
   return t("sessions.select_page", { page: page + 1 });
 }
 
+function isGeneralForumScope(ctx: Context): boolean {
+  const scope = getScopeFromContext(ctx);
+  const isForumEnabled =
+    ctx.chat?.type === CHAT_TYPE.SUPERGROUP &&
+    Reflect.get(ctx.chat, TELEGRAM_CHAT_FIELD.IS_FORUM) === true;
+
+  return Boolean(
+    isForumEnabled &&
+    scope?.context === SCOPE_CONTEXT.GROUP_GENERAL &&
+    (scope.threadId === null || scope.threadId === GENERAL_TOPIC_THREAD_ID),
+  );
+}
+
+function formatGeneralOverview(chatId: number): string {
+  const bindings = getTopicBindingsByChat(chatId).filter(
+    (binding) => binding.threadId !== GENERAL_TOPIC_THREAD_ID,
+  );
+
+  if (bindings.length === 0) {
+    return t(BOT_I18N_KEY.SESSIONS_GENERAL_EMPTY);
+  }
+
+  const lines = [t(BOT_I18N_KEY.SESSIONS_GENERAL_OVERVIEW)];
+  for (const binding of bindings) {
+    lines.push(
+      t(BOT_I18N_KEY.SESSIONS_GENERAL_ITEM, {
+        topic: binding.topicName ?? String(binding.threadId),
+        thread: String(binding.threadId),
+        status: binding.status,
+      }),
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function getErrorText(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message.toLowerCase();
+  }
+
+  const description =
+    typeof error === "object" && error !== null ? Reflect.get(error, "description") : null;
+  if (typeof description === "string") {
+    return description.toLowerCase();
+  }
+
+  return String(error).toLowerCase();
+}
+
 function clearInteractionWithScope(reason: string, scopeKey: string): void {
-  if (scopeKey === "global") {
+  if (scopeKey === GLOBAL_SCOPE_KEY) {
     clearAllInteractionState(reason);
     return;
   }
@@ -144,8 +228,28 @@ function buildSessionsKeyboard(pageData: SessionPage, pageSize: number): InlineK
 
 export async function sessionsCommand(ctx: CommandContext<Context>) {
   try {
+    const scope = getScopeFromContext(ctx);
+    const scopeKey = scope?.key ?? GLOBAL_SCOPE_KEY;
+
+    if (isTopicScope(scope)) {
+      await ctx.reply(
+        t(BOT_I18N_KEY.SESSIONS_TOPIC_LOCKED),
+        getThreadSendOptions(scope?.threadId ?? null),
+      );
+      return;
+    }
+
+    const isGeneralScope = Boolean(ctx.chat && isGeneralForumScope(ctx));
+
+    if (ctx.chat && isGeneralScope) {
+      await ctx.reply(
+        formatGeneralOverview(ctx.chat.id),
+        getThreadSendOptions(scope?.threadId ?? null),
+      );
+    }
+
     const pageSize = config.bot.sessionsListLimit;
-    const currentProject = getCurrentProject(getScopeKeyFromContext(ctx));
+    const currentProject = getCurrentProject(scopeKey);
 
     if (!currentProject) {
       await ctx.reply(t("sessions.project_not_selected"));
@@ -182,7 +286,7 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
 export async function handleSessionSelect(ctx: Context): Promise<boolean> {
   const scopeKey = getScopeKeyFromContext(ctx);
   const scope = getScopeFromContext(ctx);
-  const usePinned = ctx.chat?.type !== "private";
+  const usePinned = ctx.chat?.type !== CHAT_TYPE.PRIVATE;
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data || !callbackQuery.data.startsWith(SESSION_CALLBACK_PREFIX)) {
     return false;
@@ -243,6 +347,128 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       throw error || new Error("Failed to get session details");
     }
 
+    const inGeneralForum = Boolean(ctx.chat && isGeneralForumScope(ctx));
+    if (inGeneralForum && ctx.chat) {
+      const existingBinding = getTopicBindingBySessionId(session.id);
+      if (existingBinding && existingBinding.chatId === ctx.chat.id) {
+        const existingLink = buildTopicThreadLink(ctx.chat, existingBinding.threadId);
+        if (existingLink) {
+          clearInteractionWithScope(INTERACTION_CLEAR_REASON.SESSION_SWITCHED, scopeKey);
+          await ctx.answerCallbackQuery();
+          await ctx.reply(
+            t(BOT_I18N_KEY.SESSIONS_BOUND_TOPIC_LINK, {
+              title: session.title,
+              topic: existingBinding.topicName ?? String(existingBinding.threadId),
+              url: existingLink,
+            }),
+            getThreadSendOptions(scope?.threadId ?? null),
+          );
+          await ctx.deleteMessage().catch(() => {});
+          return true;
+        }
+      }
+
+      const createdTopic = await ctx.api.createForumTopic(
+        ctx.chat.id,
+        formatTopicTitle(session.title, session.title),
+        {
+          icon_color: TOPIC_COLORS.BLUE,
+        },
+      );
+
+      const topicThreadId = createdTopic.message_thread_id;
+      const topicScopeKey = createScopeKeyFromParams({
+        chatId: ctx.chat.id,
+        threadId: topicThreadId,
+        context: SCOPE_CONTEXT.GROUP_TOPIC,
+      });
+
+      const sessionInfo: SessionInfo = {
+        id: session.id,
+        title: session.title,
+        directory: currentProject.worktree,
+      };
+
+      setCurrentProject(currentProject, topicScopeKey);
+      setCurrentSession(sessionInfo, topicScopeKey);
+      setCurrentAgent(getStoredAgent(scopeKey), topicScopeKey);
+      setCurrentModel(getStoredModel(scopeKey), topicScopeKey);
+
+      registerTopicSessionBinding({
+        scopeKey: topicScopeKey,
+        chatId: ctx.chat.id,
+        threadId: topicThreadId,
+        sessionId: session.id,
+        projectId: currentProject.id,
+        projectWorktree: currentProject.worktree,
+        topicName: formatTopicTitle(session.title, session.title),
+        status: TOPIC_SESSION_STATUS.ACTIVE,
+      });
+
+      summaryAggregator.setSession(session.id);
+      clearInteractionWithScope(INTERACTION_CLEAR_REASON.SESSION_SWITCHED, scopeKey);
+      clearInteractionWithScope(INTERACTION_CLEAR_REASON.SESSION_SWITCHED, topicScopeKey);
+
+      if (!pinnedMessageManager.isInitialized(topicScopeKey)) {
+        pinnedMessageManager.initialize(ctx.api, ctx.chat.id, topicScopeKey, topicThreadId);
+      }
+
+      keyboardManager.initialize(ctx.api, ctx.chat.id, topicScopeKey);
+
+      try {
+        await pinnedMessageManager.onSessionChange(session.id, session.title, topicScopeKey);
+        await pinnedMessageManager.loadContextFromHistory(
+          session.id,
+          currentProject.worktree,
+          topicScopeKey,
+        );
+      } catch (err) {
+        logger.error("[Sessions] Error preparing topic pinned message", err);
+      }
+
+      const topicContextInfo =
+        pinnedMessageManager.getContextInfo(topicScopeKey) ??
+        keyboardManager.getContextInfo(topicScopeKey) ??
+        (pinnedMessageManager.getContextLimit(topicScopeKey) > 0
+          ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit(topicScopeKey) }
+          : null);
+      const topicModel = getStoredModel(topicScopeKey);
+      const topicAgent = getStoredAgent(topicScopeKey);
+      const variantName = formatVariantForButton(topicModel.variant || "default");
+      const topicKeyboard = createMainKeyboard(
+        topicAgent,
+        topicModel,
+        topicContextInfo ?? undefined,
+        variantName,
+      );
+
+      await ctx.api.sendMessage(
+        ctx.chat.id,
+        t(BOT_I18N_KEY.NEW_TOPIC_CREATED, { title: session.title }),
+        {
+          ...getThreadSendOptions(topicThreadId),
+          reply_markup: topicKeyboard,
+        },
+      );
+
+      const topicLink = buildTopicThreadLink(ctx.chat, topicThreadId);
+      if (!topicLink) {
+        throw new Error("Unable to build topic link");
+      }
+
+      await ctx.answerCallbackQuery();
+      await ctx.reply(
+        t(BOT_I18N_KEY.SESSIONS_CREATED_TOPIC_LINK, {
+          title: session.title,
+          topic: formatTopicTitle(session.title, session.title),
+          url: topicLink,
+        }),
+        getThreadSendOptions(scope?.threadId ?? null),
+      );
+      await ctx.deleteMessage().catch(() => {});
+      return true;
+    }
+
     logger.info(
       `[Bot] Session selected: id=${session.id}, title="${session.title}", project=${currentProject.worktree}`,
     );
@@ -254,7 +480,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
     };
     setCurrentSession(sessionInfo, scopeKey);
     summaryAggregator.setSession(session.id);
-    clearInteractionWithScope("session_switched", scopeKey);
+    clearInteractionWithScope(INTERACTION_CLEAR_REASON.SESSION_SWITCHED, scopeKey);
 
     await ctx.answerCallbackQuery();
 
@@ -353,9 +579,16 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
 
     await ctx.deleteMessage();
   } catch (error) {
-    clearInteractionWithScope("session_select_error", scopeKey);
+    clearInteractionWithScope(INTERACTION_CLEAR_REASON.SESSION_SELECT_ERROR, scopeKey);
     logger.error("[Sessions] Error selecting session:", error);
+    const errorText = getErrorText(error);
     await ctx.answerCallbackQuery();
+
+    if (errorText.includes(TELEGRAM_ERROR_MARKER.NOT_ENOUGH_RIGHTS_CREATE_TOPIC)) {
+      await ctx.reply(t(BOT_I18N_KEY.NEW_TOPIC_CREATE_NO_RIGHTS));
+      return true;
+    }
+
     if (scope?.threadId != null) {
       await ctx.reply(t("sessions.select_error"), getThreadSendOptions(scope.threadId));
     } else {

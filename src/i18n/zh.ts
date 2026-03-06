@@ -7,6 +7,9 @@ export const zh: I18nDictionary = {
   "cmd.description.sessions": "列出会话",
   "cmd.description.projects": "列出项目",
   "cmd.description.commands": "自定义命令",
+  "cmd.description.model": "选择模型",
+  "cmd.description.agent": "选择代理模式",
+  "cmd.description.cleanup": "关闭过期话题",
   "cmd.description.opencode_start": "启动 OpenCode 服务器",
   "cmd.description.opencode_stop": "停止 OpenCode 服务器",
   "cmd.description.help": "帮助",
@@ -101,6 +104,11 @@ export const zh: I18nDictionary = {
   "projects.selected":
     "✅ 已选择项目：{project}\n\n📋 会话已重置。请在此项目中使用 /sessions 或 /new。",
   "projects.select_error": "🔴 选择项目失败。",
+  "projects.locked.topic_scope":
+    "⚠️ 此话题已绑定自己的项目/会话范围。请仅在 General 中、创建话题前切换项目。",
+  "projects.locked.group_project":
+    "⚠️ 此群组已配置为项目：{project}。若要处理其他仓库，请创建新群组。",
+  "projects.locked.callback": "此群组已锁定项目切换。",
 
   "sessions.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
   "sessions.empty": "📭 未找到会话。\n\n使用 /new 创建新会话。",
@@ -112,6 +120,12 @@ export const zh: I18nDictionary = {
   "sessions.page_load_error_callback": "无法加载此页面。请重试。",
   "sessions.button.prev_page": "⬅️ 上一页",
   "sessions.button.next_page": "下一页 ➡️",
+  "sessions.topic_locked": "⚠️ 此话题已绑定当前会话。请在 General 话题中使用 /new 创建新话题。",
+  "sessions.general_overview": "话题会话概览：",
+  "sessions.general_item": "• {topic}（线程 #{thread}）- {status}",
+  "sessions.general_empty": "尚无会话话题。请使用 /new 创建。",
+  "sessions.bound_topic_link": "🔗 此会话的话题链接：{url}",
+  "sessions.created_topic_link": "✅ 已为此会话创建话题：{url}",
   "sessions.loading_context": "⏳ 正在加载上下文和最新消息...",
   "sessions.selected": "✅ 已选择会话：{title}",
   "sessions.select_error": "🔴 选择会话失败。",
@@ -122,7 +136,21 @@ export const zh: I18nDictionary = {
 
   "new.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
   "new.created": "✅ 新会话已创建：{title}",
+  "new.topic_only_in_general": "⚠️ 请在 General 话题中运行 /new 以创建专用会话话题。",
+  "new.requires_forum_general": "⚠️ /new 仅可在启用论坛的超级群 General 话题中使用。",
+  "new.topic_created": "✅ 会话话题已就绪：{title}",
+  "new.general_created": "✅ 已创建新的 OpenCode 会话和群组话题。",
+  "new.topic_create_error": "🔴 创建会话话题失败。请检查论坛权限后重试。",
+  "new.topic_create_no_rights":
+    "🔴 我无法在该群组创建论坛话题。请给机器人授予管理话题（Manage Topics）权限后再执行 /new。",
+  "new.general_open_link": "🔗 打开话题：{url}",
   "new.create_error": "🔴 OpenCode 服务器不可用，或创建会话时发生错误。",
+
+  "cleanup.topic_use_general": "⚠️ 请在 General 话题中运行 /cleanup。",
+  "cleanup.requires_forum_general": "⚠️ /cleanup 仅在启用论坛的超级群 General 话题中可用。",
+  "cleanup.no_topics": "✅ 没有需要清理的会话话题。",
+  "cleanup.result":
+    "🧹 清理完成。检查：{inspected}，关闭：{closed}，跳过：{skipped}，失败：{failed}。",
 
   "stop.no_active_session": "🛑 代理尚未启动\n\n使用 /new 创建会话，或通过 /sessions 选择一个。",
   "stop.in_progress": "🛑 已停止事件流，正在发送中止信号...\n\n等待代理停止。",
@@ -188,6 +216,8 @@ export const zh: I18nDictionary = {
   "context.no_active_session": "⚠️ 没有活动会话。使用 /new 创建会话",
   "context.confirm_text":
     '📊 会话 "{title}" 的上下文压缩\n\n这会通过移除历史中的旧消息来减少上下文占用。当前任务不会被中断。\n\n继续？',
+  "context.general_not_available": "⚠️ 上下文压缩仅在会话话题中可用，General 中不可用。",
+  "context.general_not_available_callback": "请先打开一个会话话题。",
   "context.callback_session_not_found": "未找到会话",
   "context.callback_compacting": "正在压缩上下文...",
   "context.progress": "⏳ 正在压缩上下文...",
@@ -240,10 +270,17 @@ export const zh: I18nDictionary = {
 
   "keyboard.agent_mode": "{emoji} {name} 模式",
   "keyboard.context": "📊 {used} / {limit} ({percent}%)",
-  "keyboard.context_empty": "📊 0",
+  "keyboard.context_empty": "📊 控制面板",
+  "keyboard.general_defaults": "新会话默认项：",
+  "keyboard.general_defaults_info":
+    "你在此群组中设置的这些默认项会应用到新创建的会话：\n• Agent\n• Model\n• Variant",
   "keyboard.variant": "💭 {name}",
   "keyboard.variant_default": "💡 默认",
   "keyboard.updated": "⌨️ 键盘已更新",
+  "keyboard.dm.status": "/status",
+  "keyboard.dm.help": "/help",
+  "keyboard.dm.opencode_start": "/opencode_start",
+  "keyboard.dm.opencode_stop": "/opencode_stop",
 
   "pinned.default_session_title": "新会话",
   "pinned.unknown": "未知",
@@ -346,4 +383,7 @@ export const zh: I18nDictionary = {
   "help.dm.hint": "请使用群组话题线程进行项目/会话工作。",
   "status.dm.title": "私聊状态概览",
   "status.dm.hint": "请使用群组话题线程运行 OpenCode 会话。",
+  "group.general.prompts_disabled":
+    "⚠️ General 话题中已禁用任务输入。请使用 /new 创建专用会话话题。",
+  "topic.unbound": "⚠️ 此话题尚未绑定会话。请前往 General 话题并执行 /new。",
 };

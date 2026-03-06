@@ -10,6 +10,7 @@ import { getStoredAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
+import { INTERACTION_CLEAR_REASON } from "../../interaction/constants.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
 import {
   appendInlineMenuCancelButton,
@@ -20,10 +21,20 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { config } from "../../config.js";
 import { ProjectInfo } from "../../settings/manager.js";
-import { getScopeKeyFromContext } from "../scope.js";
+import {
+  GLOBAL_SCOPE_KEY,
+  SCOPE_CONTEXT,
+  getScopeFromContext,
+  getScopeFromKey,
+  getScopeKeyFromContext,
+  getThreadSendOptions,
+} from "../scope.js";
+import { getTopicBindingsByChat } from "../../topic/manager.js";
+import { BOT_I18N_KEY, TELEGRAM_CHAT_FIELD } from "../constants.js";
 
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 const PROJECT_PAGE_CALLBACK_PREFIX = "projects:page:";
+const PROJECT_SELECT_CALLBACK_PREFIX = "project:";
 
 interface ProjectsPaginationRange {
   page: number;
@@ -176,7 +187,7 @@ function buildProjectsMenuView(
 }
 
 function clearInteractionWithScope(reason: string, scopeKey: string): void {
-  if (scopeKey === "global") {
+  if (scopeKey === GLOBAL_SCOPE_KEY) {
     clearAllInteractionState(reason);
     return;
   }
@@ -184,9 +195,70 @@ function clearInteractionWithScope(reason: string, scopeKey: string): void {
   clearAllInteractionState(reason, scopeKey);
 }
 
+function getConfiguredProjectName(scopeKey: string, chatId: number): string {
+  const currentProject = getCurrentProject(scopeKey);
+  if (currentProject?.name) {
+    return currentProject.name;
+  }
+
+  if (currentProject?.worktree) {
+    return currentProject.worktree;
+  }
+
+  const topicBinding = getTopicBindingsByChat(chatId).find((binding) =>
+    Boolean(binding.projectWorktree),
+  );
+  return topicBinding?.projectWorktree ?? t("pinned.unknown");
+}
+
+function getProjectLockState(
+  ctx: Context,
+  scopeKey: string,
+): { locked: boolean; messageKey?: string; projectName?: string } {
+  if (!ctx.chat) {
+    return { locked: false };
+  }
+
+  const scope = getScopeFromContext(ctx);
+  if (scope?.context === SCOPE_CONTEXT.GROUP_TOPIC) {
+    return {
+      locked: true,
+      messageKey: BOT_I18N_KEY.PROJECTS_LOCKED_TOPIC_SCOPE,
+    };
+  }
+
+  const isForumEnabled = Reflect.get(ctx.chat, TELEGRAM_CHAT_FIELD.IS_FORUM) === true;
+  if (!isForumEnabled) {
+    return { locked: false };
+  }
+
+  const hasTopicBindings = getTopicBindingsByChat(ctx.chat.id).length > 0;
+  if (!hasTopicBindings) {
+    return { locked: false };
+  }
+
+  return {
+    locked: true,
+    messageKey: BOT_I18N_KEY.PROJECTS_LOCKED_GROUP_PROJECT,
+    projectName: getConfiguredProjectName(scopeKey, ctx.chat.id),
+  };
+}
+
 export async function projectsCommand(ctx: CommandContext<Context>) {
   try {
     const scopeKey = getScopeKeyFromContext(ctx);
+    const lockState = getProjectLockState(ctx, scopeKey);
+    if (lockState.locked) {
+      const message =
+        lockState.messageKey === BOT_I18N_KEY.PROJECTS_LOCKED_GROUP_PROJECT
+          ? t(BOT_I18N_KEY.PROJECTS_LOCKED_GROUP_PROJECT, {
+              project: lockState.projectName ?? t("pinned.unknown"),
+            })
+          : t(BOT_I18N_KEY.PROJECTS_LOCKED_TOPIC_SCOPE);
+      await ctx.reply(message, getThreadSendOptions(getScopeFromContext(ctx)?.threadId ?? null));
+      return;
+    }
+
     await syncSessionDirectoryCache();
     const projects = await getProjects();
 
@@ -218,6 +290,15 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
 
   const page = parseProjectPageCallback(callbackQuery.data);
   if (page !== null) {
+    const lockState = getProjectLockState(ctx, scopeKey);
+    if (lockState.locked) {
+      await ctx.answerCallbackQuery({
+        text: t(BOT_I18N_KEY.PROJECTS_LOCKED_CALLBACK),
+        show_alert: true,
+      });
+      return true;
+    }
+
     const isActiveMenu = await ensureActiveInlineMenu(ctx, "project");
     if (!isActiveMenu) {
       return true;
@@ -244,11 +325,20 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     return true;
   }
 
-  if (!callbackQuery.data.startsWith("project:")) {
+  if (!callbackQuery.data.startsWith(PROJECT_SELECT_CALLBACK_PREFIX)) {
     return false;
   }
 
-  const projectId = callbackQuery.data.replace("project:", "");
+  const lockState = getProjectLockState(ctx, scopeKey);
+  if (lockState.locked) {
+    await ctx.answerCallbackQuery({
+      text: t(BOT_I18N_KEY.PROJECTS_LOCKED_CALLBACK),
+      show_alert: true,
+    });
+    return true;
+  }
+
+  const projectId = callbackQuery.data.replace(PROJECT_SELECT_CALLBACK_PREFIX, "");
 
   const isActiveMenu = await ensureActiveInlineMenu(ctx, "project");
   if (!isActiveMenu) {
@@ -269,7 +359,7 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
 
     setCurrentProject(selectedProject, scopeKey);
     clearSession(scopeKey);
-    clearInteractionWithScope("project_switched", scopeKey);
+    clearInteractionWithScope(INTERACTION_CLEAR_REASON.PROJECT_SWITCHED, scopeKey);
 
     // Clear pinned message when switching projects
     if (usePinned) {
@@ -303,18 +393,30 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     const currentModel = getStoredModel(scopeKey);
     const contextInfo = { tokensUsed: 0, tokensLimit: contextLimit };
     const variantName = formatVariantForButton(currentModel.variant || "default");
-    const keyboard = createMainKeyboard(currentAgent, currentModel, contextInfo, variantName);
+    const scope = getScopeFromKey(scopeKey);
+    const scopedKeyboard = createMainKeyboard(
+      currentAgent,
+      currentModel,
+      contextInfo,
+      variantName,
+      scope?.context === SCOPE_CONTEXT.GROUP_GENERAL
+        ? {
+            contextFirst: true,
+            contextLabel: t("keyboard.general_defaults"),
+          }
+        : undefined,
+    );
 
     const projectName = selectedProject.name || selectedProject.worktree;
 
     await ctx.answerCallbackQuery();
     await ctx.reply(t("projects.selected", { project: projectName }), {
-      reply_markup: keyboard,
+      reply_markup: scopedKeyboard,
     });
 
     await ctx.deleteMessage();
   } catch (error) {
-    clearInteractionWithScope("project_select_error", scopeKey);
+    clearInteractionWithScope(INTERACTION_CLEAR_REASON.PROJECT_SELECT_ERROR, scopeKey);
     logger.error("[Bot] Error selecting project:", error);
     await ctx.answerCallbackQuery();
     await ctx.reply(t("projects.select_error"));

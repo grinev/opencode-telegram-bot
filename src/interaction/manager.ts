@@ -4,6 +4,7 @@ import type {
   StartInteractionOptions,
   TransitionInteractionOptions,
 } from "./types.js";
+import { INTERACTION_CLEAR_REASON } from "./constants.js";
 import { logger } from "../utils/logger.js";
 
 export const DEFAULT_ALLOWED_INTERACTION_COMMANDS = ["/help", "/status", "/stop"] as const;
@@ -58,7 +59,7 @@ class InteractionManager {
     const currentState = this.stateByScope.get(scopeKey) ?? null;
 
     if (currentState) {
-      this.clear("state_replaced", scopeKey);
+      this.clear(INTERACTION_CLEAR_REASON.STATE_REPLACED, scopeKey);
     }
 
     if (typeof options.expiresInMs === "number") {

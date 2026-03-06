@@ -1,12 +1,12 @@
 import { Context } from "grammy";
-import { createMainKeyboard } from "../utils/keyboard.js";
+import { createDmKeyboard, createMainKeyboard } from "../utils/keyboard.js";
 import { getStoredAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { t } from "../../i18n/index.js";
-import { getScopeFromContext } from "../scope.js";
+import { SCOPE_CONTEXT, getScopeFromContext } from "../scope.js";
 
 export async function startCommand(ctx: Context): Promise<void> {
   const scope = getScopeFromContext(ctx);
@@ -15,7 +15,9 @@ export async function startCommand(ctx: Context): Promise<void> {
   const isPrivateChat = ctx.chat?.type === "private";
 
   if (isPrivateChat) {
-    await ctx.reply(`${t("start.welcome")}\n\n${t("start.welcome_dm")}`);
+    await ctx.reply(`${t("start.welcome")}\n\n${t("start.welcome_dm")}`, {
+      reply_markup: createDmKeyboard(),
+    });
     return;
   }
 
@@ -52,6 +54,12 @@ export async function startCommand(ctx: Context): Promise<void> {
     currentModel,
     contextInfo ?? undefined,
     variantName,
+    scope?.context === SCOPE_CONTEXT.GROUP_GENERAL
+      ? {
+          contextFirst: true,
+          contextLabel: t("keyboard.general_defaults"),
+        }
+      : undefined,
   );
 
   await ctx.reply(t("start.welcome"), { reply_markup: keyboard });

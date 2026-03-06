@@ -13,7 +13,7 @@ import {
   replyWithInlineMenu,
 } from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
-import { getScopeKeyFromContext } from "../scope.js";
+import { SCOPE_CONTEXT, getScopeFromKey, getScopeKeyFromContext } from "../scope.js";
 
 /**
  * Handle agent selection callback
@@ -68,11 +68,18 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
     const state = keyboardManager.getState(scopeKey);
     const variantName =
       state?.variantName ?? formatVariantForButton(currentModel.variant || "default");
+    const scope = getScopeFromKey(scopeKey);
     const keyboard = createMainKeyboard(
       agentName,
       currentModel,
       contextInfo ?? undefined,
       variantName,
+      scope?.context === SCOPE_CONTEXT.GROUP_GENERAL
+        ? {
+            contextFirst: true,
+            contextLabel: t("keyboard.general_defaults"),
+          }
+        : undefined,
     );
     const displayName = getAgentDisplayName(agentName);
 

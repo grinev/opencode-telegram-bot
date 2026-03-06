@@ -7,13 +7,14 @@ import { formatVariantForButton } from "../variant/manager.js";
 import { logger } from "../utils/logger.js";
 import type { ContextInfo, KeyboardState } from "./types.js";
 import { t } from "../i18n/index.js";
+import { SCOPE_CONTEXT, getScopeFromKey, getThreadIdFromScopeKey } from "../bot/scope.js";
 
 class KeyboardManager {
   private stateByScope: Map<string, KeyboardState> = new Map();
 
   private api: Api | null = null;
   private chatId: number | null = null;
-  private lastUpdateTime: number = 0;
+  private lastUpdateTimeByScope = new Map<string, number>();
   private readonly UPDATE_DEBOUNCE_MS = 2000;
 
   private getOrCreateState(scopeKey: string): KeyboardState {
@@ -80,11 +81,23 @@ class KeyboardManager {
 
   private buildKeyboard(scopeKey: string) {
     const state = this.getOrCreateState(scopeKey);
+    const scope = getScopeFromKey(scopeKey);
+    const effectiveContextInfo =
+      scope?.context === SCOPE_CONTEXT.GROUP_GENERAL ? undefined : (state.contextInfo ?? undefined);
+    const keyboardOptions =
+      scope?.context === SCOPE_CONTEXT.GROUP_GENERAL
+        ? {
+            contextFirst: true,
+            contextLabel: t("keyboard.general_defaults"),
+          }
+        : undefined;
+
     return createMainKeyboard(
       state.currentAgent,
       state.currentModel,
-      state.contextInfo ?? undefined,
+      effectiveContextInfo,
       state.variantName,
+      keyboardOptions,
     );
   }
 
@@ -101,16 +114,19 @@ class KeyboardManager {
     }
 
     const now = Date.now();
-    if (now - this.lastUpdateTime < this.UPDATE_DEBOUNCE_MS) {
+    const lastUpdateTime = this.lastUpdateTimeByScope.get(scopeKey) ?? 0;
+    if (now - lastUpdateTime < this.UPDATE_DEBOUNCE_MS) {
       return;
     }
 
-    this.lastUpdateTime = now;
+    this.lastUpdateTimeByScope.set(scopeKey, now);
 
     try {
       const keyboard = this.buildKeyboard(scopeKey);
+      const threadId = getThreadIdFromScopeKey(scopeKey);
       await this.api.sendMessage(targetChatId, t("keyboard.updated"), {
         reply_markup: keyboard,
+        ...(typeof threadId === "number" ? { message_thread_id: threadId } : {}),
       });
     } catch (err) {
       logger.error("[KeyboardManager] Failed to send keyboard update:", err);

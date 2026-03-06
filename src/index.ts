@@ -1,9 +1,12 @@
 import { resolveRuntimeMode, setRuntimeMode } from "./runtime/mode.js";
+import { installProcessErrorHandlers } from "./runtime/process-error-handlers.js";
 
 const EXIT_RUNTIME_ERROR = 1;
 const EXIT_INVALID_ARGS = 2;
 
 async function main(): Promise<void> {
+  installProcessErrorHandlers();
+
   const modeResult = resolveRuntimeMode({
     defaultMode: "sources",
     argv: process.argv.slice(2),

@@ -1,5 +1,4 @@
 import { Event, ToolState } from "@opencode-ai/sdk/v2";
-import type { Bot } from "grammy";
 import type { CodeFileData } from "./formatter.js";
 import { normalizePathForDisplay, prepareCodeFile } from "./formatter.js";
 import type { Question } from "../question/types.js";
@@ -43,6 +42,8 @@ type QuestionCallback = (sessionId: string, questions: Question[], requestID: st
 type QuestionErrorCallback = () => void;
 
 type ThinkingCallback = (sessionId: string) => void;
+
+type TypingIndicatorCallback = (sessionId: string) => void;
 
 export interface TokensInfo {
   input: number;
@@ -108,6 +109,35 @@ function countDiffChangesFromText(text: string): { additions: number; deletions:
   return { additions, deletions };
 }
 
+function extractEventSessionId(event: Event): string | null {
+  const eventWithProperties = event as Event & {
+    properties?: {
+      info?: { sessionID?: unknown };
+      part?: { sessionID?: unknown };
+      request?: { sessionID?: unknown };
+      session?: { id?: unknown };
+    };
+  };
+
+  if (typeof eventWithProperties.properties?.info?.sessionID === "string") {
+    return eventWithProperties.properties.info.sessionID;
+  }
+
+  if (typeof eventWithProperties.properties?.part?.sessionID === "string") {
+    return eventWithProperties.properties.part.sessionID;
+  }
+
+  if (typeof eventWithProperties.properties?.request?.sessionID === "string") {
+    return eventWithProperties.properties.request.sessionID;
+  }
+
+  if (typeof eventWithProperties.properties?.session?.id === "string") {
+    return eventWithProperties.properties.session.id;
+  }
+
+  return null;
+}
+
 class SummaryAggregator {
   private trackedSessionIds: Set<string> = new Set();
   private currentMessageParts: Map<string, string[]> = new Map();
@@ -121,6 +151,7 @@ class SummaryAggregator {
   private onQuestionCallback: QuestionCallback | null = null;
   private onQuestionErrorCallback: QuestionErrorCallback | null = null;
   private onThinkingCallback: ThinkingCallback | null = null;
+  private onTypingIndicatorCallback: TypingIndicatorCallback | null = null;
   private onTokensCallback: TokensCallback | null = null;
   private onSessionCompactedCallback: SessionCompactedCallback | null = null;
   private onSessionErrorCallback: SessionErrorCallback | null = null;
@@ -131,9 +162,8 @@ class SummaryAggregator {
   private onClearedCallback: ClearedCallback | null = null;
   private processedToolStates: Set<string> = new Set();
   private thinkingFiredForMessages: Set<string> = new Set();
-  private bot: Bot | null = null;
-  private chatId: number | null = null;
   private typingTimer: ReturnType<typeof setInterval> | null = null;
+  private activeTypingSessions: Set<string> = new Set();
   private partHashes: Map<string, Set<string>> = new Map();
 
   private getMessageKey(sessionId: string, messageId: string): string {
@@ -142,11 +172,6 @@ class SummaryAggregator {
 
   private isTrackedSession(sessionId: string): boolean {
     return this.trackedSessionIds.has(sessionId);
-  }
-
-  setBotAndChatId(bot: Bot, chatId: number): void {
-    this.bot = bot;
-    this.chatId = chatId;
   }
 
   setOnComplete(callback: MessageCompleteCallback): void {
@@ -171,6 +196,10 @@ class SummaryAggregator {
 
   setOnThinking(callback: ThinkingCallback): void {
     this.onThinkingCallback = callback;
+  }
+
+  setOnTypingIndicator(callback: TypingIndicatorCallback): void {
+    this.onTypingIndicatorCallback = callback;
   }
 
   setOnTokens(callback: TokensCallback): void {
@@ -205,87 +234,127 @@ class SummaryAggregator {
     this.onClearedCallback = callback;
   }
 
-  private startTypingIndicator(): void {
+  private hasActiveMessageForSession(sessionId: string): boolean {
+    for (const value of this.messages.values()) {
+      if (value.sessionId === sessionId && value.role === "assistant") {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private emitTypingIndicators(): void {
+    const callback = this.onTypingIndicatorCallback;
+    if (!callback) {
+      return;
+    }
+
+    for (const sessionId of this.activeTypingSessions) {
+      try {
+        callback(sessionId);
+      } catch (error) {
+        logger.error("[Aggregator] Typing callback failed", { sessionId }, error);
+      }
+    }
+  }
+
+  private startTypingIndicator(sessionId: string): void {
+    this.activeTypingSessions.add(sessionId);
+
     if (this.typingTimer) {
       return;
     }
 
-    const sendTyping = () => {
-      if (this.bot && this.chatId) {
-        this.bot.api.sendChatAction(this.chatId, "typing").catch((err) => {
-          logger.error("Failed to send typing action:", err);
-        });
-      }
-    };
-
-    sendTyping();
-    this.typingTimer = setInterval(sendTyping, 4000);
+    this.emitTypingIndicators();
+    this.typingTimer = setInterval(() => {
+      this.emitTypingIndicators();
+    }, 4000);
   }
 
-  stopTypingIndicator(): void {
-    if (this.typingTimer) {
-      clearInterval(this.typingTimer);
-      this.typingTimer = null;
+  stopTypingIndicator(sessionId?: string): void {
+    if (sessionId) {
+      this.activeTypingSessions.delete(sessionId);
+    } else {
+      this.activeTypingSessions.clear();
     }
+
+    if (!this.typingTimer || this.activeTypingSessions.size > 0) {
+      return;
+    }
+
+    clearInterval(this.typingTimer);
+    this.typingTimer = null;
   }
 
   processEvent(event: Event): void {
-    // Log all question-related events for debugging
-    if (event.type.startsWith("question.")) {
-      logger.info(
-        `[Aggregator] Question event: ${event.type}`,
-        JSON.stringify(event.properties, null, 2),
-      );
-    }
+    try {
+      // Log all question-related events for debugging
+      if (event.type.startsWith("question.")) {
+        logger.info(
+          `[Aggregator] Question event: ${event.type}`,
+          JSON.stringify(event.properties, null, 2),
+        );
+      }
 
-    // Log all session-related events for debugging
-    if (event.type.startsWith("session.")) {
-      logger.debug(
-        `[Aggregator] Session event: ${event.type}`,
-        JSON.stringify(event.properties, null, 2),
-      );
-    }
+      // Log all session-related events for debugging
+      if (event.type.startsWith("session.")) {
+        logger.debug(
+          `[Aggregator] Session event: ${event.type}`,
+          JSON.stringify(event.properties, null, 2),
+        );
+      }
 
-    switch (event.type) {
-      case "message.updated":
-        this.handleMessageUpdated(event);
-        break;
-      case "message.part.updated":
-        this.handleMessagePartUpdated(event);
-        break;
-      case "session.status":
-        this.handleSessionStatus(event);
-        break;
-      case "session.idle":
-        this.handleSessionIdle(event);
-        break;
-      case "session.compacted":
-        this.handleSessionCompacted(event);
-        break;
-      case "session.error":
-        this.handleSessionError(event);
-        break;
-      case "question.asked":
-        this.handleQuestionAsked(event);
-        break;
-      case "question.replied":
-        logger.info(`[Aggregator] Question replied: requestID=${event.properties.requestID}`);
-        break;
-      case "question.rejected":
-        logger.info(`[Aggregator] Question rejected: requestID=${event.properties.requestID}`);
-        break;
-      case "session.diff":
-        this.handleSessionDiff(event);
-        break;
-      case "permission.asked":
-        this.handlePermissionAsked(event);
-        break;
-      case "permission.replied":
-        logger.info(`[Aggregator] Permission replied: requestID=${event.properties.requestID}`);
-        break;
-      default:
-        logger.debug(`[Aggregator] Unhandled event type: ${event.type}`);
-        break;
+      switch (event.type) {
+        case "message.updated":
+          this.handleMessageUpdated(event);
+          break;
+        case "message.part.updated":
+          this.handleMessagePartUpdated(event);
+          break;
+        case "session.status":
+          this.handleSessionStatus(event);
+          break;
+        case "session.idle":
+          this.handleSessionIdle(event);
+          break;
+        case "session.compacted":
+          this.handleSessionCompacted(event);
+          break;
+        case "session.error":
+          this.handleSessionError(event);
+          break;
+        case "question.asked":
+          this.handleQuestionAsked(event);
+          break;
+        case "question.replied":
+          logger.info(`[Aggregator] Question replied: requestID=${event.properties.requestID}`);
+          break;
+        case "question.rejected":
+          logger.info(`[Aggregator] Question rejected: requestID=${event.properties.requestID}`);
+          break;
+        case "session.diff":
+          this.handleSessionDiff(event);
+          break;
+        case "permission.asked":
+          this.handlePermissionAsked(event);
+          break;
+        case "permission.replied":
+          logger.info(`[Aggregator] Permission replied: requestID=${event.properties.requestID}`);
+          break;
+        default:
+          logger.debug(`[Aggregator] Unhandled event type: ${event.type}`);
+          break;
+      }
+    } catch (error) {
+      logger.error(
+        "[Aggregator] Failed to process event",
+        {
+          eventType: event.type,
+          sessionId: extractEventSessionId(event),
+        },
+        error,
+      );
     }
   }
 
@@ -295,6 +364,7 @@ class SummaryAggregator {
 
   clearSession(sessionId: string): void {
     this.trackedSessionIds.delete(sessionId);
+    this.stopTypingIndicator(sessionId);
 
     for (const [messageKey, message] of this.messages.entries()) {
       if (message.sessionId !== sessionId) {
@@ -350,7 +420,7 @@ class SummaryAggregator {
       if (!this.currentMessageParts.has(messageKey)) {
         this.currentMessageParts.set(messageKey, []);
         this.messageCount++;
-        this.startTypingIndicator();
+        this.startTypingIndicator(info.sessionID);
       }
 
       const pending = this.pendingParts.get(messageKey) || [];
@@ -406,9 +476,11 @@ class SummaryAggregator {
           `[Aggregator] Message completed cleanup: remaining messages=${this.currentMessageParts.size}`,
         );
 
-        if (this.currentMessageParts.size === 0) {
-          logger.debug("[Aggregator] No more active messages, stopping typing indicator");
-          this.stopTypingIndicator();
+        if (!this.hasActiveMessageForSession(info.sessionID)) {
+          logger.debug(
+            `[Aggregator] No more active messages for session ${info.sessionID}, stopping typing indicator`,
+          );
+          this.stopTypingIndicator(info.sessionID);
         }
       }
 
@@ -462,7 +534,7 @@ class SummaryAggregator {
       if (messageInfo && messageInfo.role === "assistant") {
         if (!this.currentMessageParts.has(messageKey)) {
           this.currentMessageParts.set(messageKey, []);
-          this.startTypingIndicator();
+          this.startTypingIndicator(part.sessionID);
         }
 
         const parts = this.currentMessageParts.get(messageKey)!;

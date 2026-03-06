@@ -10,6 +10,7 @@ import {
 import { getStoredModel } from "../model/manager.js";
 import type { FileChange, PinnedMessageState, TokensInfo } from "./types.js";
 import { t } from "../i18n/index.js";
+import { getThreadIdFromScopeKey, getThreadSendOptions } from "../bot/scope.js";
 
 interface ScopeContext {
   api: Api | null;
@@ -43,20 +44,6 @@ class PinnedMessageManager {
     };
   }
 
-  private getThreadIdFromScopeKey(scopeKey: string): number | null {
-    const directScopeMatch = /^-?\d+:(\d+)$/.exec(scopeKey);
-    if (directScopeMatch) {
-      return Number.parseInt(directScopeMatch[1], 10);
-    }
-
-    const legacyScopeMatch = /^chat:-?\d+:(\d+)$/.exec(scopeKey);
-    if (legacyScopeMatch) {
-      return Number.parseInt(legacyScopeMatch[1], 10);
-    }
-
-    return null;
-  }
-
   private getContext(scopeKey: string): ScopeContext {
     const existing = this.contexts.get(scopeKey);
     if (existing) {
@@ -85,7 +72,7 @@ class PinnedMessageManager {
     threadId: number | null = null,
   ): void {
     const context = this.getContext(scopeKey);
-    const scopeThreadId = this.getThreadIdFromScopeKey(scopeKey);
+    const scopeThreadId = getThreadIdFromScopeKey(scopeKey);
     const resolvedThreadId = threadId ?? scopeThreadId ?? context.state.threadId;
     context.api = api;
     context.chatId = chatId;
@@ -196,7 +183,7 @@ class PinnedMessageManager {
     const context = this.getContext(scopeKey);
     context.state.tokensUsed = tokens.input + tokens.cacheRead;
     await this.refreshSessionTitle(scopeKey);
-    await this.updatePinnedMessage(scopeKey);
+    this.scheduleDebouncedUpdate(scopeKey, 1200);
   }
 
   setOnKeyboardUpdate(
@@ -232,7 +219,7 @@ class PinnedMessageManager {
     }
 
     context.state.changedFiles = diffs;
-    await this.updatePinnedMessage(scopeKey);
+    this.scheduleDebouncedUpdate(scopeKey, 1200);
   }
 
   addFileChange(change: FileChange, scopeKey: string = "global"): void {
@@ -248,7 +235,7 @@ class PinnedMessageManager {
     this.scheduleDebouncedUpdate(scopeKey);
   }
 
-  private scheduleDebouncedUpdate(scopeKey: string): void {
+  private scheduleDebouncedUpdate(scopeKey: string, delayMs: number = 1500): void {
     const context = this.getContext(scopeKey);
     if (context.debounceTimer) {
       clearTimeout(context.debounceTimer);
@@ -257,7 +244,7 @@ class PinnedMessageManager {
     context.debounceTimer = setTimeout(() => {
       context.debounceTimer = null;
       void this.updatePinnedMessage(scopeKey);
-    }, 500);
+    }, delayMs);
   }
 
   private async loadDiffsFromApi(sessionId: string, scopeKey: string): Promise<void> {
@@ -443,10 +430,10 @@ class PinnedMessageManager {
       return;
     }
 
-    const threadId = context.state.threadId ?? this.getThreadIdFromScopeKey(scopeKey);
+    const threadId = context.state.threadId ?? getThreadIdFromScopeKey(scopeKey);
 
     const sent = await context.api.sendMessage(context.chatId, this.formatMessage(scopeKey), {
-      ...(typeof threadId === "number" ? { message_thread_id: threadId } : {}),
+      ...getThreadSendOptions(threadId),
     });
 
     context.state.messageId = sent.message_id;

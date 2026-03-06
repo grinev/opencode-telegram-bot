@@ -16,6 +16,7 @@ const mocked = vi.hoisted(() => ({
     directory: "D:/repo",
   } as { id: string; title: string; directory: string } | null,
   updateSessionMock: vi.fn(),
+  getSessionMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
   pinnedOnSessionChangeMock: vi.fn(),
 }));
@@ -23,6 +24,7 @@ const mocked = vi.hoisted(() => ({
 vi.mock("../../../src/opencode/client.js", () => ({
   opencodeClient: {
     session: {
+      get: mocked.getSessionMock,
       update: mocked.updateSessionMock,
     },
   },
@@ -81,6 +83,11 @@ describe("bot/commands/rename", () => {
       directory: "D:/repo",
     };
     mocked.updateSessionMock.mockReset();
+    mocked.getSessionMock.mockReset();
+    mocked.getSessionMock.mockResolvedValue({
+      data: { id: "session-1", title: "Latest title from server" },
+      error: null,
+    });
     mocked.updateSessionMock.mockResolvedValue({
       data: { id: "session-1", title: "New title" },
       error: null,
@@ -94,6 +101,15 @@ describe("bot/commands/rename", () => {
     const ctx = createRenameCommandContext(555);
 
     await renameCommand(ctx as never);
+
+    expect(mocked.getSessionMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      directory: "D:/repo",
+    });
+    expect(ctx.reply).toHaveBeenCalledWith(
+      t("rename.prompt", { title: "Latest title from server" }),
+      expect.any(Object),
+    );
 
     expect(renameManager.isWaitingForName()).toBe(true);
     expect(renameManager.getMessageId()).toBe(555);
@@ -123,11 +139,14 @@ describe("bot/commands/rename", () => {
       directory: "D:/repo",
       title: "New title",
     });
-    expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith({
-      id: "session-1",
-      title: "New title",
-      directory: "D:/repo",
-    });
+    expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith(
+      {
+        id: "session-1",
+        title: "New title",
+        directory: "D:/repo",
+      },
+      "global",
+    );
     expect(ctx.api.deleteMessage).toHaveBeenCalledWith(101, 555);
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.success", { title: "New title" }));
     expect(renameManager.isWaitingForName()).toBe(false);

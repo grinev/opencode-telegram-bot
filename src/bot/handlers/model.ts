@@ -14,7 +14,7 @@ import {
   replyWithInlineMenu,
 } from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
-import { getScopeKeyFromContext } from "../scope.js";
+import { SCOPE_CONTEXT, getScopeFromKey, getScopeKeyFromContext } from "../scope.js";
 
 function buildModelSelectionMenuText(modelLists: ModelSelectionLists): string {
   const lines = [t("model.menu.select"), t("model.menu.favorites_title")];
@@ -97,11 +97,18 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     }
 
     const variantName = formatVariantForButton(modelInfo.variant || "default");
+    const scope = getScopeFromKey(scopeKey);
     const keyboard = createMainKeyboard(
       currentAgent,
       modelInfo,
       contextInfo ?? undefined,
       variantName,
+      scope?.context === SCOPE_CONTEXT.GROUP_GENERAL
+        ? {
+            contextFirst: true,
+            contextLabel: t("keyboard.general_defaults"),
+          }
+        : undefined,
     );
     const displayName = formatModelForDisplay(modelInfo.providerID, modelInfo.modelID);
 

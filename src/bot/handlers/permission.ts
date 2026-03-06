@@ -11,7 +11,7 @@ import { PermissionRequest, PermissionReply } from "../../permission/types.js";
 import type { I18nKey } from "../../i18n/en.js";
 import { t } from "../../i18n/index.js";
 import { sendMessageWithMarkdownFallback } from "../utils/send-with-markdown-fallback.js";
-import { getScopeKeyFromContext, getThreadSendOptions } from "../scope.js";
+import { getScopeFromContext, getScopeKeyFromContext, getThreadSendOptions } from "../scope.js";
 
 // Permission type display names
 const PERMISSION_NAME_KEYS: Record<string, I18nKey> = {
@@ -171,6 +171,7 @@ async function handlePermissionReply(
   const currentProject = getCurrentProject(scopeKey);
   const currentSession = getCurrentSession(scopeKey);
   const chatId = ctx.chat?.id;
+  const threadId = getScopeFromContext(ctx)?.threadId ?? null;
   const directory = currentSession?.directory ?? currentProject?.worktree;
 
   if (!directory || !chatId) {
@@ -214,7 +215,9 @@ async function handlePermissionReply(
       if (error) {
         logger.error("[PermissionHandler] Failed to send permission reply:", error);
         if (ctx.api && chatId) {
-          void ctx.api.sendMessage(chatId, t("permission.send_reply_error")).catch(() => {});
+          void ctx.api
+            .sendMessage(chatId, t("permission.send_reply_error"), getThreadSendOptions(threadId))
+            .catch(() => {});
         }
         return;
       }

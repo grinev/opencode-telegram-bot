@@ -7,6 +7,9 @@ export const de: I18nDictionary = {
   "cmd.description.sessions": "Sitzungen auflisten",
   "cmd.description.projects": "Projekte auflisten",
   "cmd.description.commands": "Benutzerdefinierte Befehle",
+  "cmd.description.model": "Modell auswählen",
+  "cmd.description.agent": "Agent-Modus auswählen",
+  "cmd.description.cleanup": "Veraltete Themen schließen",
   "cmd.description.opencode_start": "OpenCode-Server starten",
   "cmd.description.opencode_stop": "OpenCode-Server stoppen",
   "cmd.description.help": "Hilfe",
@@ -118,6 +121,11 @@ export const de: I18nDictionary = {
   "projects.selected":
     "✅ Projekt ausgewählt: {project}\n\n📋 Sitzung wurde zurückgesetzt. Nutze /sessions oder /new für dieses Projekt.",
   "projects.select_error": "🔴 Projekt konnte nicht ausgewählt werden.",
+  "projects.locked.topic_scope":
+    "⚠️ Dieses Thema ist an seinen eigenen Projekt-/Sitzungsbereich gebunden. Wechsle Projekte nur im General-Thema, bevor du Themen erstellst.",
+  "projects.locked.group_project":
+    "⚠️ Diese Gruppe ist bereits für folgendes Projekt konfiguriert: {project}. Erstelle eine neue Gruppe, wenn du in einem anderen Repository arbeiten willst.",
+  "projects.locked.callback": "Projektwechsel ist für diese Gruppe gesperrt.",
 
   "sessions.project_not_selected":
     "🏗 Projekt ist nicht ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
@@ -132,6 +140,13 @@ export const de: I18nDictionary = {
     "Diese Seite kann nicht geladen werden. Bitte versuche es erneut.",
   "sessions.button.prev_page": "⬅️ Zurück",
   "sessions.button.next_page": "Weiter ➡️",
+  "sessions.topic_locked":
+    "⚠️ Dieses Thema ist an seine aktuelle Sitzung gebunden. Verwende /new im General-Thema, um ein weiteres Thema zu erstellen.",
+  "sessions.general_overview": "Übersicht der Themen-Sitzungen:",
+  "sessions.general_item": "• {topic} (Thread #{thread}) - {status}",
+  "sessions.general_empty": "Noch keine Sitzungs-Themen. Verwende /new, um eins zu erstellen.",
+  "sessions.bound_topic_link": "🔗 Thema für diese Sitzung: {url}",
+  "sessions.created_topic_link": "✅ Thema für diese Sitzung erstellt: {url}",
   "sessions.loading_context": "⏳ Lade Kontext und letzte Nachrichten...",
   "sessions.selected": "✅ Sitzung ausgewählt: {title}",
   "sessions.select_error": "🔴 Sitzung konnte nicht ausgewählt werden.",
@@ -143,8 +158,26 @@ export const de: I18nDictionary = {
   "new.project_not_selected":
     "🏗 Projekt ist nicht ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
   "new.created": "✅ Neue Sitzung erstellt: {title}",
+  "new.topic_only_in_general":
+    "⚠️ Führe /new im General-Thema aus, um ein eigenes Sitzungs-Thema zu erstellen.",
+  "new.requires_forum_general":
+    "⚠️ /new benötigt das General-Thema in einer forum-fähigen Supergruppe.",
+  "new.topic_created": "✅ Sitzungs-Thema ist bereit: {title}",
+  "new.general_created": "✅ Neue OpenCode-Sitzung und Gruppenthema erstellt.",
+  "new.topic_create_error":
+    "🔴 Sitzungs-Thema konnte nicht erstellt werden. Prüfe Forum-Berechtigungen und versuche es erneut.",
+  "new.topic_create_no_rights":
+    '🔴 Ich kann in dieser Gruppe keine Foren-Themen erstellen. Bitte gib dem Bot die Berechtigung "Themen verwalten" und versuche dann /new erneut.',
+  "new.general_open_link": "🔗 Thema öffnen: {url}",
   "new.create_error":
     "🔴 OpenCode-Server ist nicht verfügbar oder beim Erstellen der Sitzung ist ein Fehler aufgetreten.",
+
+  "cleanup.topic_use_general": "⚠️ Führe /cleanup im General-Thema aus.",
+  "cleanup.requires_forum_general":
+    "⚠️ /cleanup ist nur im General-Thema einer forum-fähigen Supergruppe verfügbar.",
+  "cleanup.no_topics": "✅ Keine Themen-Sitzungen zum Aufräumen.",
+  "cleanup.result":
+    "🧹 Aufräumen abgeschlossen. Geprüft: {inspected}, geschlossen: {closed}, übersprungen: {skipped}, fehlgeschlagen: {failed}.",
 
   "stop.no_active_session":
     "🛑 Agent wurde nicht gestartet\n\nErstelle eine Sitzung mit /new oder wähle eine über /sessions aus.",
@@ -223,6 +256,9 @@ export const de: I18nDictionary = {
   "context.no_active_session": "⚠️ Keine aktive Sitzung. Erstelle eine Sitzung mit /new",
   "context.confirm_text":
     '📊 Kontext-Komprimierung für Sitzung "{title}"\n\nDadurch wird die Kontextnutzung reduziert, indem alte Nachrichten aus dem Verlauf entfernt werden. Die aktuelle Aufgabe wird nicht unterbrochen.\n\nFortfahren?',
+  "context.general_not_available":
+    "⚠️ Kontext-Kompaktierung ist nur innerhalb eines Sitzungs-Themas verfügbar, nicht im General-Thema.",
+  "context.general_not_available_callback": "Öffne zuerst ein Sitzungs-Thema.",
   "context.callback_session_not_found": "Sitzung nicht gefunden",
   "context.callback_compacting": "Komprimiere Kontext...",
   "context.progress": "⏳ Komprimiere Kontext...",
@@ -278,10 +314,17 @@ export const de: I18nDictionary = {
 
   "keyboard.agent_mode": "{emoji} {name} Modus",
   "keyboard.context": "📊 {used} / {limit} ({percent}%)",
-  "keyboard.context_empty": "📊 0",
+  "keyboard.context_empty": "📊 Steuerung",
+  "keyboard.general_defaults": "Neue Sitzungs-Standards:",
+  "keyboard.general_defaults_info":
+    "Diese Standardwerte gelten für neu erstellte Sitzungen in dieser Gruppe:\n• Agent\n• Modell\n• Variante",
   "keyboard.variant": "💭 {name}",
   "keyboard.variant_default": "💡 Standard",
   "keyboard.updated": "⌨️ Tastatur aktualisiert",
+  "keyboard.dm.status": "/status",
+  "keyboard.dm.help": "/help",
+  "keyboard.dm.opencode_start": "/opencode_start",
+  "keyboard.dm.opencode_stop": "/opencode_stop",
 
   "pinned.default_session_title": "neue Sitzung",
   "pinned.unknown": "Unbekannt",
@@ -396,4 +439,8 @@ export const de: I18nDictionary = {
   "help.dm.hint": "Nutze Gruppen-Topic-Threads für Projekt-/Sitzungsarbeit.",
   "status.dm.title": "DM-Statusübersicht",
   "status.dm.hint": "Nutze Gruppen-Topic-Threads, um OpenCode-Sitzungen auszuführen.",
+  "group.general.prompts_disabled":
+    "⚠️ Prompts sind im General-Thema deaktiviert. Verwende /new, um ein eigenes Sitzungs-Thema zu erstellen.",
+  "topic.unbound":
+    "⚠️ Dieses Thema ist keiner Sitzung zugeordnet. Gehe zum General-Thema und führe /new aus.",
 };

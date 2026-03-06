@@ -5,6 +5,9 @@ export const en = {
   "cmd.description.sessions": "List sessions",
   "cmd.description.projects": "List projects",
   "cmd.description.commands": "Custom commands",
+  "cmd.description.model": "Select model",
+  "cmd.description.agent": "Select agent mode",
+  "cmd.description.cleanup": "Close stale topic threads",
   "cmd.description.opencode_start": "Start OpenCode server",
   "cmd.description.opencode_stop": "Stop OpenCode server",
   "cmd.description.help": "Help",
@@ -113,6 +116,9 @@ export const en = {
   "help.dm.hint": "Use group topic threads for project/session work.",
   "status.dm.title": "DM status overview",
   "status.dm.hint": "Use group topic threads to run OpenCode sessions.",
+  "group.general.prompts_disabled":
+    "⚠️ Prompts are disabled in General topic. Use /new to create a dedicated session topic.",
+  "topic.unbound": "⚠️ This topic is not linked to any session. Go to General topic and run /new.",
 
   "projects.empty":
     "📭 No projects found.\n\nOpen a directory in OpenCode and create at least one session, then it will appear here.",
@@ -127,6 +133,11 @@ export const en = {
   "projects.selected":
     "✅ Project selected: {project}\n\n📋 Session was reset. Use /sessions or /new for this project.",
   "projects.select_error": "🔴 Failed to select project.",
+  "projects.locked.topic_scope":
+    "⚠️ This topic is bound to its own project/session scope. Switch projects only from General before creating topics.",
+  "projects.locked.group_project":
+    "⚠️ This group is already configured for project: {project}. Create a new group if you want to work on another repository.",
+  "projects.locked.callback": "Project switching is locked for this group.",
 
   "sessions.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
@@ -140,6 +151,13 @@ export const en = {
   "sessions.page_load_error_callback": "Cannot load this page. Please try again.",
   "sessions.button.prev_page": "⬅️ Prev",
   "sessions.button.next_page": "Next ➡️",
+  "sessions.topic_locked":
+    "⚠️ This topic is bound to its current session. Use /new in General to create another topic.",
+  "sessions.general_overview": "Topic sessions overview:",
+  "sessions.general_item": "• {topic} (thread #{thread}) - {status}",
+  "sessions.general_empty": "No session topics yet. Use /new to create one.",
+  "sessions.bound_topic_link": "🔗 Topic for this session: {url}",
+  "sessions.created_topic_link": "✅ Created topic for this session: {url}",
   "sessions.loading_context": "⏳ Loading context and latest messages...",
   "sessions.selected": "✅ Session selected: {title}",
   "sessions.select_error": "🔴 Failed to select session.",
@@ -151,8 +169,25 @@ export const en = {
   "new.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
   "new.created": "✅ New session created: {title}",
+  "new.topic_only_in_general":
+    "⚠️ Run /new from the General topic to create a dedicated session topic.",
+  "new.requires_forum_general": "⚠️ /new requires the General topic in a forum-enabled supergroup.",
+  "new.topic_created": "✅ Session topic is ready: {title}",
+  "new.general_created": "✅ Created a new OpenCode session and group topic.",
+  "new.topic_create_error":
+    "🔴 Failed to create a session topic. Check forum permissions and try again.",
+  "new.topic_create_no_rights":
+    "🔴 I cannot create forum topics in this group. Please grant the bot topic management permission (Manage Topics), then retry /new.",
+  "new.general_open_link": "🔗 Open topic: {url}",
   "new.create_error":
     "🔴 OpenCode Server is unavailable or an error occurred while creating session.",
+
+  "cleanup.topic_use_general": "⚠️ Run /cleanup from the General topic.",
+  "cleanup.requires_forum_general":
+    "⚠️ /cleanup is available only in the General topic of a forum-enabled supergroup.",
+  "cleanup.no_topics": "✅ No topic sessions to clean up.",
+  "cleanup.result":
+    "🧹 Cleanup complete. Checked: {inspected}, closed: {closed}, skipped: {skipped}, failed: {failed}.",
 
   "stop.no_active_session":
     "🛑 Agent was not started\n\nCreate a session with /new or select one via /sessions.",
@@ -226,6 +261,9 @@ export const en = {
   "context.no_active_session": "⚠️ No active session. Create a session with /new",
   "context.confirm_text":
     '📊 Context compaction for session "{title}"\n\nThis will reduce context usage by removing old messages from history. Current task will not be interrupted.\n\nContinue?',
+  "context.general_not_available":
+    "⚠️ Context compaction is only available inside a session topic, not in General.",
+  "context.general_not_available_callback": "Open a session topic first.",
   "context.callback_session_not_found": "Session not found",
   "context.callback_compacting": "Compacting context...",
   "context.progress": "⏳ Compacting context...",
@@ -281,10 +319,17 @@ export const en = {
 
   "keyboard.agent_mode": "{emoji} {name} Mode",
   "keyboard.context": "📊 {used} / {limit} ({percent}%)",
-  "keyboard.context_empty": "📊 0",
+  "keyboard.context_empty": "📊 Controls",
+  "keyboard.general_defaults": "New Session Defaults:",
+  "keyboard.general_defaults_info":
+    "These defaults apply to newly created sessions in this group:\n• Agent\n• Model\n• Variant",
   "keyboard.variant": "💭 {name}",
   "keyboard.variant_default": "💡 Default",
   "keyboard.updated": "⌨️ Keyboard updated",
+  "keyboard.dm.status": "/status",
+  "keyboard.dm.help": "/help",
+  "keyboard.dm.opencode_start": "/opencode_start",
+  "keyboard.dm.opencode_stop": "/opencode_stop",
 
   "pinned.default_session_title": "new session",
   "pinned.unknown": "Unknown",

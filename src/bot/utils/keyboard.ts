@@ -5,6 +5,11 @@ import type { ModelInfo } from "../../model/types.js";
 import type { ContextInfo } from "../../keyboard/types.js";
 import { t } from "../../i18n/index.js";
 
+interface MainKeyboardOptions {
+  contextFirst?: boolean;
+  contextLabel?: string;
+}
+
 /**
  * Format token count for display (e.g., 150000 -> "150K", 1500000 -> "1.5M")
  */
@@ -40,6 +45,7 @@ export function createMainKeyboard(
   currentModel: ModelInfo,
   contextInfo?: ContextInfo,
   variantName?: string,
+  options?: MainKeyboardOptions,
 ): Keyboard {
   const keyboard = new Keyboard();
   const agentText = getAgentDisplayName(currentAgent);
@@ -48,20 +54,37 @@ export function createMainKeyboard(
   const modelText = formatModelForButton(currentModel.providerID, currentModel.modelID);
 
   // Context text - show "0" if no data available
-  const contextText = contextInfo
-    ? formatContextForButton(contextInfo)
-    : t("keyboard.context_empty");
+  const contextText =
+    options?.contextLabel ??
+    (contextInfo ? formatContextForButton(contextInfo) : t("keyboard.context_empty"));
 
   // Variant text - default to "💭 Default" if not provided
   const variantText = variantName || t("keyboard.variant_default");
 
-  // Row 1: agent and context buttons
-  keyboard.text(agentText).text(contextText).row();
+  // Row 1: context and agent buttons (for control-plane) or agent/context defaults
+  const contextFirst = options?.contextFirst ?? true;
+  if (contextFirst) {
+    keyboard.text(contextText).text(agentText).row();
+  } else {
+    keyboard.text(agentText).text(contextText).row();
+  }
 
   // Row 2: model and variant buttons
   keyboard.text(modelText).text(variantText).row();
 
   return keyboard.resized().persistent();
+}
+
+export function createDmKeyboard(): Keyboard {
+  return new Keyboard()
+    .text(t("keyboard.dm.status"))
+    .text(t("keyboard.dm.help"))
+    .row()
+    .text(t("keyboard.dm.opencode_start"))
+    .text(t("keyboard.dm.opencode_stop"))
+    .row()
+    .resized()
+    .persistent();
 }
 
 /**

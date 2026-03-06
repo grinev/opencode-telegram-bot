@@ -72,4 +72,14 @@ describe("bot/commands/projects handleProjectSelect", () => {
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
     expect(ctx.reply).toHaveBeenCalledWith(t("projects.select_error"));
   });
+
+  it("ignores non-project callback data", async () => {
+    const ctx = createCallbackContext("variant:default");
+
+    const handled = await handleProjectSelect(ctx);
+
+    expect(handled).toBe(false);
+    expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
 });

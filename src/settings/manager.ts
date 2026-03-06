@@ -29,12 +29,37 @@ export interface SessionDirectoryCacheInfo {
   }>;
 }
 
+export const TOPIC_SESSION_STATUS = {
+  ACTIVE: "active",
+  CLOSED: "closed",
+  STALE: "stale",
+  ABANDONED: "abandoned",
+  ERROR: "error",
+} as const;
+
+export type TopicSessionStatus = (typeof TOPIC_SESSION_STATUS)[keyof typeof TOPIC_SESSION_STATUS];
+
+export interface TopicSessionBinding {
+  scopeKey: string;
+  chatId: number;
+  threadId: number;
+  sessionId: string;
+  projectId: string;
+  projectWorktree?: string;
+  topicName?: string;
+  status: TopicSessionStatus;
+  createdAt: number;
+  updatedAt: number;
+  closedAt?: number;
+}
+
 export interface Settings {
   scopedProjects?: Record<string, ProjectInfo>;
   scopedSessions?: Record<string, SessionInfo>;
   scopedAgents?: Record<string, string>;
   scopedModels?: Record<string, ModelInfo>;
   scopedPinnedMessageIds?: Record<string, number>;
+  topicSessionBindings?: Record<string, TopicSessionBinding>;
   serverProcess?: ServerProcessInfo;
   sessionDirectoryCache?: SessionDirectoryCacheInfo;
 }
@@ -109,6 +134,65 @@ function clearScopedMapValue<T>(
   ) as Record<string, T>;
 
   return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
+function isTopicSessionStatus(value: unknown): value is TopicSessionStatus {
+  return Object.values(TOPIC_SESSION_STATUS).includes(value as TopicSessionStatus);
+}
+
+function sanitizeTopicSessionBindings(
+  value: unknown,
+): Record<string, TopicSessionBinding> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const sanitizedEntries = Object.entries(value)
+    .map(([bindingKey, rawBinding]) => {
+      if (!rawBinding || typeof rawBinding !== "object") {
+        return null;
+      }
+
+      const binding = rawBinding as Partial<TopicSessionBinding>;
+      const now = Date.now();
+
+      const chatId = typeof binding.chatId === "number" ? binding.chatId : null;
+      const threadId = typeof binding.threadId === "number" ? binding.threadId : null;
+      const sessionId = typeof binding.sessionId === "string" ? binding.sessionId : "";
+      const projectId = typeof binding.projectId === "string" ? binding.projectId : "";
+      const scopeKey = typeof binding.scopeKey === "string" ? binding.scopeKey : "";
+
+      if (chatId === null || threadId === null || !sessionId || !projectId || !scopeKey) {
+        return null;
+      }
+
+      const createdAt = typeof binding.createdAt === "number" ? binding.createdAt : now;
+      const updatedAt = typeof binding.updatedAt === "number" ? binding.updatedAt : createdAt;
+
+      const sanitizedBinding: TopicSessionBinding = {
+        scopeKey,
+        chatId,
+        threadId,
+        sessionId,
+        projectId,
+        projectWorktree:
+          typeof binding.projectWorktree === "string" ? binding.projectWorktree : undefined,
+        topicName: typeof binding.topicName === "string" ? binding.topicName : undefined,
+        status: isTopicSessionStatus(binding.status) ? binding.status : TOPIC_SESSION_STATUS.ACTIVE,
+        createdAt,
+        updatedAt,
+        closedAt: typeof binding.closedAt === "number" ? binding.closedAt : undefined,
+      };
+
+      return [bindingKey, sanitizedBinding] as const;
+    })
+    .filter((entry): entry is readonly [string, TopicSessionBinding] => entry !== null);
+
+  if (sanitizedEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(sanitizedEntries);
 }
 
 export function getCurrentProject(scopeKey: string = GLOBAL_SCOPE_KEY): ProjectInfo | undefined {
@@ -222,6 +306,75 @@ export function clearScopedPinnedMessageId(scopeKey: string): void {
   void writeSettingsFile(currentSettings);
 }
 
+export function getTopicSessionBindings(): Record<string, TopicSessionBinding> {
+  return { ...(currentSettings.topicSessionBindings ?? {}) };
+}
+
+export function getTopicSessionBinding(bindingKey: string): TopicSessionBinding | undefined {
+  return getScopedMap(currentSettings.topicSessionBindings, bindingKey);
+}
+
+export function setTopicSessionBinding(bindingKey: string, binding: TopicSessionBinding): void {
+  currentSettings.topicSessionBindings = setScopedMapValue(
+    currentSettings.topicSessionBindings,
+    bindingKey,
+    binding,
+  );
+  void writeSettingsFile(currentSettings);
+}
+
+export function clearTopicSessionBinding(bindingKey: string): void {
+  currentSettings.topicSessionBindings = clearScopedMapValue(
+    currentSettings.topicSessionBindings,
+    bindingKey,
+  );
+  void writeSettingsFile(currentSettings);
+}
+
+export function findTopicSessionBindingBySessionId(
+  sessionId: string,
+): TopicSessionBinding | undefined {
+  return Object.values(currentSettings.topicSessionBindings ?? {}).find(
+    (binding) => binding.sessionId === sessionId,
+  );
+}
+
+export function findTopicSessionBindingByScopeKey(
+  scopeKey: string,
+): TopicSessionBinding | undefined {
+  return Object.values(currentSettings.topicSessionBindings ?? {}).find(
+    (binding) => binding.scopeKey === scopeKey,
+  );
+}
+
+export function getTopicSessionBindingsByChat(chatId: number): TopicSessionBinding[] {
+  return Object.values(currentSettings.topicSessionBindings ?? {}).filter(
+    (binding) => binding.chatId === chatId,
+  );
+}
+
+export function updateTopicSessionBindingStatus(
+  bindingKey: string,
+  status: TopicSessionStatus,
+): void {
+  const binding = getTopicSessionBinding(bindingKey);
+  if (!binding) {
+    return;
+  }
+
+  const updatedBinding: TopicSessionBinding = {
+    ...binding,
+    status,
+    updatedAt: Date.now(),
+    closedAt:
+      status === TOPIC_SESSION_STATUS.CLOSED || status === TOPIC_SESSION_STATUS.STALE
+        ? Date.now()
+        : binding.closedAt,
+  };
+
+  setTopicSessionBinding(bindingKey, updatedBinding);
+}
+
 export function getServerProcess(): ServerProcessInfo | undefined {
   return currentSettings.serverProcess;
 }
@@ -263,6 +416,7 @@ export async function loadSettings(): Promise<void> {
     currentAgent?: unknown;
     currentModel?: unknown;
     pinnedMessageId?: unknown;
+    topicSessionBindings?: unknown;
   };
 
   let dirty = false;
@@ -292,6 +446,26 @@ export async function loadSettings(): Promise<void> {
     delete loadedSettings.pinnedMessageId;
     dirty = true;
   }
+
+  const sanitizedTopicSessionBindings = sanitizeTopicSessionBindings(
+    loadedSettings.topicSessionBindings,
+  );
+
+  if (loadedSettings.topicSessionBindings !== undefined) {
+    const loadedCount =
+      loadedSettings.topicSessionBindings && typeof loadedSettings.topicSessionBindings === "object"
+        ? Object.keys(loadedSettings.topicSessionBindings as Record<string, unknown>).length
+        : 0;
+    const sanitizedCount = Object.keys(sanitizedTopicSessionBindings ?? {}).length;
+    if (loadedCount !== sanitizedCount) {
+      dirty = true;
+      logger.warn(
+        `[SettingsManager] Removed ${loadedCount - sanitizedCount} invalid topic-session bindings during load`,
+      );
+    }
+  }
+
+  loadedSettings.topicSessionBindings = sanitizedTopicSessionBindings;
 
   currentSettings = loadedSettings;
 

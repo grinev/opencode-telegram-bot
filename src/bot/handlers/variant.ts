@@ -18,7 +18,7 @@ import {
   replyWithInlineMenu,
 } from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
-import { getScopeKeyFromContext } from "../scope.js";
+import { SCOPE_CONTEXT, getScopeFromKey, getScopeKeyFromContext } from "../scope.js";
 
 /**
  * Handle variant selection callback
@@ -84,11 +84,18 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
     }
 
     const variantName = formatVariantForButton(variantId);
+    const scope = getScopeFromKey(scopeKey);
     const keyboard = createMainKeyboard(
       currentAgent,
       updatedModel,
       contextInfo ?? undefined,
       variantName,
+      scope?.context === SCOPE_CONTEXT.GROUP_GENERAL
+        ? {
+            contextFirst: true,
+            contextLabel: t("keyboard.general_defaults"),
+          }
+        : undefined,
     );
 
     // Send confirmation message with updated keyboard

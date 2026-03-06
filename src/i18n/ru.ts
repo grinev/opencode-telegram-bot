@@ -7,6 +7,9 @@ export const ru: I18nDictionary = {
   "cmd.description.sessions": "Список сессий",
   "cmd.description.projects": "Список проектов",
   "cmd.description.commands": "Пользовательские команды",
+  "cmd.description.model": "Выбрать модель",
+  "cmd.description.agent": "Выбрать режим агента",
+  "cmd.description.cleanup": "Закрыть устаревшие темы",
   "cmd.description.opencode_start": "Запустить OpenCode сервер",
   "cmd.description.opencode_stop": "Остановить OpenCode сервер",
   "cmd.description.help": "Справка",
@@ -112,6 +115,11 @@ export const ru: I18nDictionary = {
   "projects.selected":
     "✅ Проект выбран: {project}\n\n📋 Сессия сброшена. Используйте /sessions или /new для работы с этим проектом.",
   "projects.select_error": "🔴 Ошибка при выборе проекта.",
+  "projects.locked.topic_scope":
+    "⚠️ Этот топик привязан к собственному контексту проекта/сессии. Переключайте проекты только из General до создания топиков.",
+  "projects.locked.group_project":
+    "⚠️ Эта группа уже настроена для проекта: {project}. Создайте новую группу, если хотите работать с другим репозиторием.",
+  "projects.locked.callback": "Смена проекта для этой группы заблокирована.",
 
   "sessions.project_not_selected":
     "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
@@ -126,6 +134,13 @@ export const ru: I18nDictionary = {
     "Не удалось загрузить эту страницу. Пожалуйста, попробуйте снова.",
   "sessions.button.prev_page": "⬅️ Назад",
   "sessions.button.next_page": "Вперёд ➡️",
+  "sessions.topic_locked":
+    "⚠️ Эта тема привязана к текущей сессии. Используйте /new в General, чтобы создать новую тему.",
+  "sessions.general_overview": "Обзор сессий по темам:",
+  "sessions.general_item": "• {topic} (тред #{thread}) - {status}",
+  "sessions.general_empty": "Тем сессий пока нет. Используйте /new для создания.",
+  "sessions.bound_topic_link": "🔗 Топик для этой сессии: {url}",
+  "sessions.created_topic_link": "✅ Топик для этой сессии создан: {url}",
   "sessions.loading_context": "⏳ Загружаю контекст и последние сообщения...",
   "sessions.selected": "✅ Сессия выбрана: {title}",
   "sessions.select_error": "🔴 Ошибка при выборе сессии.",
@@ -136,7 +151,25 @@ export const ru: I18nDictionary = {
 
   "new.project_not_selected": "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
   "new.created": "✅ Создана новая сессия: {title}",
+  "new.topic_only_in_general":
+    "⚠️ Запустите /new в теме General, чтобы создать отдельную тему сессии.",
+  "new.requires_forum_general":
+    "⚠️ /new требует тему General в супергруппе с включёнными форумами.",
+  "new.topic_created": "✅ Тема сессии готова: {title}",
+  "new.general_created": "✅ Созданы новая сессия OpenCode и тема группы.",
+  "new.topic_create_error":
+    "🔴 Не удалось создать тему сессии. Проверьте права форума и попробуйте снова.",
+  "new.topic_create_no_rights":
+    '🔴 Я не могу создавать темы форума в этой группе. Выдайте боту право "Управление темами" и повторите /new.',
+  "new.general_open_link": "🔗 Открыть тему: {url}",
   "new.create_error": "🔴 OpenCode Server недоступен или произошла ошибка при создании сессии.",
+
+  "cleanup.topic_use_general": "⚠️ Выполните /cleanup из темы General.",
+  "cleanup.requires_forum_general":
+    "⚠️ /cleanup доступен только в теме General супергруппы с включёнными форумами.",
+  "cleanup.no_topics": "✅ Нет тем сессий для очистки.",
+  "cleanup.result":
+    "🧹 Очистка завершена. Проверено: {inspected}, закрыто: {closed}, пропущено: {skipped}, ошибок: {failed}.",
 
   "stop.no_active_session":
     "🛑 Агент не был запущен\n\nСначала создайте сессию командой /new или выберите существующую через /sessions.",
@@ -213,6 +246,9 @@ export const ru: I18nDictionary = {
   "context.no_active_session": "⚠️ Нет активной сессии. Создайте сессию командой /new",
   "context.confirm_text":
     '📊 Сжатие контекста для сессии "{title}"\n\nЭто уменьшит использование контекста, удалив старые сообщения из истории. Текущая задача не будет прервана.\n\nПродолжить?',
+  "context.general_not_available":
+    "⚠️ Сжатие контекста доступно только внутри топика сессии, а не в General.",
+  "context.general_not_available_callback": "Сначала откройте топик сессии.",
   "context.callback_session_not_found": "Сессия не найдена",
   "context.callback_compacting": "Сжатие контекста...",
   "context.progress": "⏳ Сжимаю контекст...",
@@ -267,10 +303,17 @@ export const ru: I18nDictionary = {
 
   "keyboard.agent_mode": "{emoji} {name} Mode",
   "keyboard.context": "📊 {used} / {limit} ({percent}%)",
-  "keyboard.context_empty": "📊 0",
+  "keyboard.context_empty": "📊 Управление",
+  "keyboard.general_defaults": "Параметры новой сессии:",
+  "keyboard.general_defaults_info":
+    "Эти значения будут применяться к новым сессиям, созданным в этой группе:\n• Агент\n• Модель\n• Вариант",
   "keyboard.variant": "💭 {name}",
   "keyboard.variant_default": "💡 Default",
   "keyboard.updated": "⌨️ Клавиатура обновлена",
+  "keyboard.dm.status": "/status",
+  "keyboard.dm.help": "/help",
+  "keyboard.dm.opencode_start": "/opencode_start",
+  "keyboard.dm.opencode_stop": "/opencode_stop",
 
   "pinned.default_session_title": "new session",
   "pinned.unknown": "Unknown",
@@ -384,4 +427,8 @@ export const ru: I18nDictionary = {
   "help.dm.hint": "Используйте топики в группе для работы с проектами/сессиями.",
   "status.dm.title": "Обзор статуса в ЛС",
   "status.dm.hint": "Используйте топики в группе для запуска сессий OpenCode.",
+  "group.general.prompts_disabled":
+    "⚠️ Промпты отключены в теме General. Используйте /new, чтобы создать отдельную тему сессии.",
+  "topic.unbound":
+    "⚠️ Эта тема не связана ни с одной сессией. Перейдите в тему General и выполните /new.",
 };

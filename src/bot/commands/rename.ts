@@ -3,10 +3,12 @@ import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentSession, setCurrentSession } from "../../session/manager.js";
 import { renameManager } from "../../rename/manager.js";
 import { interactionManager } from "../../interaction/manager.js";
+import { INTERACTION_CLEAR_REASON } from "../../interaction/constants.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { getScopeKeyFromContext } from "../scope.js";
+import { syncTopicTitleForSession } from "../../topic/title-sync.js";
 
 function getCallbackMessageId(ctx: Context): number | null {
   const message = ctx.callbackQuery?.message;
@@ -28,16 +30,41 @@ export async function renameCommand(ctx: CommandContext<Context>): Promise<void>
       return;
     }
 
+    let displayedTitle = currentSession.title;
+    try {
+      const { data: latestSession, error: latestSessionError } = await opencodeClient.session.get({
+        sessionID: currentSession.id,
+        directory: currentSession.directory,
+      });
+
+      if (!latestSessionError && latestSession?.title) {
+        displayedTitle = latestSession.title;
+        setCurrentSession(
+          {
+            id: currentSession.id,
+            title: latestSession.title,
+            directory: currentSession.directory,
+          },
+          scopeKey,
+        );
+      }
+    } catch (latestTitleError) {
+      logger.debug("[RenameCommand] Failed to fetch latest session title before prompt", {
+        sessionId: currentSession.id,
+        latestTitleError,
+      });
+    }
+
     const keyboard = new InlineKeyboard().text(t("rename.button.cancel"), "rename:cancel");
 
-    const message = await ctx.reply(t("rename.prompt", { title: currentSession.title }), {
+    const message = await ctx.reply(t("rename.prompt", { title: displayedTitle }), {
       reply_markup: keyboard,
     });
 
     renameManager.startWaiting(
       currentSession.id,
       currentSession.directory,
-      currentSession.title,
+      displayedTitle,
       scopeKey,
     );
     renameManager.setMessageId(message.message_id, scopeKey);
@@ -73,7 +100,7 @@ export async function handleRenameCancel(ctx: Context): Promise<boolean> {
   if (!renameManager.isWaitingForName(scopeKey)) {
     const state = interactionManager.getSnapshot(scopeKey);
     if (state?.kind === "rename") {
-      interactionManager.clear("rename_cancel_inactive", scopeKey);
+      interactionManager.clear(INTERACTION_CLEAR_REASON.RENAME_CANCEL_INACTIVE, scopeKey);
     }
     await ctx.answerCallbackQuery({ text: t("rename.inactive_callback"), show_alert: true });
     return true;
@@ -93,7 +120,7 @@ export async function handleRenameCancel(ctx: Context): Promise<boolean> {
   }
 
   renameManager.clear(scopeKey);
-  interactionManager.clear("rename_cancelled", scopeKey);
+  interactionManager.clear(INTERACTION_CLEAR_REASON.RENAME_CANCELLED, scopeKey);
 
   await ctx.answerCallbackQuery();
   await ctx.editMessageText(t("rename.cancelled")).catch(() => {});
@@ -127,7 +154,7 @@ export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
   const sessionInfo = renameManager.getSessionInfo(scopeKey);
   if (!sessionInfo) {
     renameManager.clear(scopeKey);
-    interactionManager.clear("rename_missing_session_info", scopeKey);
+    interactionManager.clear(INTERACTION_CLEAR_REASON.RENAME_MISSING_SESSION_INFO, scopeKey);
     return false;
   }
 
@@ -156,14 +183,19 @@ export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
       directory: sessionInfo.directory,
     };
 
-    if (scopeKey === "global") {
-      setCurrentSession(nextSession);
-    } else {
-      setCurrentSession(nextSession, scopeKey);
-    }
+    setCurrentSession(nextSession, scopeKey);
 
     if (ctx.chat?.type !== "private" && pinnedMessageManager.isInitialized(scopeKey)) {
-      await pinnedMessageManager.onSessionChange(sessionInfo.sessionId, newTitle, scopeKey);
+      await pinnedMessageManager.onSessionTitleUpdate(newTitle, scopeKey);
+
+      try {
+        await syncTopicTitleForSession(ctx.api, sessionInfo.sessionId, newTitle);
+      } catch (syncError) {
+        logger.debug("[RenameHandler] Failed to sync forum topic title", {
+          sessionId: sessionInfo.sessionId,
+          syncError,
+        });
+      }
     }
 
     const messageId = renameManager.getMessageId(scopeKey);
@@ -180,6 +212,6 @@ export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
   }
 
   renameManager.clear(scopeKey);
-  interactionManager.clear("rename_completed", scopeKey);
+  interactionManager.clear(INTERACTION_CLEAR_REASON.RENAME_COMPLETED, scopeKey);
   return true;
 }

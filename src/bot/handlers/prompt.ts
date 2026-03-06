@@ -17,7 +17,15 @@ import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { formatErrorDetails } from "../../utils/error-format.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { getScopeFromContext } from "../scope.js";
+import {
+  GLOBAL_SCOPE_KEY,
+  SCOPE_CONTEXT,
+  getScopeFromContext,
+  getThreadSendOptions,
+} from "../scope.js";
+import { BOT_I18N_KEY, CHAT_TYPE } from "../constants.js";
+import { INTERACTION_CLEAR_REASON } from "../../interaction/constants.js";
+import { getTopicBindingByScopeKey } from "../../topic/manager.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
@@ -54,7 +62,7 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
 }
 
 function resetMismatchedSessionContextForScope(scopeKey: string): void {
-  clearAllInteractionState("session_mismatch_reset", scopeKey);
+  clearAllInteractionState(INTERACTION_CLEAR_REASON.SESSION_MISMATCH_RESET, scopeKey);
   clearSession(scopeKey);
 }
 
@@ -81,8 +89,8 @@ export async function processUserPrompt(
 ): Promise<boolean> {
   const { bot, ensureEventSubscription } = deps;
   const scope = getScopeFromContext(ctx);
-  const scopeKey = scope?.key ?? "global";
-  const usePinned = ctx.chat?.type !== "private";
+  const scopeKey = scope?.key ?? GLOBAL_SCOPE_KEY;
+  const usePinned = ctx.chat?.type !== CHAT_TYPE.PRIVATE;
 
   const currentProject = getCurrentProject(scopeKey);
   if (!currentProject) {
@@ -103,6 +111,11 @@ export async function processUserPrompt(
 
   let currentSession = getCurrentSession(scopeKey);
 
+  if (scope?.context === SCOPE_CONTEXT.GROUP_TOPIC && !getTopicBindingByScopeKey(scopeKey)) {
+    await ctx.reply(t(BOT_I18N_KEY.TOPIC_UNBOUND), getThreadSendOptions(scope.threadId));
+    return false;
+  }
+
   if (currentSession && currentSession.directory !== currentProject.worktree) {
     logger.warn(
       `[Bot] Session/project mismatch detected. sessionDirectory=${currentSession.directory}, projectDirectory=${currentProject.worktree}. Resetting session context.`,
@@ -113,6 +126,11 @@ export async function processUserPrompt(
   }
 
   if (!currentSession) {
+    if (scope?.context === SCOPE_CONTEXT.GROUP_TOPIC) {
+      await ctx.reply(t(BOT_I18N_KEY.TOPIC_UNBOUND), getThreadSendOptions(scope.threadId));
+      return false;
+    }
+
     await ctx.reply(t("bot.creating_session"));
 
     const { data: session, error } = await opencodeClient.session.create({
@@ -191,7 +209,6 @@ export async function processUserPrompt(
   await ensureEventSubscription(currentSession.directory);
 
   summaryAggregator.setSession(currentSession.id);
-  summaryAggregator.setBotAndChatId(bot, ctx.chat!.id);
 
   const sessionIsBusy = await isSessionBusy(currentSession.id, currentSession.directory);
   if (sessionIsBusy) {
@@ -283,7 +300,11 @@ export async function processUserPrompt(
           logger.error("[Bot] session.prompt raw API error object:", error);
 
           // Send user-friendly error via API directly because ctx is no longer available
-          void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+          void bot.api
+            .sendMessage(ctx.chat!.id, t("bot.prompt_send_error"), {
+              ...getThreadSendOptions(scope?.threadId ?? null),
+            })
+            .catch(() => {});
           return;
         }
 
@@ -294,7 +315,11 @@ export async function processUserPrompt(
         logger.error("[Bot] session.prompt background task failed", promptErrorLogContext);
         logger.error("[Bot] session.prompt background failure details:", details);
         logger.error("[Bot] session.prompt raw background error object:", error);
-        void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+        void bot.api
+          .sendMessage(ctx.chat!.id, t("bot.prompt_send_error"), {
+            ...getThreadSendOptions(scope?.threadId ?? null),
+          })
+          .catch(() => {});
       },
     });
 
@@ -302,7 +327,7 @@ export async function processUserPrompt(
   } catch (err) {
     logger.error("Error in prompt handler:", err);
     if (interactionManager.getSnapshot(scopeKey)) {
-      clearAllInteractionState("message_handler_error", scopeKey);
+      clearAllInteractionState(INTERACTION_CLEAR_REASON.MESSAGE_HANDLER_ERROR, scopeKey);
     }
     await ctx.reply(t("error.generic"));
     return false;

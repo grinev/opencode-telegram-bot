@@ -8,6 +8,7 @@ import type {
   IncomingInputType,
   InteractionState,
 } from "./types.js";
+import { INTERACTION_CLEAR_REASON } from "./constants.js";
 
 function normalizeIncomingCommand(text: string): string | null {
   const trimmed = text.trim();
@@ -109,7 +110,7 @@ export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
   }
 
   if (interactionManager.isExpired(scopeKey)) {
-    interactionManager.clear("expired", scopeKey);
+    interactionManager.clear(INTERACTION_CLEAR_REASON.EXPIRED, scopeKey);
     return createBlockDecision(inputType, state, "expired", command);
   }
 

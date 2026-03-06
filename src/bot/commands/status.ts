@@ -12,6 +12,7 @@ import { pinnedMessageManager } from "../../pinned/manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { sendMessageWithMarkdownFallback } from "../utils/send-with-markdown-fallback.js";
+import { createDmKeyboard } from "../utils/keyboard.js";
 import { getScopeFromContext, getScopeKeyFromContext, getThreadSendOptions } from "../scope.js";
 
 export async function statusCommand(ctx: CommandContext<Context>) {
@@ -57,7 +58,7 @@ export async function statusCommand(ctx: CommandContext<Context>) {
       dmMessage += `${t("status.global_sessions", { count: sessionCount })}\n\n`;
       dmMessage += t("status.dm.hint");
 
-      await ctx.reply(dmMessage);
+      await ctx.reply(dmMessage, { reply_markup: createDmKeyboard() });
       return;
     }
 

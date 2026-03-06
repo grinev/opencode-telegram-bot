@@ -7,6 +7,9 @@ export const es: I18nDictionary = {
   "cmd.description.sessions": "Listar sesiones",
   "cmd.description.projects": "Listar proyectos",
   "cmd.description.commands": "Comandos personalizados",
+  "cmd.description.model": "Seleccionar modelo",
+  "cmd.description.agent": "Seleccionar modo de agente",
+  "cmd.description.cleanup": "Cerrar temas obsoletos",
   "cmd.description.opencode_start": "Iniciar servidor OpenCode",
   "cmd.description.opencode_stop": "Detener servidor OpenCode",
   "cmd.description.help": "Ayuda",
@@ -118,6 +121,11 @@ export const es: I18nDictionary = {
   "projects.selected":
     "✅ Proyecto seleccionado: {project}\n\n📋 La sesión se reinició. Usa /sessions o /new para este proyecto.",
   "projects.select_error": "🔴 No se pudo seleccionar el proyecto.",
+  "projects.locked.topic_scope":
+    "⚠️ Este tema está vinculado a su propio ámbito de proyecto/sesión. Cambia de proyecto solo desde General antes de crear temas.",
+  "projects.locked.group_project":
+    "⚠️ Este grupo ya está configurado para el proyecto: {project}. Crea un grupo nuevo si quieres trabajar en otro repositorio.",
+  "projects.locked.callback": "El cambio de proyecto está bloqueado para este grupo.",
 
   "sessions.project_not_selected":
     "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
@@ -131,6 +139,13 @@ export const es: I18nDictionary = {
   "sessions.page_load_error_callback": "No se puede cargar esta página. Inténtalo de nuevo.",
   "sessions.button.prev_page": "⬅️ Anterior",
   "sessions.button.next_page": "Siguiente ➡️",
+  "sessions.topic_locked":
+    "⚠️ Este tema está vinculado a su sesión actual. Usa /new en General para crear otro tema.",
+  "sessions.general_overview": "Resumen de sesiones por tema:",
+  "sessions.general_item": "• {topic} (hilo #{thread}) - {status}",
+  "sessions.general_empty": "Aún no hay temas de sesión. Usa /new para crear uno.",
+  "sessions.bound_topic_link": "🔗 Tema de esta sesión: {url}",
+  "sessions.created_topic_link": "✅ Tema creado para esta sesión: {url}",
   "sessions.loading_context": "⏳ Cargando contexto y los últimos mensajes...",
   "sessions.selected": "✅ Sesión seleccionada: {title}",
   "sessions.select_error": "🔴 No se pudo seleccionar la sesión.",
@@ -142,8 +157,26 @@ export const es: I18nDictionary = {
   "new.project_not_selected":
     "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
   "new.created": "✅ Sesión nueva creada: {title}",
+  "new.topic_only_in_general":
+    "⚠️ Ejecuta /new desde el tema General para crear un tema de sesión dedicado.",
+  "new.requires_forum_general":
+    "⚠️ /new requiere el tema General en un supergrupo con foros habilitados.",
+  "new.topic_created": "✅ El tema de sesión está listo: {title}",
+  "new.general_created": "✅ Se creó una nueva sesión de OpenCode y un tema de grupo.",
+  "new.topic_create_error":
+    "🔴 No se pudo crear el tema de sesión. Verifica permisos de foro e inténtalo de nuevo.",
+  "new.topic_create_no_rights":
+    "🔴 No puedo crear temas del foro en este grupo. Otorga al bot el permiso de gestionar temas (Manage Topics) y vuelve a ejecutar /new.",
+  "new.general_open_link": "🔗 Abrir tema: {url}",
   "new.create_error":
     "🔴 OpenCode Server no está disponible u ocurrió un error al crear la sesión.",
+
+  "cleanup.topic_use_general": "⚠️ Ejecuta /cleanup desde el tema General.",
+  "cleanup.requires_forum_general":
+    "⚠️ /cleanup solo está disponible en el tema General de un supergrupo con foros habilitados.",
+  "cleanup.no_topics": "✅ No hay temas de sesión para limpiar.",
+  "cleanup.result":
+    "🧹 Limpieza completa. Revisados: {inspected}, cerrados: {closed}, omitidos: {skipped}, fallidos: {failed}.",
 
   "stop.no_active_session":
     "🛑 El agente no se inició\n\nCrea una sesión con /new o selecciona una con /sessions.",
@@ -221,6 +254,9 @@ export const es: I18nDictionary = {
   "context.no_active_session": "⚠️ No hay una sesión activa. Crea una sesión con /new",
   "context.confirm_text":
     '📊 Compactación de contexto para la sesión "{title}"\n\nEsto reducirá el uso de contexto eliminando mensajes antiguos del historial. La tarea actual no se interrumpirá.\n\n¿Continuar?',
+  "context.general_not_available":
+    "⚠️ La compactación de contexto solo está disponible dentro de un tema de sesión, no en General.",
+  "context.general_not_available_callback": "Primero abre un tema de sesión.",
   "context.callback_session_not_found": "Sesión no encontrada",
   "context.callback_compacting": "Compactando contexto...",
   "context.progress": "⏳ Compactando contexto...",
@@ -276,10 +312,17 @@ export const es: I18nDictionary = {
 
   "keyboard.agent_mode": "{emoji} Modo {name}",
   "keyboard.context": "📊 {used} / {limit} ({percent}%)",
-  "keyboard.context_empty": "📊 0",
+  "keyboard.context_empty": "📊 Controles",
+  "keyboard.general_defaults": "Valores por defecto de sesión:",
+  "keyboard.general_defaults_info":
+    "Estos valores se aplican a las sesiones nuevas creadas en este grupo:\n• Agente\n• Modelo\n• Variante",
   "keyboard.variant": "💭 {name}",
   "keyboard.variant_default": "💡 Predeterminado",
   "keyboard.updated": "⌨️ Teclado actualizado",
+  "keyboard.dm.status": "/status",
+  "keyboard.dm.help": "/help",
+  "keyboard.dm.opencode_start": "/opencode_start",
+  "keyboard.dm.opencode_stop": "/opencode_stop",
 
   "pinned.default_session_title": "sesión nueva",
   "pinned.unknown": "Desconocido",
@@ -395,4 +438,8 @@ export const es: I18nDictionary = {
   "help.dm.hint": "Usa hilos de tema en grupo para trabajo de proyecto/sesión.",
   "status.dm.title": "Resumen de estado en DM",
   "status.dm.hint": "Usa hilos de tema en grupo para ejecutar sesiones de OpenCode.",
+  "group.general.prompts_disabled":
+    "⚠️ Los prompts están deshabilitados en el tema General. Usa /new para crear un tema de sesión dedicado.",
+  "topic.unbound":
+    "⚠️ Este tema no está vinculado a ninguna sesión. Ve al tema General y ejecuta /new.",
 };
