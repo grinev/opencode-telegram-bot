@@ -18,3 +18,15 @@ export function getCurrentSession(): SessionInfo | null {
 export function clearSession(): void {
   clearSettingsSession();
 }
+
+export function updateCurrentSessionTitle(sessionId: string, title: string): void {
+  const currentSession = getCurrentSession();
+  if (!currentSession || currentSession.id !== sessionId || currentSession.title === title) {
+    return;
+  }
+
+  setSettingsSession({
+    ...currentSession,
+    title,
+  });
+}

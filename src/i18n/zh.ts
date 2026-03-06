@@ -3,6 +3,7 @@ import type { I18nDictionary } from "./en.js";
 export const zh: I18nDictionary = {
   "cmd.description.status": "服务器和会话状态",
   "cmd.description.new": "创建新会话",
+  "cmd.description.rename": "重命名当前会话",
   "cmd.description.stop": "停止当前操作",
   "cmd.description.sessions": "列出会话",
   "cmd.description.projects": "列出项目",
@@ -41,7 +42,7 @@ export const zh: I18nDictionary = {
   "common.unknown_error": "未知错误",
 
   "start.welcome":
-    "👋 欢迎使用 OpenCode Telegram Bot！\n\n可用命令：\n/projects — 选择项目\n/sessions — 会话列表\n/new — 新建会话\n/status — 状态\n/help — 帮助\n\n请使用底部按钮选择模式、模型和变体。",
+    "👋 欢迎使用 OpenCode Telegram Bot！\n\n可用命令：\n/projects — 选择项目\n/sessions — 会话列表\n/new — 新建会话\n/rename — 重命名当前会话\n/status — 状态\n/help — 帮助\n\n请使用底部按钮选择模式、模型和变体。",
   "help.keyboard_hint": "💡 代理模式、模型、变体和上下文操作请使用底部键盘按钮。",
   "help.text":
     "📖 **帮助**\n\n/status - 查看服务器状态\n/sessions - 会话列表\n/new - 创建新会话\n/help - 帮助",
@@ -123,6 +124,15 @@ export const zh: I18nDictionary = {
   "new.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
   "new.created": "✅ 新会话已创建：{title}",
   "new.create_error": "🔴 OpenCode 服务器不可用，或创建会话时发生错误。",
+
+  "rename.no_active_session": "⚠️ 没有活动会话。请先使用 /new 创建，或通过 /sessions 选择一个。",
+  "rename.prompt": "✏️ 请通过下一条文本消息发送当前会话的新标题。\n\n当前标题：{title}",
+  "rename.empty": "⚠️ 会话标题不能为空。请发送非空白文本。",
+  "rename.success": "✅ 会话已重命名：{title}",
+  "rename.error": "🔴 重命名会话失败。",
+  "rename.button.cancel": "❌ 取消",
+  "rename.cancelled_callback": "已取消",
+  "rename.inactive_callback": "此重命名请求已失效",
 
   "stop.no_active_session": "🛑 代理尚未启动\n\n使用 /new 创建会话，或通过 /sessions 选择一个。",
   "stop.in_progress": "🛑 已停止事件流，正在发送中止信号...\n\n等待代理停止。",

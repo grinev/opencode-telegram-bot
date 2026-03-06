@@ -3,6 +3,7 @@ import type { I18nDictionary } from "./en.js";
 export const es: I18nDictionary = {
   "cmd.description.status": "Estado del servidor y de la sesión",
   "cmd.description.new": "Crear una sesión nueva",
+  "cmd.description.rename": "Renombrar la sesión actual",
   "cmd.description.stop": "Detener la acción actual",
   "cmd.description.sessions": "Listar sesiones",
   "cmd.description.projects": "Listar proyectos",
@@ -48,7 +49,7 @@ export const es: I18nDictionary = {
   "common.unknown_error": "error desconocido",
 
   "start.welcome":
-    "👋 ¡Bienvenido a OpenCode Telegram Bot!\n\nUsa los comandos:\n/projects — seleccionar proyecto\n/sessions — lista de sesiones\n/new — sesión nueva\n/status — estado\n/help — ayuda\n\nUsa los botones inferiores para elegir modo, modelo y variante.",
+    "👋 ¡Bienvenido a OpenCode Telegram Bot!\n\nUsa los comandos:\n/projects — seleccionar proyecto\n/sessions — lista de sesiones\n/new — sesión nueva\n/rename — renombrar la sesión actual\n/status — estado\n/help — ayuda\n\nUsa los botones inferiores para elegir modo, modelo y variante.",
   "help.keyboard_hint":
     "💡 Usa los botones inferiores para modo del agente, modelo, variante y acciones de contexto.",
   "help.text":
@@ -144,6 +145,18 @@ export const es: I18nDictionary = {
   "new.created": "✅ Sesión nueva creada: {title}",
   "new.create_error":
     "🔴 OpenCode Server no está disponible u ocurrió un error al crear la sesión.",
+
+  "rename.no_active_session":
+    "⚠️ No hay una sesión activa. Primero crea una con /new o elige una con /sessions.",
+  "rename.prompt":
+    "✏️ Envía el nuevo título de la sesión actual en tu siguiente mensaje de texto.\n\nTítulo actual: {title}",
+  "rename.empty":
+    "⚠️ El título de la sesión no puede estar vacío. Envía texto que no sea solo espacios.",
+  "rename.success": "✅ Sesión renombrada: {title}",
+  "rename.error": "🔴 No se pudo renombrar la sesión.",
+  "rename.button.cancel": "❌ Cancelar",
+  "rename.cancelled_callback": "Cancelado",
+  "rename.inactive_callback": "Esta solicitud de cambio de nombre está inactiva",
 
   "stop.no_active_session":
     "🛑 El agente no se inició\n\nCrea una sesión con /new o selecciona una con /sessions.",

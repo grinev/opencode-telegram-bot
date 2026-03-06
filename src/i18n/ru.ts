@@ -3,6 +3,7 @@ import type { I18nDictionary } from "./en.js";
 export const ru: I18nDictionary = {
   "cmd.description.status": "Статус сервера и сессии",
   "cmd.description.new": "Создать новую сессию",
+  "cmd.description.rename": "Переименовать текущую сессию",
   "cmd.description.stop": "Прервать текущее действие",
   "cmd.description.sessions": "Список сессий",
   "cmd.description.projects": "Список проектов",
@@ -45,7 +46,7 @@ export const ru: I18nDictionary = {
   "common.unknown_error": "неизвестная ошибка",
 
   "start.welcome":
-    "👋 Добро пожаловать в OpenCode Telegram Bot!\n\nИспользуйте команды:\n/projects — выбрать проект\n/sessions — список сессий\n/new — новая сессия\n/status — статус\n/help — справка\n\nРежим, модель и вариант выбираются кнопками внизу.",
+    "👋 Добро пожаловать в OpenCode Telegram Bot!\n\nИспользуйте команды:\n/projects — выбрать проект\n/sessions — список сессий\n/new — новая сессия\n/rename — переименовать текущую сессию\n/status — статус\n/help — справка\n\nРежим, модель и вариант выбираются кнопками внизу.",
   "help.keyboard_hint":
     "💡 Режим, модель, вариант и действия с контекстом доступны через нижние кнопки клавиатуры.",
   "help.text":
@@ -137,6 +138,17 @@ export const ru: I18nDictionary = {
   "new.project_not_selected": "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
   "new.created": "✅ Создана новая сессия: {title}",
   "new.create_error": "🔴 OpenCode Server недоступен или произошла ошибка при создании сессии.",
+
+  "rename.no_active_session":
+    "⚠️ Нет активной сессии. Сначала создайте её через /new или выберите через /sessions.",
+  "rename.prompt":
+    "✏️ Отправьте новое название текущей сессии следующим текстовым сообщением.\n\nТекущее название: {title}",
+  "rename.empty": "⚠️ Название сессии не может быть пустым. Отправьте непустой текст.",
+  "rename.success": "✅ Сессия переименована: {title}",
+  "rename.error": "🔴 Не удалось переименовать сессию.",
+  "rename.button.cancel": "❌ Отмена",
+  "rename.cancelled_callback": "Отменено",
+  "rename.inactive_callback": "Этот запрос на переименование уже неактивен",
 
   "stop.no_active_session":
     "🛑 Агент не был запущен\n\nСначала создайте сессию командой /new или выберите существующую через /sessions.",

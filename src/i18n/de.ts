@@ -3,6 +3,7 @@ import type { I18nDictionary } from "./en.js";
 export const de: I18nDictionary = {
   "cmd.description.status": "Server- und Sitzungsstatus",
   "cmd.description.new": "Neue Sitzung erstellen",
+  "cmd.description.rename": "Aktuelle Sitzung umbenennen",
   "cmd.description.stop": "Aktuelle Aktion stoppen",
   "cmd.description.sessions": "Sitzungen auflisten",
   "cmd.description.projects": "Projekte auflisten",
@@ -48,7 +49,7 @@ export const de: I18nDictionary = {
   "common.unknown_error": "unbekannter Fehler",
 
   "start.welcome":
-    "👋 Willkommen beim OpenCode Telegram Bot!\n\nNutze Befehle:\n/projects — Projekt auswählen\n/sessions — Sitzungsliste\n/new — neue Sitzung\n/status — Status\n/help — Hilfe\n\nNutze die unteren Buttons, um Modus, Modell und Variante zu wählen.",
+    "👋 Willkommen beim OpenCode Telegram Bot!\n\nNutze Befehle:\n/projects — Projekt auswählen\n/sessions — Sitzungsliste\n/new — neue Sitzung\n/rename — aktuelle Sitzung umbenennen\n/status — Status\n/help — Hilfe\n\nNutze die unteren Buttons, um Modus, Modell und Variante zu wählen.",
   "help.keyboard_hint":
     "💡 Nutze die unteren Buttons für Modus, Modell, Variante und Kontextaktionen.",
   "help.text":
@@ -145,6 +146,18 @@ export const de: I18nDictionary = {
   "new.created": "✅ Neue Sitzung erstellt: {title}",
   "new.create_error":
     "🔴 OpenCode-Server ist nicht verfügbar oder beim Erstellen der Sitzung ist ein Fehler aufgetreten.",
+
+  "rename.no_active_session":
+    "⚠️ Keine aktive Sitzung. Erstelle zuerst eine mit /new oder wähle eine über /sessions aus.",
+  "rename.prompt":
+    "✏️ Sende den neuen Titel für die aktuelle Sitzung mit deiner nächsten Textnachricht.\n\nAktueller Titel: {title}",
+  "rename.empty":
+    "⚠️ Der Sitzungstitel darf nicht leer sein. Bitte sende Text ohne nur Leerzeichen.",
+  "rename.success": "✅ Sitzung umbenannt: {title}",
+  "rename.error": "🔴 Sitzung konnte nicht umbenannt werden.",
+  "rename.button.cancel": "❌ Abbrechen",
+  "rename.cancelled_callback": "Abgebrochen",
+  "rename.inactive_callback": "Diese Umbenennungsanfrage ist inaktiv",
 
   "stop.no_active_session":
     "🛑 Agent wurde nicht gestartet\n\nErstelle eine Sitzung mit /new oder wähle eine über /sessions aus.",

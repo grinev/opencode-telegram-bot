@@ -100,6 +100,7 @@ opencode-telegram config
 | ----------------- | ------------------------------------------------------- |
 | `/status`         | Server health, current project, session, and model info |
 | `/new`            | Create a new session                                    |
+| `/rename`         | Rename the current session                              |
 | `/stop`           | Abort the current task                                  |
 | `/sessions`       | Browse and switch between recent sessions               |
 | `/projects`       | Switch between OpenCode projects                        |

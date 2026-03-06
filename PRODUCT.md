@@ -94,6 +94,7 @@ Current command set:
 
 - [x] `/status` - server, project, and session status
 - [x] `/new` - create a new session
+- [x] `/rename` - rename the current session
 - [x] `/stop` - stop the current task
 - [x] `/sessions` - show and switch recent sessions
 - [x] `/projects` - show and switch projects
@@ -108,7 +109,7 @@ Text messages (non-commands) are treated as prompts for OpenCode only when no bl
 
 Interaction routing rules:
 
-- Only one interactive flow can be active at a time (inline menu, permission, question, commands)
+- Only one interactive flow can be active at a time (inline menu, permission, question, commands, rename)
 - While an interaction is active, unrelated input is blocked with a contextual hint
 - Allowed utility commands during active interactions: `/help`, `/status`, `/stop`
 - Unknown slash commands return an explicit fallback message
@@ -126,6 +127,7 @@ Model picker behavior:
 - [x] OpenCode server control and health checks via bot commands
 - [x] Project management (list/switch) with inline menus
 - [x] Session management (list/switch/create) with inline menus
+- [x] Manual session rename flow with next-message text input and cancel button
 - [x] Prompt execution through OpenCode with SSE-based event handling
 - [x] Interactive question and permission flows (buttons + custom text answers)
 - [x] Single-active interaction routing with contextual blocking and cleanup recovery

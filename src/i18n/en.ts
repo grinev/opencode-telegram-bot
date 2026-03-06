@@ -1,6 +1,7 @@
 export const en = {
   "cmd.description.status": "Server and session status",
   "cmd.description.new": "Create a new session",
+  "cmd.description.rename": "Rename current session",
   "cmd.description.stop": "Stop current action",
   "cmd.description.sessions": "List sessions",
   "cmd.description.projects": "List projects",
@@ -45,7 +46,7 @@ export const en = {
   "common.unknown_error": "unknown error",
 
   "start.welcome":
-    "👋 Welcome to OpenCode Telegram Bot!\n\nUse commands:\n/projects — select project\n/sessions — session list\n/new — new session\n/status — status\n/help — help\n\nUse the bottom buttons to select agent mode, model, and variant.",
+    "👋 Welcome to OpenCode Telegram Bot!\n\nUse commands:\n/projects — select project\n/sessions — session list\n/new — new session\n/rename — rename current session\n/status — status\n/help — help\n\nUse the bottom buttons to select agent mode, model, and variant.",
   "help.keyboard_hint":
     "💡 Use the bottom keyboard buttons for agent mode, model, variant, and context actions.",
   "help.text":
@@ -138,6 +139,17 @@ export const en = {
   "new.created": "✅ New session created: {title}",
   "new.create_error":
     "🔴 OpenCode Server is unavailable or an error occurred while creating session.",
+
+  "rename.no_active_session":
+    "⚠️ No active session. Create one with /new or select one with /sessions first.",
+  "rename.prompt":
+    "✏️ Send the new title for the current session with your next text message.\n\nCurrent title: {title}",
+  "rename.empty": "⚠️ Session title cannot be empty. Please send non-space text.",
+  "rename.success": "✅ Session renamed: {title}",
+  "rename.error": "🔴 Failed to rename the session.",
+  "rename.button.cancel": "❌ Cancel",
+  "rename.cancelled_callback": "Cancelled",
+  "rename.inactive_callback": "This rename request is inactive",
 
   "stop.no_active_session":
     "🛑 Agent was not started\n\nCreate a session with /new or select one via /sessions.",
