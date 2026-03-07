@@ -5,7 +5,6 @@ import { getCurrentProject } from "../../settings/manager.js";
 import { fetchCurrentAgent } from "../../agent/manager.js";
 import { getAgentDisplayName } from "../../agent/types.js";
 import { fetchCurrentModel } from "../../model/manager.js";
-import { formatModelForDisplay } from "../../model/types.js";
 import { processManager } from "../../process/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
@@ -48,7 +47,7 @@ export async function statusCommand(ctx: CommandContext<Context>) {
 
     // Add model information
     const currentModel = fetchCurrentModel();
-    const modelDisplay = formatModelForDisplay(currentModel.providerID, currentModel.modelID);
+    const modelDisplay = `🤖 ${currentModel.providerID}/${currentModel.modelID}`;
     message += `${t("status.line.model", { model: modelDisplay })}\n`;
 
     const currentProject = getCurrentProject();
