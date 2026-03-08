@@ -107,6 +107,21 @@ describe("interaction guard", () => {
     expect(decision.command).toBe("/help");
   });
 
+  it("allows /new to interrupt an active inline interaction", () => {
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      allowedCommands: ["/status"],
+    });
+
+    const decision = resolveInteractionGuardDecision(createContext({ text: "/new" }));
+
+    expect(decision.allow).toBe(true);
+    expect(decision.command).toBe("/new");
+    expect(decision.state).toBeNull();
+    expect(interactionManager.isActive()).toBe(false);
+  });
+
   it("clears state and blocks when interaction is expired", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));

@@ -8,6 +8,8 @@ import type {
   InteractionState,
 } from "./types.js";
 
+const INLINE_INTERRUPT_COMMANDS = new Set(["/new"]);
+
 function normalizeIncomingCommand(text: string): string | null {
   const trimmed = text.trim();
   if (!trimmed.startsWith("/")) {
@@ -112,6 +114,11 @@ export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
   }
 
   if (inputType === "command") {
+    if (command && state.kind === "inline" && INLINE_INTERRUPT_COMMANDS.has(command)) {
+      interactionManager.clear(`inline_interrupted:${command.slice(1)}`);
+      return createAllowDecision(inputType, null, command);
+    }
+
     if (command && state.allowedCommands.includes(command)) {
       return createAllowDecision(inputType, state, command);
     }

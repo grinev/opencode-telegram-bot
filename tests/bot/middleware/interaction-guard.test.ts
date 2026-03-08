@@ -110,6 +110,23 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).toHaveBeenCalledWith(t("inline.blocked.command_not_allowed"));
   });
 
+  it("allows /new to interrupt an inline interaction", async () => {
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      allowedCommands: ["/status"],
+    });
+
+    const ctx = createTextContext("/new");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.reply).not.toHaveBeenCalled();
+    expect(interactionManager.isActive()).toBe(false);
+  });
+
   it("shows permission-specific message for blocked text", async () => {
     interactionManager.start({
       kind: "permission",
