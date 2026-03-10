@@ -5,6 +5,9 @@ import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
+import { clearSession } from "../../session/manager.js";
+import { clearProject } from "../../settings/manager.js";
+import { stopCurrentOperation } from "./stop.js";
 import { t } from "../../i18n/index.js";
 
 export async function startCommand(ctx: Context): Promise<void> {
@@ -14,6 +17,13 @@ export async function startCommand(ctx: Context): Promise<void> {
     }
     keyboardManager.initialize(ctx.api, ctx.chat.id);
   }
+
+  await stopCurrentOperation(ctx, { notifyUser: false });
+
+  clearSession();
+  clearProject();
+  keyboardManager.clearContext();
+  await pinnedMessageManager.clear();
 
   if (pinnedMessageManager.getContextLimit() === 0) {
     await pinnedMessageManager.refreshContextLimit();

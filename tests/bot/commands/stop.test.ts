@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
-import { stopCommand } from "../../../src/bot/commands/stop.js";
+import { stopCommand, stopCurrentOperation } from "../../../src/bot/commands/stop.js";
 import { clearAllInteractionState } from "../../../src/interaction/cleanup.js";
 import { questionManager } from "../../../src/question/manager.js";
 import { permissionManager } from "../../../src/permission/manager.js";
@@ -117,6 +117,46 @@ describe("bot/commands/stop", () => {
     expect(replyMock).toHaveBeenCalledWith(t("stop.in_progress"));
     expect(mocked.abortMock).toHaveBeenCalled();
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.success"));
+
+    expect(questionManager.isActive()).toBe(false);
+    expect(permissionManager.isActive()).toBe(false);
+    expect(renameManager.isWaitingForName()).toBe(false);
+    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("can stop silently without stop progress messages", async () => {
+    activateInteractionState();
+
+    mocked.currentSession = {
+      id: "session-1",
+      title: "Session",
+      directory: "D:/repo",
+    };
+
+    mocked.abortMock.mockResolvedValue({ data: true, error: null });
+    mocked.statusMock.mockResolvedValue({
+      data: {
+        "session-1": { type: "idle" },
+      },
+      error: null,
+    });
+
+    const replyMock = vi.fn().mockResolvedValue({ message_id: 88 });
+    const editMessageTextMock = vi.fn().mockResolvedValue(undefined);
+
+    const ctx = {
+      chat: { id: 777 },
+      reply: replyMock,
+      api: {
+        editMessageText: editMessageTextMock,
+      },
+    } as unknown as Context;
+
+    await stopCurrentOperation(ctx as never, { notifyUser: false });
+
+    expect(mocked.abortMock).toHaveBeenCalled();
+    expect(replyMock).not.toHaveBeenCalled();
+    expect(editMessageTextMock).not.toHaveBeenCalled();
 
     expect(questionManager.isActive()).toBe(false);
     expect(permissionManager.isActive()).toBe(false);

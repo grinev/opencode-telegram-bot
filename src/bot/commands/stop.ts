@@ -9,6 +9,10 @@ import { t } from "../../i18n/index.js";
 
 type SessionState = "idle" | "busy" | "not-found";
 
+interface StopCurrentOperationOptions {
+  notifyUser?: boolean;
+}
+
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function stopLocalStreaming(): void {
@@ -56,18 +60,37 @@ async function pollSessionStatus(
   return "busy";
 }
 
-export async function stopCommand(ctx: CommandContext<Context>) {
+export async function stopCurrentOperation(
+  ctx: Context,
+  options: StopCurrentOperationOptions = {},
+): Promise<void> {
+  const notifyUser = options.notifyUser ?? true;
+
   try {
     stopLocalStreaming();
 
     const currentSession = getCurrentSession();
 
     if (!currentSession) {
-      await ctx.reply(t("stop.no_active_session"));
+      if (notifyUser) {
+        await ctx.reply(t("stop.no_active_session"));
+      }
       return;
     }
 
-    const waitingMessage = await ctx.reply(t("stop.in_progress"));
+    let waitingMessageId: number | null = null;
+    let chatId: number | null = null;
+
+    if (notifyUser) {
+      const waitingMessage = await ctx.reply(t("stop.in_progress"));
+      waitingMessageId = waitingMessage.message_id;
+      chatId = ctx.chat?.id ?? null;
+
+      if (!chatId) {
+        logger.warn("[Stop] Chat context is missing while aborting active session");
+        return;
+      }
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -85,20 +108,16 @@ export async function stopCommand(ctx: CommandContext<Context>) {
 
       if (abortError) {
         logger.warn("[Stop] Abort request failed:", abortError);
-        await ctx.api.editMessageText(
-          ctx.chat.id,
-          waitingMessage.message_id,
-          t("stop.warn_unconfirmed"),
-        );
+        if (notifyUser && chatId !== null && waitingMessageId !== null) {
+          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_unconfirmed"));
+        }
         return;
       }
 
       if (abortResult !== true) {
-        await ctx.api.editMessageText(
-          ctx.chat.id,
-          waitingMessage.message_id,
-          t("stop.warn_maybe_finished"),
-        );
+        if (notifyUser && chatId !== null && waitingMessageId !== null) {
+          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_maybe_finished"));
+        }
         return;
       }
 
@@ -109,34 +128,34 @@ export async function stopCommand(ctx: CommandContext<Context>) {
       );
 
       if (finalStatus === "idle" || finalStatus === "not-found") {
-        await ctx.api.editMessageText(ctx.chat.id, waitingMessage.message_id, t("stop.success"));
+        if (notifyUser && chatId !== null && waitingMessageId !== null) {
+          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.success"));
+        }
       } else {
-        await ctx.api.editMessageText(
-          ctx.chat.id,
-          waitingMessage.message_id,
-          t("stop.warn_still_busy"),
-        );
+        if (notifyUser && chatId !== null && waitingMessageId !== null) {
+          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_still_busy"));
+        }
       }
     } catch (error) {
       clearTimeout(timeoutId);
 
       if (error instanceof Error && error.name === "AbortError") {
-        await ctx.api.editMessageText(
-          ctx.chat.id,
-          waitingMessage.message_id,
-          t("stop.warn_timeout"),
-        );
+        if (notifyUser && chatId !== null && waitingMessageId !== null) {
+          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_timeout"));
+        }
       } else {
         logger.error("[Stop] Error while aborting session:", error);
-        await ctx.api.editMessageText(
-          ctx.chat.id,
-          waitingMessage.message_id,
-          t("stop.warn_local_only"),
-        );
+        if (notifyUser && chatId !== null && waitingMessageId !== null) {
+          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_local_only"));
+        }
       }
     }
   } catch (error) {
     logger.error("[Stop] Unexpected error:", error);
     await ctx.reply(t("stop.error"));
   }
+}
+
+export async function stopCommand(ctx: CommandContext<Context>): Promise<void> {
+  await stopCurrentOperation(ctx);
 }

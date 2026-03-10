@@ -94,6 +94,22 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).not.toHaveBeenCalled();
   });
 
+  it("always allows /start even when command list is restricted", async () => {
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      allowedCommands: ["/status"],
+    });
+
+    const ctx = createTextContext("/start");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
+
   it("blocks disallowed command", async () => {
     interactionManager.start({
       kind: "inline",

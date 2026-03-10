@@ -31,11 +31,14 @@ function createContext({
   }
 
   if (photo) {
-    message.photo = [{ file_id: "photo-file-id", file_unique_id: "unique-photo-id", width: 1280, height: 720 }];
+    message.photo = [
+      { file_id: "photo-file-id", file_unique_id: "unique-photo-id", width: 1280, height: 720 },
+    ];
   }
 
   return {
-    message: Object.keys(message).length > 0 ? (message as unknown as Context["message"]) : undefined,
+    message:
+      Object.keys(message).length > 0 ? (message as unknown as Context["message"]) : undefined,
     callbackQuery:
       callbackData !== undefined ? ({ data: callbackData } as Context["callbackQuery"]) : undefined,
   } as Context;
@@ -91,6 +94,19 @@ describe("interaction guard", () => {
 
     expect(decision.allow).toBe(true);
     expect(decision.command).toBe("/status");
+  });
+
+  it("always allows /start even when command list is restricted", () => {
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      allowedCommands: ["/status"],
+    });
+
+    const decision = resolveInteractionGuardDecision(createContext({ text: "/start" }));
+
+    expect(decision.allow).toBe(true);
+    expect(decision.command).toBe("/start");
   });
 
   it("blocks command that is not allowed", () => {
