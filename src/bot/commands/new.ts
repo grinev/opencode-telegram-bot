@@ -48,6 +48,10 @@ const NEW_COMMAND_TOPIC_SYNC = {
   TITLE_POLL_DELAY_MS: 2000,
 } as const;
 
+interface NewCommandDeps {
+  ensureEventSubscription: (directory: string) => Promise<void>;
+}
+
 function parseNewCommandPrompt(ctx: CommandContext<Context>): string {
   const text = ctx.message?.text ?? "";
   const parts = text.trim().split(/\s+/);
@@ -121,181 +125,207 @@ function getErrorText(error: unknown): string {
   return String(error).toLowerCase();
 }
 
-export async function newCommand(ctx: CommandContext<Context>): Promise<void> {
-  try {
-    const scope = getScopeFromContext(ctx);
-    const scopeKey = scope?.key ?? GLOBAL_SCOPE_KEY;
-
-    if (isTopicScope(scope)) {
-      await ctx.reply(t(BOT_I18N_KEY.NEW_TOPIC_ONLY_IN_GENERAL));
-      return;
-    }
-
-    if (!isGeneralForumScope(ctx)) {
-      await ctx.reply(t(BOT_I18N_KEY.NEW_REQUIRES_FORUM_GENERAL));
-      return;
-    }
-
-    const currentProject = getCurrentProject(scopeKey);
-    if (!currentProject) {
-      await ctx.reply(t("new.project_not_selected"));
-      return;
-    }
-
-    logger.debug("[Bot] Creating new session for forum topic", {
-      scopeKey,
-      project: currentProject.worktree,
-    });
-
-    const { data: session, error } = await opencodeClient.session.create({
-      directory: currentProject.worktree,
-    });
-
-    if (error || !session) {
-      throw error || new Error("No data received from server");
-    }
-
-    const initialPrompt = parseNewCommandPrompt(ctx);
-    const topicTitle = formatTopicTitle(session.title, session.title);
-
-    const createdTopic = await ctx.api.createForumTopic(ctx.chat!.id, topicTitle, {
-      icon_color: TOPIC_COLORS.BLUE,
-    });
-
-    const topicThreadId = createdTopic.message_thread_id;
-    const topicScopeKey = createScopeKeyFromParams({
-      chatId: ctx.chat!.id,
-      threadId: topicThreadId,
-      context: SCOPE_CONTEXT.GROUP_TOPIC,
-    });
-
-    const sessionInfo: SessionInfo = {
-      id: session.id,
-      title: session.title,
-      directory: currentProject.worktree,
-    };
-
-    setCurrentProject(currentProject, topicScopeKey);
-    setCurrentSession(sessionInfo, topicScopeKey);
-    setCurrentAgent(getStoredAgent(scopeKey), topicScopeKey);
-    setCurrentModel(getStoredModel(scopeKey), topicScopeKey);
-
-    registerTopicSessionBinding({
-      scopeKey: topicScopeKey,
-      chatId: ctx.chat!.id,
-      threadId: topicThreadId,
-      sessionId: session.id,
-      projectId: currentProject.id,
-      projectWorktree: currentProject.worktree,
-      topicName: topicTitle,
-      status: TOPIC_SESSION_STATUS.ACTIVE,
-    });
-
-    summaryAggregator.setSession(session.id);
-    clearAllInteractionState(INTERACTION_CLEAR_REASON.SESSION_CREATED, topicScopeKey);
-    await ingestSessionInfoForCache(session);
-
-    if (!pinnedMessageManager.isInitialized(topicScopeKey)) {
-      pinnedMessageManager.initialize(ctx.api, ctx.chat!.id, topicScopeKey, topicThreadId);
-    }
-
-    keyboardManager.initialize(ctx.api, ctx.chat!.id, topicScopeKey);
-
+export function createNewCommand(deps: NewCommandDeps) {
+  return async function newCommand(ctx: CommandContext<Context>): Promise<void> {
     try {
-      await pinnedMessageManager.onSessionChange(session.id, session.title, topicScopeKey);
-    } catch (errorOnPinned) {
-      logger.error("[Bot] Error creating pinned message for new topic", errorOnPinned);
-    }
+      const scope = getScopeFromContext(ctx);
+      const scopeKey = scope?.key ?? GLOBAL_SCOPE_KEY;
 
-    if (pinnedMessageManager.getContextLimit(topicScopeKey) === 0) {
-      await pinnedMessageManager.refreshContextLimit(topicScopeKey);
-    }
-
-    const currentAgent = getStoredAgent(topicScopeKey);
-    const currentModel = getStoredModel(topicScopeKey);
-    const contextInfo =
-      pinnedMessageManager.getContextInfo(topicScopeKey) ??
-      keyboardManager.getContextInfo(topicScopeKey) ??
-      (pinnedMessageManager.getContextLimit(topicScopeKey) > 0
-        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit(topicScopeKey) }
-        : null);
-    const variantName = formatVariantForButton(currentModel.variant || "default");
-    const keyboard = createMainKeyboard(
-      currentAgent,
-      currentModel,
-      contextInfo ?? undefined,
-      variantName,
-    );
-
-    const topicReadyMessage = await ctx.api.sendMessage(
-      ctx.chat!.id,
-      t(BOT_I18N_KEY.NEW_TOPIC_CREATED, { title: session.title }),
-      {
-        ...getThreadSendOptions(topicThreadId),
-        reply_markup: keyboard,
-      },
-    );
-
-    const topicMessageLink = buildTopicMessageLink(ctx.chat, topicReadyMessage.message_id);
-    const generalReplyText = topicMessageLink
-      ? `${t(BOT_I18N_KEY.NEW_GENERAL_CREATED)}\n${t(BOT_I18N_KEY.NEW_GENERAL_OPEN_LINK, { url: topicMessageLink })}`
-      : t(BOT_I18N_KEY.NEW_TOPIC_CREATE_ERROR);
-
-    await ctx.reply(generalReplyText, getThreadSendOptions(scope?.threadId ?? null));
-
-    if (initialPrompt.length > 0) {
-      const promptModel = getStoredModel(topicScopeKey);
-      const promptAgent = getStoredAgent(topicScopeKey);
-      const promptOptions: {
-        sessionID: string;
-        directory: string;
-        parts: TextPartInput[];
-        model?: { providerID: string; modelID: string };
-        agent?: string;
-        variant?: string;
-      } = {
-        sessionID: session.id,
-        directory: currentProject.worktree,
-        parts: [{ type: "text", text: initialPrompt }],
-        agent: promptAgent,
-      };
-
-      if (promptModel.providerID && promptModel.modelID) {
-        promptOptions.model = {
-          providerID: promptModel.providerID,
-          modelID: promptModel.modelID,
-        };
-
-        if (promptModel.variant) {
-          promptOptions.variant = promptModel.variant;
-        }
+      if (isTopicScope(scope)) {
+        await ctx.reply(t(BOT_I18N_KEY.NEW_TOPIC_ONLY_IN_GENERAL));
+        return;
       }
 
-      safeBackgroundTask({
-        taskName: "new.session.prompt",
-        task: () => opencodeClient.session.prompt(promptOptions),
-        onError: (promptError) => {
-          logger.error("[Bot] Failed to send prompt from /new", {
-            sessionId: session.id,
-            promptError,
-          });
+      if (!isGeneralForumScope(ctx)) {
+        await ctx.reply(t(BOT_I18N_KEY.NEW_REQUIRES_FORUM_GENERAL));
+        return;
+      }
+
+      const currentProject = getCurrentProject(scopeKey);
+      if (!currentProject) {
+        await ctx.reply(t("new.project_not_selected"));
+        return;
+      }
+
+      logger.debug("[Bot] Creating new session for forum topic", {
+        scopeKey,
+        project: currentProject.worktree,
+      });
+
+      const { data: session, error } = await opencodeClient.session.create({
+        directory: currentProject.worktree,
+      });
+
+      if (error || !session) {
+        throw error || new Error("No data received from server");
+      }
+
+      const initialPrompt = parseNewCommandPrompt(ctx);
+      const topicTitle = formatTopicTitle(session.title, session.title);
+
+      const createdTopic = await ctx.api.createForumTopic(ctx.chat!.id, topicTitle, {
+        icon_color: TOPIC_COLORS.BLUE,
+      });
+
+      const topicThreadId = createdTopic.message_thread_id;
+      const topicScopeKey = createScopeKeyFromParams({
+        chatId: ctx.chat!.id,
+        threadId: topicThreadId,
+        context: SCOPE_CONTEXT.GROUP_TOPIC,
+      });
+
+      const sessionInfo: SessionInfo = {
+        id: session.id,
+        title: session.title,
+        directory: currentProject.worktree,
+      };
+
+      setCurrentProject(currentProject, topicScopeKey);
+      setCurrentSession(sessionInfo, topicScopeKey);
+      setCurrentAgent(getStoredAgent(scopeKey), topicScopeKey);
+      setCurrentModel(getStoredModel(scopeKey), topicScopeKey);
+
+      registerTopicSessionBinding({
+        scopeKey: topicScopeKey,
+        chatId: ctx.chat!.id,
+        threadId: topicThreadId,
+        sessionId: session.id,
+        projectId: currentProject.id,
+        projectWorktree: currentProject.worktree,
+        topicName: topicTitle,
+        status: TOPIC_SESSION_STATUS.ACTIVE,
+      });
+
+      await deps.ensureEventSubscription(currentProject.worktree);
+
+      summaryAggregator.setSession(session.id);
+      clearAllInteractionState(INTERACTION_CLEAR_REASON.SESSION_CREATED, topicScopeKey);
+      await ingestSessionInfoForCache(session);
+
+      if (!pinnedMessageManager.isInitialized(topicScopeKey)) {
+        pinnedMessageManager.initialize(ctx.api, ctx.chat!.id, topicScopeKey, topicThreadId);
+      }
+
+      keyboardManager.initialize(ctx.api, ctx.chat!.id, topicScopeKey);
+
+      try {
+        await pinnedMessageManager.onSessionChange(session.id, session.title, topicScopeKey);
+      } catch (errorOnPinned) {
+        logger.error("[Bot] Error creating pinned message for new topic", errorOnPinned);
+      }
+
+      if (pinnedMessageManager.getContextLimit(topicScopeKey) === 0) {
+        await pinnedMessageManager.refreshContextLimit(topicScopeKey);
+      }
+
+      const currentAgent = getStoredAgent(topicScopeKey);
+      const currentModel = getStoredModel(topicScopeKey);
+      const contextInfo =
+        pinnedMessageManager.getContextInfo(topicScopeKey) ??
+        keyboardManager.getContextInfo(topicScopeKey) ??
+        (pinnedMessageManager.getContextLimit(topicScopeKey) > 0
+          ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit(topicScopeKey) }
+          : null);
+      const variantName = formatVariantForButton(currentModel.variant || "default");
+      const keyboard = createMainKeyboard(
+        currentAgent,
+        currentModel,
+        contextInfo ?? undefined,
+        variantName,
+      );
+
+      const topicReadyMessage = await ctx.api.sendMessage(
+        ctx.chat!.id,
+        t(BOT_I18N_KEY.NEW_TOPIC_CREATED, { title: session.title }),
+        {
+          ...getThreadSendOptions(topicThreadId),
+          reply_markup: keyboard,
         },
-      });
+      );
 
-      safeBackgroundTask({
-        taskName: "new.session.topic_title_sync",
-        task: () => pollSessionTitleAndSyncTopic(ctx, session.id, currentProject.worktree),
-      });
+      const topicMessageLink = buildTopicMessageLink(ctx.chat, topicReadyMessage.message_id);
+      const generalReplyText = topicMessageLink
+        ? `${t(BOT_I18N_KEY.NEW_GENERAL_CREATED)}\n${t(BOT_I18N_KEY.NEW_GENERAL_OPEN_LINK, { url: topicMessageLink })}`
+        : t(BOT_I18N_KEY.NEW_TOPIC_CREATE_ERROR);
+
+      await ctx.reply(generalReplyText, getThreadSendOptions(scope?.threadId ?? null));
+
+      if (initialPrompt.length > 0) {
+        const promptModel = getStoredModel(topicScopeKey);
+        const promptAgent = getStoredAgent(topicScopeKey);
+        const promptOptions: {
+          sessionID: string;
+          directory: string;
+          parts: TextPartInput[];
+          model?: { providerID: string; modelID: string };
+          agent?: string;
+          variant?: string;
+        } = {
+          sessionID: session.id,
+          directory: currentProject.worktree,
+          parts: [{ type: "text", text: initialPrompt }],
+          agent: promptAgent,
+        };
+
+        if (promptModel.providerID && promptModel.modelID) {
+          promptOptions.model = {
+            providerID: promptModel.providerID,
+            modelID: promptModel.modelID,
+          };
+
+          if (promptModel.variant) {
+            promptOptions.variant = promptModel.variant;
+          }
+        }
+
+        safeBackgroundTask({
+          taskName: "new.session.prompt",
+          task: () => opencodeClient.session.prompt(promptOptions),
+          onSuccess: async ({ error: promptError }) => {
+            if (!promptError) {
+              return;
+            }
+
+            logger.error("[Bot] OpenCode API returned an error for /new prompt", {
+              sessionId: session.id,
+              promptError,
+            });
+
+            await ctx.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error"), {
+              ...getThreadSendOptions(topicThreadId),
+            });
+          },
+          onError: async (promptError) => {
+            logger.error("[Bot] Failed to send prompt from /new", {
+              sessionId: session.id,
+              promptError,
+            });
+
+            await ctx.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error"), {
+              ...getThreadSendOptions(topicThreadId),
+            });
+          },
+        });
+
+        safeBackgroundTask({
+          taskName: "new.session.topic_title_sync",
+          task: () => pollSessionTitleAndSyncTopic(ctx, session.id, currentProject.worktree),
+        });
+      }
+    } catch (error) {
+      logger.error("[Bot] Error creating session/topic", error);
+      const errorText = getErrorText(error);
+
+      if (errorText.includes(TELEGRAM_ERROR_MARKER.NOT_ENOUGH_RIGHTS_CREATE_TOPIC)) {
+        await ctx.reply(t(BOT_I18N_KEY.NEW_TOPIC_CREATE_NO_RIGHTS));
+        return;
+      }
+
+      await ctx.reply(t(BOT_I18N_KEY.NEW_TOPIC_CREATE_ERROR));
     }
-  } catch (error) {
-    logger.error("[Bot] Error creating session/topic", error);
-    const errorText = getErrorText(error);
-
-    if (errorText.includes(TELEGRAM_ERROR_MARKER.NOT_ENOUGH_RIGHTS_CREATE_TOPIC)) {
-      await ctx.reply(t(BOT_I18N_KEY.NEW_TOPIC_CREATE_NO_RIGHTS));
-      return;
-    }
-
-    await ctx.reply(t(BOT_I18N_KEY.NEW_TOPIC_CREATE_ERROR));
-  }
+  };
 }
+
+export const newCommand = createNewCommand({
+  ensureEventSubscription: async () => undefined,
+});

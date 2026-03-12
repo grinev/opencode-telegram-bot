@@ -18,7 +18,7 @@ import {
   VARIANT_BUTTON_TEXT_PATTERN,
 } from "./message-patterns.js";
 import { sessionsCommand, handleSessionSelect } from "./commands/sessions.js";
-import { newCommand } from "./commands/new.js";
+import { createNewCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
 import { stopCommand } from "./commands/stop.js";
 import { opencodeStartCommand } from "./commands/opencode-start.js";
@@ -869,7 +869,7 @@ export function createBot(): Bot<Context> {
   bot.command(BOT_COMMAND.OPENCODE_STOP, opencodeStopCommand);
   bot.command(BOT_COMMAND.PROJECTS, projectsCommand);
   bot.command(BOT_COMMAND.SESSIONS, sessionsCommand);
-  bot.command(BOT_COMMAND.NEW, newCommand);
+  bot.command(BOT_COMMAND.NEW, createNewCommand({ ensureEventSubscription }));
   bot.command(BOT_COMMAND.STOP, stopCommand);
   bot.command(BOT_COMMAND.RENAME, renameCommand);
   bot.command(BOT_COMMAND.COMMANDS, commandsCommand);
