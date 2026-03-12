@@ -342,7 +342,3 @@ export function createNewCommand(deps: NewCommandDeps) {
     }
   };
 }
-
-export const newCommand = createNewCommand({
-  ensureEventSubscription: async () => undefined,
-});
