@@ -22,23 +22,23 @@ export async function modelsCommand(ctx: CommandContext<Context>) {
     let message = t("legacy.models.header");
 
     for (const provider of providers) {
-      message += `🔹 **\`${provider.id}\`**\n`;
+      message += `🔹 ${provider.id}\n`;
 
       const models = Object.values(provider.models);
       if (models.length === 0) {
         message += t("legacy.models.no_provider_models");
       } else {
         for (const model of models) {
-          message += `  • \`${model.id}\`\n`;
+          message += `  - ${model.id}\n`;
         }
       }
       message += "\n";
     }
 
     message += t("legacy.models.env_hint");
-    message += "```\nOPENCODE_MODEL_PROVIDER=<provider.id>\nOPENCODE_MODEL_ID=<model.id>\n```";
+    message += "OPENCODE_MODEL_PROVIDER=<provider.id>\nOPENCODE_MODEL_ID=<model.id>";
 
-    await ctx.reply(message, { parse_mode: "Markdown" });
+    await ctx.reply(message);
   } catch (error) {
     logger.error("[ModelsCommand] Error listing models:", error);
     await ctx.reply(t("legacy.models.error"));

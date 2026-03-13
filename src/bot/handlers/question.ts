@@ -245,7 +245,6 @@ async function updateQuestionMessage(ctx: Context): Promise<void> {
   try {
     await ctx.editMessageText(text, {
       reply_markup: keyboard,
-      parse_mode: "Markdown",
     });
   } catch (err) {
     logger.error("[QuestionHandler] Failed to update message:", err);
@@ -273,7 +272,6 @@ export async function showCurrentQuestion(bot: Context["api"], chatId: number): 
   try {
     const message = await bot.sendMessage(chatId, text, {
       reply_markup: keyboard,
-      parse_mode: "Markdown",
     });
 
     logger.debug(`[QuestionHandler] Message sent, messageId=${message.message_id}`);
@@ -443,7 +441,7 @@ function formatQuestionText(question: {
   const progressText = totalQuestions > 0 ? `${currentIndex + 1}/${totalQuestions}` : "";
 
   const headerTitle = [progressText, question.header].filter(Boolean).join(" ");
-  const header = headerTitle ? `**${headerTitle}**\n\n` : "";
+  const header = headerTitle ? `${headerTitle}\n\n` : "";
   const multiple = question.multiple ? t("question.multi_hint") : "";
   return `${header}${question.question}${multiple}`;
 }

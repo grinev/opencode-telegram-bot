@@ -78,7 +78,7 @@ export const en = {
   "bot.model_no_pdf": "⚠️ Current model doesn't support PDF input. Sending text only.",
   "bot.text_file_too_large": "⚠️ Text file is too large (max {maxSizeKb}KB)",
 
-  "status.header_running": "🟢 **OpenCode Server is running**",
+  "status.header_running": "🟢 OpenCode Server is running",
   "status.health.healthy": "Healthy",
   "status.health.unhealthy": "Unhealthy",
   "status.line.health": "Status: {health}",
@@ -160,7 +160,7 @@ export const en = {
     "✅ OpenCode Server is already running as an external process\n\nVersion: {version}\n\nThis server was not started by bot, so /opencode-stop cannot stop it.",
   "opencode_start.starting": "🔄 Starting OpenCode Server...",
   "opencode_start.start_error":
-    "🔴 Failed to start OpenCode Server\n\nError: {error}\n\nCheck that OpenCode CLI is installed and available in PATH:\n`opencode --version`\n`npm install -g @opencode-ai/cli`",
+    "🔴 Failed to start OpenCode Server\n\nError: {error}\n\nCheck that OpenCode CLI is installed and available in PATH:\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ OpenCode Server started, but is not responding\n\nPID: {pid}\n\nServer may still be starting. Try /status in a few seconds.",
   "opencode_start.success":
@@ -228,7 +228,7 @@ export const en = {
     "⚠️ Please answer the permission request first using the buttons above.",
   "permission.blocked.command_not_allowed":
     "⚠️ This command is not available until you answer the permission request.",
-  "permission.header": "{emoji} **Permission request: {name}**\n\n",
+  "permission.header": "{emoji} Permission request: {name}\n\n",
   "permission.button.allow": "✅ Allow once",
   "permission.button.always": "🔓 Allow always",
   "permission.button.reject": "❌ Reject",
@@ -243,6 +243,7 @@ export const en = {
   "permission.name.list": "List Directory",
   "permission.name.task": "Task",
   "permission.name.lsp": "LSP",
+  "permission.name.external_directory": "External Directory",
 
   "question.inactive_callback": "Poll is inactive",
   "question.processing_error_callback": "Processing error",
@@ -254,7 +255,7 @@ export const en = {
   "question.no_active_project": "❌ No active project",
   "question.no_active_request": "❌ No active request",
   "question.send_answers_error": "❌ Failed to send answers to agent",
-  "question.multi_hint": "\n*You can select multiple options*",
+  "question.multi_hint": "\n(You can select multiple options)",
   "question.button.submit": "✅ Done",
   "question.button.custom": "🔤 Custom answer",
   "question.button.cancel": "❌ Cancel",
@@ -359,7 +360,7 @@ export const en = {
 
   "legacy.models.fetch_error": "🔴 Failed to get models list. Check server status with /status.",
   "legacy.models.empty": "📋 No available models. Configure providers in OpenCode.",
-  "legacy.models.header": "📋 **Available models:**\n\n",
+  "legacy.models.header": "📋 Available models:\n\n",
   "legacy.models.no_provider_models": "  ⚠️ No available models\n",
   "legacy.models.env_hint": "💡 To use model in .env:\n",
   "legacy.models.error": "🔴 An error occurred while loading models list.",

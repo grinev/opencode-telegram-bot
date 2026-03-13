@@ -78,7 +78,7 @@ export const ru: I18nDictionary = {
   "bot.model_no_pdf": "⚠️ Текущая модель не поддерживает PDF. Отправляю только текст.",
   "bot.text_file_too_large": "⚠️ Текстовый файл слишком большой (макс. {maxSizeKb}КБ)",
 
-  "status.header_running": "🟢 **OpenCode Server запущен**",
+  "status.header_running": "🟢 OpenCode Server запущен",
   "status.health.healthy": "Healthy",
   "status.health.unhealthy": "Unhealthy",
   "status.line.health": "Статус: {health}",
@@ -163,7 +163,7 @@ export const ru: I18nDictionary = {
     "✅ OpenCode Server уже запущен внешним процессом\n\nВерсия: {version}\n\nЭтот сервер не был запущен через бота, поэтому команда /opencode-stop не сможет его остановить.",
   "opencode_start.starting": "🔄 Запускаю OpenCode Server...",
   "opencode_start.start_error":
-    "🔴 Не удалось запустить OpenCode Server\n\nОшибка: {error}\n\nПроверьте, что OpenCode CLI установлен и доступен в PATH:\n`opencode --version`\n`npm install -g @opencode-ai/cli`",
+    "🔴 Не удалось запустить OpenCode Server\n\nОшибка: {error}\n\nПроверьте, что OpenCode CLI установлен и доступен в PATH:\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ OpenCode Server запущен, но не отвечает\n\nPID: {pid}\n\nСервер может запускаться. Попробуйте /status через несколько секунд.",
   "opencode_start.success": "✅ OpenCode Server успешно запущен\n\nPID: {pid}\nВерсия: {version}",
@@ -229,7 +229,7 @@ export const ru: I18nDictionary = {
   "permission.blocked.expected_reply": "⚠️ Сначала ответьте на запрос разрешения кнопками выше.",
   "permission.blocked.command_not_allowed":
     "⚠️ Эта команда недоступна, пока вы не ответите на запрос разрешения.",
-  "permission.header": "{emoji} **Запрос разрешения: {name}**\n\n",
+  "permission.header": "{emoji} Запрос разрешения: {name}\n\n",
   "permission.button.allow": "✅ Разрешить один раз",
   "permission.button.always": "🔓 Разрешить всегда",
   "permission.button.reject": "❌ Отклонить",
@@ -244,6 +244,7 @@ export const ru: I18nDictionary = {
   "permission.name.list": "List Directory",
   "permission.name.task": "Task",
   "permission.name.lsp": "LSP",
+  "permission.name.external_directory": "Внешняя директория",
 
   "question.inactive_callback": "Опрос неактивен",
   "question.processing_error_callback": "Ошибка при обработке",
@@ -255,7 +256,7 @@ export const ru: I18nDictionary = {
   "question.no_active_project": "❌ Нет активного проекта",
   "question.no_active_request": "❌ Нет активного запроса",
   "question.send_answers_error": "❌ Не удалось отправить ответы агенту",
-  "question.multi_hint": "\n*Можно выбрать несколько вариантов*",
+  "question.multi_hint": "\n(Можно выбрать несколько вариантов)",
   "question.button.submit": "✅ Готово",
   "question.button.custom": "🔤 Свой ответ",
   "question.button.cancel": "❌ Отмена",
@@ -362,7 +363,7 @@ export const ru: I18nDictionary = {
   "legacy.models.fetch_error":
     "🔴 Не удалось получить список моделей. Проверьте статус сервера /status.",
   "legacy.models.empty": "📋 Нет доступных моделей. Настройте провайдеры через OpenCode.",
-  "legacy.models.header": "📋 **Доступные модели:**\n\n",
+  "legacy.models.header": "📋 Доступные модели:\n\n",
   "legacy.models.no_provider_models": "  ⚠️ Нет доступных моделей\n",
   "legacy.models.env_hint": "💡 Для использования модели в .env:\n",
   "legacy.models.error": "🔴 Произошла ошибка при получении списка моделей.",

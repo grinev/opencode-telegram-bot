@@ -84,7 +84,7 @@ export const de: I18nDictionary = {
   "bot.model_no_pdf": "⚠️ Das aktuelle Modell unterstützt keine PDF-Eingabe. Sende nur Text.",
   "bot.text_file_too_large": "⚠️ Textdatei ist zu groß (max. {maxSizeKb}KB)",
 
-  "status.header_running": "🟢 **OpenCode-Server läuft**",
+  "status.header_running": "🟢 OpenCode-Server läuft",
   "status.health.healthy": "OK",
   "status.health.unhealthy": "Nicht OK",
   "status.line.health": "Status: {health}",
@@ -171,7 +171,7 @@ export const de: I18nDictionary = {
     "✅ OpenCode-Server läuft bereits als externer Prozess\n\nVersion: {version}\n\nDieser Server wurde nicht vom Bot gestartet, daher kann /opencode-stop ihn nicht stoppen.",
   "opencode_start.starting": "🔄 Starte OpenCode-Server...",
   "opencode_start.start_error":
-    "🔴 OpenCode-Server konnte nicht gestartet werden\n\nFehler: {error}\n\nPrüfe, ob OpenCode CLI installiert und im PATH verfügbar ist:\n`opencode --version`\n`npm install -g @opencode-ai/cli`",
+    "🔴 OpenCode-Server konnte nicht gestartet werden\n\nFehler: {error}\n\nPrüfe, ob OpenCode CLI installiert und im PATH verfügbar ist:\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ OpenCode-Server gestartet, aber reagiert nicht\n\nPID: {pid}\n\nDer Server startet möglicherweise noch. Versuche /status in ein paar Sekunden.",
   "opencode_start.success":
@@ -240,7 +240,7 @@ export const de: I18nDictionary = {
     "⚠️ Bitte beantworte zuerst die Berechtigungsanfrage mit den Buttons oben.",
   "permission.blocked.command_not_allowed":
     "⚠️ Dieser Befehl ist erst verfügbar, wenn du die Berechtigungsanfrage beantwortet hast.",
-  "permission.header": "{emoji} **Berechtigungsanfrage: {name}**\n\n",
+  "permission.header": "{emoji} Berechtigungsanfrage: {name}\n\n",
   "permission.button.allow": "✅ Einmal erlauben",
   "permission.button.always": "🔓 Immer erlauben",
   "permission.button.reject": "❌ Ablehnen",
@@ -255,6 +255,7 @@ export const de: I18nDictionary = {
   "permission.name.list": "Verzeichnis auflisten",
   "permission.name.task": "Task",
   "permission.name.lsp": "LSP",
+  "permission.name.external_directory": "Externes Verzeichnis",
 
   "question.inactive_callback": "Umfrage ist inaktiv",
   "question.processing_error_callback": "Verarbeitungsfehler",
@@ -266,7 +267,7 @@ export const de: I18nDictionary = {
   "question.no_active_project": "❌ Kein aktives Projekt",
   "question.no_active_request": "❌ Keine aktive Anfrage",
   "question.send_answers_error": "❌ Antworten konnten nicht an den Agenten gesendet werden",
-  "question.multi_hint": "\n*Du kannst mehrere Optionen auswählen*",
+  "question.multi_hint": "\n(Du kannst mehrere Optionen auswählen)",
   "question.button.submit": "✅ Fertig",
   "question.button.custom": "🔤 Eigene Antwort",
   "question.button.cancel": "❌ Abbrechen",
@@ -374,7 +375,7 @@ export const de: I18nDictionary = {
   "legacy.models.fetch_error":
     "🔴 Modellliste konnte nicht geladen werden. Prüfe den Serverstatus mit /status.",
   "legacy.models.empty": "📋 Keine verfügbaren Modelle. Konfiguriere Provider in OpenCode.",
-  "legacy.models.header": "📋 **Verfügbare Modelle:**\n\n",
+  "legacy.models.header": "📋 Verfügbare Modelle:\n\n",
   "legacy.models.no_provider_models": "  ⚠️ Keine verfügbaren Modelle\n",
   "legacy.models.env_hint": "💡 Um ein Modell in .env zu nutzen:\n",
   "legacy.models.error": "🔴 Beim Laden der Modellliste ist ein Fehler aufgetreten.",

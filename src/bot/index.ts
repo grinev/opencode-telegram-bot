@@ -58,7 +58,7 @@ import { processUserPrompt } from "./handlers/prompt.js";
 import { handleVoiceMessage } from "./handlers/voice.js";
 import { handleDocumentMessage } from "./handlers/document.js";
 import { downloadTelegramFile, toDataUri } from "./utils/file-download.js";
-import { sendMessageWithMarkdownFallback } from "./utils/send-with-markdown-fallback.js";
+import { sendBotText } from "./utils/telegram-text.js";
 import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
 import { getStoredModel } from "../model/manager.js";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
@@ -188,6 +188,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     try {
       const parts = formatSummary(messageText);
       const assistantParseMode = getAssistantParseMode();
+      const assistantMessageFormat = assistantParseMode === "MarkdownV2" ? "markdown_v2" : "raw";
 
       logger.debug(
         `[Bot] Sending completed message to Telegram (chatId=${chatIdInstance}, parts=${parts.length})`,
@@ -199,12 +200,12 @@ async function ensureEventSubscription(directory: string): Promise<void> {
           isLastPart && keyboardManager.isInitialized() ? keyboardManager.getKeyboard() : undefined;
         const options = keyboard ? { reply_markup: keyboard } : undefined;
 
-        await sendMessageWithMarkdownFallback({
+        await sendBotText({
           api: botInstance.api,
           chatId: chatIdInstance,
           text: parts[i],
           options,
-          parseMode: assistantParseMode,
+          format: assistantMessageFormat,
         });
       }
     } catch (err) {

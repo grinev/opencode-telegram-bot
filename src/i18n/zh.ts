@@ -69,7 +69,7 @@ export const zh: I18nDictionary = {
   "bot.model_no_pdf": "⚠️ 当前模型不支持PDF输入。将仅发送文本。",
   "bot.text_file_too_large": "⚠️ 文本文件过大（最大 {maxSizeKb}KB）",
 
-  "status.header_running": "🟢 **OpenCode 服务器正在运行**",
+  "status.header_running": "🟢 OpenCode 服务器正在运行",
   "status.health.healthy": "健康",
   "status.health.unhealthy": "不健康",
   "status.line.health": "状态：{health}",
@@ -141,7 +141,7 @@ export const zh: I18nDictionary = {
     "✅ OpenCode 服务器正作为外部进程运行\n\n版本：{version}\n\n该服务器不是由机器人启动，因此 /opencode-stop 无法停止它。",
   "opencode_start.starting": "🔄 正在启动 OpenCode 服务器...",
   "opencode_start.start_error":
-    "🔴 启动 OpenCode 服务器失败\n\n错误：{error}\n\n请检查 OpenCode CLI 已安装且在 PATH 中可用：\n`opencode --version`\n`npm install -g @opencode-ai/cli`",
+    "🔴 启动 OpenCode 服务器失败\n\n错误：{error}\n\n请检查 OpenCode CLI 已安装且在 PATH 中可用：\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ OpenCode 服务器已启动，但未响应\n\nPID：{pid}\n\n服务器可能仍在启动中。几秒后试试 /status。",
   "opencode_start.success": "✅ OpenCode 服务器启动成功\n\nPID：{pid}\n版本：{version}",
@@ -203,7 +203,7 @@ export const zh: I18nDictionary = {
   "permission.send_reply_error": "❌ 发送权限回复失败",
   "permission.blocked.expected_reply": "⚠️ 请先使用上方按钮回答权限请求。",
   "permission.blocked.command_not_allowed": "⚠️ 在你回答权限请求之前不可用此命令。",
-  "permission.header": "{emoji} **权限请求：{name}**\n\n",
+  "permission.header": "{emoji} 权限请求：{name}\n\n",
   "permission.button.allow": "✅ 允许一次",
   "permission.button.always": "🔓 始终允许",
   "permission.button.reject": "❌ 拒绝",
@@ -218,6 +218,7 @@ export const zh: I18nDictionary = {
   "permission.name.list": "列出目录",
   "permission.name.task": "任务",
   "permission.name.lsp": "LSP",
+  "permission.name.external_directory": "外部目录",
 
   "question.inactive_callback": "投票已失效",
   "question.processing_error_callback": "处理错误",
@@ -229,7 +230,7 @@ export const zh: I18nDictionary = {
   "question.no_active_project": "❌ 没有活动项目",
   "question.no_active_request": "❌ 没有活动请求",
   "question.send_answers_error": "❌ 向代理发送答案失败",
-  "question.multi_hint": "\n*你可以选择多个选项*",
+  "question.multi_hint": "\n（你可以选择多个选项）",
   "question.button.submit": "✅ 完成",
   "question.button.custom": "🔤 自定义回答",
   "question.button.cancel": "❌ 取消",
@@ -326,7 +327,7 @@ export const zh: I18nDictionary = {
 
   "legacy.models.fetch_error": "🔴 获取模型列表失败。请使用 /status 检查服务器状态。",
   "legacy.models.empty": "📋 没有可用模型。请在 OpenCode 中配置 providers。",
-  "legacy.models.header": "📋 **可用模型：**\n\n",
+  "legacy.models.header": "📋 可用模型：\n\n",
   "legacy.models.no_provider_models": "  ⚠️ 没有可用模型\n",
   "legacy.models.env_hint": "💡 在 .env 中使用该模型：\n",
   "legacy.models.error": "🔴 加载模型列表时发生错误。",

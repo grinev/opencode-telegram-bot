@@ -24,6 +24,7 @@ const PERMISSION_NAME_KEYS: Record<string, I18nKey> = {
   list: "permission.name.list",
   task: "permission.name.task",
   lsp: "permission.name.lsp",
+  external_directory: "permission.name.external_directory",
 };
 
 // Permission type emojis
@@ -39,6 +40,7 @@ const PERMISSION_EMOJIS: Record<string, string> = {
   list: "📂",
   task: "⚙️",
   lsp: "🔧",
+  external_directory: "📁",
 };
 
 function getCallbackMessageId(ctx: Context): number | null {
@@ -238,7 +240,6 @@ export async function showPermissionRequest(
   try {
     const message = await bot.sendMessage(chatId, text, {
       reply_markup: keyboard,
-      parse_mode: "Markdown",
     });
 
     logger.debug(`[PermissionHandler] Message sent, messageId=${message.message_id}`);
@@ -269,9 +270,7 @@ function formatPermissionText(request: PermissionRequest): string {
   // Show patterns (commands/files)
   if (request.patterns.length > 0) {
     request.patterns.forEach((pattern) => {
-      // Escape backticks for Markdown code
-      const escapedPattern = pattern.replace(/`/g, "\\`");
-      text += `\`${escapedPattern}\`\n`;
+      text += `• ${pattern}\n`;
     });
   }
 

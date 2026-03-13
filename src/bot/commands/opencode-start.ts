@@ -3,6 +3,7 @@ import { opencodeClient } from "../../opencode/client.js";
 import { processManager } from "../../process/manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { editBotText } from "../utils/telegram-text.js";
 
 /**
  * Wait for OpenCode server to become ready by polling health endpoint
@@ -73,12 +74,12 @@ export async function opencodeStartCommand(ctx: CommandContext<Context>) {
     const { success, error } = await processManager.start();
 
     if (!success) {
-      await ctx.api.editMessageText(
-        ctx.chat.id,
-        statusMessage.message_id,
-        t("opencode_start.start_error", { error: error || t("common.unknown_error") }),
-        { parse_mode: "Markdown" },
-      );
+      await editBotText({
+        api: ctx.api,
+        chatId: ctx.chat.id,
+        messageId: statusMessage.message_id,
+        text: t("opencode_start.start_error", { error: error || t("common.unknown_error") }),
+      });
       return;
     }
 
@@ -87,26 +88,28 @@ export async function opencodeStartCommand(ctx: CommandContext<Context>) {
     const ready = await waitForServerReady(10000);
 
     if (!ready) {
-      await ctx.api.editMessageText(
-        ctx.chat.id,
-        statusMessage.message_id,
-        t("opencode_start.started_not_ready", {
+      await editBotText({
+        api: ctx.api,
+        chatId: ctx.chat.id,
+        messageId: statusMessage.message_id,
+        text: t("opencode_start.started_not_ready", {
           pid: processManager.getPID() ?? "-",
         }),
-      );
+      });
       return;
     }
 
     // 6. Get server version and send success message
     const { data: health } = await opencodeClient.global.health();
-    await ctx.api.editMessageText(
-      ctx.chat.id,
-      statusMessage.message_id,
-      t("opencode_start.success", {
+    await editBotText({
+      api: ctx.api,
+      chatId: ctx.chat.id,
+      messageId: statusMessage.message_id,
+      text: t("opencode_start.success", {
         pid: processManager.getPID() ?? "-",
         version: health?.version || t("common.unknown"),
       }),
-    );
+    });
 
     logger.info(`[Bot] OpenCode server started successfully, PID=${processManager.getPID()}`);
   } catch (err) {
