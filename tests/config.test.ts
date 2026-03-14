@@ -79,11 +79,11 @@ describe("config boolean env parsing", () => {
   });
 
   it("parses supported locale from BOT_LOCALE", async () => {
-    vi.stubEnv("BOT_LOCALE", "ru");
+    vi.stubEnv("BOT_LOCALE", "fr");
 
     const config = await loadConfig();
 
-    expect(config.bot.locale).toBe("ru");
+    expect(config.bot.locale).toBe("fr");
   });
 
   it("normalizes regional locale tags", async () => {
@@ -95,7 +95,7 @@ describe("config boolean env parsing", () => {
   });
 
   it("falls back to default locale on unsupported value", async () => {
-    vi.stubEnv("BOT_LOCALE", "fr");
+    vi.stubEnv("BOT_LOCALE", "pt");
 
     const config = await loadConfig();
 

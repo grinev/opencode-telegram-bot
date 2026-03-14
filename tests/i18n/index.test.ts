@@ -21,10 +21,12 @@ describe("i18n/index locale helpers", () => {
     expect(resolveSupportedLocale("ru-RU")).toBe("ru");
     expect(resolveSupportedLocale("en-US")).toBe("en");
     expect(resolveSupportedLocale("de")).toBe("de");
+    expect(resolveSupportedLocale("fr")).toBe("fr");
+    expect(resolveSupportedLocale("fr-FR")).toBe("fr");
   });
 
   it("normalizes unsupported locale values with fallback", () => {
-    expect(normalizeLocale("fr", "en")).toBe("en");
+    expect(normalizeLocale("pt", "en")).toBe("en");
     expect(normalizeLocale(undefined, "ru")).toBe("ru");
   });
 
@@ -32,6 +34,7 @@ describe("i18n/index locale helpers", () => {
     expect(getDateLocale("ru")).toBe("ru-RU");
     expect(getDateLocale("en")).toBe("en-US");
     expect(getDateLocale("de")).toBe("de-DE");
+    expect(getDateLocale("fr")).toBe("fr-FR");
   });
 
   it("returns locale options from a single registry", () => {
