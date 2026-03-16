@@ -355,6 +355,8 @@ export const en = {
     "Recurring schedule is too frequent. The minimum allowed interval is once every 5 minutes.",
   "task.kind.cron": "recurring",
   "task.kind.once": "one-time",
+  "task.run.success": "⏰ Scheduled task completed: {description}\n\n{result}",
+  "task.run.error": "🔴 Scheduled task failed: {description}\n\nError: {error}",
 
   "commands.select": "Choose an OpenCode command:",
   "commands.empty": "📭 No OpenCode commands are available for this project.",

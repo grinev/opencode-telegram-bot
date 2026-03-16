@@ -1,5 +1,5 @@
 import type { ModelInfo } from "../model/types.js";
-import type { ScheduledTask } from "../scheduled-task/types.js";
+import { cloneScheduledTask, type ScheduledTask } from "../scheduled-task/types.js";
 import path from "node:path";
 import { getRuntimePaths } from "../runtime/paths.js";
 import { logger } from "../utils/logger.js";
@@ -39,10 +39,6 @@ export interface Settings {
   serverProcess?: ServerProcessInfo;
   sessionDirectoryCache?: SessionDirectoryCacheInfo;
   scheduledTasks?: ScheduledTask[];
-}
-
-function cloneScheduledTask(task: ScheduledTask): ScheduledTask {
-  return { ...task };
 }
 
 function cloneScheduledTasks(tasks: ScheduledTask[] | undefined): ScheduledTask[] | undefined {

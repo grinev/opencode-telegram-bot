@@ -63,6 +63,8 @@ import { sendBotText } from "./utils/telegram-text.js";
 import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
 import { getStoredModel } from "../model/manager.js";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
+import { foregroundSessionState } from "../scheduled-task/foreground-state.js";
+import { scheduledTaskRuntime } from "../scheduled-task/runtime.js";
 
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
@@ -176,11 +178,14 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   summaryAggregator.setOnComplete(async (sessionId, messageText) => {
     if (!botInstance || !chatIdInstance) {
       logger.error("Bot or chat ID not available for sending message");
+      foregroundSessionState.markIdle(sessionId);
       return;
     }
 
     const currentSession = getCurrentSession();
     if (currentSession?.id !== sessionId) {
+      foregroundSessionState.markIdle(sessionId);
+      await scheduledTaskRuntime.flushDeferredDeliveries();
       return;
     }
 
@@ -214,6 +219,9 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       // Stop processing events after critical error to prevent infinite loop
       logger.error("[Bot] CRITICAL: Stopping event processing due to error");
       summaryAggregator.clear();
+    } finally {
+      foregroundSessionState.markIdle(sessionId);
+      await scheduledTaskRuntime.flushDeferredDeliveries();
     }
   });
 
@@ -383,11 +391,14 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
   summaryAggregator.setOnSessionError(async (sessionId, message) => {
     if (!botInstance || !chatIdInstance) {
+      foregroundSessionState.markIdle(sessionId);
       return;
     }
 
     const currentSession = getCurrentSession();
     if (!currentSession || currentSession.id !== sessionId) {
+      foregroundSessionState.markIdle(sessionId);
+      await scheduledTaskRuntime.flushDeferredDeliveries();
       return;
     }
 
@@ -404,6 +415,9 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       .catch((err) => {
         logger.error("[Bot] Failed to send session.error message:", err);
       });
+
+    foregroundSessionState.markIdle(sessionId);
+    await scheduledTaskRuntime.flushDeferredDeliveries();
   });
 
   summaryAggregator.setOnSessionRetry(async ({ sessionId, message }) => {

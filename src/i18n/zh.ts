@@ -320,6 +320,8 @@ export const zh: I18nDictionary = {
   "task.schedule_too_frequent": "重复任务过于频繁。最小允许间隔为每 5 分钟一次。",
   "task.kind.cron": "重复",
   "task.kind.once": "一次性",
+  "task.run.success": "⏰ 定时任务已完成: {description}\n\n{result}",
+  "task.run.error": "🔴 定时任务执行失败: {description}\n\n错误: {error}",
 
   "commands.select": "请选择一个 OpenCode 命令：",
   "commands.empty": "📭 当前项目没有可用的 OpenCode 命令。",

@@ -135,6 +135,7 @@ Model picker behavior:
 - [x] In-chat controls for model, agent, variant, and context
 - [x] Built-in and custom command catalog access (`/commands`)
 - [x] Scheduled task creation flow (`/task`)
+- [x] Scheduled task runtime execution with deferred Telegram delivery
 - [x] Persistent settings between restarts (`settings.json`)
 - [x] UI localization support via i18n files
 - [x] Service message visibility controls (thinking/tool updates)

@@ -6,6 +6,7 @@ import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
 
 type SessionState = "idle" | "busy" | "not-found";
 
@@ -128,6 +129,7 @@ export async function abortCurrentOperation(
       );
 
       if (finalStatus === "idle" || finalStatus === "not-found") {
+        foregroundSessionState.markIdle(currentSession.id);
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
           await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.success"));
         }

@@ -8,6 +8,7 @@ import { getCurrentProject } from "../../settings/manager.js";
 import { taskCreationManager } from "../../scheduled-task/creation-manager.js";
 import { parseTaskSchedule } from "../../scheduled-task/schedule-parser.js";
 import { addScheduledTask } from "../../scheduled-task/store.js";
+import { scheduledTaskRuntime } from "../../scheduled-task/runtime.js";
 import {
   createScheduledTaskModel,
   type ParsedTaskSchedule,
@@ -107,7 +108,7 @@ function formatTaskCreatedMessage(task: ScheduledTask): string {
     project: task.projectWorktree,
     model,
     schedule: task.scheduleSummary,
-    nextRunAt: formatScheduledDate(task.nextRunAt, task.timezone),
+    nextRunAt: task.nextRunAt ? formatScheduledDate(task.nextRunAt, task.timezone) : "-",
   });
 }
 
@@ -501,6 +502,7 @@ export async function handleTaskTextInput(ctx: Context): Promise<boolean> {
     );
 
     await addScheduledTask(task);
+    scheduledTaskRuntime.registerTask(task);
     await deleteMessageIfPresent(ctx, flowState.previewMessageId);
     await deleteMessageIfPresent(ctx, flowState.promptRequestMessageId);
     clearTaskFlow("task_completed");

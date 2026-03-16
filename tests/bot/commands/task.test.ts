@@ -21,6 +21,7 @@ const mocked = vi.hoisted(() => ({
   },
   parseTaskScheduleMock: vi.fn(),
   addScheduledTaskMock: vi.fn(),
+  registerTaskMock: vi.fn(),
 }));
 
 vi.mock("../../../src/settings/manager.js", () => ({
@@ -37,6 +38,12 @@ vi.mock("../../../src/scheduled-task/schedule-parser.js", () => ({
 
 vi.mock("../../../src/scheduled-task/store.js", () => ({
   addScheduledTask: mocked.addScheduledTaskMock,
+}));
+
+vi.mock("../../../src/scheduled-task/runtime.js", () => ({
+  scheduledTaskRuntime: {
+    registerTask: mocked.registerTaskMock,
+  },
 }));
 
 function createCommandContext(): Context {
@@ -94,6 +101,7 @@ describe("bot/commands/task", () => {
     };
     mocked.parseTaskScheduleMock.mockReset();
     mocked.addScheduledTaskMock.mockReset();
+    mocked.registerTaskMock.mockReset();
     mocked.addScheduledTaskMock.mockResolvedValue(undefined);
     mocked.parseTaskScheduleMock.mockResolvedValue({
       kind: "cron",
@@ -167,6 +175,7 @@ describe("bot/commands/task", () => {
 
     expect(handled).toBe(true);
     expect(mocked.addScheduledTaskMock).toHaveBeenCalledTimes(1);
+    expect(mocked.registerTaskMock).toHaveBeenCalledTimes(1);
     expect(mocked.addScheduledTaskMock).toHaveBeenCalledWith(
       expect.objectContaining({
         projectId: "project-1",

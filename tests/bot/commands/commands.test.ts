@@ -8,6 +8,7 @@ import {
 } from "../../../src/bot/commands/commands.js";
 import { interactionManager } from "../../../src/interaction/manager.js";
 import { t } from "../../../src/i18n/index.js";
+import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -170,6 +171,7 @@ function createDeps(): ExecuteCommandDeps {
 describe("bot/commands/commands", () => {
   beforeEach(() => {
     interactionManager.clear("test_setup");
+    foregroundSessionState.__resetForTests();
 
     mocked.currentProject = {
       id: "project-1",

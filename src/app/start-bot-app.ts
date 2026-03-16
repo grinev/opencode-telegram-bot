@@ -4,6 +4,7 @@ import { createBot } from "../bot/index.js";
 import { config } from "../config.js";
 import { loadSettings } from "../settings/manager.js";
 import { processManager } from "../process/manager.js";
+import { scheduledTaskRuntime } from "../scheduled-task/runtime.js";
 import { warmupSessionDirectoryCache } from "../session/cache-manager.js";
 import { reconcileStoredModelSelection } from "../model/manager.js";
 import { getRuntimeMode } from "../runtime/mode.js";
@@ -39,6 +40,7 @@ export async function startBotApp(): Promise<void> {
   await warmupSessionDirectoryCache();
 
   const bot = createBot();
+  await scheduledTaskRuntime.initialize(bot);
 
   const webhookInfo = await bot.api.getWebhookInfo();
   if (webhookInfo.url) {

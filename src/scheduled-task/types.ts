@@ -20,7 +20,7 @@ export interface ScheduledTaskBase {
   timezone: string;
   prompt: string;
   createdAt: string;
-  nextRunAt: string;
+  nextRunAt: string | null;
   lastRunAt: string | null;
   runCount: number;
   lastStatus: ScheduledTaskStatus;
@@ -92,4 +92,22 @@ export function cloneScheduledTask(task: ScheduledTask): ScheduledTask {
     ...task,
     model: cloneScheduledTaskModel(task.model),
   };
+}
+
+export interface ScheduledTaskExecutionResult {
+  taskId: string;
+  status: "success" | "error";
+  startedAt: string;
+  finishedAt: string;
+  resultText: string | null;
+  errorMessage: string | null;
+}
+
+export interface QueuedScheduledTaskDelivery {
+  taskId: string;
+  scheduleSummary: string;
+  prompt: string;
+  runAt: string;
+  status: "success" | "error";
+  messageText: string;
 }

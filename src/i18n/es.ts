@@ -367,6 +367,8 @@ export const es: I18nDictionary = {
     "El horario recurrente es demasiado frecuente. El intervalo mínimo permitido es una vez cada 5 minutos.",
   "task.kind.cron": "recurrente",
   "task.kind.once": "única",
+  "task.run.success": "⏰ Tarea programada completada: {description}\n\n{result}",
+  "task.run.error": "🔴 La tarea programada falló: {description}\n\nError: {error}",
 
   "commands.select": "Elige un comando de OpenCode:",
   "commands.empty": "📭 No hay comandos de OpenCode disponibles para este proyecto.",

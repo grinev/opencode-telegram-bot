@@ -369,6 +369,8 @@ export const fr: I18nDictionary = {
     "Le planning récurrent est trop fréquent. L'intervalle minimum autorisé est d'une fois toutes les 5 minutes.",
   "task.kind.cron": "récurrente",
   "task.kind.once": "ponctuelle",
+  "task.run.success": "⏰ Tâche planifiée terminée : {description}\n\n{result}",
+  "task.run.error": "🔴 Échec de la tâche planifiée : {description}\n\nErreur : {error}",
 
   "commands.select": "Choisissez une commande OpenCode :",
   "commands.empty": "📭 Aucune commande OpenCode n'est disponible pour ce projet.",

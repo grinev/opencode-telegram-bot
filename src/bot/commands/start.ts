@@ -7,6 +7,7 @@ import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { clearSession } from "../../session/manager.js";
 import { clearProject } from "../../settings/manager.js";
+import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
 import { abortCurrentOperation } from "./abort.js";
 import { t } from "../../i18n/index.js";
 
@@ -19,6 +20,7 @@ export async function startCommand(ctx: Context): Promise<void> {
   }
 
   await abortCurrentOperation(ctx, { notifyUser: false });
+  foregroundSessionState.clearAll("start_command_reset");
 
   clearSession();
   clearProject();

@@ -18,6 +18,7 @@ import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { formatErrorDetails } from "../../utils/error-format.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
@@ -56,6 +57,7 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
 async function resetMismatchedSessionContext(): Promise<void> {
   stopEventListening();
   summaryAggregator.clear();
+  foregroundSessionState.clearAll("session_mismatch_reset");
   clearAllInteractionState("session_mismatch_reset");
   clearSession();
   keyboardManager.clearContext();
@@ -260,6 +262,8 @@ export async function processUserPrompt(
       `[Bot] Calling session.prompt (fire-and-forget) with agent=${currentAgent}, fileCount=${fileParts.length}...`,
     );
 
+    foregroundSessionState.markBusy(currentSession.id);
+
     // CRITICAL: DO NOT wait for session.prompt to complete.
     // If we wait, the handler will not finish and grammY will not call getUpdates,
     // which blocks receiving button callback_query updates.
@@ -269,6 +273,7 @@ export async function processUserPrompt(
       task: () => opencodeClient.session.prompt(promptOptions),
       onSuccess: ({ error }) => {
         if (error) {
+          foregroundSessionState.markIdle(currentSession.id);
           const details = formatErrorDetails(error, 6000);
           logger.error(
             "[Bot] OpenCode API returned an error for session.prompt",
@@ -285,6 +290,7 @@ export async function processUserPrompt(
         logger.info("[Bot] session.prompt completed");
       },
       onError: (error) => {
+        foregroundSessionState.markIdle(currentSession.id);
         const details = formatErrorDetails(error, 6000);
         logger.error("[Bot] session.prompt background task failed", promptErrorLogContext);
         logger.error("[Bot] session.prompt background failure details:", details);
@@ -295,6 +301,9 @@ export async function processUserPrompt(
 
     return true;
   } catch (err) {
+    if (currentSession) {
+      foregroundSessionState.markIdle(currentSession.id);
+    }
     logger.error("Error in prompt handler:", err);
     if (interactionManager.getSnapshot()) {
       clearAllInteractionState("message_handler_error");
