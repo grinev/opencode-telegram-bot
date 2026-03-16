@@ -18,6 +18,7 @@ import type { QueuedScheduledTaskDelivery, ScheduledTask } from "./types.js";
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const TASK_DESCRIPTION_PREVIEW_LENGTH = 64;
 const RESTART_INTERRUPTED_ERROR = "Interrupted by bot restart during scheduled task execution.";
 
 function splitTelegramText(text: string): string[] {
@@ -46,7 +47,12 @@ function splitTelegramText(text: string): string[] {
 }
 
 function normalizeTaskPrompt(prompt: string): string {
-  return prompt.replace(/\s+/g, " ").trim();
+  const normalized = prompt.replace(/\s+/g, " ").trim();
+  if (normalized.length <= TASK_DESCRIPTION_PREVIEW_LENGTH) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, TASK_DESCRIPTION_PREVIEW_LENGTH)}...`;
 }
 
 function buildSuccessDelivery(
