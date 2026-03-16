@@ -98,6 +98,13 @@ function isAllowedRenameCancelCallback(ctx: Context, state: InteractionState): b
   );
 }
 
+function isAllowedTaskCallback(ctx: Context, state: InteractionState): boolean {
+  return (
+    state.kind === "task" &&
+    (ctx.callbackQuery?.data === "task:cancel" || ctx.callbackQuery?.data === "task:retry-schedule")
+  );
+}
+
 export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
   const state = interactionManager.getSnapshot();
   const { inputType, command } = classifyIncomingInput(ctx);
@@ -132,6 +139,10 @@ export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
   }
 
   if (inputType === "callback" && isAllowedRenameCancelCallback(ctx, state)) {
+    return createAllowDecision(inputType, state, command);
+  }
+
+  if (inputType === "callback" && isAllowedTaskCallback(ctx, state)) {
     return createAllowDecision(inputType, state, command);
   }
 

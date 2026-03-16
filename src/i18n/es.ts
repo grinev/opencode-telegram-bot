@@ -6,6 +6,7 @@ export const es: I18nDictionary = {
   "cmd.description.stop": "Detener la acción actual",
   "cmd.description.sessions": "Listar sesiones",
   "cmd.description.projects": "Listar proyectos",
+  "cmd.description.task": "Crear tarea programada",
   "cmd.description.commands": "Comandos personalizados",
   "cmd.description.opencode_start": "Iniciar servidor OpenCode",
   "cmd.description.opencode_stop": "Detener servidor OpenCode",
@@ -48,7 +49,7 @@ export const es: I18nDictionary = {
   "common.unknown_error": "error desconocido",
 
   "start.welcome":
-    "👋 ¡Bienvenido a OpenCode Telegram Bot!\n\nUsa los comandos:\n/projects — seleccionar proyecto\n/sessions — lista de sesiones\n/new — sesión nueva\n/status — estado\n/help — ayuda\n\nUsa los botones inferiores para elegir modo, modelo y variante.",
+    "👋 ¡Bienvenido a OpenCode Telegram Bot!\n\nUsa los comandos:\n/projects — seleccionar proyecto\n/sessions — lista de sesiones\n/new — sesión nueva\n/task — tarea programada\n/status — estado\n/help — ayuda\n\nUsa los botones inferiores para elegir modo, modelo y variante.",
   "help.keyboard_hint":
     "💡 Usa los botones inferiores para modo del agente, modelo, variante y acciones de contexto.",
   "help.text":
@@ -338,6 +339,34 @@ export const es: I18nDictionary = {
   "rename.blocked.command_not_allowed":
     "⚠️ Este comando no está disponible mientras el cambio de nombre espera un nuevo nombre.",
   "rename.button.cancel": "❌ Cancelar",
+
+  "task.prompt.schedule":
+    "⏰ Envía el horario de la tarea en lenguaje natural.\n\nEjemplos:\n- cada 5 minutos\n- cada día a las 17:00\n- mañana a las 12:00",
+  "task.schedule_empty": "⚠️ El horario no puede estar vacío.",
+  "task.parse.in_progress": "⏳ Analizando horario...",
+  "task.parse_error":
+    "🔴 No se pudo interpretar el horario.\n\n{message}\n\nEnvía el periodo otra vez de forma más clara.",
+  "task.schedule_preview":
+    "✅ Horario interpretado\n\nEntendido como: {summary}\nZona horaria: {timezone}\nTipo: {kind}\nPróxima ejecución: {nextRunAt}",
+  "task.prompt.body": "📝 Ahora envía lo que el bot debe hacer según este horario.",
+  "task.prompt_empty": "⚠️ El texto de la tarea no puede estar vacío.",
+  "task.created":
+    "✅ Tarea programada creada\n\nTarea: {description}\nProyecto: {project}\nModelo: {model}\nHorario: {schedule}\nPróxima ejecución: {nextRunAt}",
+  "task.button.retry_schedule": "🔁 Volver a introducir horario",
+  "task.button.cancel": "❌ Cancelar",
+  "task.retry_schedule_callback": "Volviendo a introducir el horario...",
+  "task.cancel_callback": "Cancelando...",
+  "task.cancelled": "❌ Creación de la tarea programada cancelada.",
+  "task.inactive_callback": "Este flujo de tarea programada ya no está activo",
+  "task.inactive": "⚠️ La creación de la tarea programada no está activa. Ejecuta /task otra vez.",
+  "task.blocked.expected_input":
+    "⚠️ Primero termina la configuración actual de la tarea programada: envía texto o usa el botón del mensaje del horario.",
+  "task.blocked.command_not_allowed":
+    "⚠️ Este comando no está disponible mientras la creación de la tarea programada está activa.",
+  "task.schedule_too_frequent":
+    "El horario recurrente es demasiado frecuente. El intervalo mínimo permitido es una vez cada 5 minutos.",
+  "task.kind.cron": "recurrente",
+  "task.kind.once": "única",
 
   "commands.select": "Elige un comando de OpenCode:",
   "commands.empty": "📭 No hay comandos de OpenCode disponibles para este proyecto.",

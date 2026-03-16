@@ -6,6 +6,7 @@ export const de: I18nDictionary = {
   "cmd.description.stop": "Aktuelle Aktion stoppen",
   "cmd.description.sessions": "Sitzungen auflisten",
   "cmd.description.projects": "Projekte auflisten",
+  "cmd.description.task": "Geplante Aufgabe erstellen",
   "cmd.description.commands": "Benutzerdefinierte Befehle",
   "cmd.description.opencode_start": "OpenCode-Server starten",
   "cmd.description.opencode_stop": "OpenCode-Server stoppen",
@@ -48,7 +49,7 @@ export const de: I18nDictionary = {
   "common.unknown_error": "unbekannter Fehler",
 
   "start.welcome":
-    "👋 Willkommen beim OpenCode Telegram Bot!\n\nNutze Befehle:\n/projects — Projekt auswählen\n/sessions — Sitzungsliste\n/new — neue Sitzung\n/status — Status\n/help — Hilfe\n\nNutze die unteren Buttons, um Modus, Modell und Variante zu wählen.",
+    "👋 Willkommen beim OpenCode Telegram Bot!\n\nNutze Befehle:\n/projects — Projekt auswählen\n/sessions — Sitzungsliste\n/new — neue Sitzung\n/task — geplante Aufgabe\n/status — Status\n/help — Hilfe\n\nNutze die unteren Buttons, um Modus, Modell und Variante zu wählen.",
   "help.keyboard_hint":
     "💡 Nutze die unteren Buttons für Modus, Modell, Variante und Kontextaktionen.",
   "help.text":
@@ -339,6 +340,34 @@ export const de: I18nDictionary = {
   "rename.blocked.command_not_allowed":
     "⚠️ Dieser Befehl ist nicht verfügbar, solange beim Umbenennen auf einen neuen Namen gewartet wird.",
   "rename.button.cancel": "❌ Abbrechen",
+
+  "task.prompt.schedule":
+    "⏰ Sende den Zeitplan der Aufgabe in natürlicher Sprache.\n\nBeispiele:\n- alle 5 Minuten\n- jeden Tag um 17:00\n- morgen um 12:00",
+  "task.schedule_empty": "⚠️ Der Zeitplan darf nicht leer sein.",
+  "task.parse.in_progress": "⏳ Zeitplan wird verarbeitet...",
+  "task.parse_error":
+    "🔴 Zeitplan konnte nicht erkannt werden.\n\n{message}\n\nSende den Zeitraum bitte noch einmal klarer formuliert.",
+  "task.schedule_preview":
+    "✅ Zeitplan erkannt\n\nVerstanden als: {summary}\nZeitzone: {timezone}\nTyp: {kind}\nNächster Lauf: {nextRunAt}",
+  "task.prompt.body": "📝 Sende jetzt, was der Bot nach Zeitplan tun soll.",
+  "task.prompt_empty": "⚠️ Der Aufgabentext darf nicht leer sein.",
+  "task.created":
+    "✅ Geplante Aufgabe erstellt\n\nAufgabe: {description}\nProjekt: {project}\nModell: {model}\nZeitplan: {schedule}\nNächster Lauf: {nextRunAt}",
+  "task.button.retry_schedule": "🔁 Zeitplan neu eingeben",
+  "task.button.cancel": "❌ Abbrechen",
+  "task.retry_schedule_callback": "Zeitplaneingabe wird zurückgesetzt...",
+  "task.cancel_callback": "Abbruch...",
+  "task.cancelled": "❌ Erstellung der geplanten Aufgabe abgebrochen.",
+  "task.inactive_callback": "Dieser Ablauf für geplante Aufgaben ist nicht mehr aktiv",
+  "task.inactive": "⚠️ Die Erstellung geplanter Aufgaben ist nicht aktiv. Starte /task erneut.",
+  "task.blocked.expected_input":
+    "⚠️ Schließe zuerst die aktuelle geplante Aufgabe ab: Sende Text oder nutze die Schaltfläche in der Zeitplan-Nachricht.",
+  "task.blocked.command_not_allowed":
+    "⚠️ Dieser Befehl ist nicht verfügbar, solange die Erstellung einer geplanten Aufgabe aktiv ist.",
+  "task.schedule_too_frequent":
+    "Der wiederkehrende Zeitplan ist zu häufig. Das minimale erlaubte Intervall ist einmal alle 5 Minuten.",
+  "task.kind.cron": "wiederkehrend",
+  "task.kind.once": "einmalig",
 
   "commands.select": "Wähle einen OpenCode-Befehl:",
   "commands.empty": "📭 Für dieses Projekt sind keine OpenCode-Befehle verfügbar.",

@@ -6,6 +6,7 @@ export const fr: I18nDictionary = {
   "cmd.description.stop": "Arrêter l'action en cours",
   "cmd.description.sessions": "Lister les sessions",
   "cmd.description.projects": "Lister les projets",
+  "cmd.description.task": "Créer une tâche planifiée",
   "cmd.description.commands": "Commandes personnalisées",
   "cmd.description.opencode_start": "Démarrer le serveur OpenCode",
   "cmd.description.opencode_stop": "Arrêter le serveur OpenCode",
@@ -24,8 +25,7 @@ export const fr: I18nDictionary = {
   "interaction.blocked.expected_callback":
     "⚠️ Veuillez utiliser les boutons inline pour cette étape ou appuyer sur Annuler.",
   "interaction.blocked.expected_text": "⚠️ Veuillez envoyer un message texte pour cette étape.",
-  "interaction.blocked.expected_command":
-    "⚠️ Veuillez envoyer une commande pour cette étape.",
+  "interaction.blocked.expected_command": "⚠️ Veuillez envoyer une commande pour cette étape.",
   "interaction.blocked.command_not_allowed":
     "⚠️ Cette commande n'est pas disponible à l'étape actuelle.",
   "interaction.blocked.finish_current":
@@ -49,7 +49,7 @@ export const fr: I18nDictionary = {
   "common.unknown_error": "erreur inconnue",
 
   "start.welcome":
-    "👋 Bienvenue dans OpenCode Telegram Bot !\n\nUtilisez les commandes :\n/projects — sélectionner un projet\n/sessions — liste des sessions\n/new — nouvelle session\n/status — statut\n/help — aide\n\nUtilisez les boutons du bas pour choisir le mode d'agent, le modèle et la variante.",
+    "👋 Bienvenue dans OpenCode Telegram Bot !\n\nUtilisez les commandes :\n/projects — sélectionner un projet\n/sessions — liste des sessions\n/new — nouvelle session\n/task — tâche planifiée\n/status — statut\n/help — aide\n\nUtilisez les boutons du bas pour choisir le mode d'agent, le modèle et la variante.",
   "help.keyboard_hint":
     "💡 Utilisez les boutons du bas pour le mode d'agent, le modèle, la variante et les actions de contexte.",
   "help.text":
@@ -128,8 +128,7 @@ export const fr: I18nDictionary = {
   "sessions.select_page": "Sélectionnez une session (page {page}) :",
   "sessions.fetch_error":
     "🔴 Le serveur OpenCode est indisponible ou une erreur s'est produite lors du chargement des sessions.",
-  "sessions.select_project_first":
-    "🔴 Aucun projet n'est sélectionné. Utilisez /projects.",
+  "sessions.select_project_first": "🔴 Aucun projet n'est sélectionné. Utilisez /projects.",
   "sessions.page_empty_callback": "Aucune session sur cette page",
   "sessions.page_load_error_callback": "Impossible de charger cette page. Veuillez réessayer.",
   "sessions.button.prev_page": "⬅️ Préc.",
@@ -184,8 +183,7 @@ export const fr: I18nDictionary = {
     "⚠️ Le serveur OpenCode s'exécute comme processus externe\n\nCe serveur n'a pas été démarré via /opencode-start.\nArrêtez-le manuellement ou utilisez /status pour vérifier son état.",
   "opencode_stop.not_running": "⚠️ Le serveur OpenCode n'est pas en cours d'exécution",
   "opencode_stop.stopping": "🛑 Arrêt du serveur OpenCode...\n\nPID : {pid}",
-  "opencode_stop.stop_error":
-    "🔴 Impossible d'arrêter le serveur OpenCode\n\nErreur : {error}",
+  "opencode_stop.stop_error": "🔴 Impossible d'arrêter le serveur OpenCode\n\nErreur : {error}",
   "opencode_stop.success": "✅ Serveur OpenCode arrêté avec succès",
   "opencode_stop.error":
     "🔴 Une erreur s'est produite lors de l'arrêt du serveur.\n\nConsultez les logs de l'application pour plus de détails.",
@@ -330,21 +328,47 @@ export const fr: I18nDictionary = {
   "runtime.wizard.tty_required":
     "L'assistant interactif nécessite un terminal TTY. Exécutez `opencode-telegram config` dans un shell interactif.",
 
-  "rename.no_session":
-    "⚠️ Aucune session active. Créez ou sélectionnez d'abord une session.",
+  "rename.no_session": "⚠️ Aucune session active. Créez ou sélectionnez d'abord une session.",
   "rename.prompt": "📝 Entrez le nouveau titre de la session :\n\nActuel : {title}",
   "rename.empty_title": "⚠️ Le titre ne peut pas être vide.",
   "rename.success": "✅ Session renommée en : {title}",
   "rename.error": "🔴 Impossible de renommer la session.",
   "rename.cancelled": "❌ Renommage annulé.",
   "rename.inactive_callback": "La demande de renommage est inactive",
-  "rename.inactive":
-    "⚠️ La demande de renommage n'est pas active. Exécutez /rename à nouveau.",
+  "rename.inactive": "⚠️ La demande de renommage n'est pas active. Exécutez /rename à nouveau.",
   "rename.blocked.expected_name":
     "⚠️ Entrez le nouveau nom de la session sous forme de texte ou appuyez sur Annuler dans le message de renommage.",
   "rename.blocked.command_not_allowed":
     "⚠️ Cette commande n'est pas disponible tant que le renommage attend un nouveau nom.",
   "rename.button.cancel": "❌ Annuler",
+
+  "task.prompt.schedule":
+    "⏰ Envoyez le planning de la tâche en langage naturel.\n\nExemples :\n- toutes les 5 minutes\n- chaque jour à 17:00\n- demain à 12:00",
+  "task.schedule_empty": "⚠️ Le planning ne peut pas être vide.",
+  "task.parse.in_progress": "⏳ Analyse du planning...",
+  "task.parse_error":
+    "🔴 Impossible d'interpréter le planning.\n\n{message}\n\nEnvoyez le créneau à nouveau de façon plus claire.",
+  "task.schedule_preview":
+    "✅ Planning interprété\n\nCompris comme : {summary}\nFuseau horaire : {timezone}\nType : {kind}\nProchaine exécution : {nextRunAt}",
+  "task.prompt.body": "📝 Envoyez maintenant ce que le bot doit faire selon ce planning.",
+  "task.prompt_empty": "⚠️ Le texte de la tâche ne peut pas être vide.",
+  "task.created":
+    "✅ Tâche planifiée créée\n\nTâche : {description}\nProjet : {project}\nModèle : {model}\nPlanning : {schedule}\nProchaine exécution : {nextRunAt}",
+  "task.button.retry_schedule": "🔁 Ressaisir le planning",
+  "task.button.cancel": "❌ Annuler",
+  "task.retry_schedule_callback": "Retour à la saisie du planning...",
+  "task.cancel_callback": "Annulation...",
+  "task.cancelled": "❌ Création de la tâche planifiée annulée.",
+  "task.inactive_callback": "Ce flux de tâche planifiée n'est plus actif",
+  "task.inactive": "⚠️ La création de tâche planifiée n'est pas active. Relancez /task.",
+  "task.blocked.expected_input":
+    "⚠️ Terminez d'abord la configuration de la tâche planifiée : envoyez du texte ou utilisez le bouton dans le message du planning.",
+  "task.blocked.command_not_allowed":
+    "⚠️ Cette commande n'est pas disponible pendant la création d'une tâche planifiée.",
+  "task.schedule_too_frequent":
+    "Le planning récurrent est trop fréquent. L'intervalle minimum autorisé est d'une fois toutes les 5 minutes.",
+  "task.kind.cron": "récurrente",
+  "task.kind.once": "ponctuelle",
 
   "commands.select": "Choisissez une commande OpenCode :",
   "commands.empty": "📭 Aucune commande OpenCode n'est disponible pour ce projet.",
@@ -373,8 +397,7 @@ export const fr: I18nDictionary = {
   "cli.placeholder.unavailable": "Commande indisponible.",
   "cli.error.prefix": "Erreur CLI : {message}",
   "cli.args.unknown_command": "Commande inconnue : {value}",
-  "cli.args.mode_requires_value":
-    "L'option --mode nécessite une valeur : sources|installed",
+  "cli.args.mode_requires_value": "L'option --mode nécessite une valeur : sources|installed",
   "cli.args.invalid_mode": "Valeur de mode invalide : {value}. Attendu : sources|installed",
   "cli.args.unknown_option": "Option inconnue : {value}",
   "cli.args.mode_only_start":
@@ -382,13 +405,11 @@ export const fr: I18nDictionary = {
 
   "legacy.models.fetch_error":
     "🔴 Impossible de récupérer la liste des modèles. Vérifiez l'état du serveur avec /status.",
-  "legacy.models.empty":
-    "📋 Aucun modèle disponible. Configurez les fournisseurs dans OpenCode.",
+  "legacy.models.empty": "📋 Aucun modèle disponible. Configurez les fournisseurs dans OpenCode.",
   "legacy.models.header": "📋 Modèles disponibles :\n\n",
   "legacy.models.no_provider_models": "  ⚠️ Aucun modèle disponible\n",
   "legacy.models.env_hint": "💡 Pour utiliser le modèle dans .env :\n",
-  "legacy.models.error":
-    "🔴 Une erreur s'est produite lors du chargement de la liste des modèles.",
+  "legacy.models.error": "🔴 Une erreur s'est produite lors du chargement de la liste des modèles.",
 
   "stt.recognizing": "🎤 Reconnaissance audio en cours...",
   "stt.recognized": "🎤 Reconnu :\n{text}",

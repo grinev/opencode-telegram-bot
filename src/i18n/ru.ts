@@ -6,6 +6,7 @@ export const ru: I18nDictionary = {
   "cmd.description.stop": "Прервать текущее действие",
   "cmd.description.sessions": "Список сессий",
   "cmd.description.projects": "Список проектов",
+  "cmd.description.task": "Создать задачу по расписанию",
   "cmd.description.commands": "Пользовательские команды",
   "cmd.description.opencode_start": "Запустить OpenCode сервер",
   "cmd.description.opencode_stop": "Остановить OpenCode сервер",
@@ -45,7 +46,7 @@ export const ru: I18nDictionary = {
   "common.unknown_error": "неизвестная ошибка",
 
   "start.welcome":
-    "👋 Добро пожаловать в OpenCode Telegram Bot!\n\nИспользуйте команды:\n/projects — выбрать проект\n/sessions — список сессий\n/new — новая сессия\n/status — статус\n/help — справка\n\nРежим, модель и вариант выбираются кнопками внизу.",
+    "👋 Добро пожаловать в OpenCode Telegram Bot!\n\nИспользуйте команды:\n/projects — выбрать проект\n/sessions — список сессий\n/new — новая сессия\n/task — задача по расписанию\n/status — статус\n/help — справка\n\nРежим, модель и вариант выбираются кнопками внизу.",
   "help.keyboard_hint":
     "💡 Режим, модель, вариант и действия с контекстом доступны через нижние кнопки клавиатуры.",
   "help.text":
@@ -327,6 +328,34 @@ export const ru: I18nDictionary = {
   "rename.blocked.command_not_allowed":
     "⚠️ Эта команда недоступна, пока ожидается новое название сессии.",
   "rename.button.cancel": "❌ Отмена",
+
+  "task.prompt.schedule":
+    "⏰ Отправьте расписание задачи обычным языком.\n\nПримеры:\n- каждые 5 минут\n- каждый день в 17:00\n- завтра в 12:00",
+  "task.schedule_empty": "⚠️ Расписание не может быть пустым.",
+  "task.parse.in_progress": "⏳ Распознаю расписание...",
+  "task.parse_error":
+    "🔴 Не удалось распознать расписание.\n\n{message}\n\nОтправьте период еще раз в более явном виде.",
+  "task.schedule_preview":
+    "✅ Расписание распознано\n\nКак я понял: {summary}\nЧасовой пояс: {timezone}\nТип: {kind}\nСледующий запуск: {nextRunAt}",
+  "task.prompt.body": "📝 Теперь отправьте текст задачи, которую нужно выполнять по расписанию.",
+  "task.prompt_empty": "⚠️ Текст задачи не может быть пустым.",
+  "task.created":
+    "✅ Задача по расписанию создана\n\nЗадача: {description}\nПроект: {project}\nМодель: {model}\nРасписание: {schedule}\nСледующий запуск: {nextRunAt}",
+  "task.button.retry_schedule": "🔁 Ввести период заново",
+  "task.button.cancel": "❌ Отмена",
+  "task.retry_schedule_callback": "Возвращаю ввод периода...",
+  "task.cancel_callback": "Отменяю...",
+  "task.cancelled": "❌ Создание задачи по расписанию отменено.",
+  "task.inactive_callback": "Этот сценарий создания задачи уже неактивен",
+  "task.inactive": "⚠️ Сценарий создания задачи неактивен. Запустите /task снова.",
+  "task.blocked.expected_input":
+    "⚠️ Сначала завершите создание задачи по расписанию: отправьте текст или используйте кнопку в сообщении с расписанием.",
+  "task.blocked.command_not_allowed":
+    "⚠️ Эта команда недоступна, пока идет создание задачи по расписанию.",
+  "task.schedule_too_frequent":
+    "Повторяющееся расписание слишком частое. Минимально допустимый интервал - один запуск в 5 минут.",
+  "task.kind.cron": "повторяющаяся",
+  "task.kind.once": "однократная",
 
   "commands.select": "Выберите команду OpenCode:",
   "commands.empty": "📭 Для этого проекта нет доступных команд OpenCode.",

@@ -6,6 +6,7 @@ export const zh: I18nDictionary = {
   "cmd.description.stop": "停止当前操作",
   "cmd.description.sessions": "列出会话",
   "cmd.description.projects": "列出项目",
+  "cmd.description.task": "创建定时任务",
   "cmd.description.commands": "自定义命令",
   "cmd.description.opencode_start": "启动 OpenCode 服务器",
   "cmd.description.opencode_stop": "停止 OpenCode 服务器",
@@ -41,7 +42,7 @@ export const zh: I18nDictionary = {
   "common.unknown_error": "未知错误",
 
   "start.welcome":
-    "👋 欢迎使用 OpenCode Telegram Bot！\n\n可用命令：\n/projects — 选择项目\n/sessions — 会话列表\n/new — 新建会话\n/status — 状态\n/help — 帮助\n\n请使用底部按钮选择模式、模型和变体。",
+    "👋 欢迎使用 OpenCode Telegram Bot！\n\n可用命令：\n/projects — 选择项目\n/sessions — 会话列表\n/new — 新建会话\n/task — 定时任务\n/status — 状态\n/help — 帮助\n\n请使用底部按钮选择模式、模型和变体。",
   "help.keyboard_hint": "💡 代理模式、模型、变体和上下文操作请使用底部键盘按钮。",
   "help.text":
     "📖 **帮助**\n\n/status - 查看服务器状态\n/sessions - 会话列表\n/new - 创建新会话\n/help - 帮助",
@@ -294,6 +295,31 @@ export const zh: I18nDictionary = {
   "rename.blocked.expected_name": "⚠️ 请以文本输入新会话名称，或在重命名消息中点击取消。",
   "rename.blocked.command_not_allowed": "⚠️ 重命名等待新名称期间不可用此命令。",
   "rename.button.cancel": "❌ 取消",
+
+  "task.prompt.schedule":
+    "⏰ 请用自然语言发送任务的时间安排。\n\n示例：\n- 每 5 分钟\n- 每天 17:00\n- 明天 12:00",
+  "task.schedule_empty": "⚠️ 时间安排不能为空。",
+  "task.parse.in_progress": "⏳ 正在解析时间安排...",
+  "task.parse_error": "🔴 无法解析时间安排。\n\n{message}\n\n请用更清晰的方式重新发送。",
+  "task.schedule_preview":
+    "✅ 时间安排已解析\n\n理解为：{summary}\n时区：{timezone}\n类型：{kind}\n下次运行：{nextRunAt}",
+  "task.prompt.body": "📝 现在发送机器人按此时间安排需要执行的内容。",
+  "task.prompt_empty": "⚠️ 任务文本不能为空。",
+  "task.created":
+    "✅ 定时任务已创建\n\n任务：{description}\n项目：{project}\n模型：{model}\n时间安排：{schedule}\n下次运行：{nextRunAt}",
+  "task.button.retry_schedule": "🔁 重新输入时间安排",
+  "task.button.cancel": "❌ 取消",
+  "task.retry_schedule_callback": "正在重新输入时间安排...",
+  "task.cancel_callback": "正在取消...",
+  "task.cancelled": "❌ 定时任务创建已取消。",
+  "task.inactive_callback": "这个定时任务流程已失效",
+  "task.inactive": "⚠️ 定时任务创建流程未激活。请重新运行 /task。",
+  "task.blocked.expected_input":
+    "⚠️ 请先完成当前定时任务设置：发送文本，或使用时间安排消息中的按钮。",
+  "task.blocked.command_not_allowed": "⚠️ 定时任务创建进行中时，此命令不可用。",
+  "task.schedule_too_frequent": "重复任务过于频繁。最小允许间隔为每 5 分钟一次。",
+  "task.kind.cron": "重复",
+  "task.kind.once": "一次性",
 
   "commands.select": "请选择一个 OpenCode 命令：",
   "commands.empty": "📭 当前项目没有可用的 OpenCode 命令。",

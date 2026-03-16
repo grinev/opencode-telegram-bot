@@ -218,4 +218,35 @@ describe("interactionGuardMiddleware", () => {
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("question.blocked.command_not_allowed"));
   });
+
+  it("allows task cancel callback while text is expected", async () => {
+    interactionManager.start({
+      kind: "task",
+      expectedInput: "text",
+    });
+
+    const ctx = createCallbackContext("task:cancel");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
+  });
+
+  it("shows task-specific message for disallowed command", async () => {
+    interactionManager.start({
+      kind: "task",
+      expectedInput: "text",
+      allowedCommands: ["/status"],
+    });
+
+    const ctx = createTextContext("/new");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(ctx.reply).toHaveBeenCalledWith(t("task.blocked.command_not_allowed"));
+  });
 });

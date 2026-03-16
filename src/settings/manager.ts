@@ -1,4 +1,5 @@
 import type { ModelInfo } from "../model/types.js";
+import type { ScheduledTask } from "../scheduled-task/types.js";
 import path from "node:path";
 import { getRuntimePaths } from "../runtime/paths.js";
 import { logger } from "../utils/logger.js";
@@ -37,6 +38,15 @@ export interface Settings {
   pinnedMessageId?: number;
   serverProcess?: ServerProcessInfo;
   sessionDirectoryCache?: SessionDirectoryCacheInfo;
+  scheduledTasks?: ScheduledTask[];
+}
+
+function cloneScheduledTask(task: ScheduledTask): ScheduledTask {
+  return { ...task };
+}
+
+function cloneScheduledTasks(tasks: ScheduledTask[] | undefined): ScheduledTask[] | undefined {
+  return tasks?.map((task) => cloneScheduledTask(task));
 }
 
 function getSettingsFilePath(): string {
@@ -177,6 +187,15 @@ export function clearSessionDirectoryCache(): void {
   void writeSettingsFile(currentSettings);
 }
 
+export function getScheduledTasks(): ScheduledTask[] {
+  return cloneScheduledTasks(currentSettings.scheduledTasks) ?? [];
+}
+
+export function setScheduledTasks(tasks: ScheduledTask[]): Promise<void> {
+  currentSettings.scheduledTasks = cloneScheduledTasks(tasks);
+  return writeSettingsFile(currentSettings);
+}
+
 export function __resetSettingsForTests(): void {
   currentSettings = {};
   settingsWriteQueue = Promise.resolve();
@@ -193,4 +212,5 @@ export async function loadSettings(): Promise<void> {
   }
 
   currentSettings = loadedSettings;
+  currentSettings.scheduledTasks = cloneScheduledTasks(loadedSettings.scheduledTasks) ?? [];
 }
