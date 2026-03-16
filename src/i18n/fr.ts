@@ -350,11 +350,13 @@ export const fr: I18nDictionary = {
   "task.parse_error":
     "🔴 Impossible d'interpréter le planning.\n\n{message}\n\nEnvoyez le créneau à nouveau de façon plus claire.",
   "task.schedule_preview":
-    "✅ Planning interprété\n\nCompris comme : {summary}\nFuseau horaire : {timezone}\nType : {kind}\nProchaine exécution : {nextRunAt}",
+    "✅ Planning interprété\n\nCompris comme : {summary}\n{cronLine}Fuseau horaire : {timezone}\nType : {kind}\nProchaine exécution : {nextRunAt}",
+  "task.schedule_preview.cron": "Cron : {cron}",
   "task.prompt.body": "📝 Envoyez maintenant ce que le bot doit faire selon ce planning.",
   "task.prompt_empty": "⚠️ Le texte de la tâche ne peut pas être vide.",
   "task.created":
-    "✅ Tâche planifiée créée\n\nTâche : {description}\nProjet : {project}\nModèle : {model}\nPlanning : {schedule}\nProchaine exécution : {nextRunAt}",
+    "✅ Tâche planifiée créée\n\nTâche : {description}\nProjet : {project}\nModèle : {model}\nPlanning : {schedule}\n{cronLine}Prochaine exécution : {nextRunAt}",
+  "task.created.cron": "Cron : {cron}",
   "task.button.retry_schedule": "🔁 Ressaisir le planning",
   "task.button.cancel": "❌ Annuler",
   "task.retry_schedule_callback": "Retour à la saisie du planning...",
@@ -378,7 +380,8 @@ export const fr: I18nDictionary = {
   "tasklist.empty": "📭 Aucune tâche planifiée pour le moment.",
   "tasklist.select": "Sélectionnez une tâche planifiée :",
   "tasklist.details":
-    "⏰ Tâche planifiée\n\nTâche : {prompt}\nProjet : {project}\nPlanning : {schedule}\nFuseau horaire : {timezone}\nProchaine exécution : {nextRunAt}\nDernière exécution : {lastRunAt}\nNombre d'exécutions : {runCount}",
+    "⏰ Tâche planifiée\n\nTâche : {prompt}\nProjet : {project}\nPlanning : {schedule}\n{cronLine}Fuseau horaire : {timezone}\nProchaine exécution : {nextRunAt}\nDernière exécution : {lastRunAt}\nNombre d'exécutions : {runCount}",
+  "tasklist.details.cron": "Cron : {cron}",
   "tasklist.button.delete": "🗑 Supprimer",
   "tasklist.button.cancel": "❌ Annuler",
   "tasklist.deleted_callback": "Supprimée",

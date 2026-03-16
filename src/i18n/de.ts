@@ -349,11 +349,13 @@ export const de: I18nDictionary = {
   "task.parse_error":
     "🔴 Zeitplan konnte nicht erkannt werden.\n\n{message}\n\nSende den Zeitraum bitte noch einmal klarer formuliert.",
   "task.schedule_preview":
-    "✅ Zeitplan erkannt\n\nVerstanden als: {summary}\nZeitzone: {timezone}\nTyp: {kind}\nNächster Lauf: {nextRunAt}",
+    "✅ Zeitplan erkannt\n\nVerstanden als: {summary}\n{cronLine}Zeitzone: {timezone}\nTyp: {kind}\nNächster Lauf: {nextRunAt}",
+  "task.schedule_preview.cron": "Cron: {cron}",
   "task.prompt.body": "📝 Sende jetzt, was der Bot nach Zeitplan tun soll.",
   "task.prompt_empty": "⚠️ Der Aufgabentext darf nicht leer sein.",
   "task.created":
-    "✅ Geplante Aufgabe erstellt\n\nAufgabe: {description}\nProjekt: {project}\nModell: {model}\nZeitplan: {schedule}\nNächster Lauf: {nextRunAt}",
+    "✅ Geplante Aufgabe erstellt\n\nAufgabe: {description}\nProjekt: {project}\nModell: {model}\nZeitplan: {schedule}\n{cronLine}Nächster Lauf: {nextRunAt}",
+  "task.created.cron": "Cron: {cron}",
   "task.button.retry_schedule": "🔁 Zeitplan neu eingeben",
   "task.button.cancel": "❌ Abbrechen",
   "task.retry_schedule_callback": "Zeitplaneingabe wird zurückgesetzt...",
@@ -377,7 +379,8 @@ export const de: I18nDictionary = {
   "tasklist.empty": "📭 Noch keine geplanten Aufgaben.",
   "tasklist.select": "Wähle eine geplante Aufgabe:",
   "tasklist.details":
-    "⏰ Geplante Aufgabe\n\nAufgabe: {prompt}\nProjekt: {project}\nZeitplan: {schedule}\nZeitzone: {timezone}\nNächster Lauf: {nextRunAt}\nLetzter Lauf: {lastRunAt}\nAnzahl Läufe: {runCount}",
+    "⏰ Geplante Aufgabe\n\nAufgabe: {prompt}\nProjekt: {project}\nZeitplan: {schedule}\n{cronLine}Zeitzone: {timezone}\nNächster Lauf: {nextRunAt}\nLetzter Lauf: {lastRunAt}\nAnzahl Läufe: {runCount}",
+  "tasklist.details.cron": "Cron: {cron}",
   "tasklist.button.delete": "🗑 Löschen",
   "tasklist.button.cancel": "❌ Abbrechen",
   "tasklist.deleted_callback": "Gelöscht",

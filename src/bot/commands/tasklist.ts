@@ -2,6 +2,7 @@ import { CommandContext, Context, InlineKeyboard } from "grammy";
 import { getDateLocale, t } from "../../i18n/index.js";
 import { interactionManager } from "../../interaction/manager.js";
 import type { InteractionState } from "../../interaction/types.js";
+import { formatTaskListBadge } from "../../scheduled-task/display.js";
 import { scheduledTaskRuntime } from "../../scheduled-task/runtime.js";
 import {
   getScheduledTask,
@@ -112,11 +113,7 @@ function formatDateTime(dateIso: string | null, timezone: string): string {
 }
 
 function formatTaskButtonPrefix(task: ScheduledTask): string {
-  if (task.kind === "cron") {
-    return task.scheduleSummary;
-  }
-
-  return formatDateTime(task.runAt, task.timezone);
+  return formatTaskListBadge(task);
 }
 
 function formatTaskButtonLabel(task: ScheduledTask): string {
@@ -156,10 +153,14 @@ function sortTasks(tasks: ScheduledTask[]): ScheduledTask[] {
 }
 
 function formatTaskDetails(task: ScheduledTask): string {
+  const cronLine =
+    task.kind === "cron" ? `${t("tasklist.details.cron", { cron: task.cron })}\n` : "";
+
   return t("tasklist.details", {
     prompt: task.prompt,
     project: task.projectWorktree,
     schedule: task.scheduleSummary,
+    cronLine,
     timezone: task.timezone,
     nextRunAt: formatDateTime(task.nextRunAt, task.timezone),
     lastRunAt: formatDateTime(task.lastRunAt, task.timezone),

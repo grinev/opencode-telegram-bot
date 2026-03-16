@@ -303,11 +303,13 @@ export const zh: I18nDictionary = {
   "task.parse.in_progress": "⏳ 正在解析时间安排...",
   "task.parse_error": "🔴 无法解析时间安排。\n\n{message}\n\n请用更清晰的方式重新发送。",
   "task.schedule_preview":
-    "✅ 时间安排已解析\n\n理解为：{summary}\n时区：{timezone}\n类型：{kind}\n下次运行：{nextRunAt}",
+    "✅ 时间安排已解析\n\n理解为：{summary}\n{cronLine}时区：{timezone}\n类型：{kind}\n下次运行：{nextRunAt}",
+  "task.schedule_preview.cron": "Cron: {cron}",
   "task.prompt.body": "📝 现在发送机器人按此时间安排需要执行的内容。",
   "task.prompt_empty": "⚠️ 任务文本不能为空。",
   "task.created":
-    "✅ 定时任务已创建\n\n任务：{description}\n项目：{project}\n模型：{model}\n时间安排：{schedule}\n下次运行：{nextRunAt}",
+    "✅ 定时任务已创建\n\n任务：{description}\n项目：{project}\n模型：{model}\n时间安排：{schedule}\n{cronLine}下次运行：{nextRunAt}",
+  "task.created.cron": "Cron: {cron}",
   "task.button.retry_schedule": "🔁 重新输入时间安排",
   "task.button.cancel": "❌ 取消",
   "task.retry_schedule_callback": "正在重新输入时间安排...",
@@ -328,7 +330,8 @@ export const zh: I18nDictionary = {
   "tasklist.empty": "📭 还没有定时任务。",
   "tasklist.select": "请选择一个定时任务：",
   "tasklist.details":
-    "⏰ 定时任务\n\n任务：{prompt}\n项目：{project}\n计划：{schedule}\n时区：{timezone}\n下次运行：{nextRunAt}\n上次运行：{lastRunAt}\n运行次数：{runCount}",
+    "⏰ 定时任务\n\n任务：{prompt}\n项目：{project}\n计划：{schedule}\n{cronLine}时区：{timezone}\n下次运行：{nextRunAt}\n上次运行：{lastRunAt}\n运行次数：{runCount}",
+  "tasklist.details.cron": "Cron: {cron}",
   "tasklist.button.delete": "🗑 删除",
   "tasklist.button.cancel": "❌ 取消",
   "tasklist.deleted_callback": "已删除",

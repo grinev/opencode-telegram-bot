@@ -27,6 +27,7 @@ function createTask(id: string, overrides: Partial<Record<string, unknown>> = {}
   return {
     id,
     kind: "cron",
+    cron: "0 * * * *",
     projectId: `project-${id}`,
     projectWorktree: `D:\\Projects\\${id}`,
     model: {
@@ -95,11 +96,13 @@ describe("bot/commands/tasklist", () => {
     mocked.listScheduledTasksMock.mockReturnValue([
       createTask("task-1", {
         projectWorktree: "D:\\Projects\\RepoA",
+        cron: "0 * * * *",
         scheduleSummary: "Every hour",
         prompt: "Check weather forecast",
       }),
       createTask("task-2", {
         projectWorktree: "D:\\Projects\\RepoB",
+        cron: "0 9 * * *",
         scheduleSummary: "Every day at 09:00",
         prompt: "Send backup report",
         nextRunAt: "2026-03-20T09:00:00.000Z",
@@ -116,9 +119,9 @@ describe("bot/commands/tasklist", () => {
       { reply_markup: { inline_keyboard: Array<Array<{ text: string; callback_data?: string }>> } },
     ];
 
-    expect(options.reply_markup.inline_keyboard[0]?.[0]?.text).toContain("[Every day at 09:00]");
+    expect(options.reply_markup.inline_keyboard[0]?.[0]?.text).toContain("[daily 09:00]");
     expect(options.reply_markup.inline_keyboard[0]?.[0]?.text).toContain("Send backup report");
-    expect(options.reply_markup.inline_keyboard[1]?.[0]?.text).toContain("[Every hour]");
+    expect(options.reply_markup.inline_keyboard[1]?.[0]?.text).toContain("[hourly]");
     expect(options.reply_markup.inline_keyboard[1]?.[0]?.text).toContain("Check weather forecast");
     expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("tasklist:cancel");
 
@@ -147,6 +150,7 @@ describe("bot/commands/tasklist", () => {
     mocked.getScheduledTaskMock.mockReturnValue(
       createTask("task-1", {
         projectWorktree: "D:\\Projects\\RepoA",
+        cron: "0 * * * *",
         scheduleText: "every hour please",
         scheduleSummary: "Every hour",
         prompt: "Check weather forecast",
@@ -164,6 +168,7 @@ describe("bot/commands/tasklist", () => {
     expect(text).toContain("Check weather forecast");
     expect(text).toContain("D:\\Projects\\RepoA");
     expect(text).toContain("Every hour");
+    expect(text).toContain("Cron: 0 * * * *");
     expect(text).not.toContain("every hour please");
 
     expect(interactionManager.getSnapshot()).toMatchObject({

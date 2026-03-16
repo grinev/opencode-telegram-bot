@@ -92,8 +92,12 @@ function getTaskKindLabel(schedule: ParsedTaskSchedule): string {
 }
 
 function formatParsedScheduleMessage(schedule: ParsedTaskSchedule): string {
+  const cronLine =
+    schedule.kind === "cron" ? `${t("task.schedule_preview.cron", { cron: schedule.cron })}\n` : "";
+
   return t("task.schedule_preview", {
     summary: schedule.summary,
+    cronLine,
     timezone: schedule.timezone,
     kind: getTaskKindLabel(schedule),
     nextRunAt: formatScheduledDate(schedule.nextRunAt, schedule.timezone),
@@ -107,12 +111,14 @@ function formatParsedSchedulePromptMessage(schedule: ParsedTaskSchedule): string
 function formatTaskCreatedMessage(task: ScheduledTask): string {
   const variant = task.model.variant ? ` (${task.model.variant})` : "";
   const model = `${task.model.providerID}/${task.model.modelID}${variant}`;
+  const cronLine = task.kind === "cron" ? `${t("task.created.cron", { cron: task.cron })}\n` : "";
 
   return t("task.created", {
     description: truncateTaskPrompt(task.prompt),
     project: task.projectWorktree,
     model,
     schedule: task.scheduleSummary,
+    cronLine,
     nextRunAt: task.nextRunAt ? formatScheduledDate(task.nextRunAt, task.timezone) : "-",
   });
 }

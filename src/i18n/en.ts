@@ -336,11 +336,13 @@ export const en = {
   "task.parse_error":
     "🔴 Failed to parse schedule.\n\n{message}\n\nSend the schedule again in a clearer form.",
   "task.schedule_preview":
-    "✅ Schedule parsed\n\nHow I understood it: {summary}\nTimezone: {timezone}\nType: {kind}\nNext run: {nextRunAt}",
+    "✅ Schedule parsed\n\nHow I understood it: {summary}\n{cronLine}Timezone: {timezone}\nType: {kind}\nNext run: {nextRunAt}",
+  "task.schedule_preview.cron": "Cron: {cron}",
   "task.prompt.body": "📝 Now send what the bot should do on schedule.",
   "task.prompt_empty": "⚠️ Task text cannot be empty.",
   "task.created":
-    "✅ Scheduled task created\n\nTask: {description}\nProject: {project}\nModel: {model}\nSchedule: {schedule}\nNext run: {nextRunAt}",
+    "✅ Scheduled task created\n\nTask: {description}\nProject: {project}\nModel: {model}\nSchedule: {schedule}\n{cronLine}Next run: {nextRunAt}",
+  "task.created.cron": "Cron: {cron}",
   "task.button.retry_schedule": "🔁 Re-enter schedule",
   "task.button.cancel": "❌ Cancel",
   "task.retry_schedule_callback": "Re-entering schedule...",
@@ -363,7 +365,8 @@ export const en = {
   "tasklist.empty": "📭 No scheduled tasks yet.",
   "tasklist.select": "Select a scheduled task:",
   "tasklist.details":
-    "⏰ Scheduled task\n\nTask: {prompt}\nProject: {project}\nSchedule: {schedule}\nTimezone: {timezone}\nNext run: {nextRunAt}\nLast run: {lastRunAt}\nRun count: {runCount}",
+    "⏰ Scheduled task\n\nTask: {prompt}\nProject: {project}\nSchedule: {schedule}\n{cronLine}Timezone: {timezone}\nNext run: {nextRunAt}\nLast run: {lastRunAt}\nRun count: {runCount}",
+  "tasklist.details.cron": "Cron: {cron}",
   "tasklist.button.delete": "🗑 Delete",
   "tasklist.button.cancel": "❌ Cancel",
   "tasklist.deleted_callback": "Deleted",

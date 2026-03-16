@@ -212,6 +212,7 @@ describe("bot/commands/task", () => {
       { reply_markup: unknown },
     ];
     expect(previewCall[0]).toContain("Every day at 17:00");
+    expect(previewCall[0]).toContain("Cron: 0 17 * * *");
     expect(previewCall[0]).toContain("UTC");
     expect(previewCall[0]).toContain(t("task.kind.cron"));
     expect(previewCall[0]).toContain(t("task.prompt.body"));
@@ -263,6 +264,7 @@ describe("bot/commands/task", () => {
     expect(successCall[0]).toContain("D:\\Projects\\Repo");
     expect(successCall[0]).toContain("openai/gpt-5 (default)");
     expect(successCall[0]).toContain("Every day at 17:00");
+    expect(successCall[0]).toContain("Cron: 0 17 * * *");
     expect(taskCreationManager.isActive()).toBe(false);
     expect(interactionManager.getSnapshot()).toBeNull();
   });

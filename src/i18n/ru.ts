@@ -337,11 +337,13 @@ export const ru: I18nDictionary = {
   "task.parse_error":
     "🔴 Не удалось распознать расписание.\n\n{message}\n\nОтправьте период еще раз в более явном виде.",
   "task.schedule_preview":
-    "✅ Расписание распознано\n\nКак я понял: {summary}\nЧасовой пояс: {timezone}\nТип: {kind}\nСледующий запуск: {nextRunAt}",
+    "✅ Расписание распознано\n\nКак я понял: {summary}\n{cronLine}Часовой пояс: {timezone}\nТип: {kind}\nСледующий запуск: {nextRunAt}",
+  "task.schedule_preview.cron": "Cron: {cron}",
   "task.prompt.body": "📝 Теперь отправьте текст задачи, которую нужно выполнять по расписанию.",
   "task.prompt_empty": "⚠️ Текст задачи не может быть пустым.",
   "task.created":
-    "✅ Задача по расписанию создана\n\nЗадача: {description}\nПроект: {project}\nМодель: {model}\nРасписание: {schedule}\nСледующий запуск: {nextRunAt}",
+    "✅ Задача по расписанию создана\n\nЗадача: {description}\nПроект: {project}\nМодель: {model}\nРасписание: {schedule}\n{cronLine}Следующий запуск: {nextRunAt}",
+  "task.created.cron": "Cron: {cron}",
   "task.button.retry_schedule": "🔁 Ввести период заново",
   "task.button.cancel": "❌ Отмена",
   "task.retry_schedule_callback": "Возвращаю ввод периода...",
@@ -365,7 +367,8 @@ export const ru: I18nDictionary = {
   "tasklist.empty": "📭 Задач по расписанию пока нет.",
   "tasklist.select": "Выберите задачу по расписанию:",
   "tasklist.details":
-    "⏰ Задача по расписанию\n\nЗадача: {prompt}\nПроект: {project}\nРасписание: {schedule}\nЧасовой пояс: {timezone}\nСледующий запуск: {nextRunAt}\nПоследний запуск: {lastRunAt}\nКоличество запусков: {runCount}",
+    "⏰ Задача по расписанию\n\nЗадача: {prompt}\nПроект: {project}\nРасписание: {schedule}\n{cronLine}Часовой пояс: {timezone}\nСледующий запуск: {nextRunAt}\nПоследний запуск: {lastRunAt}\nКоличество запусков: {runCount}",
+  "tasklist.details.cron": "Cron: {cron}",
   "tasklist.button.delete": "🗑 Удалить",
   "tasklist.button.cancel": "❌ Отмена",
   "tasklist.deleted_callback": "Удалено",

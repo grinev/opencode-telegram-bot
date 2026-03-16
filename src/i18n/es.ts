@@ -348,11 +348,13 @@ export const es: I18nDictionary = {
   "task.parse_error":
     "🔴 No se pudo interpretar el horario.\n\n{message}\n\nEnvía el periodo otra vez de forma más clara.",
   "task.schedule_preview":
-    "✅ Horario interpretado\n\nEntendido como: {summary}\nZona horaria: {timezone}\nTipo: {kind}\nPróxima ejecución: {nextRunAt}",
+    "✅ Horario interpretado\n\nEntendido como: {summary}\n{cronLine}Zona horaria: {timezone}\nTipo: {kind}\nPróxima ejecución: {nextRunAt}",
+  "task.schedule_preview.cron": "Cron: {cron}",
   "task.prompt.body": "📝 Ahora envía lo que el bot debe hacer según este horario.",
   "task.prompt_empty": "⚠️ El texto de la tarea no puede estar vacío.",
   "task.created":
-    "✅ Tarea programada creada\n\nTarea: {description}\nProyecto: {project}\nModelo: {model}\nHorario: {schedule}\nPróxima ejecución: {nextRunAt}",
+    "✅ Tarea programada creada\n\nTarea: {description}\nProyecto: {project}\nModelo: {model}\nHorario: {schedule}\n{cronLine}Próxima ejecución: {nextRunAt}",
+  "task.created.cron": "Cron: {cron}",
   "task.button.retry_schedule": "🔁 Volver a introducir horario",
   "task.button.cancel": "❌ Cancelar",
   "task.retry_schedule_callback": "Volviendo a introducir el horario...",
@@ -376,7 +378,8 @@ export const es: I18nDictionary = {
   "tasklist.empty": "📭 Aún no hay tareas programadas.",
   "tasklist.select": "Elige una tarea programada:",
   "tasklist.details":
-    "⏰ Tarea programada\n\nTarea: {prompt}\nProyecto: {project}\nHorario: {schedule}\nZona horaria: {timezone}\nPróxima ejecución: {nextRunAt}\nÚltima ejecución: {lastRunAt}\nNúmero de ejecuciones: {runCount}",
+    "⏰ Tarea programada\n\nTarea: {prompt}\nProyecto: {project}\nHorario: {schedule}\n{cronLine}Zona horaria: {timezone}\nPróxima ejecución: {nextRunAt}\nÚltima ejecución: {lastRunAt}\nNúmero de ejecuciones: {runCount}",
+  "tasklist.details.cron": "Cron: {cron}",
   "tasklist.button.delete": "🗑 Eliminar",
   "tasklist.button.cancel": "❌ Cancelar",
   "tasklist.deleted_callback": "Eliminada",
