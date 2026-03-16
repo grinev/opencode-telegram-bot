@@ -58,7 +58,7 @@ import { processUserPrompt } from "./handlers/prompt.js";
 import { handleVoiceMessage } from "./handlers/voice.js";
 import { handleDocumentMessage } from "./handlers/document.js";
 import { downloadTelegramFile, toDataUri } from "./utils/file-download.js";
-import { sendBotText } from "./utils/telegram-text.js";
+import { sendBotText, sendBotTextWithFileFallback } from "./utils/telegram-text.js";
 import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
 import { getStoredModel } from "../model/manager.js";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
@@ -98,8 +98,11 @@ const toolMessageBatcher = new ToolMessageBatcher({
       return;
     }
 
-    await botInstance.api.sendMessage(chatIdInstance, text, {
-      disable_notification: true,
+    await sendBotTextWithFileFallback({
+      api: botInstance.api,
+      chatId: chatIdInstance,
+      text,
+      options: { disable_notification: true },
     });
   },
   sendFile: async (sessionId, fileData) => {
@@ -200,7 +203,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
           isLastPart && keyboardManager.isInitialized() ? keyboardManager.getKeyboard() : undefined;
         const options = keyboard ? { reply_markup: keyboard } : undefined;
 
-        await sendBotText({
+        await sendBotTextWithFileFallback({
           api: botInstance.api,
           chatId: chatIdInstance,
           text: parts[i],

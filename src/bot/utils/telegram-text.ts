@@ -1,10 +1,15 @@
+import { InputFile } from "grammy";
+import { promises as fs } from "fs";
+import * as path from "path";
 import type { Api, RawApi } from "grammy";
 import {
   editMessageWithMarkdownFallback,
   sendMessageWithMarkdownFallback,
 } from "./send-with-markdown-fallback.js";
 
-type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
+const TELEGRAM_MESSAGE_MAX_LENGTH = 4096;
+
+type SendMessageApi = Pick<Api<RawApi>, "sendMessage" | "sendDocument">;
 type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
 
 type TelegramSendMessageOptions = Parameters<SendMessageApi["sendMessage"]>[2];
@@ -51,6 +56,45 @@ export async function sendBotText({
     options,
     parseMode: resolveParseMode(format),
   });
+}
+
+export async function sendBotTextWithFileFallback({
+  api,
+  chatId,
+  text,
+  options,
+  format = "raw",
+}: SendBotTextParams): Promise<void> {
+  // Si el mensaje cabe en un solo mensaje de Telegram, enviar normal
+  if (text.length <= TELEGRAM_MESSAGE_MAX_LENGTH) {
+    return sendBotText({ api, chatId, text, options, format });
+  }
+
+  // Mensaje de advertencia indicando que el contenido se envía como archivo
+  await api.sendMessage(
+    chatId,
+    "⚠️ El mensaje es muy largo y se ha convertido en archivo.",
+    { disable_notification: options?.disable_notification }
+  );
+
+  // Crear archivo temporal
+  const tempDir = path.join(process.cwd(), ".tmp");
+  await fs.mkdir(tempDir, { recursive: true });
+
+  const filename = `opencode_output_${Date.now()}.txt`;
+  const tempFilePath = path.join(tempDir, filename);
+
+  await fs.writeFile(tempFilePath, text, "utf-8");
+
+  try {
+    await api.sendDocument(chatId, new InputFile(tempFilePath), {
+      caption: `Respuesta de OpenCode (${text.length} caracteres)`,
+      disable_notification: options?.disable_notification,
+    });
+  } finally {
+    // IMPORTANTE: Borrar archivo después de enviar
+    await fs.unlink(tempFilePath).catch(() => {});
+  }
 }
 
 export async function editBotText({
