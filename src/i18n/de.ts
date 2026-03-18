@@ -291,6 +291,7 @@ export const de: I18nDictionary = {
   "pinned.line.project": "Projekt: {project}",
   "pinned.line.model": "Modell: {model}",
   "pinned.line.context": "Kontext: {used} / {limit} ({percent}%)",
+  "pinned.line.cost": "Kosten: {cost} ausgegeben",
   "pinned.files.title": "Dateien ({count}):",
   "pinned.files.item": "  {path}{diff}",
   "pinned.files.more": "  ... und {count} mehr",

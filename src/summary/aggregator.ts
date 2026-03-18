@@ -54,6 +54,8 @@ export interface TokensInfo {
 
 type TokensCallback = (tokens: TokensInfo) => void;
 
+type CostCallback = (cost: number) => void;
+
 type SessionCompactedCallback = (sessionId: string, directory: string) => void;
 
 type SessionErrorCallback = (sessionId: string, message: string) => void;
@@ -122,6 +124,7 @@ class SummaryAggregator {
   private onQuestionErrorCallback: QuestionErrorCallback | null = null;
   private onThinkingCallback: ThinkingCallback | null = null;
   private onTokensCallback: TokensCallback | null = null;
+  private onCostCallback: CostCallback | null = null;
   private onSessionCompactedCallback: SessionCompactedCallback | null = null;
   private onSessionErrorCallback: SessionErrorCallback | null = null;
   private onSessionRetryCallback: SessionRetryCallback | null = null;
@@ -167,6 +170,10 @@ class SummaryAggregator {
 
   setOnTokens(callback: TokensCallback): void {
     this.onTokensCallback = callback;
+  }
+
+  setOnCost(callback: CostCallback): void {
+    this.onCostCallback = callback;
   }
 
   setOnSessionCompacted(callback: SessionCompactedCallback): void {
@@ -355,6 +362,7 @@ class SummaryAggregator {
             reasoning: number;
             cache: { read: number; write: number };
           };
+          cost?: number;
         };
 
         if (this.onTokensCallback && assistantInfo.tokens) {
@@ -370,6 +378,12 @@ class SummaryAggregator {
           );
           // Call synchronously so keyboardManager is updated before onComplete sends the reply
           this.onTokensCallback(tokens);
+        }
+
+        // Extract and report cost
+        if (this.onCostCallback && assistantInfo.cost !== undefined) {
+          logger.debug(`[Aggregator] Cost: $${assistantInfo.cost.toFixed(2)}`);
+          this.onCostCallback(assistantInfo.cost);
         }
 
         if (this.onCompleteCallback && lastPart.length > 0) {

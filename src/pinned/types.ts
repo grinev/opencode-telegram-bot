@@ -31,4 +31,5 @@ export interface PinnedMessageState {
   tokensLimit: number;
   lastUpdated: number;
   changedFiles: FileChange[];
+  cost?: number;
 }

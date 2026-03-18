@@ -25,6 +25,7 @@ class PinnedMessageManager {
     tokensLimit: 0,
     lastUpdated: 0,
     changedFiles: [],
+    cost: 0,
   };
   private contextLimit: number | null = null;
   private onKeyboardUpdateCallback?: (tokensUsed: number, tokensLimit: number) => void;
@@ -52,6 +53,7 @@ class PinnedMessageManager {
 
     // Reset tokens for new session
     this.state.tokensUsed = 0;
+    this.state.cost = 0;
 
     // Update state
     this.state.sessionId = sessionId;
@@ -108,9 +110,10 @@ class PinnedMessageManager {
         return;
       }
 
-      // Get the maximum context size from session history
+      // Get the maximum context size and cost from session history
       // Context = input + cache.read (cache.read contains previously cached context)
       let maxContextSize = 0;
+      let maxCost = 0;
       logger.debug(`[PinnedManager] Processing ${messagesData.length} messages from history`);
 
       messagesData.forEach(({ info }) => {
@@ -121,6 +124,7 @@ class PinnedMessageManager {
               input: number;
               cache?: { read: number };
             };
+            cost?: number;
           };
 
           // Skip summary messages (technical, not real agent responses)
@@ -132,22 +136,31 @@ class PinnedMessageManager {
           const input = assistantInfo.tokens?.input || 0;
           const cacheRead = assistantInfo.tokens?.cache?.read || 0;
           const contextSize = input + cacheRead;
+          const cost = assistantInfo.cost || 0;
 
           logger.debug(
-            `[PinnedManager] Assistant message: input=${input}, cache.read=${cacheRead}, total=${contextSize}`,
+            `[PinnedManager] Assistant message: input=${input}, cache.read=${cacheRead}, total=${contextSize}, cost=$${cost.toFixed(2)}`,
           );
 
           // Keep track of maximum context size (peak usage in session)
           if (contextSize > maxContextSize) {
             maxContextSize = contextSize;
           }
+
+          // Keep track of maximum cost (cumulative in OpenCode)
+          if (cost > maxCost) {
+            maxCost = cost;
+          }
         }
       });
 
       this.state.tokensUsed = maxContextSize;
+      this.state.cost = maxCost;
       this.state.sessionId = sessionId;
 
-      logger.info(`[PinnedManager] Loaded context from history: ${this.state.tokensUsed} tokens`);
+      logger.info(
+        `[PinnedManager] Loaded context from history: ${this.state.tokensUsed} tokens, cost: $${this.state.cost.toFixed(2)}`,
+      );
 
       await this.updatePinnedMessage();
     } catch (err) {
@@ -186,6 +199,15 @@ class PinnedMessageManager {
     // Also fetch latest session title (it may have changed after first message)
     await this.refreshSessionTitle();
 
+    await this.updatePinnedMessage();
+  }
+
+  /**
+   * Called when cost info is received from SSE events
+   */
+  async onCostUpdate(cost: number): Promise<void> {
+    this.state.cost = cost;
+    logger.debug(`[PinnedManager] Cost updated: $${cost.toFixed(2)}`);
     await this.updatePinnedMessage();
   }
 
@@ -564,6 +586,10 @@ class PinnedMessageManager {
         percent: percentage,
       }),
     ];
+
+    if (this.state.cost !== undefined && this.state.cost !== null) {
+      lines.push(t("pinned.line.cost", { cost: `$${this.state.cost.toFixed(2)}` }));
+    }
 
     if (this.state.changedFiles.length > 0) {
       const maxFiles = 10;

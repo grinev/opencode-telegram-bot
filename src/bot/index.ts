@@ -377,6 +377,19 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
   });
 
+  summaryAggregator.setOnCost(async (cost) => {
+    if (!pinnedMessageManager.isInitialized()) {
+      return;
+    }
+
+    try {
+      logger.debug(`[Bot] Cost update: $${cost.toFixed(2)}`);
+      await pinnedMessageManager.onCostUpdate(cost);
+    } catch (err) {
+      logger.error("[Bot] Error updating cost:", err);
+    }
+  });
+
   summaryAggregator.setOnSessionCompacted(async (sessionId, directory) => {
     if (!pinnedMessageManager.isInitialized()) {
       return;

@@ -280,6 +280,7 @@ export const ru: I18nDictionary = {
   "pinned.line.project": "Проект: {project}",
   "pinned.line.model": "Модель: {model}",
   "pinned.line.context": "Контекст: {used} / {limit} ({percent}%)",
+  "pinned.line.cost": "Стоимость: {cost} потрачено",
   "pinned.files.title": "Файлы ({count}):",
   "pinned.files.item": "  {path}{diff}",
   "pinned.files.more": "  ... и еще {count}",

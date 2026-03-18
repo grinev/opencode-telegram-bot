@@ -253,6 +253,7 @@ export const zh: I18nDictionary = {
   "pinned.line.project": "项目: {project}",
   "pinned.line.model": "模型: {model}",
   "pinned.line.context": "上下文: {used} / {limit} ({percent}%)",
+  "pinned.line.cost": "费用: {cost}",
   "pinned.files.title": "文件（{count}）：",
   "pinned.files.item": "  {path}{diff}",
   "pinned.files.more": "  ... 还有 {count} 个",
