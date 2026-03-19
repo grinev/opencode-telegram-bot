@@ -110,10 +110,10 @@ class PinnedMessageManager {
         return;
       }
 
-      // Get the maximum context size and cost from session history
+      // Get the maximum context size and total cost from session history
       // Context = input + cache.read (cache.read contains previously cached context)
       let maxContextSize = 0;
-      let maxCost = 0;
+      let totalCost = 0;
       logger.debug(`[PinnedManager] Processing ${messagesData.length} messages from history`);
 
       messagesData.forEach(({ info }) => {
@@ -147,15 +147,13 @@ class PinnedMessageManager {
             maxContextSize = contextSize;
           }
 
-          // Keep track of maximum cost (cumulative in OpenCode)
-          if (cost > maxCost) {
-            maxCost = cost;
-          }
+          // Accumulate total session cost
+          totalCost += cost;
         }
       });
 
       this.state.tokensUsed = maxContextSize;
-      this.state.cost = maxCost;
+      this.state.cost = totalCost;
       this.state.sessionId = sessionId;
 
       logger.info(
@@ -206,8 +204,11 @@ class PinnedMessageManager {
    * Called when cost info is received from SSE events
    */
   async onCostUpdate(cost: number): Promise<void> {
-    this.state.cost = cost;
-    logger.debug(`[PinnedManager] Cost updated: $${cost.toFixed(2)}`);
+    const currentCost = this.state.cost || 0;
+    this.state.cost = currentCost + cost;
+    logger.debug(
+      `[PinnedManager] Cost added: $${cost.toFixed(2)}, total session: $${(this.state.cost || 0).toFixed(2)}`,
+    );
     await this.updatePinnedMessage();
   }
 
