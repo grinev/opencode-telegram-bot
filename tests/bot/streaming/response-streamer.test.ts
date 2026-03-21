@@ -143,6 +143,76 @@ describe("bot/streaming/response-streamer", () => {
     });
   });
 
+  it("marks a stream as broken after fatal edit error and cleans up partial messages on complete", async () => {
+    vi.useFakeTimers();
+
+    const sendText = vi.fn().mockResolvedValue(42);
+    const editText = vi
+      .fn()
+      .mockRejectedValue(new Error("400: Bad Request: message can't be edited"));
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ResponseStreamer({
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText,
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["partial"], format: "raw" });
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["partial updated"], format: "raw" });
+    await vi.waitFor(() => {
+      expect(editText).toHaveBeenCalledTimes(1);
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["partial updated again"], format: "raw" });
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(editText).toHaveBeenCalledTimes(1);
+
+    const synced = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
+
+    expect(synced).toBe(false);
+    expect(deleteText).toHaveBeenCalledTimes(1);
+    expect(deleteText).toHaveBeenCalledWith(42);
+    expect(sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back cleanly when fatal send error happens before any partial is visible", async () => {
+    vi.useFakeTimers();
+
+    const sendText = vi
+      .fn()
+      .mockRejectedValue(new Error("403: Forbidden: bot was blocked by the user"));
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ResponseStreamer({
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText,
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["partial"], format: "raw" });
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["partial again"], format: "raw" });
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    const synced = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
+
+    expect(synced).toBe(false);
+    expect(editText).not.toHaveBeenCalled();
+    expect(deleteText).not.toHaveBeenCalled();
+  });
+
   it("skips final sync when stream never emitted partial update", async () => {
     vi.useFakeTimers();
 

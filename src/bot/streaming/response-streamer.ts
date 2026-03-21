@@ -46,6 +46,9 @@ interface StreamState {
   timer: ReturnType<typeof setTimeout> | null;
   task: Promise<boolean>;
   cancelled: boolean;
+  isBroken: boolean;
+  fatalErrorMessage: string | null;
+  fatalErrorLogged: boolean;
 }
 
 function buildStateKey(sessionId: string, messageId: string): string {
@@ -127,6 +130,10 @@ export class ResponseStreamer {
 
     const state = this.getOrCreateState(sessionId, messageId);
     state.latestPayload = normalizedPayload;
+    if (state.isBroken) {
+      return;
+    }
+
     this.ensureTimer(state);
   }
 
@@ -154,18 +161,20 @@ export class ResponseStreamer {
       return false;
     }
 
+    if (state.isBroken) {
+      await this.cleanupBrokenStream(state, "complete_broken_stream");
+      this.cancelState(state);
+      this.states.delete(state.key);
+      return false;
+    }
+
     this.clearTimer(state);
 
     let synced = true;
     if (options?.flushFinal !== false) {
-      try {
-        synced = await this.enqueueTask(state, () => this.flushState(state, "complete"));
-      } catch (error) {
-        logger.error(
-          `[ResponseStreamer] Final stream sync failed: session=${state.sessionId}, message=${state.messageId}`,
-          error,
-        );
-        synced = false;
+      synced = await this.enqueueTask(state, () => this.flushState(state, "complete"));
+      if (!synced && state.isBroken) {
+        await this.cleanupBrokenStream(state, "final_sync_failed_cleanup");
       }
     }
 
@@ -233,6 +242,9 @@ export class ResponseStreamer {
       timer: null,
       task: Promise.resolve(true),
       cancelled: false,
+      isBroken: false,
+      fatalErrorMessage: null,
+      fatalErrorLogged: false,
     };
 
     this.states.set(key, state);
@@ -292,6 +304,10 @@ export class ResponseStreamer {
       return false;
     }
 
+    if (state.isBroken) {
+      return false;
+    }
+
     while (!state.cancelled) {
       const payload = state.latestPayload;
       if (!payload) {
@@ -316,7 +332,8 @@ export class ResponseStreamer {
       } catch (error) {
         const retryAfterMs = getRetryAfterMs(error);
         if (retryAfterMs === null) {
-          throw error;
+          this.markStreamBroken(state, error, reason);
+          return false;
         }
 
         const delayMs = Math.max(this.throttleMs, retryAfterMs);
@@ -329,6 +346,49 @@ export class ResponseStreamer {
     }
 
     return false;
+  }
+
+  private markStreamBroken(state: StreamState, error: unknown, reason: string): void {
+    state.isBroken = true;
+    state.fatalErrorMessage = getErrorMessage(error);
+
+    if (state.fatalErrorLogged) {
+      return;
+    }
+
+    state.fatalErrorLogged = true;
+    logger.error(
+      `[ResponseStreamer] Stream marked as broken: session=${state.sessionId}, message=${state.messageId}, reason=${reason}, error=${state.fatalErrorMessage}`,
+      error,
+    );
+  }
+
+  private async cleanupBrokenStream(state: StreamState, reason: string): Promise<void> {
+    if (state.telegramMessageIds.length === 0) {
+      return;
+    }
+
+    for (let index = state.telegramMessageIds.length - 1; index >= 0; index--) {
+      const messageId = state.telegramMessageIds[index];
+      if (!messageId) {
+        continue;
+      }
+
+      try {
+        await this.deleteText(messageId);
+      } catch (error) {
+        logger.warn(
+          `[ResponseStreamer] Failed to delete broken stream message: session=${state.sessionId}, message=${state.messageId}, telegramMessageId=${messageId}, reason=${reason}`,
+          error,
+        );
+      }
+    }
+
+    state.telegramMessageIds = [];
+    state.lastSentSignatures = [];
+    logger.debug(
+      `[ResponseStreamer] Cleaned up broken stream messages: session=${state.sessionId}, message=${state.messageId}, reason=${reason}`,
+    );
   }
 
   private async syncMessages(
