@@ -6,105 +6,165 @@ describe("bot/streaming/response-streamer", () => {
     vi.useRealTimers();
   });
 
-  it("throttles updates and sends only the latest draft payload", async () => {
+  it("throttles updates and sends only the latest payload", async () => {
     vi.useFakeTimers();
 
-    const sendDraft = vi.fn().mockResolvedValue(undefined);
+    let nextMessageId = 1;
+    const sendText = vi.fn(async () => nextMessageId++);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 500,
-      sendDraft,
+      sendText,
+      editText,
+      deleteText,
     });
 
-    streamer.enqueue("s1", "m1", { text: "first", format: "raw" });
-    streamer.enqueue("s1", "m1", { text: "second", format: "raw" });
+    streamer.enqueue("s1", "m1", { parts: ["first"], format: "raw" });
+    streamer.enqueue("s1", "m1", { parts: ["second"], format: "raw" });
 
     await vi.advanceTimersByTimeAsync(500);
 
-    expect(sendDraft).toHaveBeenCalledTimes(1);
-    expect(sendDraft).toHaveBeenCalledWith(1, "second");
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenCalledWith("second", "raw", undefined);
+    expect(editText).not.toHaveBeenCalled();
+    expect(deleteText).not.toHaveBeenCalled();
   });
 
-  it("retries raw mode when markdown draft parsing fails", async () => {
+  it("streams into a second Telegram message when parts grow", async () => {
     vi.useFakeTimers();
 
-    const sendDraft = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("Bad Request: can't parse entities"))
-      .mockResolvedValueOnce(undefined);
-
+    let nextMessageId = 101;
+    const sendText = vi.fn(async () => nextMessageId++);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 0,
-      sendDraft,
+      sendText,
+      editText,
+      deleteText,
     });
 
-    streamer.enqueue("s1", "m1", { text: "**hello**", format: "markdown_v2" });
+    streamer.enqueue("s1", "m1", { parts: ["part-1"], format: "markdown_v2" });
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
+    streamer.enqueue("s1", "m1", {
+      parts: ["part-1", "part-2"],
+      format: "markdown_v2",
+    });
 
     await vi.waitFor(() => {
-      expect(sendDraft).toHaveBeenCalledTimes(2);
+      expect(sendText).toHaveBeenCalledTimes(2);
     });
 
-    expect(sendDraft).toHaveBeenNthCalledWith(1, 1, "**hello**", { parse_mode: "MarkdownV2" });
-    expect(sendDraft).toHaveBeenNthCalledWith(2, 1, "**hello**");
-  });
-
-  it("disables draft streaming after non-markdown API error", async () => {
-    vi.useFakeTimers();
-
-    const sendDraft = vi.fn().mockRejectedValue(new Error("Bad Request: method is not available"));
-
-    const streamer = new ResponseStreamer({
-      throttleMs: 0,
-      sendDraft,
-    });
-
-    streamer.enqueue("s1", "m1", { text: "hello", format: "raw" });
-
-    await vi.waitFor(() => {
-      expect(sendDraft).toHaveBeenCalledTimes(1);
-    });
-
-    streamer.enqueue("s1", "m2", { text: "world", format: "raw" });
-    await vi.advanceTimersByTimeAsync(100);
-
-    expect(sendDraft).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenNthCalledWith(1, "part-1", "markdown_v2", undefined);
+    expect(sendText).toHaveBeenNthCalledWith(2, "part-2", "markdown_v2", undefined);
+    expect(editText).not.toHaveBeenCalled();
+    expect(deleteText).not.toHaveBeenCalled();
   });
 
   it("flushes final payload on complete after streaming started", async () => {
     vi.useFakeTimers();
 
-    const sendDraft = vi.fn().mockResolvedValue(undefined);
+    let nextMessageId = 1;
+    const sendText = vi.fn(async () => nextMessageId++);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 500,
-      sendDraft,
+      sendText,
+      editText,
+      deleteText,
     });
 
-    streamer.enqueue("s1", "m1", { text: "partial", format: "raw" });
+    streamer.enqueue("s1", "m1", { parts: ["partial"], format: "raw" });
     await vi.advanceTimersByTimeAsync(500);
 
-    await streamer.complete("s1", "m1", { text: "final", format: "raw" });
-    await vi.waitFor(() => {
-      expect(sendDraft).toHaveBeenCalledTimes(2);
-    });
+    const synced = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
 
-    expect(sendDraft).toHaveBeenNthCalledWith(2, 1, "final");
-
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(sendDraft).toHaveBeenCalledTimes(2);
+    expect(synced).toBe(true);
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(editText).toHaveBeenCalledTimes(1);
+    expect(editText).toHaveBeenCalledWith(1, "final", "raw", undefined);
+    expect(deleteText).not.toHaveBeenCalled();
   });
 
-  it("skips final draft when stream never emitted partial update", async () => {
+  it("removes extra Telegram messages when payload shrinks", async () => {
     vi.useFakeTimers();
 
-    const sendDraft = vi.fn().mockResolvedValue(undefined);
+    let nextMessageId = 10;
+    const sendText = vi.fn(async () => nextMessageId++);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
-      throttleMs: 500,
-      sendDraft,
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText,
     });
 
-    streamer.enqueue("s1", "m1", { text: "partial", format: "raw" });
-    await streamer.complete("s1", "m1", { text: "final", format: "raw" });
+    streamer.enqueue("s1", "m1", { parts: ["one", "two"], format: "raw" });
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(2);
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["one"], format: "raw" });
+    await vi.waitFor(() => {
+      expect(deleteText).toHaveBeenCalledTimes(1);
+    });
+
+    expect(deleteText).toHaveBeenCalledWith(11);
+  });
+
+  it("retries after Telegram rate limits", async () => {
+    vi.useFakeTimers();
+
+    const sendText = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("429: retry after 1"))
+      .mockResolvedValueOnce(1);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ResponseStreamer({
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText,
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["hello"], format: "raw" });
 
     await vi.advanceTimersByTimeAsync(1000);
-    expect(sendDraft).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("skips final sync when stream never emitted partial update", async () => {
+    vi.useFakeTimers();
+
+    let nextMessageId = 1;
+    const sendText = vi.fn(async () => nextMessageId++);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ResponseStreamer({
+      throttleMs: 500,
+      sendText,
+      editText,
+      deleteText,
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["partial"], format: "raw" });
+    const synced = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(synced).toBe(false);
+    expect(sendText).not.toHaveBeenCalled();
+    expect(editText).not.toHaveBeenCalled();
+    expect(deleteText).not.toHaveBeenCalled();
   });
 });

@@ -72,15 +72,19 @@ import type { FilePartInput } from "@opencode-ai/sdk/v2";
 import { foregroundSessionState } from "../scheduled-task/foreground-state.js";
 import { scheduledTaskRuntime } from "../scheduled-task/runtime.js";
 import { ResponseStreamer } from "./streaming/response-streamer.js";
-import { isTelegramMarkdownParseError } from "./utils/send-with-markdown-fallback.js";
+import type { ResponseDraftPayload } from "./streaming/response-streamer.js";
+import {
+  editMessageWithMarkdownFallback,
+  sendMessageWithMarkdownFallback,
+} from "./utils/send-with-markdown-fallback.js";
 
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
 let commandsInitialized = false;
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
-const TELEGRAM_TEXT_LIMIT = 4096;
 const RESPONSE_STREAM_THROTTLE_MS = 200;
+const RESPONSE_STREAM_TEXT_LIMIT = 3800;
 const SESSION_RETRY_PREFIX = "🔁";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -107,33 +111,18 @@ function prepareDocumentCaption(caption: string): string {
   return `${normalizedCaption.slice(0, TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH - 3)}...`;
 }
 
-function trimToTelegramTextLimit(text: string): string {
-  if (text.length <= TELEGRAM_TEXT_LIMIT) {
-    return text;
-  }
-
-  return `...${text.slice(text.length - (TELEGRAM_TEXT_LIMIT - 3))}`;
-}
-
-function prepareResponseDraftText(messageText: string): {
-  text: string;
-  format: "raw" | "markdown_v2";
-} | null {
-  const parts = formatSummaryWithMode(messageText, config.bot.messageFormatMode);
+function prepareResponseDraftPayload(messageText: string): ResponseDraftPayload | null {
+  const parts = formatSummaryWithMode(
+    messageText,
+    config.bot.messageFormatMode,
+    RESPONSE_STREAM_TEXT_LIMIT,
+  );
   if (parts.length === 0) {
     return null;
   }
 
-  const latestPart = parts[parts.length - 1];
-  const withPrefix = parts.length > 1 ? `...\n${latestPart}` : latestPart;
-  const trimmed = trimToTelegramTextLimit(withPrefix.trim());
-
-  if (!trimmed) {
-    return null;
-  }
-
   return {
-    text: trimmed,
+    parts,
     format: config.bot.messageFormatMode === "markdown" ? "markdown_v2" : "raw",
   };
 }
@@ -190,43 +179,41 @@ const toolMessageBatcher = new ToolMessageBatcher({
   },
 });
 
-const streamMessageIdsByDraftId = new Map<number, number>();
-
 const responseStreamer = new ResponseStreamer({
   throttleMs: RESPONSE_STREAM_THROTTLE_MS,
-  sendDraft: async (draftId, text, options) => {
+  sendText: async (text, format, options) => {
     if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
-      return;
+      throw new Error("Bot context missing for streamed send");
     }
 
-    const parseMode = options?.parse_mode;
-    const existingMessageId = streamMessageIdsByDraftId.get(draftId);
+    const parseMode = format === "markdown_v2" ? "MarkdownV2" : undefined;
+    const sentMessage = await sendMessageWithMarkdownFallback({
+      api: botInstance.api,
+      chatId: chatIdInstance,
+      text,
+      options,
+      parseMode,
+    });
 
-    if (!existingMessageId) {
-      try {
-        const sentMessage = await botInstance.api.sendMessage(chatIdInstance, text, options);
-        streamMessageIdsByDraftId.set(draftId, sentMessage.message_id);
-      } catch (error) {
-        if (parseMode && isTelegramMarkdownParseError(error)) {
-          const sentMessage = await botInstance.api.sendMessage(chatIdInstance, text);
-          streamMessageIdsByDraftId.set(draftId, sentMessage.message_id);
-          return;
-        }
-
-        throw error;
-      }
-
-      return;
+    return sentMessage.message_id;
+  },
+  editText: async (messageId, text, format, options) => {
+    if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+      throw new Error("Bot context missing for streamed edit");
     }
+
+    const parseMode = format === "markdown_v2" ? "MarkdownV2" : undefined;
 
     try {
-      await botInstance.api.editMessageText(chatIdInstance, existingMessageId, text, options);
+      await editMessageWithMarkdownFallback({
+        api: botInstance.api,
+        chatId: chatIdInstance,
+        messageId,
+        text,
+        options,
+        parseMode,
+      });
     } catch (error) {
-      if (parseMode && isTelegramMarkdownParseError(error)) {
-        await botInstance.api.editMessageText(chatIdInstance, existingMessageId, text);
-        return;
-      }
-
       const errorMessage =
         error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
       if (errorMessage.includes("message is not modified")) {
@@ -235,6 +222,24 @@ const responseStreamer = new ResponseStreamer({
 
       throw error;
     }
+  },
+  deleteText: async (messageId) => {
+    if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+      throw new Error("Bot context missing for streamed delete");
+    }
+
+    await botInstance.api.deleteMessage(chatIdInstance, messageId).catch((error) => {
+      const errorMessage =
+        error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      if (
+        errorMessage.includes("message to delete not found") ||
+        errorMessage.includes("message identifier is not specified")
+      ) {
+        return;
+      }
+
+      throw error;
+    });
   },
 });
 
@@ -278,7 +283,6 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   summaryAggregator.setOnCleared(() => {
     toolMessageBatcher.clearAll("summary_aggregator_clear");
     responseStreamer.clearAll("summary_aggregator_clear");
-    streamMessageIdsByDraftId.clear();
   });
 
   summaryAggregator.setOnPartial((sessionId, messageId, messageText) => {
@@ -299,10 +303,13 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       toolMessageBatcher.dropQueuedText(sessionId, t("bot.thinking"), "response_stream_started");
     }
 
-    const preparedDraft = prepareResponseDraftText(messageText);
+    const preparedDraft = prepareResponseDraftPayload(messageText);
     if (!preparedDraft) {
       return;
     }
+
+    preparedDraft.sendOptions = undefined;
+    preparedDraft.editOptions = undefined;
 
     responseStreamer.enqueue(sessionId, messageId, preparedDraft);
   });
@@ -325,7 +332,12 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
     let streamedViaDraft = false;
     if (config.bot.responseStreaming) {
-      const preparedDraft = prepareResponseDraftText(messageText);
+      const preparedDraft = prepareResponseDraftPayload(messageText);
+      if (preparedDraft) {
+        preparedDraft.sendOptions = undefined;
+        preparedDraft.editOptions = undefined;
+      }
+
       streamedViaDraft = await responseStreamer.complete(
         sessionId,
         messageId,

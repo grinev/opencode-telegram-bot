@@ -226,6 +226,70 @@ describe("summary/aggregator", () => {
     expect(onComplete).toHaveBeenCalledWith("session-1", "message-stream-1", "Partial answer");
   });
 
+  it("combines multiple text parts into a single final message", () => {
+    const onPartial = vi.fn();
+    const onComplete = vi.fn();
+
+    summaryAggregator.setOnPartial(onPartial);
+    summaryAggregator.setOnComplete(onComplete);
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "message-multipart-1",
+          sessionID: "session-1",
+          role: "assistant",
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-a",
+          sessionID: "session-1",
+          messageID: "message-multipart-1",
+          type: "text",
+          text: "Hello ",
+          time: { start: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-b",
+          sessionID: "session-1",
+          messageID: "message-multipart-1",
+          type: "text",
+          text: "world",
+          time: { start: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "message-multipart-1",
+          sessionID: "session-1",
+          role: "assistant",
+          time: { created: Date.now(), completed: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onPartial).toHaveBeenLastCalledWith("session-1", "message-multipart-1", "Hello world");
+    expect(onComplete).toHaveBeenCalledWith("session-1", "message-multipart-1", "Hello world");
+  });
+
   it("starts optimistic partial streaming after second unknown text update", () => {
     const onPartial = vi.fn();
     summaryAggregator.setOnPartial(onPartial);

@@ -76,10 +76,11 @@ export async function sendMessageWithMarkdownFallback({
   text,
   options,
   parseMode,
-}: SendMessageWithMarkdownFallbackParams): Promise<void> {
+}: SendMessageWithMarkdownFallbackParams): Promise<
+  Awaited<ReturnType<SendMessageApi["sendMessage"]>>
+> {
   if (!parseMode) {
-    await api.sendMessage(chatId, text, options);
-    return;
+    return api.sendMessage(chatId, text, options);
   }
 
   const markdownOptions: TelegramSendMessageOptions = {
@@ -88,14 +89,14 @@ export async function sendMessageWithMarkdownFallback({
   };
 
   try {
-    await api.sendMessage(chatId, text, markdownOptions);
+    return await api.sendMessage(chatId, text, markdownOptions);
   } catch (error) {
     if (!isTelegramMarkdownParseError(error)) {
       throw error;
     }
 
     logger.warn("[Bot] Markdown parse failed, retrying assistant message in raw mode", error);
-    await api.sendMessage(chatId, text, options);
+    return api.sendMessage(chatId, text, options);
   }
 }
 
@@ -106,10 +107,11 @@ export async function editMessageWithMarkdownFallback({
   text,
   options,
   parseMode,
-}: EditMessageWithMarkdownFallbackParams): Promise<void> {
+}: EditMessageWithMarkdownFallbackParams): Promise<
+  Awaited<ReturnType<EditMessageApi["editMessageText"]>>
+> {
   if (!parseMode) {
-    await api.editMessageText(chatId, messageId, text, options);
-    return;
+    return api.editMessageText(chatId, messageId, text, options);
   }
 
   const markdownOptions: TelegramEditMessageOptions = {
@@ -118,13 +120,13 @@ export async function editMessageWithMarkdownFallback({
   };
 
   try {
-    await api.editMessageText(chatId, messageId, text, markdownOptions);
+    return await api.editMessageText(chatId, messageId, text, markdownOptions);
   } catch (error) {
     if (!isTelegramMarkdownParseError(error)) {
       throw error;
     }
 
     logger.warn("[Bot] Markdown parse failed, retrying edited message in raw mode", error);
-    await api.editMessageText(chatId, messageId, text, options);
+    return api.editMessageText(chatId, messageId, text, options);
   }
 }

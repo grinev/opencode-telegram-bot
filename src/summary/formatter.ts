@@ -188,12 +188,19 @@ function formatMarkdownForTelegram(text: string): string {
   }
 }
 
-export function formatSummaryWithMode(text: string, mode: MessageFormatMode): string[] {
+export function formatSummaryWithMode(
+  text: string,
+  mode: MessageFormatMode,
+  maxLength: number = TELEGRAM_MESSAGE_LIMIT,
+): string[] {
   if (!text || text.trim().length === 0) {
     return [];
   }
 
-  const parts = splitText(text, TELEGRAM_MESSAGE_LIMIT);
+  const normalizedMaxLength = Math.max(1, Math.floor(maxLength));
+  const rawTextLimit =
+    mode === "raw" ? Math.max(1, normalizedMaxLength - "```\n\n```".length) : normalizedMaxLength;
+  const parts = splitText(text, rawTextLimit);
   const formattedParts: string[] = [];
 
   for (const part of parts) {
@@ -204,7 +211,7 @@ export function formatSummaryWithMode(text: string, mode: MessageFormatMode): st
 
     if (mode === "markdown") {
       const converted = formatMarkdownForTelegram(trimmed);
-      const convertedParts = splitText(converted, TELEGRAM_MESSAGE_LIMIT);
+      const convertedParts = splitText(converted, normalizedMaxLength);
 
       for (const convertedPart of convertedParts) {
         const normalizedPart = convertedPart.trim();

@@ -1,15 +1,19 @@
 import type { Api, RawApi } from "grammy";
 import { logger } from "../../utils/logger.js";
-import { isTelegramMarkdownParseError } from "../utils/send-with-markdown-fallback.js";
 
-type DraftApi = Pick<Api<RawApi>, "sendMessageDraft">;
-type TelegramDraftOptions = Parameters<DraftApi["sendMessageDraft"]>[3];
+type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
+type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
+
+type TelegramSendMessageOptions = Parameters<SendMessageApi["sendMessage"]>[2];
+type TelegramEditMessageOptions = Parameters<EditMessageApi["editMessageText"]>[3];
 
 export type ResponseDraftFormat = "raw" | "markdown_v2";
 
 export interface ResponseDraftPayload {
-  text: string;
+  parts: string[];
   format: ResponseDraftFormat;
+  sendOptions?: TelegramSendMessageOptions;
+  editOptions?: TelegramEditMessageOptions;
 }
 
 interface ResponseStreamerCompleteOptions {
@@ -18,18 +22,30 @@ interface ResponseStreamerCompleteOptions {
 
 interface ResponseStreamerOptions {
   throttleMs: number;
-  sendDraft: (draftId: number, text: string, options?: TelegramDraftOptions) => Promise<void>;
+  sendText: (
+    text: string,
+    format: ResponseDraftFormat,
+    options?: TelegramSendMessageOptions,
+  ) => Promise<number>;
+  editText: (
+    messageId: number,
+    text: string,
+    format: ResponseDraftFormat,
+    options?: TelegramEditMessageOptions,
+  ) => Promise<void>;
+  deleteText: (messageId: number) => Promise<void>;
 }
 
 interface StreamState {
   key: string;
   sessionId: string;
   messageId: string;
-  draftId: number;
   latestPayload: ResponseDraftPayload | null;
-  lastSentSignature: string | null;
+  lastSentSignatures: string[];
+  telegramMessageIds: number[];
   timer: ReturnType<typeof setTimeout> | null;
-  task: Promise<void>;
+  task: Promise<boolean>;
+  cancelled: boolean;
 }
 
 function buildStateKey(sessionId: string, messageId: string): string {
@@ -37,14 +53,18 @@ function buildStateKey(sessionId: string, messageId: string): string {
 }
 
 function normalizePayload(payload: ResponseDraftPayload): ResponseDraftPayload | null {
-  const normalizedText = payload.text.trim();
-  if (!normalizedText) {
+  const normalizedParts = payload.parts
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (normalizedParts.length === 0) {
     return null;
   }
 
   return {
-    text: normalizedText,
+    parts: normalizedParts,
     format: payload.format,
+    sendOptions: payload.sendOptions,
+    editOptions: payload.editOptions,
   };
 }
 
@@ -75,23 +95,31 @@ function getRetryAfterMs(error: unknown): number | null {
   return seconds * 1000;
 }
 
+function createSignature(text: string, format: ResponseDraftFormat): string {
+  return `${format}\n${text}`;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export class ResponseStreamer {
   private readonly throttleMs: number;
-  private readonly sendDraft: ResponseStreamerOptions["sendDraft"];
+  private readonly sendText: ResponseStreamerOptions["sendText"];
+  private readonly editText: ResponseStreamerOptions["editText"];
+  private readonly deleteText: ResponseStreamerOptions["deleteText"];
   private readonly states: Map<string, StreamState> = new Map();
-  private nextDraftId = 1;
-  private unavailable = false;
 
   constructor(options: ResponseStreamerOptions) {
     this.throttleMs = Math.max(0, Math.floor(options.throttleMs));
-    this.sendDraft = options.sendDraft;
+    this.sendText = options.sendText;
+    this.editText = options.editText;
+    this.deleteText = options.deleteText;
   }
 
   enqueue(sessionId: string, messageId: string, payload: ResponseDraftPayload): void {
-    if (this.unavailable) {
-      return;
-    }
-
     const normalizedPayload = normalizePayload(payload);
     if (!normalizedPayload) {
       return;
@@ -108,10 +136,6 @@ export class ResponseStreamer {
     payload?: ResponseDraftPayload,
     options?: ResponseStreamerCompleteOptions,
   ): Promise<boolean> {
-    if (this.unavailable) {
-      return false;
-    }
-
     const state = this.states.get(buildStateKey(sessionId, messageId));
     if (!state) {
       return false;
@@ -124,21 +148,30 @@ export class ResponseStreamer {
       }
     }
 
-    if (state.lastSentSignature === null) {
-      this.clearTimer(state);
+    if (state.telegramMessageIds.length === 0) {
+      this.cancelState(state);
       this.states.delete(state.key);
       return false;
     }
 
-    const streamedAtLeastOnce = state.lastSentSignature !== null;
+    this.clearTimer(state);
 
-    this.clearTimer(state);
+    let synced = true;
     if (options?.flushFinal !== false) {
-      await this.enqueueTask(state, () => this.flushState(state, "complete"));
+      try {
+        synced = await this.enqueueTask(state, () => this.flushState(state, "complete"));
+      } catch (error) {
+        logger.error(
+          `[ResponseStreamer] Final stream sync failed: session=${state.sessionId}, message=${state.messageId}`,
+          error,
+        );
+        synced = false;
+      }
     }
-    this.clearTimer(state);
+
+    this.cancelState(state);
     this.states.delete(state.key);
-    return streamedAtLeastOnce;
+    return synced;
   }
 
   clearMessage(sessionId: string, messageId: string, reason: string): void {
@@ -148,7 +181,7 @@ export class ResponseStreamer {
       return;
     }
 
-    this.clearTimer(state);
+    this.cancelState(state);
     this.states.delete(key);
     logger.debug(
       `[ResponseStreamer] Cleared message stream: session=${sessionId}, message=${messageId}, reason=${reason}`,
@@ -161,7 +194,7 @@ export class ResponseStreamer {
         continue;
       }
 
-      this.clearTimer(state);
+      this.cancelState(state);
       this.states.delete(state.key);
     }
 
@@ -172,7 +205,7 @@ export class ResponseStreamer {
 
   clearAll(reason: string): void {
     for (const state of this.states.values()) {
-      this.clearTimer(state);
+      this.cancelState(state);
     }
 
     const count = this.states.size;
@@ -194,41 +227,43 @@ export class ResponseStreamer {
       key,
       sessionId,
       messageId,
-      draftId: this.consumeDraftId(),
       latestPayload: null,
-      lastSentSignature: null,
+      lastSentSignatures: [],
+      telegramMessageIds: [],
       timer: null,
-      task: Promise.resolve(),
+      task: Promise.resolve(true),
+      cancelled: false,
     };
 
     this.states.set(key, state);
     return state;
   }
 
-  private consumeDraftId(): number {
-    const draftId = this.nextDraftId;
-    this.nextDraftId++;
-
-    if (this.nextDraftId > Number.MAX_SAFE_INTEGER) {
-      this.nextDraftId = 1;
-    }
-
-    return draftId;
-  }
-
   private ensureTimer(state: StreamState): void {
-    if (state.timer) {
+    if (state.timer || state.cancelled) {
       return;
     }
 
     if (this.throttleMs === 0) {
-      void this.enqueueTask(state, () => this.flushState(state, "immediate"));
+      void this.enqueueTask(state, () => this.flushState(state, "immediate")).catch((error) => {
+        logger.error(
+          `[ResponseStreamer] Immediate stream sync failed: session=${state.sessionId}, message=${state.messageId}`,
+          error,
+        );
+      });
       return;
     }
 
     state.timer = setTimeout(() => {
       state.timer = null;
-      void this.enqueueTask(state, () => this.flushState(state, "throttle_elapsed"));
+      void this.enqueueTask(state, () => this.flushState(state, "throttle_elapsed")).catch(
+        (error) => {
+          logger.error(
+            `[ResponseStreamer] Throttled stream sync failed: session=${state.sessionId}, message=${state.messageId}`,
+            error,
+          );
+        },
+      );
     }, this.throttleMs);
   }
 
@@ -241,96 +276,93 @@ export class ResponseStreamer {
     state.timer = null;
   }
 
-  private enqueueTask(state: StreamState, task: () => Promise<void>): Promise<void> {
-    const nextTask = state.task
-      .catch(() => undefined)
-      .then(task)
-      .catch((error) => {
-        logger.error(
-          `[ResponseStreamer] Stream task failed: session=${state.sessionId}, message=${state.messageId}`,
-          error,
-        );
-      });
+  private cancelState(state: StreamState): void {
+    state.cancelled = true;
+    this.clearTimer(state);
+  }
 
+  private enqueueTask(state: StreamState, task: () => Promise<boolean>): Promise<boolean> {
+    const nextTask = state.task.catch(() => false).then(task);
     state.task = nextTask;
     return nextTask;
   }
 
-  private async flushState(state: StreamState, reason: string): Promise<void> {
-    if (this.unavailable) {
-      return;
+  private async flushState(state: StreamState, reason: string): Promise<boolean> {
+    if (state.cancelled) {
+      return false;
     }
 
-    const payload = state.latestPayload;
-    if (!payload) {
-      return;
-    }
-
-    const signature = `${payload.format}\n${payload.text}`;
-    if (state.lastSentSignature === signature) {
-      return;
-    }
-
-    try {
-      await this.sendPayload(state.draftId, payload);
-      state.lastSentSignature = signature;
-      logger.debug(
-        `[ResponseStreamer] Draft sent: session=${state.sessionId}, message=${state.messageId}, reason=${reason}, length=${payload.text.length}`,
-      );
-    } catch (error) {
-      const retryAfterMs = getRetryAfterMs(error);
-      if (retryAfterMs !== null) {
-        this.scheduleRetry(state, retryAfterMs, reason, error);
-        return;
+    while (!state.cancelled) {
+      const payload = state.latestPayload;
+      if (!payload) {
+        return state.telegramMessageIds.length > 0;
       }
 
-      this.disableStreaming(error);
-    }
-  }
+      const targetSignatures = payload.parts.map((part) => createSignature(part, payload.format));
+      const unchanged =
+        targetSignatures.length === state.lastSentSignatures.length &&
+        targetSignatures.every((signature, index) => signature === state.lastSentSignatures[index]);
 
-  private scheduleRetry(
-    state: StreamState,
-    retryAfterMs: number,
-    reason: string,
-    error: unknown,
-  ): void {
-    const delayMs = Math.max(this.throttleMs, retryAfterMs);
-    this.clearTimer(state);
-    state.timer = setTimeout(() => {
-      state.timer = null;
-      void this.enqueueTask(state, () => this.flushState(state, "rate_limit_retry"));
-    }, delayMs);
+      if (unchanged) {
+        return state.telegramMessageIds.length > 0;
+      }
 
-    logger.warn(
-      `[ResponseStreamer] Draft send rate-limited, retrying in ${delayMs}ms: session=${state.sessionId}, message=${state.messageId}, reason=${reason}`,
-      error,
-    );
-  }
-
-  private async sendPayload(draftId: number, payload: ResponseDraftPayload): Promise<void> {
-    if (payload.format === "markdown_v2") {
       try {
-        await this.sendDraft(draftId, payload.text, { parse_mode: "MarkdownV2" });
-        return;
+        await this.syncMessages(state, payload, targetSignatures);
+        logger.debug(
+          `[ResponseStreamer] Stream synced: session=${state.sessionId}, message=${state.messageId}, reason=${reason}, parts=${payload.parts.length}`,
+        );
+        return true;
       } catch (error) {
-        if (!isTelegramMarkdownParseError(error)) {
+        const retryAfterMs = getRetryAfterMs(error);
+        if (retryAfterMs === null) {
           throw error;
         }
 
-        logger.debug("[ResponseStreamer] Markdown draft parse failed, retrying raw", error);
+        const delayMs = Math.max(this.throttleMs, retryAfterMs);
+        logger.warn(
+          `[ResponseStreamer] Stream sync rate-limited, retrying in ${delayMs}ms: session=${state.sessionId}, message=${state.messageId}, reason=${reason}`,
+          error,
+        );
+        await delay(delayMs);
       }
     }
 
-    await this.sendDraft(draftId, payload.text);
+    return false;
   }
 
-  private disableStreaming(error: unknown): void {
-    if (this.unavailable) {
-      return;
+  private async syncMessages(
+    state: StreamState,
+    payload: ResponseDraftPayload,
+    targetSignatures: string[],
+  ): Promise<void> {
+    for (let index = 0; index < payload.parts.length; index++) {
+      const text = payload.parts[index];
+      const nextSignature = targetSignatures[index];
+      const currentMessageId = state.telegramMessageIds[index];
+
+      if (currentMessageId) {
+        if (state.lastSentSignatures[index] === nextSignature) {
+          continue;
+        }
+
+        await this.editText(currentMessageId, text, payload.format, payload.editOptions);
+        state.lastSentSignatures[index] = nextSignature;
+        continue;
+      }
+
+      const messageId = await this.sendText(text, payload.format, payload.sendOptions);
+      state.telegramMessageIds[index] = messageId;
+      state.lastSentSignatures[index] = nextSignature;
     }
 
-    this.unavailable = true;
-    this.clearAll("draft_unavailable");
-    logger.warn("[ResponseStreamer] Disabling draft streaming after Telegram API error", error);
+    for (let index = state.telegramMessageIds.length - 1; index >= payload.parts.length; index--) {
+      const messageId = state.telegramMessageIds[index];
+      if (messageId) {
+        await this.deleteText(messageId);
+      }
+      state.telegramMessageIds.pop();
+      state.lastSentSignatures.pop();
+    }
   }
 }
