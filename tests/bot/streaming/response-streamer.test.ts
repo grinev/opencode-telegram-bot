@@ -213,6 +213,75 @@ describe("bot/streaming/response-streamer", () => {
     expect(deleteText).not.toHaveBeenCalled();
   });
 
+  it("keeps visible partial messages when clearing a session and stops tracking the old stream", async () => {
+    vi.useFakeTimers();
+
+    let nextMessageId = 100;
+    const sendText = vi.fn(async () => nextMessageId++);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ResponseStreamer({
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText,
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["partial"], format: "raw" });
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
+    streamer.clearSession("s1", "session_error");
+
+    const completedAfterClear = await streamer.complete("s1", "m1", {
+      parts: ["final"],
+      format: "raw",
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["new partial"], format: "raw" });
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(2);
+    });
+
+    expect(completedAfterClear).toBe(false);
+    expect(editText).not.toHaveBeenCalled();
+    expect(deleteText).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenNthCalledWith(2, "new partial", "raw", undefined);
+  });
+
+  it("keeps visible partial messages when clearing all streams", async () => {
+    vi.useFakeTimers();
+
+    let nextMessageId = 200;
+    const sendText = vi.fn(async () => nextMessageId++);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ResponseStreamer({
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText,
+    });
+
+    streamer.enqueue("s1", "m1", { parts: ["partial"], format: "raw" });
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
+    streamer.clearAll("summary_aggregator_clear");
+
+    const completedAfterClear = await streamer.complete("s1", "m1", {
+      parts: ["final"],
+      format: "raw",
+    });
+
+    expect(completedAfterClear).toBe(false);
+    expect(editText).not.toHaveBeenCalled();
+    expect(deleteText).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledTimes(1);
+  });
+
   it("skips final sync when stream never emitted partial update", async () => {
     vi.useFakeTimers();
 

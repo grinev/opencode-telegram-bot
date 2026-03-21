@@ -7,11 +7,11 @@ type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
 type TelegramSendMessageOptions = Parameters<SendMessageApi["sendMessage"]>[2];
 type TelegramEditMessageOptions = Parameters<EditMessageApi["editMessageText"]>[3];
 
-export type ResponseDraftFormat = "raw" | "markdown_v2";
+export type StreamingMessageFormat = "raw" | "markdown_v2";
 
-export interface ResponseDraftPayload {
+export interface StreamingMessagePayload {
   parts: string[];
-  format: ResponseDraftFormat;
+  format: StreamingMessageFormat;
   sendOptions?: TelegramSendMessageOptions;
   editOptions?: TelegramEditMessageOptions;
 }
@@ -24,13 +24,13 @@ interface ResponseStreamerOptions {
   throttleMs: number;
   sendText: (
     text: string,
-    format: ResponseDraftFormat,
+    format: StreamingMessageFormat,
     options?: TelegramSendMessageOptions,
   ) => Promise<number>;
   editText: (
     messageId: number,
     text: string,
-    format: ResponseDraftFormat,
+    format: StreamingMessageFormat,
     options?: TelegramEditMessageOptions,
   ) => Promise<void>;
   deleteText: (messageId: number) => Promise<void>;
@@ -40,7 +40,7 @@ interface StreamState {
   key: string;
   sessionId: string;
   messageId: string;
-  latestPayload: ResponseDraftPayload | null;
+  latestPayload: StreamingMessagePayload | null;
   lastSentSignatures: string[];
   telegramMessageIds: number[];
   timer: ReturnType<typeof setTimeout> | null;
@@ -55,7 +55,7 @@ function buildStateKey(sessionId: string, messageId: string): string {
   return `${sessionId}:${messageId}`;
 }
 
-function normalizePayload(payload: ResponseDraftPayload): ResponseDraftPayload | null {
+function normalizePayload(payload: StreamingMessagePayload): StreamingMessagePayload | null {
   const normalizedParts = payload.parts
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
@@ -98,7 +98,7 @@ function getRetryAfterMs(error: unknown): number | null {
   return seconds * 1000;
 }
 
-function createSignature(text: string, format: ResponseDraftFormat): string {
+function createSignature(text: string, format: StreamingMessageFormat): string {
   return `${format}\n${text}`;
 }
 
@@ -122,7 +122,7 @@ export class ResponseStreamer {
     this.deleteText = options.deleteText;
   }
 
-  enqueue(sessionId: string, messageId: string, payload: ResponseDraftPayload): void {
+  enqueue(sessionId: string, messageId: string, payload: StreamingMessagePayload): void {
     const normalizedPayload = normalizePayload(payload);
     if (!normalizedPayload) {
       return;
@@ -140,7 +140,7 @@ export class ResponseStreamer {
   async complete(
     sessionId: string,
     messageId: string,
-    payload?: ResponseDraftPayload,
+    payload?: StreamingMessagePayload,
     options?: ResponseStreamerCompleteOptions,
   ): Promise<boolean> {
     const state = this.states.get(buildStateKey(sessionId, messageId));
@@ -393,7 +393,7 @@ export class ResponseStreamer {
 
   private async syncMessages(
     state: StreamState,
-    payload: ResponseDraftPayload,
+    payload: StreamingMessagePayload,
     targetSignatures: string[],
   ): Promise<void> {
     for (let index = 0; index < payload.parts.length; index++) {

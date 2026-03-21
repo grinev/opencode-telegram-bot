@@ -72,7 +72,7 @@ import type { FilePartInput } from "@opencode-ai/sdk/v2";
 import { foregroundSessionState } from "../scheduled-task/foreground-state.js";
 import { scheduledTaskRuntime } from "../scheduled-task/runtime.js";
 import { ResponseStreamer } from "./streaming/response-streamer.js";
-import type { ResponseDraftPayload } from "./streaming/response-streamer.js";
+import type { StreamingMessagePayload } from "./streaming/response-streamer.js";
 import {
   editMessageWithMarkdownFallback,
   sendMessageWithMarkdownFallback,
@@ -111,7 +111,7 @@ function prepareDocumentCaption(caption: string): string {
   return `${normalizedCaption.slice(0, TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH - 3)}...`;
 }
 
-function prepareResponseDraftPayload(messageText: string): ResponseDraftPayload | null {
+function prepareStreamingPayload(messageText: string): StreamingMessagePayload | null {
   const parts = formatSummaryWithMode(
     messageText,
     config.bot.messageFormatMode,
@@ -303,15 +303,15 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       toolMessageBatcher.dropQueuedText(sessionId, t("bot.thinking"), "response_stream_started");
     }
 
-    const preparedDraft = prepareResponseDraftPayload(messageText);
-    if (!preparedDraft) {
+    const preparedStreamPayload = prepareStreamingPayload(messageText);
+    if (!preparedStreamPayload) {
       return;
     }
 
-    preparedDraft.sendOptions = undefined;
-    preparedDraft.editOptions = undefined;
+    preparedStreamPayload.sendOptions = undefined;
+    preparedStreamPayload.editOptions = undefined;
 
-    responseStreamer.enqueue(sessionId, messageId, preparedDraft);
+    responseStreamer.enqueue(sessionId, messageId, preparedStreamPayload);
   });
 
   summaryAggregator.setOnComplete(async (sessionId, messageId, messageText) => {
@@ -330,24 +330,24 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       return;
     }
 
-    let streamedViaDraft = false;
+    let streamedViaMessages = false;
     if (config.bot.responseStreaming) {
-      const preparedDraft = prepareResponseDraftPayload(messageText);
-      if (preparedDraft) {
-        preparedDraft.sendOptions = undefined;
-        preparedDraft.editOptions = undefined;
+      const preparedStreamPayload = prepareStreamingPayload(messageText);
+      if (preparedStreamPayload) {
+        preparedStreamPayload.sendOptions = undefined;
+        preparedStreamPayload.editOptions = undefined;
       }
 
-      streamedViaDraft = await responseStreamer.complete(
+      streamedViaMessages = await responseStreamer.complete(
         sessionId,
         messageId,
-        preparedDraft ?? undefined,
+        preparedStreamPayload ?? undefined,
       );
     }
 
     await toolMessageBatcher.flushSession(sessionId, "assistant_message_completed");
 
-    if (streamedViaDraft) {
+    if (streamedViaMessages) {
       logger.debug(
         `[Bot] Final assistant message already streamed (session=${sessionId}, message=${messageId})`,
       );
