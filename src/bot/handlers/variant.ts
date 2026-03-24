@@ -7,7 +7,7 @@ import {
   formatVariantForButton,
 } from "../../variant/manager.js";
 import { getStoredModel } from "../../model/manager.js";
-import { getStoredAgent } from "../../agent/manager.js";
+import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { logger } from "../../utils/logger.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
@@ -70,12 +70,14 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
     keyboardManager.updateVariant(variantId);
 
     // Build keyboard with correct context info
-    const currentAgent = getStoredAgent();
+    const currentAgent = await resolveProjectAgent(getStoredAgent());
     const contextInfo =
       pinnedMessageManager.getContextInfo() ??
       (pinnedMessageManager.getContextLimit() > 0
         ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
         : null);
+
+    keyboardManager.updateAgent(currentAgent);
 
     if (contextInfo) {
       keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
