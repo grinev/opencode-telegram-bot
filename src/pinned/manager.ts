@@ -9,8 +9,15 @@ import {
   clearPinnedMessageId,
 } from "../settings/manager.js";
 import { getStoredModel } from "../model/manager.js";
+import { getModelContextLimit } from "../model/context-limit.js";
 import type { FileChange, PinnedMessageState, TokensInfo } from "./types.js";
 import { t } from "../i18n/index.js";
+import {
+  DEFAULT_CONTEXT_LIMIT,
+  formatContextLine,
+  formatCostLine,
+  formatModelDisplayName,
+} from "./format.js";
 
 class PinnedMessageManager {
   private api: Api | null = null;
@@ -519,41 +526,12 @@ class PinnedMessageManager {
   private async fetchContextLimit(): Promise<void> {
     try {
       const model = getStoredModel();
-      if (!model.providerID || !model.modelID) {
-        logger.warn("[PinnedManager] No model configured, using default limit");
-        this.contextLimit = 200000;
-        this.state.tokensLimit = this.contextLimit;
-        return;
-      }
-
-      const { data: providersData, error } = await opencodeClient.config.providers();
-
-      if (error || !providersData) {
-        logger.warn("[PinnedManager] Failed to fetch providers, using default limit");
-        this.contextLimit = 200000;
-        this.state.tokensLimit = this.contextLimit;
-        return;
-      }
-
-      // Find the model in providers
-      for (const provider of providersData.providers) {
-        if (provider.id === model.providerID) {
-          const modelInfo = provider.models[model.modelID];
-          if (modelInfo?.limit?.context) {
-            this.contextLimit = modelInfo.limit.context;
-            this.state.tokensLimit = this.contextLimit;
-            logger.debug(`[PinnedManager] Context limit: ${this.contextLimit}`);
-            return;
-          }
-        }
-      }
-
-      logger.warn("[PinnedManager] Model not found in providers, using default limit");
-      this.contextLimit = 200000;
+      this.contextLimit = await getModelContextLimit(model.providerID, model.modelID);
       this.state.tokensLimit = this.contextLimit;
+      logger.debug(`[PinnedManager] Context limit: ${this.contextLimit}`);
     } catch (err) {
       logger.error("[PinnedManager] Error fetching context limit:", err);
-      this.contextLimit = 200000;
+      this.contextLimit = DEFAULT_CONTEXT_LIMIT;
       this.state.tokensLimit = this.contextLimit;
     }
   }
@@ -562,34 +540,18 @@ class PinnedMessageManager {
    * Format the pinned message text
    */
   private formatMessage(): string {
-    const percentage =
-      this.state.tokensLimit > 0
-        ? Math.round((this.state.tokensUsed / this.state.tokensLimit) * 100)
-        : 0;
-
-    const tokensFormatted = this.formatTokenCount(this.state.tokensUsed);
-    const limitFormatted = this.formatTokenCount(this.state.tokensLimit);
-
-    // Get current model info
     const currentModel = getStoredModel();
-    const modelName =
-      currentModel.providerID && currentModel.modelID
-        ? `${currentModel.providerID}/${currentModel.modelID}`
-        : t("pinned.unknown");
+    const modelName = formatModelDisplayName(currentModel.providerID, currentModel.modelID);
 
     const lines = [
       `${this.state.sessionTitle}`,
       t("pinned.line.project", { project: this.state.projectName }),
       t("pinned.line.model", { model: modelName }),
-      t("pinned.line.context", {
-        used: tokensFormatted,
-        limit: limitFormatted,
-        percent: percentage,
-      }),
+      formatContextLine(this.state.tokensUsed, this.state.tokensLimit),
     ];
 
     if (this.state.cost !== undefined && this.state.cost !== null) {
-      lines.push(t("pinned.line.cost", { cost: `$${this.state.cost.toFixed(2)}` }));
+      lines.push(formatCostLine(this.state.cost));
     }
 
     if (this.state.changedFiles.length > 0) {
@@ -616,19 +578,6 @@ class PinnedMessageManager {
 
     return lines.join("\n");
   }
-
-  /**
-   * Format token count (e.g., 150000 -> "150K")
-   */
-  private formatTokenCount(count: number): string {
-    if (count >= 1000000) {
-      return `${(count / 1000000).toFixed(1)}M`;
-    } else if (count >= 1000) {
-      return `${Math.round(count / 1000)}K`;
-    }
-    return count.toString();
-  }
-
   /**
    * Create and pin a new status message
    */

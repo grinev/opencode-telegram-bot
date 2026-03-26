@@ -27,6 +27,7 @@ describe("summary/aggregator", () => {
     summaryAggregator.setOnToolFile(() => {});
     summaryAggregator.setOnPartial(() => {});
     summaryAggregator.setOnThinking(() => {});
+    summaryAggregator.setOnSubagent(() => {});
     summaryAggregator.setOnSessionError(() => {});
     summaryAggregator.setOnSessionRetry(() => {});
   });
@@ -87,6 +88,369 @@ describe("summary/aggregator", () => {
         hasFileAttachment: false,
       }),
     );
+  });
+
+  it("emits live subagent updates with per-session model, context, cost, and current tool", () => {
+    const onSubagent = vi.fn();
+    summaryAggregator.setOnSubagent(onSubagent);
+    summaryAggregator.setSession("root-session");
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "subtask-1",
+          sessionID: "root-session",
+          messageID: "root-message",
+          type: "subtask",
+          prompt: "Inspect pinned manager",
+          description: "task description",
+          agent: "explore",
+          command: "inspect",
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "task-tool-1",
+          sessionID: "root-session",
+          messageID: "root-message",
+          type: "tool",
+          callID: "task-call-1",
+          tool: "task",
+          state: {
+            status: "running",
+            input: {
+              description: "Explore project architecture",
+              subagent_type: "explore",
+              prompt: "Inspect architecture",
+            },
+            title: "Launching subagent",
+            metadata: {},
+            time: { start: Date.now() },
+          },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "session.created",
+      properties: {
+        info: {
+          id: "child-session-1",
+          parentID: "root-session",
+          title: "Explore project architecture (@explore subagent)",
+          slug: "child",
+          directory: "D:/repo",
+          projectID: "p1",
+          version: "1",
+          time: { created: Date.now(), updated: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "child-message-1",
+          sessionID: "child-session-1",
+          role: "assistant",
+          parentID: "root-message",
+          providerID: "openai",
+          modelID: "gpt-5.4",
+          agent: "explore",
+          path: { cwd: "D:/repo", root: "D:/repo" },
+          mode: "all",
+          cost: 0.18,
+          tokens: {
+            input: 54000,
+            output: 1200,
+            reasoning: 0,
+            cache: { read: 1000, write: 0 },
+          },
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "child-tool-1",
+          sessionID: "child-session-1",
+          messageID: "child-message-1",
+          type: "tool",
+          callID: "call-child-1",
+          tool: "read",
+          state: {
+            status: "running",
+            input: {
+              filePath: "src/pinned/manager.ts",
+              offset: 1,
+              limit: 280,
+            },
+            title: "Reading pinned manager",
+            metadata: {},
+            time: { start: Date.now() },
+          },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onSubagent).toHaveBeenCalled();
+    expect(onSubagent.mock.lastCall?.[0]).toBe("root-session");
+    expect(onSubagent.mock.lastCall?.[1]).toEqual([
+      expect.objectContaining({
+        sessionId: "child-session-1",
+        parentSessionId: "root-session",
+        agent: "explore",
+        description: "Explore project architecture",
+        status: "running",
+        providerID: "openai",
+        modelID: "gpt-5.4",
+        cost: 0.18,
+        currentTool: "read",
+        currentToolTitle: "Reading pinned manager",
+        currentToolInput: expect.objectContaining({
+          filePath: "src/pinned/manager.ts",
+          offset: 1,
+          limit: 280,
+        }),
+        tokens: expect.objectContaining({
+          input: 54000,
+          cacheRead: 1000,
+        }),
+      }),
+    ]);
+  });
+
+  it("attaches unknown child session events to pending subagent cards before session.created", () => {
+    const onSubagent = vi.fn();
+    summaryAggregator.setOnSubagent(onSubagent);
+    summaryAggregator.setSession("root-session");
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "subtask-1",
+          sessionID: "root-session",
+          messageID: "root-message",
+          type: "subtask",
+          prompt: "Explore architecture",
+          description: "Explore architecture",
+          agent: "explore",
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "step-1",
+          sessionID: "child-unknown",
+          messageID: "child-message-1",
+          type: "step-finish",
+          reason: "done",
+          cost: 0.12,
+          snapshot: "step snapshot",
+          tokens: {
+            input: 1000,
+            output: 50,
+            reasoning: 0,
+            cache: { read: 200, write: 0 },
+          },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onSubagent.mock.lastCall?.[1]).toEqual([
+      expect.objectContaining({
+        sessionId: "child-unknown",
+        cost: 0.12,
+        tokens: expect.objectContaining({ input: 1000, cacheRead: 200 }),
+        currentToolTitle: "step snapshot",
+      }),
+    ]);
+  });
+
+  it("tracks multiple parallel subagents independently", () => {
+    const onSubagent = vi.fn();
+    summaryAggregator.setOnSubagent(onSubagent);
+    summaryAggregator.setSession("root-session");
+
+    const subtasks = [
+      { id: "subtask-1", agent: "explore", description: "first task", child: "child-1" },
+      { id: "subtask-2", agent: "general", description: "second task", child: "child-2" },
+    ];
+
+    for (const item of subtasks) {
+      summaryAggregator.processEvent({
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: item.id,
+            sessionID: "root-session",
+            messageID: "root-message",
+            type: "subtask",
+            prompt: item.description,
+            description: item.description,
+            agent: item.agent,
+          },
+        },
+      } as unknown as Event);
+
+      summaryAggregator.processEvent({
+        type: "session.created",
+        properties: {
+          info: {
+            id: item.child,
+            parentID: "root-session",
+            title: `${item.description} (@${item.agent} subagent)`,
+            slug: item.child,
+            directory: "D:/repo",
+            projectID: "p1",
+            version: "1",
+            time: { created: Date.now(), updated: Date.now() },
+          },
+        },
+      } as unknown as Event);
+
+      summaryAggregator.processEvent({
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: `tool-${item.child}`,
+            sessionID: item.child,
+            messageID: `message-${item.child}`,
+            type: "tool",
+            callID: `call-${item.child}`,
+            tool: "bash",
+            state: {
+              status: "running",
+              input: { command: `echo ${item.child}` },
+              title: `Running ${item.child}`,
+              metadata: {},
+              time: { start: Date.now() },
+            },
+          },
+        },
+      } as unknown as Event);
+    }
+
+    expect(onSubagent.mock.lastCall?.[1]).toHaveLength(2);
+    expect(onSubagent.mock.lastCall?.[1]).toEqual([
+      expect.objectContaining({
+        sessionId: "child-1",
+        description: "first task",
+        agent: "explore",
+      }),
+      expect.objectContaining({
+        sessionId: "child-2",
+        description: "second task",
+        agent: "general",
+      }),
+    ]);
+  });
+
+  it("keeps subagent cards and updates terminal status for child sessions", () => {
+    const onSubagent = vi.fn();
+    summaryAggregator.setOnSubagent(onSubagent);
+    summaryAggregator.setSession("root-session");
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "subtask-1",
+          sessionID: "root-session",
+          messageID: "root-message",
+          type: "subtask",
+          prompt: "done task",
+          description: "done task",
+          agent: "explore",
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "session.created",
+      properties: {
+        info: {
+          id: "child-done",
+          parentID: "root-session",
+          title: "done task (@explore subagent)",
+          slug: "child-done",
+          directory: "D:/repo",
+          projectID: "p1",
+          version: "1",
+          time: { created: Date.now(), updated: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "session.idle",
+      properties: {
+        sessionID: "child-done",
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "subtask-2",
+          sessionID: "root-session",
+          messageID: "root-message",
+          type: "subtask",
+          prompt: "failed task",
+          description: "failed task",
+          agent: "general",
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "session.created",
+      properties: {
+        info: {
+          id: "child-error",
+          parentID: "root-session",
+          title: "failed task (@general subagent)",
+          slug: "child-error",
+          directory: "D:/repo",
+          projectID: "p1",
+          version: "1",
+          time: { created: Date.now(), updated: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "session.error",
+      properties: {
+        sessionID: "child-error",
+        error: {
+          data: { message: "Task failed" },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onSubagent.mock.lastCall?.[1]).toEqual([
+      expect.objectContaining({ sessionId: "child-done", status: "completed" }),
+      expect.objectContaining({
+        sessionId: "child-error",
+        status: "error",
+        terminalMessage: "Task failed",
+      }),
+    ]);
   });
 
   it("marks write tool without file attachment when payload is oversized", () => {

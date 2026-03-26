@@ -76,6 +76,30 @@ type TokensCallback = (tokens: TokensInfo) => void;
 
 type CostCallback = (cost: number) => void;
 
+export type SubagentStatus = "pending" | "running" | "completed" | "error";
+
+export interface SubagentInfo {
+  cardId: string;
+  sessionId: string | null;
+  parentSessionId: string;
+  agent: string;
+  description: string;
+  prompt: string;
+  command?: string;
+  status: SubagentStatus;
+  providerID?: string;
+  modelID?: string;
+  tokens: TokensInfo;
+  cost: number;
+  currentTool?: string;
+  currentToolInput?: { [key: string]: unknown };
+  currentToolTitle?: string;
+  terminalMessage?: string;
+  updatedAt: number;
+}
+
+type SubagentCallback = (sessionId: string, subagents: SubagentInfo[]) => void;
+
 type SessionCompactedCallback = (sessionId: string, directory: string) => void;
 
 type SessionErrorCallback = (sessionId: string, message: string) => void;
@@ -106,6 +130,13 @@ interface TextMessageState {
   orderedPartIds: string[];
   partTexts: Map<string, string>;
   optimisticUpdateCount: number;
+}
+
+interface SubagentState extends SubagentInfo {
+  hasSubtaskMetadata: boolean;
+  hasTaskToolMetadata: boolean;
+  hasSessionTitleMetadata: boolean;
+  createdAt: number;
 }
 
 function extractFirstUpdatedFileFromTitle(title: string): string {
@@ -151,6 +182,7 @@ class SummaryAggregator {
   private onThinkingCallback: ThinkingCallback | null = null;
   private onTokensCallback: TokensCallback | null = null;
   private onCostCallback: CostCallback | null = null;
+  private onSubagentCallback: SubagentCallback | null = null;
   private onSessionCompactedCallback: SessionCompactedCallback | null = null;
   private onSessionErrorCallback: SessionErrorCallback | null = null;
   private onSessionRetryCallback: SessionRetryCallback | null = null;
@@ -166,6 +198,13 @@ class SummaryAggregator {
   private typingTimer: ReturnType<typeof setInterval> | null = null;
   private typingIndicatorEnabled = true;
   private partHashes: Map<string, Set<string>> = new Map();
+  private trackedSessionParents: Map<string, string | null> = new Map();
+  private subagentStates: Map<string, SubagentState> = new Map();
+  private subagentOrder: string[] = [];
+  private subagentCardIdBySessionId: Map<string, string> = new Map();
+  private pendingSubagentCardIdsByParent: Map<string, string[]> = new Map();
+  private pendingChildSessionIdsByParent: Map<string, string[]> = new Map();
+  private fallbackSubagentCardIdsByParent: Map<string, string[]> = new Map();
 
   setBotAndChatId(bot: Bot, chatId: number): void {
     this.bot = bot;
@@ -206,6 +245,10 @@ class SummaryAggregator {
 
   setOnCost(callback: CostCallback): void {
     this.onCostCallback = callback;
+  }
+
+  setOnSubagent(callback: SubagentCallback): void {
+    this.onSubagentCallback = callback;
   }
 
   setOnSessionCompacted(callback: SessionCompactedCallback): void {
@@ -297,6 +340,10 @@ class SummaryAggregator {
     }
 
     switch (event.type) {
+      case "session.created":
+      case "session.updated":
+        this.handleSessionCreatedOrUpdated(event);
+        break;
       case "message.updated":
         this.handleMessageUpdated(event);
         break;
@@ -343,6 +390,7 @@ class SummaryAggregator {
     if (this.currentSessionId !== sessionId) {
       this.clear();
       this.currentSessionId = sessionId;
+      this.trackedSessionParents.set(sessionId, null);
     }
   }
 
@@ -355,6 +403,13 @@ class SummaryAggregator {
     this.knownTextPartIds.clear();
     this.processedToolStates.clear();
     this.thinkingFiredForMessages.clear();
+    this.trackedSessionParents.clear();
+    this.subagentStates.clear();
+    this.subagentOrder = [];
+    this.subagentCardIdBySessionId.clear();
+    this.pendingSubagentCardIdsByParent.clear();
+    this.pendingChildSessionIdsByParent.clear();
+    this.fallbackSubagentCardIdsByParent.clear();
     this.messageCount = 0;
     this.lastUpdated = 0;
 
@@ -367,12 +422,516 @@ class SummaryAggregator {
     }
   }
 
+  private isTrackedChildSession(sessionId: string): boolean {
+    return this.trackedSessionParents.has(sessionId) && sessionId !== this.currentSessionId;
+  }
+
+  private getQueue(map: Map<string, string[]>, parentSessionId: string): string[] {
+    const existing = map.get(parentSessionId);
+    if (existing) {
+      return existing;
+    }
+
+    const queue: string[] = [];
+    map.set(parentSessionId, queue);
+    return queue;
+  }
+
+  private dequeue(map: Map<string, string[]>, parentSessionId: string): string | undefined {
+    const queue = map.get(parentSessionId);
+    if (!queue || queue.length === 0) {
+      return undefined;
+    }
+
+    const value = queue.shift();
+    if (queue.length === 0) {
+      map.delete(parentSessionId);
+    }
+
+    return value;
+  }
+
+  private removeFromQueue(
+    map: Map<string, string[]>,
+    parentSessionId: string,
+    value: string,
+  ): void {
+    const queue = map.get(parentSessionId);
+    if (!queue) {
+      return;
+    }
+
+    const index = queue.indexOf(value);
+    if (index >= 0) {
+      queue.splice(index, 1);
+    }
+
+    if (queue.length === 0) {
+      map.delete(parentSessionId);
+    }
+  }
+
+  private emitSubagentState(): void {
+    if (!this.currentSessionId || !this.onSubagentCallback || this.subagentOrder.length === 0) {
+      return;
+    }
+
+    const subagents = this.subagentOrder
+      .map((cardId) => this.subagentStates.get(cardId))
+      .filter((state): state is SubagentState => Boolean(state))
+      .map((state) => ({
+        cardId: state.cardId,
+        sessionId: state.sessionId,
+        parentSessionId: state.parentSessionId,
+        agent: state.agent,
+        description: state.description,
+        prompt: state.prompt,
+        command: state.command,
+        status: state.status,
+        providerID: state.providerID,
+        modelID: state.modelID,
+        tokens: { ...state.tokens },
+        cost: state.cost,
+        currentTool: state.currentTool,
+        currentToolInput: state.currentToolInput ? { ...state.currentToolInput } : undefined,
+        currentToolTitle: state.currentToolTitle,
+        terminalMessage: state.terminalMessage,
+        updatedAt: state.updatedAt,
+      }));
+
+    this.onSubagentCallback(this.currentSessionId, subagents);
+  }
+
+  private createSubagentState(
+    parentSessionId: string,
+    sessionId: string | null,
+    cardId: string = `subagent-${parentSessionId}-${Date.now()}-${this.subagentOrder.length}`,
+  ): SubagentState {
+    const state: SubagentState = {
+      cardId,
+      sessionId,
+      parentSessionId,
+      agent: "",
+      description: "",
+      prompt: "",
+      status: "pending",
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+      cost: 0,
+      terminalMessage: undefined,
+      updatedAt: Date.now(),
+      hasSubtaskMetadata: false,
+      hasTaskToolMetadata: false,
+      hasSessionTitleMetadata: false,
+      createdAt: Date.now(),
+    };
+
+    this.subagentStates.set(cardId, state);
+    this.subagentOrder.push(cardId);
+    if (sessionId) {
+      this.subagentCardIdBySessionId.set(sessionId, cardId);
+    }
+    return state;
+  }
+
+  private enrichSubagentFromSubtask(
+    state: SubagentState,
+    details: { agent: string; description: string; prompt: string; command?: string },
+  ): void {
+    state.agent = details.agent || state.agent;
+    state.description = details.description || details.prompt || state.description;
+    state.prompt = details.prompt;
+    state.command = details.command;
+    state.hasSubtaskMetadata = true;
+    state.updatedAt = Date.now();
+  }
+
+  private enrichSubagentFromTaskTool(
+    state: SubagentState,
+    details: {
+      agent?: string;
+      description?: string;
+      prompt?: string;
+      command?: string;
+    },
+  ): void {
+    const nextDescription = details.description?.trim() || details.prompt?.trim();
+    if (details.agent?.trim()) {
+      state.agent = details.agent.trim();
+    }
+    if (nextDescription) {
+      state.description = nextDescription;
+    }
+    if (details.prompt?.trim()) {
+      state.prompt = details.prompt.trim();
+    }
+    if (details.command?.trim()) {
+      state.command = details.command.trim();
+    }
+    state.hasTaskToolMetadata = true;
+    state.updatedAt = Date.now();
+  }
+
+  private enrichSubagentFromSessionTitle(state: SubagentState, title?: string): void {
+    const trimmedTitle = title?.trim();
+    if (!trimmedTitle) {
+      return;
+    }
+
+    const match = trimmedTitle.match(/^(.*?)(?:\s+\(@([^\s)]+)\s+subagent\))?$/i);
+    const rawDescription = match?.[1]?.trim() || trimmedTitle;
+    const rawAgent = match?.[2]?.trim();
+
+    if (rawDescription) {
+      state.description = rawDescription;
+    }
+
+    if (rawAgent) {
+      state.agent = rawAgent.replace(/^@/, "");
+    }
+
+    state.hasSessionTitleMetadata = true;
+    state.updatedAt = Date.now();
+  }
+
+  private attachSessionToSubagent(cardId: string, sessionId: string): void {
+    const state = this.subagentStates.get(cardId);
+    if (!state) {
+      return;
+    }
+
+    state.sessionId = sessionId;
+    state.updatedAt = Date.now();
+    this.subagentCardIdBySessionId.set(sessionId, cardId);
+    this.removeFromQueue(this.pendingSubagentCardIdsByParent, state.parentSessionId, cardId);
+  }
+
+  private findPendingSubagentWithoutSession(): SubagentState | null {
+    for (const cardId of this.subagentOrder) {
+      const state = this.subagentStates.get(cardId);
+      if (state && !state.sessionId) {
+        return state;
+      }
+    }
+
+    return null;
+  }
+
+  private attachUnknownSessionToPendingSubagent(sessionId: string): boolean {
+    const pendingState = this.findPendingSubagentWithoutSession();
+    if (!pendingState) {
+      return false;
+    }
+
+    this.trackedSessionParents.set(sessionId, pendingState.parentSessionId);
+    this.attachSessionToSubagent(pendingState.cardId, sessionId);
+    this.removeFromQueue(
+      this.pendingChildSessionIdsByParent,
+      pendingState.parentSessionId,
+      sessionId,
+    );
+    this.emitSubagentState();
+    return true;
+  }
+
+  private findNextSubagentForTaskTool(parentSessionId: string): SubagentState | null {
+    for (const cardId of this.subagentOrder) {
+      const state = this.subagentStates.get(cardId);
+      if (state && state.parentSessionId === parentSessionId && !state.hasTaskToolMetadata) {
+        return state;
+      }
+    }
+
+    return null;
+  }
+
+  private updateSubagentFromTaskTool(
+    parentSessionId: string,
+    input?: { [key: string]: unknown },
+  ): void {
+    const subagent = this.findNextSubagentForTaskTool(parentSessionId);
+    if (!subagent || !input) {
+      return;
+    }
+
+    const description = typeof input.description === "string" ? input.description : undefined;
+    const prompt = typeof input.prompt === "string" ? input.prompt : undefined;
+    const agent = typeof input.subagent_type === "string" ? input.subagent_type : undefined;
+    const command = typeof input.command === "string" ? input.command : undefined;
+
+    if (!description && !prompt && !agent && !command) {
+      return;
+    }
+
+    this.enrichSubagentFromTaskTool(subagent, { agent, description, prompt, command });
+    this.emitSubagentState();
+  }
+
+  private getOrCreateSubagentForSession(sessionId: string): SubagentState {
+    const existingCardId = this.subagentCardIdBySessionId.get(sessionId);
+    if (existingCardId) {
+      return this.subagentStates.get(existingCardId)!;
+    }
+
+    const parentSessionId =
+      this.trackedSessionParents.get(sessionId) ?? this.currentSessionId ?? sessionId;
+    this.removeFromQueue(this.pendingChildSessionIdsByParent, parentSessionId, sessionId);
+    const state = this.createSubagentState(parentSessionId, sessionId);
+    this.getQueue(this.fallbackSubagentCardIdsByParent, parentSessionId).push(state.cardId);
+    return state;
+  }
+
+  private registerSubtaskPart(
+    parentSessionId: string,
+    partId: string,
+    agent: string,
+    description: string,
+    prompt: string,
+    command?: string,
+  ): void {
+    const fallbackCardId = this.dequeue(this.fallbackSubagentCardIdsByParent, parentSessionId);
+    if (fallbackCardId) {
+      const fallbackState = this.subagentStates.get(fallbackCardId);
+      if (fallbackState) {
+        this.enrichSubagentFromSubtask(fallbackState, { agent, description, prompt, command });
+        this.emitSubagentState();
+        return;
+      }
+    }
+
+    const state = this.createSubagentState(
+      parentSessionId,
+      null,
+      `subtask-${parentSessionId}-${partId}`,
+    );
+    this.enrichSubagentFromSubtask(state, { agent, description, prompt, command });
+
+    const pendingChildSessionId = this.dequeue(
+      this.pendingChildSessionIdsByParent,
+      parentSessionId,
+    );
+    if (pendingChildSessionId) {
+      this.attachSessionToSubagent(state.cardId, pendingChildSessionId);
+    } else {
+      this.getQueue(this.pendingSubagentCardIdsByParent, parentSessionId).push(state.cardId);
+    }
+
+    this.emitSubagentState();
+  }
+
+  private trackChildSession(sessionId: string, parentSessionId: string): void {
+    this.trackedSessionParents.set(sessionId, parentSessionId);
+
+    const pendingCardId = this.dequeue(this.pendingSubagentCardIdsByParent, parentSessionId);
+    if (pendingCardId) {
+      this.attachSessionToSubagent(pendingCardId, sessionId);
+      this.emitSubagentState();
+      return;
+    }
+
+    this.getQueue(this.pendingChildSessionIdsByParent, parentSessionId).push(sessionId);
+  }
+
+  private handleSessionCreatedOrUpdated(
+    event: Event & {
+      type: "session.created" | "session.updated";
+    },
+  ): void {
+    if (!this.currentSessionId) {
+      return;
+    }
+
+    const { info } = event.properties;
+    if (!info.parentID) {
+      return;
+    }
+
+    if (!this.trackedSessionParents.has(info.parentID)) {
+      return;
+    }
+
+    if (info.id === this.currentSessionId) {
+      return;
+    }
+
+    if (!this.trackedSessionParents.has(info.id)) {
+      this.trackChildSession(info.id, info.parentID);
+    }
+
+    const subagent = this.getOrCreateSubagentForSession(info.id);
+    this.enrichSubagentFromSessionTitle(subagent, info.title);
+    this.emitSubagentState();
+  }
+
+  private updateSubagentFromAssistantMessage(info: {
+    sessionID: string;
+    providerID?: string;
+    modelID?: string;
+    agent?: string;
+    tokens?: {
+      input: number;
+      output: number;
+      reasoning: number;
+      cache?: { read: number; write: number };
+    };
+    cost?: number;
+  }): void {
+    const subagent = this.getOrCreateSubagentForSession(info.sessionID);
+    if (info.agent) {
+      subagent.agent = info.agent;
+    }
+    if (info.providerID) {
+      subagent.providerID = info.providerID;
+    }
+    if (info.modelID) {
+      subagent.modelID = info.modelID;
+    }
+    if (info.tokens) {
+      subagent.tokens = {
+        input: info.tokens.input,
+        output: info.tokens.output,
+        reasoning: info.tokens.reasoning,
+        cacheRead: info.tokens.cache?.read || 0,
+        cacheWrite: info.tokens.cache?.write || 0,
+      };
+    }
+    if (typeof info.cost === "number") {
+      subagent.cost = info.cost;
+    }
+    subagent.updatedAt = Date.now();
+    this.emitSubagentState();
+  }
+
+  private updateSubagentToolState(
+    sessionId: string,
+    state: ToolState,
+    tool: string,
+    input?: { [key: string]: unknown },
+    title?: string,
+  ): void {
+    const subagent = this.getOrCreateSubagentForSession(sessionId);
+    const status = "status" in state ? state.status : undefined;
+
+    if (status === "running") {
+      subagent.status = "running";
+      subagent.terminalMessage = undefined;
+    }
+
+    if (status === "pending" && subagent.status === "pending") {
+      subagent.status = "pending";
+      subagent.terminalMessage = undefined;
+    }
+
+    subagent.currentTool = tool;
+    subagent.currentToolInput = input ? { ...input } : undefined;
+    subagent.currentToolTitle = title;
+    subagent.updatedAt = Date.now();
+    this.emitSubagentState();
+  }
+
+  private updateSubagentStepStart(sessionId: string, snapshot?: string): void {
+    const subagent = this.getOrCreateSubagentForSession(sessionId);
+    subagent.status = "running";
+    subagent.terminalMessage = undefined;
+    subagent.currentTool = undefined;
+    subagent.currentToolInput = undefined;
+    subagent.currentToolTitle = snapshot?.trim() || subagent.currentToolTitle;
+    subagent.updatedAt = Date.now();
+    this.emitSubagentState();
+  }
+
+  private updateSubagentStepFinish(
+    sessionId: string,
+    tokens: {
+      input: number;
+      output: number;
+      reasoning: number;
+      cache: { read: number; write: number };
+    },
+    cost: number,
+    snapshot?: string,
+  ): void {
+    const subagent = this.getOrCreateSubagentForSession(sessionId);
+    subagent.status = "running";
+    subagent.terminalMessage = undefined;
+    subagent.tokens = {
+      input: tokens.input,
+      output: tokens.output,
+      reasoning: tokens.reasoning,
+      cacheRead: tokens.cache.read,
+      cacheWrite: tokens.cache.write,
+    };
+    subagent.cost += cost;
+    if (snapshot?.trim()) {
+      subagent.currentToolTitle = snapshot.trim();
+    }
+    subagent.updatedAt = Date.now();
+    this.emitSubagentState();
+  }
+
+  private setSubagentTerminalStatus(
+    sessionId: string,
+    status: Extract<SubagentStatus, "completed" | "error">,
+    terminalMessage?: string,
+  ): void {
+    const cardId = this.subagentCardIdBySessionId.get(sessionId);
+    if (!cardId) {
+      return;
+    }
+
+    const subagent = this.subagentStates.get(cardId);
+    if (!subagent) {
+      return;
+    }
+
+    subagent.status = status;
+    subagent.currentTool = undefined;
+    subagent.currentToolInput = undefined;
+    subagent.currentToolTitle = undefined;
+    subagent.terminalMessage = terminalMessage?.trim() || undefined;
+    subagent.updatedAt = Date.now();
+    this.emitSubagentState();
+  }
+
   private handleMessageUpdated(
     event: Event & {
       type: "message.updated";
     },
   ): void {
     const { info } = event.properties;
+
+    if (
+      info.sessionID !== this.currentSessionId &&
+      !this.trackedSessionParents.has(info.sessionID) &&
+      info.role === "assistant"
+    ) {
+      this.attachUnknownSessionToPendingSubagent(info.sessionID);
+    }
+
+    if (this.isTrackedChildSession(info.sessionID)) {
+      if (info.role === "assistant") {
+        const assistantInfo = info as {
+          sessionID: string;
+          providerID?: string;
+          modelID?: string;
+          agent?: string;
+          tokens?: {
+            input: number;
+            output: number;
+            reasoning: number;
+            cache: { read: number; write: number };
+          };
+          cost?: number;
+        };
+        this.updateSubagentFromAssistantMessage(assistantInfo);
+      }
+      return;
+    }
 
     if (info.sessionID !== this.currentSessionId) {
       return;
@@ -473,7 +1032,51 @@ class SummaryAggregator {
   ): void {
     const { part } = event.properties;
 
-    if (part.sessionID !== this.currentSessionId) {
+    if (
+      part.sessionID !== this.currentSessionId &&
+      !this.trackedSessionParents.has(part.sessionID) &&
+      part.type !== "subtask"
+    ) {
+      this.attachUnknownSessionToPendingSubagent(part.sessionID);
+    }
+
+    const isCurrentRootSession = part.sessionID === this.currentSessionId;
+    const isTrackedChildSession = this.isTrackedChildSession(part.sessionID);
+
+    if (!isCurrentRootSession && !isTrackedChildSession) {
+      return;
+    }
+
+    if (part.type === "subtask") {
+      this.registerSubtaskPart(
+        part.sessionID,
+        part.id,
+        part.agent,
+        part.description,
+        part.prompt,
+        part.command,
+      );
+      this.lastUpdated = Date.now();
+      return;
+    }
+
+    if (isTrackedChildSession) {
+      if (part.type === "tool") {
+        const state = part.state;
+        const input = "input" in state ? (state.input as { [key: string]: unknown }) : undefined;
+        const title = "title" in state ? state.title : undefined;
+        this.updateSubagentToolState(part.sessionID, state, part.tool, input, title);
+      }
+
+      if (part.type === "step-start") {
+        this.updateSubagentStepStart(part.sessionID, part.snapshot);
+      }
+
+      if (part.type === "step-finish") {
+        this.updateSubagentStepFinish(part.sessionID, part.tokens, part.cost, part.snapshot);
+      }
+
+      this.lastUpdated = Date.now();
       return;
     }
 
@@ -535,6 +1138,10 @@ class SummaryAggregator {
       const state = part.state;
       const input = "input" in state ? (state.input as { [key: string]: unknown }) : undefined;
       const title = "title" in state ? state.title : undefined;
+
+      if (part.tool === "task") {
+        this.updateSubagentFromTaskTool(part.sessionID, input);
+      }
 
       logger.debug(
         `[Aggregator] Tool event: callID=${part.callID}, tool=${part.tool}, status=${"status" in state ? state.status : "unknown"}`,
@@ -937,6 +1544,12 @@ class SummaryAggregator {
   ): void {
     const { sessionID } = event.properties;
 
+    if (this.isTrackedChildSession(sessionID)) {
+      logger.info(`[Aggregator] Subagent session became idle: ${sessionID}`);
+      this.setSubagentTerminalStatus(sessionID, "completed");
+      return;
+    }
+
     if (sessionID !== this.currentSessionId) {
       return;
     }
@@ -986,12 +1599,18 @@ class SummaryAggregator {
       };
     };
 
-    if (sessionID !== this.currentSessionId) {
+    const message =
+      error?.data?.message || error?.message || error?.name || "Unknown session error";
+
+    if (sessionID && this.isTrackedChildSession(sessionID)) {
+      logger.warn(`[Aggregator] Subagent session error: ${sessionID}: ${message}`);
+      this.setSubagentTerminalStatus(sessionID, "error", message);
       return;
     }
 
-    const message =
-      error?.data?.message || error?.message || error?.name || "Unknown session error";
+    if (sessionID !== this.currentSessionId) {
+      return;
+    }
 
     logger.warn(`[Aggregator] Session error: ${sessionID}: ${message}`);
     this.stopTypingIndicator();

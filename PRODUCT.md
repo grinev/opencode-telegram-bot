@@ -156,7 +156,7 @@ Open tasks for upcoming iterations:
 - [ ] `/messages` command: browse session messages with fork/revert actions
 - [ ] `/skills` command: browse skills and choose one for usage
 - [ ] `/mcps` command: browse available MCP servers
-- [ ] Dynamic subagent activity display during task execution
+- [x] Dynamic subagent activity display during task execution
 - [ ] Git tree support
 - [ ] Docker runtime support and deployment guide
 - [ ] OpenCode server monitoring with automatic restart on stop/crash

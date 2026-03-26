@@ -54,6 +54,7 @@ import {
   formatToolInfo,
   getAssistantParseMode,
 } from "../summary/formatter.js";
+import { renderSubagentCards } from "../summary/subagent-formatter.js";
 import { ToolMessageBatcher } from "../summary/tool-message-batcher.js";
 import { getCurrentSession } from "../session/manager.js";
 import { ingestSessionInfoForCache } from "../session/cache-manager.js";
@@ -89,6 +90,7 @@ const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
 const RESPONSE_STREAM_THROTTLE_MS = 200;
 const RESPONSE_STREAM_TEXT_LIMIT = 3800;
 const SESSION_RETRY_PREFIX = "🔁";
+const SUBAGENT_STREAM_PREFIX = "🧩";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEMP_DIR = path.join(__dirname, "..", ".tmp");
@@ -461,7 +463,11 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       toolInfo.hasFileAttachment &&
       (toolInfo.tool === "write" || toolInfo.tool === "edit" || toolInfo.tool === "apply_patch");
 
-    if (config.bot.hideToolCallMessages || shouldIncludeToolInfoInFileCaption) {
+    if (
+      config.bot.hideToolCallMessages ||
+      shouldIncludeToolInfoInFileCaption ||
+      toolInfo.tool === "task"
+    ) {
       return;
     }
 
@@ -472,6 +478,32 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       }
     } catch (err) {
       logger.error("Failed to send tool notification to Telegram:", err);
+    }
+  });
+
+  summaryAggregator.setOnSubagent(async (sessionId, subagents) => {
+    if (!botInstance || !chatIdInstance) {
+      return;
+    }
+
+    if (config.bot.hideToolCallMessages) {
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
+      return;
+    }
+
+    try {
+      const renderedCards = await renderSubagentCards(subagents);
+      if (!renderedCards) {
+        return;
+      }
+
+      toolCallStreamer.replaceByPrefix(sessionId, SUBAGENT_STREAM_PREFIX, renderedCards);
+    } catch (err) {
+      logger.error("Failed to render subagent activity for Telegram:", err);
     }
   });
 
