@@ -1097,4 +1097,151 @@ describe("summary/aggregator", () => {
     expect(filePayload.fileData.filename).toBe("edit_README.md.txt");
     expect(filePayload.fileData.buffer.toString("utf8")).toContain("Edit File/Path: README.md");
   });
+
+  it("fires onTokens with isCompleted=true when message has completed timestamp", () => {
+    const onTokens = vi.fn();
+    summaryAggregator.setOnTokens(onTokens);
+    summaryAggregator.setOnComplete(() => {});
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg-tokens-completed",
+          sessionID: "session-1",
+          role: "assistant",
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-text-tokens",
+          sessionID: "session-1",
+          messageID: "msg-tokens-completed",
+          type: "text",
+          text: "Done",
+          time: { start: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg-tokens-completed",
+          sessionID: "session-1",
+          role: "assistant",
+          tokens: { input: 800, output: 200, reasoning: 0, cache: { read: 100, write: 0 } },
+          cost: 0.01,
+          time: { created: Date.now(), completed: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onTokens).toHaveBeenCalledTimes(1);
+    expect(onTokens).toHaveBeenCalledWith(
+      expect.objectContaining({ input: 800, output: 200, cacheRead: 100 }),
+      true,
+    );
+  });
+
+  it("fires onTokens with isCompleted=false for non-completed message with tokens", () => {
+    const onTokens = vi.fn();
+    summaryAggregator.setOnTokens(onTokens);
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg-tokens-intermediate",
+          sessionID: "session-1",
+          role: "assistant",
+          tokens: { input: 500, output: 50, reasoning: 0, cache: { read: 200, write: 0 } },
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onTokens).toHaveBeenCalledTimes(1);
+    expect(onTokens).toHaveBeenCalledWith(
+      expect.objectContaining({ input: 500, output: 50, cacheRead: 200 }),
+      false,
+    );
+  });
+
+  it("fires onTokens for non-completed message with non-zero tokens (intermediate update)", () => {
+    const onTokens = vi.fn();
+    summaryAggregator.setOnTokens(onTokens);
+    summaryAggregator.setSession("session-1");
+
+    // First message with zero tokens (new message starting)
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg-step2",
+          sessionID: "session-1",
+          role: "assistant",
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    // The callback IS fired (filtering zero tokens is done at bot/index.ts level)
+    expect(onTokens).toHaveBeenCalledTimes(1);
+    expect(onTokens).toHaveBeenCalledWith(
+      expect.objectContaining({ input: 0, cacheRead: 0 }),
+      false,
+    );
+
+    onTokens.mockClear();
+
+    // Later update with real tokens
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg-step2",
+          sessionID: "session-1",
+          role: "assistant",
+          tokens: { input: 4000, output: 300, reasoning: 0, cache: { read: 12000, write: 0 } },
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onTokens).toHaveBeenCalledTimes(1);
+    expect(onTokens).toHaveBeenCalledWith(
+      expect.objectContaining({ input: 4000, cacheRead: 12000 }),
+      false,
+    );
+  });
+
+  it("does not fire onTokens when message.updated has no tokens field", () => {
+    const onTokens = vi.fn();
+    summaryAggregator.setOnTokens(onTokens);
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg-no-tokens",
+          sessionID: "session-1",
+          role: "assistant",
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onTokens).not.toHaveBeenCalled();
+  });
 });

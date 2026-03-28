@@ -614,25 +614,45 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       responseStreaming: config.bot.responseStreaming,
       hideThinkingMessages: config.bot.hideThinkingMessages,
     });
+
+    // Refresh pinned message so it shows the latest in-memory context
+    // (accumulated from silent token updates). 1 API call per thinking event.
+    if (pinnedMessageManager.isInitialized()) {
+      await pinnedMessageManager.refresh();
+    }
   });
 
-  summaryAggregator.setOnTokens(async (tokens) => {
+  summaryAggregator.setOnTokens(async (tokens, isCompleted) => {
     if (!pinnedMessageManager.isInitialized()) {
       return;
     }
 
     try {
-      logger.debug(`[Bot] Received tokens: input=${tokens.input}, output=${tokens.output}`);
+      logger.debug(
+        `[Bot] Received tokens: input=${tokens.input}, output=${tokens.output}, completed=${isCompleted}`,
+      );
 
-      // Update keyboardManager SYNCHRONOUSLY before any await
-      // This ensures keyboard has correct context when onComplete sends the reply
       const contextSize = tokens.input + tokens.cacheRead;
       const contextLimit = pinnedMessageManager.getContextLimit();
+
+      // Skip non-completed messages with zero context: a new assistant message
+      // starts with tokens={input:0, ...} which would overwrite valid context
+      // from the previous step. Only accept zeros from completed messages.
+      if (!isCompleted && contextSize === 0) {
+        logger.debug("[Bot] Skipping zero-token intermediate update");
+        return;
+      }
+
+      // Update both keyboard and pinned state in memory (keeps them in sync)
       if (contextLimit > 0) {
         keyboardManager.updateContext(contextSize, contextLimit);
       }
+      pinnedMessageManager.updateTokensSilent(tokens);
 
-      await pinnedMessageManager.onMessageComplete(tokens);
+      // Full pinned message update (API call) only on completed messages
+      if (isCompleted) {
+        await pinnedMessageManager.onMessageComplete(tokens);
+      }
     } catch (err) {
       logger.error("[Bot] Error updating pinned message with tokens:", err);
     }

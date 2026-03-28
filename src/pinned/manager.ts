@@ -208,6 +208,26 @@ class PinnedMessageManager {
   }
 
   /**
+   * Update tokens in memory without triggering an API call.
+   * Used for intermediate (non-completed) message.updated events
+   * to keep pinned state in sync with keyboardManager.
+   */
+  updateTokensSilent(tokens: TokensInfo): void {
+    this.state.tokensUsed = tokens.input + tokens.cacheRead;
+    logger.debug(
+      `[PinnedManager] Tokens updated (silent): ${this.state.tokensUsed}/${this.state.tokensLimit}`,
+    );
+  }
+
+  /**
+   * Refresh the pinned message with current in-memory state.
+   * Used at thinking time to push accumulated silent updates to Telegram.
+   */
+  async refresh(): Promise<void> {
+    await this.updatePinnedMessage();
+  }
+
+  /**
    * Called when cost info is received from SSE events
    */
   async onCostUpdate(cost: number): Promise<void> {

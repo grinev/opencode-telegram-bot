@@ -72,7 +72,7 @@ export interface TokensInfo {
   cacheWrite: number;
 }
 
-type TokensCallback = (tokens: TokensInfo) => void;
+type TokensCallback = (tokens: TokensInfo, isCompleted: boolean) => void;
 
 type CostCallback = (cost: number) => void;
 
@@ -963,38 +963,39 @@ class SummaryAggregator {
         this.emitPartialText(info.sessionID, messageID, messageText);
       }
 
+      // Extract and report tokens for EVERY message.updated with token data
+      // (both intermediate and completed). This keeps keyboard context in sync.
+      const assistantInfo = info as {
+        tokens?: {
+          input: number;
+          output: number;
+          reasoning: number;
+          cache: { read: number; write: number };
+        };
+        cost?: number;
+      };
+
+      if (this.onTokensCallback && assistantInfo.tokens) {
+        const tokens: TokensInfo = {
+          input: assistantInfo.tokens.input,
+          output: assistantInfo.tokens.output,
+          reasoning: assistantInfo.tokens.reasoning,
+          cacheRead: assistantInfo.tokens.cache?.read || 0,
+          cacheWrite: assistantInfo.tokens.cache?.write || 0,
+        };
+        logger.debug(
+          `[Aggregator] Tokens: input=${tokens.input}, output=${tokens.output}, reasoning=${tokens.reasoning}, cacheRead=${tokens.cacheRead}, cacheWrite=${tokens.cacheWrite}, completed=${isCompleted}`,
+        );
+        // Call synchronously so keyboardManager is updated before onComplete sends the reply
+        this.onTokensCallback(tokens, isCompleted);
+      }
+
       if (isCompleted) {
         const finalText = messageText;
 
         logger.debug(
           `[Aggregator] Message part completed: messageId=${messageID}, textLength=${finalText.length}, totalParts=${textState.orderedPartIds.length}, session=${this.currentSessionId}`,
         );
-
-        // Extract and report tokens BEFORE onComplete so keyboard context is updated
-        const assistantInfo = info as {
-          tokens?: {
-            input: number;
-            output: number;
-            reasoning: number;
-            cache: { read: number; write: number };
-          };
-          cost?: number;
-        };
-
-        if (this.onTokensCallback && assistantInfo.tokens) {
-          const tokens: TokensInfo = {
-            input: assistantInfo.tokens.input,
-            output: assistantInfo.tokens.output,
-            reasoning: assistantInfo.tokens.reasoning,
-            cacheRead: assistantInfo.tokens.cache?.read || 0,
-            cacheWrite: assistantInfo.tokens.cache?.write || 0,
-          };
-          logger.debug(
-            `[Aggregator] Tokens: input=${tokens.input}, output=${tokens.output}, reasoning=${tokens.reasoning}`,
-          );
-          // Call synchronously so keyboardManager is updated before onComplete sends the reply
-          this.onTokensCallback(tokens);
-        }
 
         // Extract and report cost
         if (this.onCostCallback && assistantInfo.cost !== undefined) {
