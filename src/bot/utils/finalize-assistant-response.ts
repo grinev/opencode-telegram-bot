@@ -1,5 +1,6 @@
 import type { StreamingMessagePayload, ResponseStreamer } from "../streaming/response-streamer.js";
 import type { TelegramTextFormat } from "./telegram-text.js";
+import { logger } from "../../utils/logger.js";
 
 interface FinalizeAssistantResponseOptions {
   responseStreaming: boolean;
@@ -17,6 +18,7 @@ interface FinalizeAssistantResponseOptions {
     options: { reply_markup: unknown } | undefined,
     format: TelegramTextFormat,
   ) => Promise<void>;
+  deleteMessages: (messageIds: number[]) => Promise<void>;
 }
 
 export async function finalizeAssistantResponse({
@@ -31,8 +33,9 @@ export async function finalizeAssistantResponse({
   resolveFormat,
   getReplyKeyboard,
   sendText,
+  deleteMessages,
 }: FinalizeAssistantResponseOptions): Promise<boolean> {
-  let streamedViaMessages = false;
+  let streamedMessageIds: number[] = [];
 
   if (responseStreaming) {
     const preparedStreamPayload = prepareStreamingPayload(messageText);
@@ -41,17 +44,27 @@ export async function finalizeAssistantResponse({
       preparedStreamPayload.editOptions = undefined;
     }
 
-    streamedViaMessages = await responseStreamer.complete(
+    const result = await responseStreamer.complete(
       sessionId,
       messageId,
       preparedStreamPayload ?? undefined,
     );
+
+    if (result.streamed) {
+      streamedMessageIds = result.telegramMessageIds;
+    }
   }
 
   await flushPendingServiceMessages();
 
-  if (streamedViaMessages) {
-    return true;
+  // When the response was streamed, delete the streamed messages and re-send
+  // via the non-streamed path so the reply keyboard carries the latest context.
+  if (streamedMessageIds.length > 0) {
+    try {
+      await deleteMessages(streamedMessageIds);
+    } catch (err) {
+      logger.warn("[FinalizeResponse] Failed to delete streamed messages, sending with keyboard anyway:", err);
+    }
   }
 
   const parts = formatSummary(messageText);

@@ -4,12 +4,13 @@ import { finalizeAssistantResponse } from "../../../src/bot/utils/finalize-assis
 describe("bot/utils/finalize-assistant-response", () => {
   it("uses the non-streaming send path when response streaming is disabled", async () => {
     const responseStreamer = {
-      complete: vi.fn().mockResolvedValue(true),
+      complete: vi.fn().mockResolvedValue({ streamed: false, telegramMessageIds: [] }),
     };
     const flushPendingServiceMessages = vi.fn().mockResolvedValue(undefined);
     const sendText = vi.fn().mockResolvedValue(undefined);
+    const deleteMessages = vi.fn().mockResolvedValue(undefined);
 
-    const streamed = await finalizeAssistantResponse({
+    await finalizeAssistantResponse({
       responseStreaming: false,
       sessionId: "s1",
       messageId: "m1",
@@ -21,11 +22,12 @@ describe("bot/utils/finalize-assistant-response", () => {
       resolveFormat: vi.fn(() => "markdown_v2"),
       getReplyKeyboard: vi.fn(() => ({ keyboard: [[{ text: "A" }]] })),
       sendText,
+      deleteMessages,
     });
 
-    expect(streamed).toBe(false);
     expect(responseStreamer.complete).not.toHaveBeenCalled();
     expect(flushPendingServiceMessages).toHaveBeenCalledTimes(1);
+    expect(deleteMessages).not.toHaveBeenCalled();
     expect(sendText).toHaveBeenCalledTimes(2);
     expect(sendText).toHaveBeenNthCalledWith(
       1,
@@ -41,15 +43,53 @@ describe("bot/utils/finalize-assistant-response", () => {
     );
   });
 
-  it("skips the non-streaming send path when streaming already delivered the final message", async () => {
+  it("deletes streamed messages and re-sends with keyboard when streaming delivered the message", async () => {
     const responseStreamer = {
-      complete: vi.fn().mockResolvedValue(true),
+      complete: vi.fn().mockResolvedValue({ streamed: true, telegramMessageIds: [101] }),
     };
     const flushPendingServiceMessages = vi.fn().mockResolvedValue(undefined);
     const sendText = vi.fn().mockResolvedValue(undefined);
+    const deleteMessages = vi.fn().mockResolvedValue(undefined);
+    const prepareStreamingPayload = vi.fn(() => ({ parts: ["reply"], format: "raw" as const }));
+    const keyboard = { keyboard: [[{ text: "ctx" }]] };
+
+    await finalizeAssistantResponse({
+      responseStreaming: true,
+      sessionId: "s1",
+      messageId: "m1",
+      messageText: "reply",
+      responseStreamer,
+      flushPendingServiceMessages,
+      prepareStreamingPayload,
+      formatSummary: vi.fn(() => ["reply"]),
+      resolveFormat: vi.fn(() => "raw"),
+      getReplyKeyboard: vi.fn(() => keyboard),
+      sendText,
+      deleteMessages,
+    });
+
+    expect(responseStreamer.complete).toHaveBeenCalledWith("s1", "m1", {
+      parts: ["reply"],
+      format: "raw",
+      sendOptions: undefined,
+      editOptions: undefined,
+    });
+    expect(flushPendingServiceMessages).toHaveBeenCalledTimes(1);
+    expect(deleteMessages).toHaveBeenCalledWith([101]);
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenCalledWith("reply", { reply_markup: keyboard }, "raw");
+  });
+
+  it("still sends with keyboard when streamer reports not streamed", async () => {
+    const responseStreamer = {
+      complete: vi.fn().mockResolvedValue({ streamed: false, telegramMessageIds: [] }),
+    };
+    const flushPendingServiceMessages = vi.fn().mockResolvedValue(undefined);
+    const sendText = vi.fn().mockResolvedValue(undefined);
+    const deleteMessages = vi.fn().mockResolvedValue(undefined);
     const prepareStreamingPayload = vi.fn(() => ({ parts: ["reply"], format: "raw" as const }));
 
-    const streamed = await finalizeAssistantResponse({
+    await finalizeAssistantResponse({
       responseStreaming: true,
       sessionId: "s1",
       messageId: "m1",
@@ -61,16 +101,11 @@ describe("bot/utils/finalize-assistant-response", () => {
       resolveFormat: vi.fn(() => "raw"),
       getReplyKeyboard: vi.fn(() => undefined),
       sendText,
+      deleteMessages,
     });
 
-    expect(streamed).toBe(true);
-    expect(responseStreamer.complete).toHaveBeenCalledWith("s1", "m1", {
-      parts: ["reply"],
-      format: "raw",
-      sendOptions: undefined,
-      editOptions: undefined,
-    });
-    expect(flushPendingServiceMessages).toHaveBeenCalledTimes(1);
-    expect(sendText).not.toHaveBeenCalled();
+    expect(deleteMessages).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenCalledWith("reply", undefined, "raw");
   });
 });

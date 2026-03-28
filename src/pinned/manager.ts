@@ -225,6 +225,13 @@ class PinnedMessageManager {
   setOnKeyboardUpdate(callback: (tokensUsed: number, tokensLimit: number) => void): void {
     this.onKeyboardUpdateCallback = callback;
     logger.debug("[PinnedManager] Keyboard update callback registered");
+
+    // Fire immediately with current state to fix race condition:
+    // onSessionChange may have already run before this callback was registered.
+    const limit = this.state.tokensLimit > 0 ? this.state.tokensLimit : this.contextLimit || 0;
+    if (limit > 0) {
+      callback(this.state.tokensUsed, limit);
+    }
   }
 
   /**

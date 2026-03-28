@@ -16,6 +16,11 @@ export interface StreamingMessagePayload {
   editOptions?: TelegramEditMessageOptions;
 }
 
+export interface StreamCompleteResult {
+  streamed: boolean;
+  telegramMessageIds: number[];
+}
+
 interface ResponseStreamerCompleteOptions {
   flushFinal?: boolean;
 }
@@ -142,10 +147,12 @@ export class ResponseStreamer {
     messageId: string,
     payload?: StreamingMessagePayload,
     options?: ResponseStreamerCompleteOptions,
-  ): Promise<boolean> {
+  ): Promise<StreamCompleteResult> {
+    const notStreamed: StreamCompleteResult = { streamed: false, telegramMessageIds: [] };
+
     const state = this.states.get(buildStateKey(sessionId, messageId));
     if (!state) {
-      return false;
+      return notStreamed;
     }
 
     if (payload) {
@@ -163,13 +170,13 @@ export class ResponseStreamer {
       await this.cleanupBrokenStream(state, "complete_broken_stream");
       this.cancelState(state);
       this.states.delete(state.key);
-      return false;
+      return notStreamed;
     }
 
     if (state.telegramMessageIds.length === 0) {
       this.cancelState(state);
       this.states.delete(state.key);
-      return false;
+      return notStreamed;
     }
 
     let synced = true;
@@ -180,9 +187,10 @@ export class ResponseStreamer {
       }
     }
 
+    const messageIds = [...state.telegramMessageIds];
     this.cancelState(state);
     this.states.delete(state.key);
-    return synced;
+    return { streamed: synced, telegramMessageIds: messageIds };
   }
 
   clearMessage(sessionId: string, messageId: string, reason: string): void {

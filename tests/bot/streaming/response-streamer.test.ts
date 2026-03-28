@@ -82,9 +82,10 @@ describe("bot/streaming/response-streamer", () => {
     streamer.enqueue("s1", "m1", { parts: ["partial"], format: "raw" });
     await vi.advanceTimersByTimeAsync(500);
 
-    const synced = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
+    const result = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
 
-    expect(synced).toBe(true);
+    expect(result.streamed).toBe(true);
+    expect(result.telegramMessageIds).toEqual([1]);
     expect(sendText).toHaveBeenCalledTimes(1);
     expect(editText).toHaveBeenCalledTimes(1);
     expect(editText).toHaveBeenCalledWith(1, "final", "raw", undefined);
@@ -173,9 +174,10 @@ describe("bot/streaming/response-streamer", () => {
 
     expect(editText).toHaveBeenCalledTimes(1);
 
-    const synced = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
+    const result = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
 
-    expect(synced).toBe(false);
+    expect(result.streamed).toBe(false);
+    expect(result.telegramMessageIds).toEqual([]);
     expect(deleteText).toHaveBeenCalledTimes(1);
     expect(deleteText).toHaveBeenCalledWith(42);
     expect(sendText).toHaveBeenCalledTimes(1);
@@ -206,9 +208,10 @@ describe("bot/streaming/response-streamer", () => {
 
     expect(sendText).toHaveBeenCalledTimes(1);
 
-    const synced = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
+    const result = await streamer.complete("s1", "m1", { parts: ["final"], format: "raw" });
 
-    expect(synced).toBe(false);
+    expect(result.streamed).toBe(false);
+    expect(result.telegramMessageIds).toEqual([]);
     expect(editText).not.toHaveBeenCalled();
     expect(deleteText).not.toHaveBeenCalled();
   });
@@ -246,7 +249,9 @@ describe("bot/streaming/response-streamer", () => {
 
     resolveSend?.(1);
 
-    await expect(completionPromise).resolves.toBe(true);
+    const result = await completionPromise;
+    expect(result.streamed).toBe(true);
+    expect(result.telegramMessageIds).toEqual([1]);
     expect(sendText).toHaveBeenCalledTimes(1);
     expect(editText).not.toHaveBeenCalled();
     expect(deleteText).not.toHaveBeenCalled();
@@ -283,7 +288,8 @@ describe("bot/streaming/response-streamer", () => {
       expect(sendText).toHaveBeenCalledTimes(2);
     });
 
-    expect(completedAfterClear).toBe(false);
+    expect(completedAfterClear.streamed).toBe(false);
+    expect(completedAfterClear.telegramMessageIds).toEqual([]);
     expect(editText).not.toHaveBeenCalled();
     expect(deleteText).not.toHaveBeenCalled();
     expect(sendText).toHaveBeenNthCalledWith(2, "new partial", "raw", undefined);
@@ -315,7 +321,8 @@ describe("bot/streaming/response-streamer", () => {
       format: "raw",
     });
 
-    expect(completedAfterClear).toBe(false);
+    expect(completedAfterClear.streamed).toBe(false);
+    expect(completedAfterClear.telegramMessageIds).toEqual([]);
     expect(editText).not.toHaveBeenCalled();
     expect(deleteText).not.toHaveBeenCalled();
     expect(sendText).toHaveBeenCalledTimes(1);
@@ -340,7 +347,8 @@ describe("bot/streaming/response-streamer", () => {
 
     await vi.advanceTimersByTimeAsync(1000);
 
-    expect(synced).toBe(false);
+    expect(synced.streamed).toBe(false);
+    expect(synced.telegramMessageIds).toEqual([]);
     expect(sendText).not.toHaveBeenCalled();
     expect(editText).not.toHaveBeenCalled();
     expect(deleteText).not.toHaveBeenCalled();

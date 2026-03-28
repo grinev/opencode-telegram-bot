@@ -403,7 +403,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     const chatId = chatIdInstance;
 
     try {
-      const streamedViaMessages = await finalizeAssistantResponse({
+      await finalizeAssistantResponse({
         responseStreaming: config.bot.responseStreaming,
         sessionId,
         messageId,
@@ -427,16 +427,16 @@ async function ensureEventSubscription(directory: string): Promise<void> {
             format,
           });
         },
+        deleteMessages: async (messageIds) => {
+          for (const msgId of messageIds) {
+            try {
+              await botApi.deleteMessage(chatId, msgId);
+            } catch (err) {
+              logger.warn(`[Bot] Failed to delete streamed message ${msgId}:`, err);
+            }
+          }
+        },
       });
-
-      if (streamedViaMessages) {
-        logger.debug(
-          `[Bot] Final assistant message already streamed (session=${sessionId}, message=${messageId})`,
-        );
-        foregroundSessionState.markIdle(sessionId);
-        await scheduledTaskRuntime.flushDeferredDeliveries();
-        return;
-      }
     } catch (err) {
       logger.error("Failed to send message to Telegram:", err);
       // Stop processing events after critical error to prevent infinite loop
