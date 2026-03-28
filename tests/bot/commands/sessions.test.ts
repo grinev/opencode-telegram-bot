@@ -176,6 +176,7 @@ describe("bot/commands/sessions", () => {
     expect(mocked.sessionListMock).toHaveBeenCalledWith({
       directory: "/repo",
       limit: 11,
+      roots: true,
     });
 
     const keyboardRows = getKeyboardButtons(ctx);
@@ -215,6 +216,7 @@ describe("bot/commands/sessions", () => {
     expect(mocked.sessionListMock).toHaveBeenCalledWith({
       directory: "/repo",
       limit: 21,
+      roots: true,
     });
     expect(ctx.editMessageText).toHaveBeenCalledTimes(1);
 

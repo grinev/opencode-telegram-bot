@@ -87,6 +87,7 @@ async function loadSessionPage(
   const { data: sessions, error } = await opencodeClient.session.list({
     directory,
     limit: endExclusive + SESSION_FETCH_EXTRA_COUNT,
+    roots: true,
   });
 
   if (error || !sessions) {
