@@ -5,6 +5,7 @@ export const ru: I18nDictionary = {
   "cmd.description.new": "Создать новую сессию",
   "cmd.description.stop": "Прервать текущее действие",
   "cmd.description.sessions": "Список сессий",
+  "cmd.description.tts": "Переключить TTS-ответы",
   "cmd.description.projects": "Список проектов",
   "cmd.description.task": "Создать задачу по расписанию",
   "cmd.description.tasklist": "Список задач по расписанию",
@@ -91,6 +92,9 @@ export const ru: I18nDictionary = {
   "status.line.uptime_sec": "Uptime: {seconds} сек",
   "status.line.mode": "Режим: {mode}",
   "status.line.model": "Модель: {model}",
+  "status.line.tts": "TTS-ответы: {tts}",
+  "status.tts.on": "Вкл",
+  "status.tts.off": "Выкл",
   "status.agent_not_set": "не установлен",
   "status.project_selected": "Проект: {project}",
   "status.project_not_selected": "Проект: не выбран",
@@ -100,6 +104,11 @@ export const ru: I18nDictionary = {
   "status.session_hint": "Используйте /sessions для выбора или /new для создания",
   "status.server_unavailable":
     "🔴 OpenCode Server недоступен\n\nИспользуйте /opencode_start для запуска сервера.",
+
+  "tts.enabled": "🔊 TTS-ответы включены для этого чата.",
+  "tts.enabled_not_configured":
+    "🔊 TTS-ответы включены для этого чата.\n\nУчетные данные TTS пока не настроены. Укажите `TTS_API_URL` и `TTS_API_KEY` или используйте `STT_API_URL` и `STT_API_KEY` как резервный вариант.",
+  "tts.disabled": "🔇 TTS-ответы выключены для этого чата.",
 
   "projects.empty":
     "📭 Проектов нет.\n\nОткройте директорию в OpenCode и создайте хотя бы одну сессию, после этого она появится здесь.",

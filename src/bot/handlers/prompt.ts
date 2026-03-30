@@ -3,7 +3,7 @@ import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2";
 import { opencodeClient } from "../../opencode/client.js";
 import { clearSession, getCurrentSession, setCurrentSession } from "../../session/manager.js";
 import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject, isTtsEnabled } from "../../settings/manager.js";
 import { getStoredAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
@@ -23,6 +23,13 @@ import { foregroundSessionState } from "../../scheduled-task/foreground-state.js
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
+const promptResponseModes = new Map<string, PromptResponseMode>();
+
+export type PromptResponseMode = "text_only" | "text_and_tts";
+
+type ProcessPromptOptions = {
+  responseMode?: PromptResponseMode;
+};
 
 export function getPromptBotInstance(): Bot<Context> | null {
   return botInstance;
@@ -30,6 +37,20 @@ export function getPromptBotInstance(): Bot<Context> | null {
 
 export function getPromptChatId(): number | null {
   return chatIdInstance;
+}
+
+export function setPromptResponseMode(sessionId: string, responseMode: PromptResponseMode): void {
+  promptResponseModes.set(sessionId, responseMode);
+}
+
+export function clearPromptResponseMode(sessionId: string): void {
+  promptResponseModes.delete(sessionId);
+}
+
+export function consumePromptResponseMode(sessionId: string): PromptResponseMode | null {
+  const responseMode = promptResponseModes.get(sessionId) ?? null;
+  promptResponseModes.delete(sessionId);
+  return responseMode;
 }
 
 async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
@@ -93,8 +114,10 @@ export async function processUserPrompt(
   text: string,
   deps: ProcessPromptDeps,
   fileParts: FilePartInput[] = [],
+  options: ProcessPromptOptions = {},
 ): Promise<boolean> {
   const { bot, ensureEventSubscription } = deps;
+  const responseMode = options.responseMode ?? (isTtsEnabled() ? "text_and_tts" : "text_only");
 
   const currentProject = getCurrentProject();
   if (!currentProject) {
@@ -274,6 +297,7 @@ export async function processUserPrompt(
       onSuccess: ({ error }) => {
         if (error) {
           foregroundSessionState.markIdle(currentSession.id);
+          clearPromptResponseMode(currentSession.id);
           const details = formatErrorDetails(error, 6000);
           logger.error(
             "[Bot] OpenCode API returned an error for session.prompt",
@@ -287,10 +311,12 @@ export async function processUserPrompt(
           return;
         }
 
+        setPromptResponseMode(currentSession.id, responseMode);
         logger.info("[Bot] session.prompt completed");
       },
       onError: (error) => {
         foregroundSessionState.markIdle(currentSession.id);
+        clearPromptResponseMode(currentSession.id);
         const details = formatErrorDetails(error, 6000);
         logger.error("[Bot] session.prompt background task failed", promptErrorLogContext);
         logger.error("[Bot] session.prompt background failure details:", details);

@@ -5,6 +5,7 @@ export const de: I18nDictionary = {
   "cmd.description.new": "Neue Sitzung erstellen",
   "cmd.description.stop": "Aktuelle Aktion stoppen",
   "cmd.description.sessions": "Sitzungen auflisten",
+  "cmd.description.tts": "TTS-Antworten umschalten",
   "cmd.description.projects": "Projekte auflisten",
   "cmd.description.task": "Geplante Aufgabe erstellen",
   "cmd.description.tasklist": "Geplante Aufgaben anzeigen",
@@ -97,6 +98,9 @@ export const de: I18nDictionary = {
   "status.line.uptime_sec": "Betriebszeit: {seconds} s",
   "status.line.mode": "Modus: {mode}",
   "status.line.model": "Modell: {model}",
+  "status.line.tts": "TTS-Antworten: {tts}",
+  "status.tts.on": "Ein",
+  "status.tts.off": "Aus",
   "status.agent_not_set": "nicht gesetzt",
   "status.project_selected": "Projekt: {project}",
   "status.project_not_selected": "Projekt: nicht ausgewählt",
@@ -106,6 +110,11 @@ export const de: I18nDictionary = {
   "status.session_hint": "Nutze /sessions zur Auswahl oder /new zum Erstellen",
   "status.server_unavailable":
     "🔴 OpenCode-Server ist nicht verfügbar\n\nNutze /opencode_start, um den Server zu starten.",
+
+  "tts.enabled": "🔊 TTS-Antworten für diesen Chat aktiviert.",
+  "tts.enabled_not_configured":
+    "🔊 TTS-Antworten für diesen Chat aktiviert.\n\nTTS-Zugangsdaten sind noch nicht konfiguriert. Setze `TTS_API_URL` und `TTS_API_KEY` oder nutze `STT_API_URL` und `STT_API_KEY` als Fallback.",
+  "tts.disabled": "🔇 TTS-Antworten für diesen Chat deaktiviert.",
 
   "projects.empty":
     "📭 Keine Projekte gefunden.\n\nÖffne ein Verzeichnis in OpenCode und erstelle mindestens eine Sitzung, dann erscheint es hier.",

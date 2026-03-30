@@ -31,6 +31,7 @@ import {
   handleCommandsCallback,
   handleCommandTextArguments,
 } from "./commands/commands.js";
+import { ttsCommand } from "./commands/tts.js";
 import {
   handleQuestionCallback,
   showCurrentQuestion,
@@ -63,11 +64,12 @@ import { safeBackgroundTask } from "../utils/safe-background-task.js";
 import { withTelegramRateLimitRetry } from "../utils/telegram-rate-limit-retry.js";
 import { pinnedMessageManager } from "../pinned/manager.js";
 import { t } from "../i18n/index.js";
-import { processUserPrompt } from "./handlers/prompt.js";
+import { clearPromptResponseMode, processUserPrompt } from "./handlers/prompt.js";
 import { handleVoiceMessage } from "./handlers/voice.js";
 import { handleDocumentMessage } from "./handlers/document.js";
 import { downloadTelegramFile, toDataUri } from "./utils/file-download.js";
 import { finalizeAssistantResponse } from "./utils/finalize-assistant-response.js";
+import { sendTtsResponseForSession } from "./utils/send-tts-response.js";
 import { deliverThinkingMessage } from "./utils/thinking-message.js";
 import { sendBotText } from "./utils/telegram-text.js";
 import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
@@ -379,6 +381,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   summaryAggregator.setOnComplete(async (sessionId, messageId, messageText) => {
     if (!botInstance || !chatIdInstance) {
       logger.error("Bot or chat ID not available for sending message");
+      clearPromptResponseMode(sessionId);
       responseStreamer.clearMessage(sessionId, messageId, "bot_context_missing");
       toolCallStreamer.clearSession(sessionId, "bot_context_missing");
       foregroundSessionState.markIdle(sessionId);
@@ -387,6 +390,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
     const currentSession = getCurrentSession();
     if (currentSession?.id !== sessionId) {
+      clearPromptResponseMode(sessionId);
       responseStreamer.clearMessage(sessionId, messageId, "session_mismatch");
       toolCallStreamer.clearSession(sessionId, "session_mismatch");
       foregroundSessionState.markIdle(sessionId);
@@ -433,7 +437,15 @@ async function ensureEventSubscription(directory: string): Promise<void> {
           }
         },
       });
+
+      await sendTtsResponseForSession({
+        api: botApi,
+        sessionId,
+        chatId,
+        text: messageText,
+      });
     } catch (err) {
+      clearPromptResponseMode(sessionId);
       logger.error("Failed to send message to Telegram:", err);
       // Stop processing events after critical error to prevent infinite loop
       logger.error("[Bot] CRITICAL: Stopping event processing due to error");
@@ -681,12 +693,14 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
   summaryAggregator.setOnSessionError(async (sessionId, message) => {
     if (!botInstance || !chatIdInstance) {
+      clearPromptResponseMode(sessionId);
       foregroundSessionState.markIdle(sessionId);
       return;
     }
 
     const currentSession = getCurrentSession();
     if (!currentSession || currentSession.id !== sessionId) {
+      clearPromptResponseMode(sessionId);
       responseStreamer.clearSession(sessionId, "session_error_not_current");
       toolCallStreamer.clearSession(sessionId, "session_error_not_current");
       foregroundSessionState.markIdle(sessionId);
@@ -695,6 +709,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
 
     responseStreamer.clearSession(sessionId, "session_error");
+    clearPromptResponseMode(sessionId);
     await Promise.all([
       toolMessageBatcher.flushSession(sessionId, "session_error"),
       toolCallStreamer.flushSession(sessionId, "session_error"),
@@ -879,6 +894,7 @@ export function createBot(): Bot<Context> {
   bot.command("start", startCommand);
   bot.command("help", helpCommand);
   bot.command("status", statusCommand);
+  bot.command("tts", ttsCommand);
   bot.command("opencode_start", opencodeStartCommand);
   bot.command("opencode_stop", opencodeStopCommand);
   bot.command("projects", projectsCommand);

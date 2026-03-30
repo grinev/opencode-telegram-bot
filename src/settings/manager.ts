@@ -36,6 +36,7 @@ export interface Settings {
   currentAgent?: string;
   currentModel?: ModelInfo;
   pinnedMessageId?: number;
+  ttsEnabled?: boolean;
   serverProcess?: ServerProcessInfo;
   sessionDirectoryCache?: SessionDirectoryCacheInfo;
   scheduledTasks?: ScheduledTask[];
@@ -110,6 +111,15 @@ export function setCurrentSession(sessionInfo: SessionInfo): void {
 
 export function clearSession(): void {
   currentSettings.currentSession = undefined;
+  void writeSettingsFile(currentSettings);
+}
+
+export function isTtsEnabled(): boolean {
+  return currentSettings.ttsEnabled === true;
+}
+
+export function setTtsEnabled(enabled: boolean): void {
+  currentSettings.ttsEnabled = enabled;
   void writeSettingsFile(currentSettings);
 }
 

@@ -1,7 +1,7 @@
 import { CommandContext, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentSession } from "../../session/manager.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject, isTtsEnabled } from "../../settings/manager.js";
 import { fetchCurrentAgent } from "../../agent/manager.js";
 import { getAgentDisplayName } from "../../agent/types.js";
 import { fetchCurrentModel } from "../../model/manager.js";
@@ -26,6 +26,9 @@ export async function statusCommand(ctx: CommandContext<Context>) {
     if (data.version) {
       message += `${t("status.line.version", { version: data.version })}\n`;
     }
+    message += `${t("status.line.tts", {
+      tts: isTtsEnabled() ? t("status.tts.on") : t("status.tts.off"),
+    })}\n`;
 
     // Add process management information
     if (processManager.isRunning()) {
