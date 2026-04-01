@@ -408,4 +408,18 @@ export const zh: I18nDictionary = {
     "🎤 语音识别尚未配置。\n\n在 .env 中设置 STT_API_URL 和 STT_API_KEY 以启用。",
   "stt.error": "🔴 识别音频失败：{error}",
   "stt.empty_result": "🎤 音频消息中未检测到语音。",
+
+  "cmd.description.open": "通过浏览目录添加项目",
+  "open.back": "⬆️ 上级",
+  "open.home": "🏠 主目录",
+  "open.prev_page": "⬅️ 上一页",
+  "open.next_page": "下一页 ➡️",
+  "open.select_current": "✅ 选择此文件夹",
+  "open.scan_error": "🔴 无法浏览目录：{error}",
+  "open.open_error": "🔴 无法打开目录浏览器。",
+  "open.selected": "✅ 项目已添加：{project}\n\n📋 使用 /sessions 或 /new 开始工作。",
+  "open.select_error": "🔴 添加项目失败。",
+  "open.no_subfolders": "📭 无子文件夹",
+  "open.subfolder_count": "{count} 个子文件夹",
+  "open.subfolders_count": "{count} 个子文件夹",
 };

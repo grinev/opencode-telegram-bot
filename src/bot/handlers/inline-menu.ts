@@ -7,7 +7,15 @@ import { t } from "../../i18n/index.js";
 const INLINE_MENU_CANCEL_PREFIX = "inline:cancel:";
 const LEGACY_CONTEXT_CANCEL_CALLBACK = "compact:cancel";
 
-const INLINE_MENU_KINDS = ["project", "session", "model", "agent", "variant", "context"] as const;
+const INLINE_MENU_KINDS = [
+  "project",
+  "session",
+  "model",
+  "agent",
+  "variant",
+  "context",
+  "open",
+] as const;
 
 export type InlineMenuKind = (typeof INLINE_MENU_KINDS)[number];
 

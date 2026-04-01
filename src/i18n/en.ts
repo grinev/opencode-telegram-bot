@@ -446,6 +446,20 @@ export const en = {
     "🎤 Voice recognition is not configured.\n\nSet STT_API_URL and STT_API_KEY in .env to enable it.",
   "stt.error": "🔴 Failed to recognize audio: {error}",
   "stt.empty_result": "🎤 No speech detected in the audio message.",
+
+  "cmd.description.open": "Add a project by browsing directories",
+  "open.back": "⬆️ Up",
+  "open.home": "🏠 Home",
+  "open.prev_page": "⬅️ Previous",
+  "open.next_page": "Next ➡️",
+  "open.select_current": "✅ Select this folder",
+  "open.scan_error": "🔴 Cannot browse directory: {error}",
+  "open.open_error": "🔴 Failed to open directory browser.",
+  "open.selected": "✅ Project added: {project}\n\n📋 Use /sessions or /new to start working.",
+  "open.select_error": "🔴 Failed to add project.",
+  "open.no_subfolders": "📭 No subfolders",
+  "open.subfolder_count": "{count} subfolder",
+  "open.subfolders_count": "{count} subfolders",
 } as const;
 
 export type I18nKey = keyof typeof en;

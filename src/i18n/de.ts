@@ -463,4 +463,19 @@ export const de: I18nDictionary = {
     "🎤 Spracherkennung ist nicht konfiguriert.\n\nSetze STT_API_URL und STT_API_KEY in .env, um sie zu aktivieren.",
   "stt.error": "🔴 Audio konnte nicht erkannt werden: {error}",
   "stt.empty_result": "🎤 Keine Sprache in der Audionachricht erkannt.",
+
+  "cmd.description.open": "Projekt durch Ordner-Auswahl hinzufügen",
+  "open.back": "⬆️ Hoch",
+  "open.home": "🏠 Home",
+  "open.prev_page": "⬅️ Zurück",
+  "open.next_page": "Weiter ➡️",
+  "open.select_current": "✅ Diesen Ordner wählen",
+  "open.scan_error": "🔴 Verzeichnis kann nicht durchsucht werden: {error}",
+  "open.open_error": "🔴 Verzeichnisbrowser konnte nicht geöffnet werden.",
+  "open.selected":
+    "✅ Projekt hinzugefügt: {project}\n\n📋 Verwende /sessions oder /new zum Arbeiten.",
+  "open.select_error": "🔴 Projekt konnte nicht hinzugefügt werden.",
+  "open.no_subfolders": "📭 Keine Unterordner",
+  "open.subfolder_count": "{count} Unterordner",
+  "open.subfolders_count": "{count} Unterordner",
 };

@@ -464,4 +464,18 @@ export const fr: I18nDictionary = {
     "🎤 La reconnaissance vocale n'est pas configurée.\n\nDéfinissez STT_API_URL et STT_API_KEY dans .env pour l'activer.",
   "stt.error": "🔴 Impossible de reconnaître l'audio : {error}",
   "stt.empty_result": "🎤 Aucune parole détectée dans le message audio.",
+
+  "cmd.description.open": "Ajouter un projet en parcourant les dossiers",
+  "open.back": "⬆️ Remonter",
+  "open.home": "🏠 Accueil",
+  "open.prev_page": "⬅️ Précédent",
+  "open.next_page": "Suivant ➡️",
+  "open.select_current": "✅ Sélectionner ce dossier",
+  "open.scan_error": "🔴 Impossible de parcourir le répertoire : {error}",
+  "open.open_error": "🔴 Impossible d'ouvrir l'explorateur de répertoires.",
+  "open.selected": "✅ Projet ajouté : {project}\n\n📋 Utilisez /sessions ou /new pour commencer.",
+  "open.select_error": "🔴 Impossible d'ajouter le projet.",
+  "open.no_subfolders": "📭 Aucun sous-dossier",
+  "open.subfolder_count": "{count} sous-dossier",
+  "open.subfolders_count": "{count} sous-dossiers",
 };

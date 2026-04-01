@@ -20,6 +20,7 @@ import {
 import { sessionsCommand, handleSessionSelect } from "./commands/sessions.js";
 import { newCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
+import { openCommand, handleOpenCallback, clearOpenPathIndex } from "./commands/open.js";
 import { abortCommand } from "./commands/abort.js";
 import { opencodeStartCommand } from "./commands/opencode-start.js";
 import { opencodeStopCommand } from "./commands/opencode-stop.js";
@@ -911,6 +912,7 @@ export function createBot(): Bot<Context> {
   bot.command("opencode_start", opencodeStartCommand);
   bot.command("opencode_stop", opencodeStopCommand);
   bot.command("projects", projectsCommand);
+  bot.command("open", openCommand);
   bot.command("sessions", sessionsCommand);
   bot.command("new", newCommand);
   bot.command("abort", abortCommand);
@@ -932,8 +934,13 @@ export function createBot(): Bot<Context> {
 
     try {
       const handledInlineCancel = await handleInlineMenuCancel(ctx);
+      if (handledInlineCancel) {
+        // Clean up path index when the open-directory menu is cancelled
+        clearOpenPathIndex();
+      }
       const handledSession = await handleSessionSelect(ctx);
       const handledProject = await handleProjectSelect(ctx);
+      const handledOpen = await handleOpenCallback(ctx);
       const handledQuestion = await handleQuestionCallback(ctx);
       const handledPermission = await handlePermissionCallback(ctx);
       const handledAgent = await handleAgentSelect(ctx);
@@ -946,13 +953,14 @@ export function createBot(): Bot<Context> {
       const handledCommands = await handleCommandsCallback(ctx, { bot, ensureEventSubscription });
 
       logger.debug(
-        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}`,
+        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, open=${handledOpen}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}`,
       );
 
       if (
         !handledInlineCancel &&
         !handledSession &&
         !handledProject &&
+        !handledOpen &&
         !handledQuestion &&
         !handledPermission &&
         !handledAgent &&
