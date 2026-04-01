@@ -1,22 +1,16 @@
 import { CommandContext, Context } from "grammy";
 import { InlineKeyboard } from "grammy";
-import { setCurrentProject, getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../settings/manager.js";
 import { getProjects } from "../../project/manager.js";
 import { syncSessionDirectoryCache } from "../../session/cache-manager.js";
-import { clearSession } from "../../session/manager.js";
-import { summaryAggregator } from "../../summary/aggregator.js";
-import { pinnedMessageManager } from "../../pinned/manager.js";
-import { keyboardManager } from "../../keyboard/manager.js";
-import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
-import { getStoredModel } from "../../model/manager.js";
-import { formatVariantForButton } from "../../variant/manager.js";
-import { clearAllInteractionState } from "../../interaction/cleanup.js";
-import { createMainKeyboard } from "../utils/keyboard.js";
+
 import {
   appendInlineMenuCancelButton,
   ensureActiveInlineMenu,
   replyWithInlineMenu,
 } from "../handlers/inline-menu.js";
+import { switchToProject } from "../utils/switch-project.js";
+import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
@@ -257,43 +251,11 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
       throw new Error(`Project with id ${projectId} not found`);
     }
 
-    logger.info(
-      `[Bot] Project selected: ${selectedProject.name || selectedProject.worktree} (id: ${projectId})`,
-    );
-
-    setCurrentProject(selectedProject);
-    clearSession();
-    summaryAggregator.clear();
-    clearAllInteractionState("project_switched");
-
-    // Clear pinned message when switching projects
-    try {
-      await pinnedMessageManager.clear();
-    } catch (err) {
-      logger.error("[Bot] Error clearing pinned message:", err);
-    }
-
-    // Initialize keyboard manager if not already
-    if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
-    }
-
-    // Refresh context limit for current model
-    await pinnedMessageManager.refreshContextLimit();
-    const contextLimit = pinnedMessageManager.getContextLimit();
-
-    // Reset context to 0 (no session selected) with current model's limit
-    keyboardManager.updateContext(0, contextLimit);
-
-    // Get current state for keyboard (with context = 0)
-    const currentAgent = await resolveProjectAgent(getStoredAgent());
-    const currentModel = getStoredModel();
-    const contextInfo = { tokensUsed: 0, tokensLimit: contextLimit };
-    const variantName = formatVariantForButton(currentModel.variant || "default");
-    keyboardManager.updateAgent(currentAgent);
-    const keyboard = createMainKeyboard(currentAgent, currentModel, contextInfo, variantName);
-
     const projectName = selectedProject.name || selectedProject.worktree;
+
+    logger.info(`[Bot] Project selected: ${projectName} (id: ${projectId})`);
+
+    const keyboard = await switchToProject(ctx, selectedProject, "project_switched");
 
     await ctx.answerCallbackQuery();
     await ctx.reply(t("projects.selected", { project: projectName }), {
