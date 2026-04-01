@@ -168,6 +168,6 @@ Open tasks for upcoming iterations:
 
 Optional or longer-term enhancements:
 
-- [ ] Create new OpenCode projects directly from Telegram
+- [x] Create new OpenCode projects directly from Telegram
 - [ ] Add project file browsing helpers (for example, `ls` and `open` flows)
 - [ ] Add a bot settings command with in-chat UI
