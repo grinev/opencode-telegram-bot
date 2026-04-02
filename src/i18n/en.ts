@@ -3,7 +3,7 @@ export const en = {
   "cmd.description.new": "Create a new session",
   "cmd.description.stop": "Stop current action",
   "cmd.description.sessions": "List sessions",
-  "cmd.description.tts": "Toggle TTS replies",
+  "cmd.description.tts": "Toggle audio replies",
   "cmd.description.projects": "List projects",
   "cmd.description.task": "Create a scheduled task",
   "cmd.description.tasklist": "List scheduled tasks",
@@ -105,10 +105,11 @@ export const en = {
   "status.server_unavailable":
     "🔴 OpenCode Server is unavailable\n\nUse /opencode_start to start the server.",
 
-  "tts.enabled": "🔊 TTS replies enabled for this chat.",
-  "tts.enabled_not_configured":
-    "🔊 TTS replies enabled for this chat.\n\nTTS credentials are not configured yet. Set `TTS_API_URL` and `TTS_API_KEY`, or let them fall back to `STT_API_URL` and `STT_API_KEY`.",
-  "tts.disabled": "🔇 TTS replies disabled for this chat.",
+  "tts.enabled": "🔊 Audio replies enabled globally.",
+  "tts.not_configured":
+    "⚠️ Audio replies are unavailable. Set `TTS_API_URL` and `TTS_API_KEY` first.",
+  "tts.disabled": "🔇 Audio replies disabled globally.",
+  "tts.failed": "⚠️ Failed to generate audio reply.",
 
   "projects.empty":
     "📭 No projects found.\n\nOpen a directory in OpenCode and create at least one session, then it will appear here.",

@@ -150,7 +150,7 @@ describe("config boolean env parsing", () => {
     expect(config.bot.taskLimit).toBe(10);
   });
 
-  it("falls back to STT credentials for TTS when dedicated vars are unset", async () => {
+  it("keeps TTS credentials unset when dedicated vars are missing", async () => {
     vi.stubEnv("STT_API_URL", "https://api.openai.com/v1");
     vi.stubEnv("STT_API_KEY", "sk-test-key");
     vi.stubEnv("TTS_API_URL", "");
@@ -159,8 +159,8 @@ describe("config boolean env parsing", () => {
 
     const config = await loadConfig();
 
-    expect(config.tts.apiUrl).toBe("https://api.openai.com/v1");
-    expect(config.tts.apiKey).toBe("sk-test-key");
+    expect(config.tts.apiUrl).toBe("");
+    expect(config.tts.apiKey).toBe("");
     expect(config.tts.model).toBe("gpt-4o-mini-tts");
     expect(config.tts.voice).toBe("alloy");
   });

@@ -1,12 +1,14 @@
 import { InputFile } from "grammy";
 import { consumePromptResponseMode } from "../handlers/prompt.js";
 import { isTtsConfigured, synthesizeSpeech, type TtsResult } from "../../tts/client.js";
+import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 
 const MAX_TTS_INPUT_CHARS = 4_000;
 
 interface TelegramAudioApi {
   sendAudio: (chatId: number, audio: InputFile) => Promise<unknown>;
+  sendMessage: (chatId: number, text: string) => Promise<unknown>;
 }
 
 interface SendTtsResponseParams {
@@ -57,6 +59,11 @@ export async function sendTtsResponseForSession({
     return true;
   } catch (error) {
     logger.warn(`[TTS] Failed to send audio reply for session ${sessionId}`, error);
+
+    await api.sendMessage(chatId, t("tts.failed")).catch((sendError) => {
+      logger.warn(`[TTS] Failed to send audio error message for session ${sessionId}`, sendError);
+    });
+
     return false;
   }
 }

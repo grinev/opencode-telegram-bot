@@ -286,6 +286,7 @@ export async function processUserPrompt(
     );
 
     foregroundSessionState.markBusy(currentSession.id);
+    setPromptResponseMode(currentSession.id, responseMode);
 
     // CRITICAL: DO NOT wait for session.prompt to complete.
     // If we wait, the handler will not finish and grammY will not call getUpdates,
@@ -311,7 +312,6 @@ export async function processUserPrompt(
           return;
         }
 
-        setPromptResponseMode(currentSession.id, responseMode);
         logger.info("[Bot] session.prompt completed");
       },
       onError: (error) => {

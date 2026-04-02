@@ -5,7 +5,7 @@ export const zh: I18nDictionary = {
   "cmd.description.new": "创建新会话",
   "cmd.description.stop": "停止当前操作",
   "cmd.description.sessions": "列出会话",
-  "cmd.description.tts": "切换 TTS 回复",
+  "cmd.description.tts": "切换语音回复",
   "cmd.description.projects": "列出项目",
   "cmd.description.task": "创建定时任务",
   "cmd.description.tasklist": "查看定时任务",
@@ -95,10 +95,10 @@ export const zh: I18nDictionary = {
   "status.session_hint": "使用 /sessions 选择一个会话，或 /new 创建",
   "status.server_unavailable": "🔴 OpenCode 服务器不可用\n\n使用 /opencode_start 启动服务器。",
 
-  "tts.enabled": "🔊 已为当前聊天启用 TTS 回复。",
-  "tts.enabled_not_configured":
-    "🔊 已为当前聊天启用 TTS 回复。\n\n当前尚未配置 TTS 凭据。请设置 `TTS_API_URL` 和 `TTS_API_KEY`，或让它们回退到 `STT_API_URL` 和 `STT_API_KEY`。",
-  "tts.disabled": "🔇 已为当前聊天关闭 TTS 回复。",
+  "tts.enabled": "🔊 已全局启用语音回复。",
+  "tts.not_configured": "⚠️ 语音回复暂不可用。请先设置 `TTS_API_URL` 和 `TTS_API_KEY`。",
+  "tts.disabled": "🔇 已全局关闭语音回复。",
+  "tts.failed": "⚠️ 生成语音回复失败。",
 
   "projects.empty":
     "📭 未找到项目。\n\n在 OpenCode 中打开一个目录并至少创建一个会话，然后它会出现在这里。",

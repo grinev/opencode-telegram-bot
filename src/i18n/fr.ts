@@ -5,7 +5,7 @@ export const fr: I18nDictionary = {
   "cmd.description.new": "Créer une nouvelle session",
   "cmd.description.stop": "Arrêter l'action en cours",
   "cmd.description.sessions": "Lister les sessions",
-  "cmd.description.tts": "Basculer les réponses TTS",
+  "cmd.description.tts": "Basculer les réponses audio",
   "cmd.description.projects": "Lister les projets",
   "cmd.description.task": "Créer une tâche planifiée",
   "cmd.description.tasklist": "Afficher les tâches planifiées",
@@ -112,10 +112,11 @@ export const fr: I18nDictionary = {
   "status.server_unavailable":
     "🔴 Le serveur OpenCode est indisponible\n\nUtilisez /opencode_start pour démarrer le serveur.",
 
-  "tts.enabled": "🔊 Réponses TTS activées pour ce chat.",
-  "tts.enabled_not_configured":
-    "🔊 Réponses TTS activées pour ce chat.\n\nLes identifiants TTS ne sont pas encore configurés. Définissez `TTS_API_URL` et `TTS_API_KEY`, ou laissez-les utiliser `STT_API_URL` et `STT_API_KEY` comme repli.",
-  "tts.disabled": "🔇 Réponses TTS désactivées pour ce chat.",
+  "tts.enabled": "🔊 Réponses audio activées globalement.",
+  "tts.not_configured":
+    "⚠️ Les réponses audio ne sont pas disponibles. Définissez d'abord `TTS_API_URL` et `TTS_API_KEY`.",
+  "tts.disabled": "🔇 Réponses audio désactivées globalement.",
+  "tts.failed": "⚠️ Impossible de générer la réponse audio.",
 
   "projects.empty":
     "📭 Aucun projet trouvé.\n\nOuvrez un répertoire dans OpenCode et créez au moins une session, il apparaîtra ensuite ici.",

@@ -25,7 +25,7 @@ describe("bot/commands/tts", () => {
     mocked.isTtsConfiguredMock.mockReset();
   });
 
-  it("enables TTS replies for the current chat", async () => {
+  it("enables audio replies globally", async () => {
     mocked.isTtsEnabledMock.mockReturnValue(false);
     mocked.isTtsConfiguredMock.mockReturnValue(true);
     const replyMock = vi.fn().mockResolvedValue(undefined);
@@ -41,7 +41,23 @@ describe("bot/commands/tts", () => {
     expect(replyMock).toHaveBeenCalledWith(t("tts.enabled"));
   });
 
-  it("disables TTS replies for the current chat", async () => {
+  it("does not enable audio replies when TTS is not configured", async () => {
+    mocked.isTtsEnabledMock.mockReturnValue(false);
+    mocked.isTtsConfiguredMock.mockReturnValue(false);
+    const replyMock = vi.fn().mockResolvedValue(undefined);
+    const ctx = {
+      chat: { id: 42, type: "private" },
+      message: { text: "/tts" },
+      reply: replyMock,
+    } as unknown as Context;
+
+    await ttsCommand(ctx as never);
+
+    expect(mocked.setTtsEnabledMock).not.toHaveBeenCalled();
+    expect(replyMock).toHaveBeenCalledWith(t("tts.not_configured"));
+  });
+
+  it("disables audio replies globally", async () => {
     mocked.isTtsEnabledMock.mockReturnValue(true);
     const replyMock = vi.fn().mockResolvedValue(undefined);
     const ctx = {

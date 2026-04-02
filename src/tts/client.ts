@@ -15,7 +15,7 @@ export function isTtsConfigured(): boolean {
 
 export async function synthesizeSpeech(text: string): Promise<TtsResult> {
   if (!isTtsConfigured()) {
-    throw new Error("TTS is not configured: set TTS/STT API credentials");
+    throw new Error("TTS is not configured: set TTS API credentials");
   }
 
   const input = text.trim();
