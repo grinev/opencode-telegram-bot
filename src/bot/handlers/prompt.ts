@@ -4,7 +4,7 @@ import { opencodeClient } from "../../opencode/client.js";
 import { clearSession, getCurrentSession, setCurrentSession } from "../../session/manager.js";
 import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
 import { getCurrentProject, isTtsEnabled } from "../../settings/manager.js";
-import { getStoredAgent } from "../../agent/manager.js";
+import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
@@ -179,10 +179,11 @@ export async function processUserPrompt(
       logger.error("[Bot] Error creating pinned message for new session:", err);
     }
 
-    const currentAgent = getStoredAgent();
+    const currentAgent = await resolveProjectAgent(getStoredAgent());
     const currentModel = getStoredModel();
     const contextInfo = pinnedMessageManager.getContextInfo();
     const variantName = formatVariantForButton(currentModel.variant || "default");
+    keyboardManager.updateAgent(currentAgent);
     const keyboard = createMainKeyboard(
       currentAgent,
       currentModel,
@@ -221,7 +222,7 @@ export async function processUserPrompt(
   }
 
   try {
-    const currentAgent = getStoredAgent();
+    const currentAgent = await resolveProjectAgent(getStoredAgent());
     const storedModel = getStoredModel();
 
     // Build parts array with text and files

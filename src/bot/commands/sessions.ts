@@ -1,6 +1,7 @@
 import { CommandContext, Context } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
+import { resolveProjectAgent } from "../../agent/manager.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
@@ -292,6 +293,9 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
 
     if (ctx.chat) {
       const chatId = ctx.chat.id;
+      const currentAgent = await resolveProjectAgent();
+
+      keyboardManager.updateAgent(currentAgent);
 
       // Update keyboard with loaded context (callback executes async via setImmediate, so update manually)
       const contextInfo = pinnedMessageManager.getContextInfo();

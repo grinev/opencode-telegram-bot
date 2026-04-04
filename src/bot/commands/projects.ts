@@ -7,7 +7,7 @@ import { clearSession } from "../../session/manager.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
-import { getStoredAgent } from "../../agent/manager.js";
+import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
@@ -286,10 +286,11 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     keyboardManager.updateContext(0, contextLimit);
 
     // Get current state for keyboard (with context = 0)
-    const currentAgent = getStoredAgent();
+    const currentAgent = await resolveProjectAgent(getStoredAgent());
     const currentModel = getStoredModel();
     const contextInfo = { tokensUsed: 0, tokensLimit: contextLimit };
     const variantName = formatVariantForButton(currentModel.variant || "default");
+    keyboardManager.updateAgent(currentAgent);
     const keyboard = createMainKeyboard(currentAgent, currentModel, contextInfo, variantName);
 
     const projectName = selectedProject.name || selectedProject.worktree;

@@ -7,7 +7,7 @@ import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
-import { getStoredAgent } from "../../agent/manager.js";
+import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
@@ -68,10 +68,11 @@ export async function newCommand(ctx: CommandContext<Context>) {
     }
 
     // Get current state for keyboard
-    const currentAgent = getStoredAgent();
+    const currentAgent = await resolveProjectAgent(getStoredAgent());
     const currentModel = getStoredModel();
     const contextInfo = pinnedMessageManager.getContextInfo();
     const variantName = formatVariantForButton(currentModel.variant || "default");
+    keyboardManager.updateAgent(currentAgent);
     const keyboard = createMainKeyboard(
       currentAgent,
       currentModel,

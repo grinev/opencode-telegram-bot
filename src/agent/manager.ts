@@ -40,6 +40,40 @@ export async function getAvailableAgents(): Promise<AgentInfo[]> {
 
 const DEFAULT_AGENT = "build";
 
+function pickFallbackAgent(agents: AgentInfo[]): string {
+  const defaultAgent = agents.find((agent) => agent.name === DEFAULT_AGENT);
+  if (defaultAgent) {
+    return defaultAgent.name;
+  }
+
+  return agents[0]?.name ?? DEFAULT_AGENT;
+}
+
+export async function resolveProjectAgent(preferredAgent?: string): Promise<string> {
+  const requestedAgent = preferredAgent ?? getCurrentAgent() ?? DEFAULT_AGENT;
+  const project = getCurrentProject();
+
+  if (!project) {
+    return requestedAgent;
+  }
+
+  const agents = await getAvailableAgents();
+  if (agents.length === 0) {
+    return requestedAgent;
+  }
+
+  if (agents.some((agent) => agent.name === requestedAgent)) {
+    return requestedAgent;
+  }
+
+  const fallbackAgent = pickFallbackAgent(agents);
+  logger.warn(
+    `[AgentManager] Agent "${requestedAgent}" is not available for project ${project.worktree}. Falling back to "${fallbackAgent}".`,
+  );
+  setCurrentAgent(fallbackAgent);
+  return fallbackAgent;
+}
+
 /**
  * Get current agent from last session message or settings.
  * Falls back to "build" if nothing is stored.
@@ -50,9 +84,13 @@ export async function fetchCurrentAgent(): Promise<string> {
   const session = getCurrentSession();
   const project = getCurrentProject();
 
-  if (!session || !project) {
-    // No active session, return stored agent from settings
+  if (!project) {
+    // No active project, return stored agent from settings
     return storedAgent ?? DEFAULT_AGENT;
+  }
+
+  if (!session) {
+    return resolveProjectAgent(storedAgent ?? DEFAULT_AGENT);
   }
 
   try {
@@ -64,7 +102,7 @@ export async function fetchCurrentAgent(): Promise<string> {
 
     if (error || !messages || messages.length === 0) {
       logger.debug("[AgentManager] No messages found, using stored agent");
-      return storedAgent ?? DEFAULT_AGENT;
+      return resolveProjectAgent(storedAgent ?? DEFAULT_AGENT);
     }
 
     const lastAgent = messages[0].info.agent;
@@ -76,7 +114,7 @@ export async function fetchCurrentAgent(): Promise<string> {
       logger.debug(
         `[AgentManager] Using stored agent "${storedAgent}" instead of session agent "${lastAgent}"`,
       );
-      return storedAgent;
+      return resolveProjectAgent(storedAgent);
     }
 
     // No stored agent yet: sync from session history
@@ -84,10 +122,10 @@ export async function fetchCurrentAgent(): Promise<string> {
       setCurrentAgent(lastAgent);
     }
 
-    return lastAgent || storedAgent || DEFAULT_AGENT;
+    return resolveProjectAgent(lastAgent || storedAgent || DEFAULT_AGENT);
   } catch (err) {
     logger.error("[AgentManager] Error fetching current agent:", err);
-    return storedAgent ?? DEFAULT_AGENT;
+    return resolveProjectAgent(storedAgent ?? DEFAULT_AGENT);
   }
 }
 

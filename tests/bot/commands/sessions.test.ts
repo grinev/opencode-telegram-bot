@@ -17,12 +17,14 @@ const mocked = vi.hoisted(() => ({
   clearInteractionMock: vi.fn(),
   keyboardInitializeMock: vi.fn(),
   keyboardGetKeyboardMock: vi.fn(() => ({ inline_keyboard: [] })),
+  keyboardUpdateAgentMock: vi.fn(),
   keyboardUpdateContextMock: vi.fn(),
   pinnedIsInitializedMock: vi.fn(() => false),
   pinnedInitializeMock: vi.fn(),
   pinnedOnSessionChangeMock: vi.fn(),
   pinnedLoadContextFromHistoryMock: vi.fn(),
   pinnedGetContextInfoMock: vi.fn(() => null),
+  resolveProjectAgentMock: vi.fn(async () => "build"),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -56,8 +58,13 @@ vi.mock("../../../src/keyboard/manager.js", () => ({
   keyboardManager: {
     initialize: mocked.keyboardInitializeMock,
     getKeyboard: mocked.keyboardGetKeyboardMock,
+    updateAgent: mocked.keyboardUpdateAgentMock,
     updateContext: mocked.keyboardUpdateContextMock,
   },
+}));
+
+vi.mock("../../../src/agent/manager.js", () => ({
+  resolveProjectAgent: mocked.resolveProjectAgentMock,
 }));
 
 vi.mock("../../../src/pinned/manager.js", () => ({
@@ -154,6 +161,7 @@ describe("bot/commands/sessions", () => {
     mocked.keyboardInitializeMock.mockReset();
     mocked.keyboardGetKeyboardMock.mockReset();
     mocked.keyboardGetKeyboardMock.mockReturnValue({ inline_keyboard: [] });
+    mocked.keyboardUpdateAgentMock.mockReset();
     mocked.keyboardUpdateContextMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReturnValue(false);
@@ -164,6 +172,8 @@ describe("bot/commands/sessions", () => {
     mocked.pinnedLoadContextFromHistoryMock.mockResolvedValue(undefined);
     mocked.pinnedGetContextInfoMock.mockReset();
     mocked.pinnedGetContextInfoMock.mockReturnValue(null);
+    mocked.resolveProjectAgentMock.mockReset();
+    mocked.resolveProjectAgentMock.mockResolvedValue("build");
   });
 
   it("shows next-page button when sessions exceed page size", async () => {
@@ -304,6 +314,37 @@ describe("bot/commands/sessions", () => {
     expect(mocked.clearInteractionMock).toHaveBeenCalledWith("session_select_error");
     expect(ctx.answerCallbackQuery).toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("sessions.select_error"));
+  });
+
+  it("resolves the project agent before sending the keyboard for an existing session", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+    mocked.resolveProjectAgentMock.mockResolvedValueOnce("plan");
+
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    const ctx = createCallbackContext("session:session-1", 456);
+    const handled = await handleSessionSelect(ctx);
+
+    expect(handled).toBe(true);
+    expect(mocked.resolveProjectAgentMock).toHaveBeenCalledOnce();
+    expect(mocked.keyboardUpdateAgentMock).toHaveBeenCalledWith("plan");
+    expect(ctx.api.sendMessage).toHaveBeenCalledWith(
+      111,
+      t("sessions.selected", { title: "Session 1" }),
+      expect.objectContaining({
+        reply_markup: { inline_keyboard: [] },
+      }),
+    );
   });
 
   it("blocks session selection callback while foreground session is busy", async () => {

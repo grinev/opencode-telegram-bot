@@ -5,7 +5,7 @@ import type { FavoriteModel, ModelInfo, ModelSelectionLists } from "../../model/
 import { formatVariantForButton } from "../../variant/manager.js";
 import { logger } from "../../utils/logger.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
-import { getStoredAgent } from "../../agent/manager.js";
+import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import {
@@ -83,12 +83,14 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     await pinnedMessageManager.refreshContextLimit();
 
     // Update Reply Keyboard with new model and context
-    const currentAgent = getStoredAgent();
+    const currentAgent = await resolveProjectAgent(getStoredAgent());
     const contextInfo =
       pinnedMessageManager.getContextInfo() ??
       (pinnedMessageManager.getContextLimit() > 0
         ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
         : null);
+
+    keyboardManager.updateAgent(currentAgent);
 
     if (contextInfo) {
       keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);

@@ -11,7 +11,7 @@ import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
 import { interactionManager } from "../../interaction/manager.js";
 import type { InteractionState } from "../../interaction/types.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
-import { getStoredAgent } from "../../agent/manager.js";
+import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { logger } from "../../utils/logger.js";
@@ -426,7 +426,7 @@ async function executeCommand(
     return;
   }
 
-  const currentAgent = getStoredAgent();
+  const currentAgent = await resolveProjectAgent(getStoredAgent());
   const storedModel = getStoredModel();
   const model =
     storedModel.providerID && storedModel.modelID
