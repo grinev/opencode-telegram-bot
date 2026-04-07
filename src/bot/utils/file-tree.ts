@@ -11,6 +11,7 @@ export interface DirectoryEntry {
 export interface DirectoryScanResult {
   entries: DirectoryEntry[];
   totalCount: number;
+  page: number;
   currentPath: string;
   displayPath: string;
   hasParent: boolean;
@@ -63,12 +64,18 @@ export async function scanDirectory(
     const parentPath = path.dirname(dirPath);
     const hasParent = dirPath !== path.parse(dirPath).root;
 
-    const start = page * MAX_ENTRIES_PER_PAGE;
+    // Clamp page to valid range so stale or crafted callbacks never produce
+    // an out-of-bounds page indicator like "(4/2)".
+    const totalPages = Math.max(1, Math.ceil(subdirs.length / MAX_ENTRIES_PER_PAGE));
+    const safePage = Math.max(0, Math.min(page, totalPages - 1));
+
+    const start = safePage * MAX_ENTRIES_PER_PAGE;
     const pageEntries = subdirs.slice(start, start + MAX_ENTRIES_PER_PAGE);
 
     return {
       entries: pageEntries,
       totalCount: subdirs.length,
+      page: safePage,
       currentPath: dirPath,
       displayPath: pathToDisplayPath(dirPath),
       hasParent,

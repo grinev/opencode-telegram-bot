@@ -189,10 +189,10 @@ async function renderBrowseView(dirPath: string, page: number = 0) {
     return { error: result.error };
   }
 
-  const { entries, totalCount, currentPath, displayPath, hasParent } = result;
+  const { entries, totalCount, page: clampedPage, currentPath, displayPath, hasParent } = result;
   const totalPages = Math.max(1, Math.ceil(totalCount / MAX_ENTRIES_PER_PAGE));
-  const header = buildTreeHeader(displayPath, totalCount, page, totalPages);
-  const keyboard = buildBrowseKeyboard(entries, currentPath, hasParent, page, totalCount);
+  const header = buildTreeHeader(displayPath, totalCount, clampedPage, totalPages);
+  const keyboard = buildBrowseKeyboard(entries, currentPath, hasParent, clampedPage, totalCount);
 
   return { text: header, keyboard };
 }

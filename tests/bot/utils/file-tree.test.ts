@@ -113,6 +113,43 @@ describe("file-tree", () => {
       expect(page1.entries).toHaveLength(3);
     });
 
+    it("should clamp page number to last valid page when page exceeds total", async () => {
+      await mkdir(path.join(tempDir, "alpha"));
+      await mkdir(path.join(tempDir, "bravo"));
+
+      const result = await scanDirectory(tempDir, 99);
+      expect(isScanError(result)).toBe(false);
+      if (isScanError(result)) return;
+
+      // Only 2 entries → 1 page → page should be clamped to 0
+      expect(result.page).toBe(0);
+      expect(result.entries).toHaveLength(2);
+    });
+
+    it("should clamp negative page number to 0", async () => {
+      await mkdir(path.join(tempDir, "alpha"));
+
+      const result = await scanDirectory(tempDir, -5);
+      expect(isScanError(result)).toBe(false);
+      if (isScanError(result)) return;
+
+      expect(result.page).toBe(0);
+      expect(result.entries).toHaveLength(1);
+    });
+
+    it("should return clamped page in result for valid pagination", async () => {
+      for (let i = 0; i < MAX_ENTRIES_PER_PAGE + 3; i++) {
+        await mkdir(path.join(tempDir, `dir-${String(i).padStart(2, "0")}`));
+      }
+
+      const result = await scanDirectory(tempDir, 1);
+      expect(isScanError(result)).toBe(false);
+      if (isScanError(result)) return;
+
+      expect(result.page).toBe(1);
+      expect(result.entries).toHaveLength(3);
+    });
+
     it("should return hasParent=true for non-root directories", async () => {
       const result = await scanDirectory(tempDir);
       expect(isScanError(result)).toBe(false);
@@ -186,6 +223,7 @@ describe("file-tree", () => {
       const result = {
         entries: [],
         totalCount: 0,
+        page: 0,
         currentPath: "/tmp",
         displayPath: "/tmp",
         hasParent: true,

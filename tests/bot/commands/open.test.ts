@@ -112,10 +112,12 @@ function makeScanResult(
   entries: Array<{ name: string; fullPath: string }>,
   currentPath: string,
   hasParent: boolean = true,
+  page: number = 0,
 ) {
   return {
     entries,
     totalCount: entries.length,
+    page,
     currentPath,
     displayPath: currentPath.replace("/home/user", "~"),
     hasParent,
