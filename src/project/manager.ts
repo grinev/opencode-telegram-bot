@@ -113,7 +113,8 @@ export async function getProjectById(id: string): Promise<ProjectInfo> {
 
 export async function getProjectByWorktree(worktree: string): Promise<ProjectInfo> {
   const projects = await getProjects();
-  const project = projects.find((p) => p.worktree === worktree);
+  const key = worktreeKey(worktree);
+  const project = projects.find((p) => worktreeKey(p.worktree) === key);
   if (!project) {
     throw new Error(`Project with worktree ${worktree} not found`);
   }

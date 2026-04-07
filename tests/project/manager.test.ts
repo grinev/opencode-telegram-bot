@@ -21,7 +21,7 @@ vi.mock("../../src/session/cache-manager.js", () => ({
   __resetSessionDirectoryCacheForTests: vi.fn(),
 }));
 
-import { getProjects } from "../../src/project/manager.js";
+import { getProjects, getProjectByWorktree } from "../../src/project/manager.js";
 
 describe("project/manager", () => {
   let tempRoot = "";
@@ -97,5 +97,52 @@ describe("project/manager", () => {
     const projects = await getProjects();
 
     expect(projects).toEqual([{ id: "main", worktree: mainWorktree, name: "Main" }]);
+  });
+
+  describe("getProjectByWorktree", () => {
+    it("should find project by exact worktree path", async () => {
+      projectListMock.mockResolvedValueOnce({
+        data: [{ id: "p1", worktree: "/home/user/repo", name: "Repo" }],
+        error: null,
+      });
+      cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+      const project = await getProjectByWorktree("/home/user/repo");
+      expect(project).toEqual({ id: "p1", worktree: "/home/user/repo", name: "Repo" });
+    });
+
+    it("should throw when worktree is not found", async () => {
+      projectListMock.mockResolvedValueOnce({
+        data: [{ id: "p1", worktree: "/home/user/repo", name: "Repo" }],
+        error: null,
+      });
+      cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+      await expect(getProjectByWorktree("/home/user/other")).rejects.toThrow(
+        "Project with worktree /home/user/other not found",
+      );
+    });
+
+    it("should match case-insensitively on Windows", async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, "platform", { value: "win32" });
+
+      try {
+        projectListMock.mockResolvedValueOnce({
+          data: [{ id: "p1", worktree: "C:\\Users\\Dev\\Repo", name: "Repo" }],
+          error: null,
+        });
+        cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+        const project = await getProjectByWorktree("c:\\users\\dev\\repo");
+        expect(project).toEqual({
+          id: "p1",
+          worktree: "C:\\Users\\Dev\\Repo",
+          name: "Repo",
+        });
+      } finally {
+        Object.defineProperty(process, "platform", { value: originalPlatform });
+      }
+    });
   });
 });
