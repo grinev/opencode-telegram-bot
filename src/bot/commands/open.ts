@@ -304,15 +304,16 @@ async function selectDirectory(ctx: Context, directory: string) {
   try {
     logger.info(`[Bot] Adding project directory: ${directory}`);
 
-    // Register directory in the session cache so it appears in /projects
-    await upsertSessionDirectory(directory, Date.now());
-
     const projectInfo = await getProjectByWorktree(directory);
     const replyKeyboard = await switchToProject(
       ctx,
       { ...projectInfo, name: displayPath },
       "open_project_selected",
     );
+
+    // Register directory in the session cache only after the project switch
+    // succeeded — avoids leaving a stale entry if an earlier step fails.
+    await upsertSessionDirectory(directory, Date.now());
 
     await ctx.answerCallbackQuery();
     await ctx.reply(t("open.selected", { project: displayPath }), {
