@@ -4,7 +4,6 @@ import { t } from "../../../src/i18n/index.js";
 
 const mocked = vi.hoisted(() => ({
   scanDirectoryMock: vi.fn(),
-  getHomeDirectoryMock: vi.fn(() => "/home/user"),
   pathToDisplayPathMock: vi.fn((p: string) => p.replace("/home/user", "~")),
   buildEntryLabelMock: vi.fn((entry: { name: string }) => `📁 ${entry.name}`),
   buildTreeHeaderMock: vi.fn(
@@ -17,6 +16,9 @@ const mocked = vi.hoisted(() => ({
   isScanErrorMock: vi.fn(
     (result: unknown) => typeof result === "object" && result !== null && "error" in result,
   ),
+  getBrowserRootsMock: vi.fn(() => ["/home/user"]),
+  isWithinAllowedRootMock: vi.fn(() => true),
+  isAllowedRootMock: vi.fn(() => false),
   ensureActiveInlineMenuMock: vi.fn().mockResolvedValue(true),
   isForegroundBusyMock: vi.fn(() => false),
   replyBusyBlockedMock: vi.fn().mockResolvedValue(undefined),
@@ -31,13 +33,18 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/bot/utils/file-tree.js", () => ({
-  getHomeDirectory: mocked.getHomeDirectoryMock,
   pathToDisplayPath: mocked.pathToDisplayPathMock,
   scanDirectory: mocked.scanDirectoryMock,
   buildEntryLabel: mocked.buildEntryLabelMock,
   buildTreeHeader: mocked.buildTreeHeaderMock,
   isScanError: mocked.isScanErrorMock,
   MAX_ENTRIES_PER_PAGE: 8,
+}));
+
+vi.mock("../../../src/bot/utils/browser-roots.js", () => ({
+  getBrowserRoots: mocked.getBrowserRootsMock,
+  isWithinAllowedRoot: mocked.isWithinAllowedRootMock,
+  isAllowedRoot: mocked.isAllowedRootMock,
 }));
 
 vi.mock("../../../src/bot/handlers/inline-menu.js", () => ({
@@ -132,6 +139,9 @@ describe("open command", () => {
     clearOpenPathIndex();
     // Reset hoisted mocks that need custom return values
     mocked.scanDirectoryMock.mockReset();
+    mocked.getBrowserRootsMock.mockReset().mockReturnValue(["/home/user"]);
+    mocked.isWithinAllowedRootMock.mockReset().mockReturnValue(true);
+    mocked.isAllowedRootMock.mockReset().mockReturnValue(false);
     mocked.ensureActiveInlineMenuMock.mockReset().mockResolvedValue(true);
     mocked.isForegroundBusyMock.mockReset().mockReturnValue(false);
     mocked.getProjectByWorktreeMock.mockReset().mockResolvedValue({
@@ -211,7 +221,7 @@ describe("open command", () => {
 
     it("should block when foreground is busy", async () => {
       mocked.isForegroundBusyMock.mockReturnValue(true);
-      const ctx = createCallbackContext("open:home");
+      const ctx = createCallbackContext("open:roots");
 
       const result = await handleOpenCallback(ctx);
 
@@ -221,7 +231,7 @@ describe("open command", () => {
 
     it("should return true when ensureActiveInlineMenu returns false (stale menu)", async () => {
       mocked.ensureActiveInlineMenuMock.mockResolvedValue(false);
-      const ctx = createCallbackContext("open:home");
+      const ctx = createCallbackContext("open:roots");
 
       const result = await handleOpenCallback(ctx);
 
@@ -230,15 +240,28 @@ describe("open command", () => {
       expect(ctx.editMessageText).not.toHaveBeenCalled();
     });
 
-    it("should navigate to home directory on open:home callback", async () => {
-      mocked.scanDirectoryMock.mockResolvedValue(makeScanResult([], "/home/user", false));
+    it("should show root selection on open:roots callback", async () => {
+      mocked.getBrowserRootsMock.mockReturnValue(["/home/user", "/opt/repos"]);
 
-      const ctx = createCallbackContext("open:home");
+      const ctx = createCallbackContext("open:roots");
       const result = await handleOpenCallback(ctx);
 
       expect(result).toBe(true);
       expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
       expect(ctx.editMessageText).toHaveBeenCalled();
+    });
+
+    it("should deny navigation to path outside allowed roots", async () => {
+      mocked.isWithinAllowedRootMock.mockReturnValue(false);
+
+      const ctx = createCallbackContext("open:nav:/etc/passwd");
+      const result = await handleOpenCallback(ctx);
+
+      expect(result).toBe(true);
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+        text: t("open.access_denied"),
+      });
+      expect(mocked.scanDirectoryMock).not.toHaveBeenCalled();
     });
 
     it("should navigate into subdirectory on open:nav: callback", async () => {

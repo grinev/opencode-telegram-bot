@@ -411,10 +411,12 @@ export const zh: I18nDictionary = {
 
   "cmd.description.open": "通过浏览目录添加项目",
   "open.back": "⬆️ 上级",
-  "open.home": "🏠 主目录",
+  "open.roots": "📋 返回根目录",
   "open.prev_page": "⬅️ 上一页",
   "open.next_page": "下一页 ➡️",
   "open.select_current": "✅ 选择此文件夹",
+  "open.select_root": "📂 选择要浏览的根目录：",
+  "open.access_denied": "⛔ 访问被拒绝：路径超出允许的目录范围",
   "open.scan_error": "🔴 无法浏览目录：{error}",
   "open.open_error": "🔴 无法打开目录浏览器。",
   "open.selected": "✅ 项目已添加：{project}\n\n📋 使用 /sessions 或 /new 开始工作。",

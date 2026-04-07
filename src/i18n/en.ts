@@ -449,10 +449,12 @@ export const en = {
 
   "cmd.description.open": "Add a project by browsing directories",
   "open.back": "⬆️ Up",
-  "open.home": "🏠 Home",
+  "open.roots": "📋 Back to roots",
   "open.prev_page": "⬅️ Previous",
   "open.next_page": "Next ➡️",
   "open.select_current": "✅ Select this folder",
+  "open.select_root": "📂 Select a root directory to browse:",
+  "open.access_denied": "⛔ Access denied: path is outside allowed roots",
   "open.scan_error": "🔴 Cannot browse directory: {error}",
   "open.open_error": "🔴 Failed to open directory browser.",
   "open.selected": "✅ Project added: {project}\n\n📋 Use /sessions or /new to start working.",

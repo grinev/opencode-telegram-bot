@@ -467,10 +467,12 @@ export const fr: I18nDictionary = {
 
   "cmd.description.open": "Ajouter un projet en parcourant les dossiers",
   "open.back": "⬆️ Remonter",
-  "open.home": "🏠 Accueil",
+  "open.roots": "📋 Retour aux racines",
   "open.prev_page": "⬅️ Précédent",
   "open.next_page": "Suivant ➡️",
   "open.select_current": "✅ Sélectionner ce dossier",
+  "open.select_root": "📂 Sélectionnez un répertoire racine à parcourir :",
+  "open.access_denied": "⛔ Accès refusé : le chemin est en dehors des répertoires autorisés",
   "open.scan_error": "🔴 Impossible de parcourir le répertoire : {error}",
   "open.open_error": "🔴 Impossible d'ouvrir l'explorateur de répertoires.",
   "open.selected": "✅ Projet ajouté : {project}\n\n📋 Utilisez /sessions ou /new pour commencer.",

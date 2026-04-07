@@ -466,10 +466,12 @@ export const de: I18nDictionary = {
 
   "cmd.description.open": "Projekt durch Ordner-Auswahl hinzufügen",
   "open.back": "⬆️ Hoch",
-  "open.home": "🏠 Home",
+  "open.roots": "📋 Zurück zur Auswahl",
   "open.prev_page": "⬅️ Zurück",
   "open.next_page": "Weiter ➡️",
   "open.select_current": "✅ Diesen Ordner wählen",
+  "open.select_root": "📂 Stammverzeichnis zum Durchsuchen wählen:",
+  "open.access_denied": "⛔ Zugriff verweigert: Pfad liegt außerhalb erlaubter Verzeichnisse",
   "open.scan_error": "🔴 Verzeichnis kann nicht durchsucht werden: {error}",
   "open.open_error": "🔴 Verzeichnisbrowser konnte nicht geöffnet werden.",
   "open.selected":

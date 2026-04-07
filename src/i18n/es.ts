@@ -465,10 +465,12 @@ export const es: I18nDictionary = {
 
   "cmd.description.open": "Añadir proyecto navegando directorios",
   "open.back": "⬆️ Subir",
-  "open.home": "🏠 Inicio",
+  "open.roots": "📋 Volver a raíces",
   "open.prev_page": "⬅️ Anterior",
   "open.next_page": "Siguiente ➡️",
   "open.select_current": "✅ Seleccionar esta carpeta",
+  "open.select_root": "📂 Selecciona un directorio raíz para explorar:",
+  "open.access_denied": "⛔ Acceso denegado: la ruta está fuera de los directorios permitidos",
   "open.scan_error": "🔴 No se puede explorar el directorio: {error}",
   "open.open_error": "🔴 No se pudo abrir el explorador de directorios.",
   "open.selected":

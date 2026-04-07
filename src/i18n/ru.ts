@@ -453,10 +453,12 @@ export const ru: I18nDictionary = {
 
   "cmd.description.open": "Добавить проект через обзор папок",
   "open.back": "⬆️ Наверх",
-  "open.home": "🏠 Домой",
+  "open.roots": "📋 К списку корней",
   "open.prev_page": "⬅️ Назад",
   "open.next_page": "Далее ➡️",
   "open.select_current": "✅ Выбрать эту папку",
+  "open.select_root": "📂 Выберите корневой каталог для просмотра:",
+  "open.access_denied": "⛔ Доступ запрещён: путь за пределами разрешённых каталогов",
   "open.scan_error": "🔴 Не удалось открыть каталог: {error}",
   "open.open_error": "🔴 Не удалось открыть обозреватель каталогов.",
   "open.selected":

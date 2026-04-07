@@ -108,6 +108,9 @@ export const config = {
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),
   },
+  open: {
+    browserRoots: getEnvVar("OPEN_BROWSER_ROOTS", false),
+  },
   stt: {
     apiUrl: getEnvVar("STT_API_URL", false),
     apiKey: getEnvVar("STT_API_KEY", false),

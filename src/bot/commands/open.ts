@@ -4,7 +4,6 @@ import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../handler
 import { interactionManager } from "../../interaction/manager.js";
 import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
 import {
-  getHomeDirectory,
   pathToDisplayPath,
   scanDirectory,
   buildEntryLabel,
@@ -13,6 +12,7 @@ import {
   MAX_ENTRIES_PER_PAGE,
   type DirectoryEntry,
 } from "../utils/file-tree.js";
+import { getBrowserRoots, isWithinAllowedRoot, isAllowedRoot } from "../utils/browser-roots.js";
 import { upsertSessionDirectory } from "../../session/cache-manager.js";
 import { getProjectByWorktree } from "../../project/manager.js";
 import { switchToProject } from "../utils/switch-project.js";
@@ -23,7 +23,7 @@ const CALLBACK_PREFIX = "open:";
 const CALLBACK_NAV_PREFIX = "open:nav:";
 const CALLBACK_SELECT_PREFIX = "open:sel:";
 const CALLBACK_PAGE_PREFIX = "open:pg:";
-const CALLBACK_HOME = "open:home";
+const CALLBACK_ROOTS = "open:roots";
 const MAX_BUTTON_LABEL_LENGTH = 64;
 
 /**
@@ -145,17 +145,20 @@ function buildBrowseKeyboard(
     keyboard.text(label, encodePathForCallback(CALLBACK_NAV_PREFIX, entry.fullPath)).row();
   }
 
-  // Navigation: Up + Home
-  const showUp = hasParent;
-  const showHome = currentPath !== getHomeDirectory();
+  // Navigation: Up + Back to roots
+  // Suppress "Up" when at an allowed root (don't let user navigate above it)
+  const atRoot = isAllowedRoot(currentPath);
+  const showUp = hasParent && !atRoot;
+  const roots = getBrowserRoots();
+  const showRoots = roots.length > 1;
 
-  if (showUp || showHome) {
+  if (showUp || showRoots) {
     if (showUp) {
       const parentPath = path.dirname(currentPath);
       keyboard.text(t("open.back"), encodePathForCallback(CALLBACK_NAV_PREFIX, parentPath));
     }
-    if (showHome) {
-      keyboard.text(t("open.home"), CALLBACK_HOME);
+    if (showRoots) {
+      keyboard.text(t("open.roots"), CALLBACK_ROOTS);
     }
     keyboard.row();
   }
@@ -197,6 +200,19 @@ async function renderBrowseView(dirPath: string, page: number = 0) {
   return { text: header, keyboard };
 }
 
+function buildRootsKeyboard(): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  const roots = getBrowserRoots();
+
+  for (const root of roots) {
+    const label = truncateLabel(`📂 ${pathToDisplayPath(root)}`);
+    keyboard.text(label, encodePathForCallback(CALLBACK_NAV_PREFIX, root)).row();
+  }
+
+  appendInlineMenuCancelButton(keyboard, "open");
+  return keyboard;
+}
+
 export async function openCommand(ctx: CommandContext<Context>) {
   try {
     if (isForegroundBusy()) {
@@ -207,16 +223,27 @@ export async function openCommand(ctx: CommandContext<Context>) {
     // Reset path index for new interaction
     clearOpenPathIndex();
 
-    const view = await renderBrowseView(getHomeDirectory());
+    const roots = getBrowserRoots();
 
-    if ("error" in view) {
-      await ctx.reply(t("open.scan_error", { error: view.error }));
-      return;
+    let text: string;
+    let keyboard: InlineKeyboard;
+
+    if (roots.length === 1) {
+      // Single root — navigate directly into it
+      const view = await renderBrowseView(roots[0]);
+      if ("error" in view) {
+        await ctx.reply(t("open.scan_error", { error: view.error }));
+        return;
+      }
+      text = view.text;
+      keyboard = view.keyboard;
+    } else {
+      // Multiple roots — show root selection
+      text = t("open.select_root");
+      keyboard = buildRootsKeyboard();
     }
 
-    const message = await ctx.reply(view.text, {
-      reply_markup: view.keyboard,
-    });
+    const message = await ctx.reply(text, { reply_markup: keyboard });
 
     interactionManager.start({
       kind: "inline",
@@ -249,15 +276,19 @@ export async function handleOpenCallback(ctx: Context): Promise<boolean> {
   }
 
   try {
-    // Navigate to home
-    if (data === CALLBACK_HOME) {
-      await navigateTo(ctx, getHomeDirectory());
+    // Back to root selection (multi-root mode)
+    if (data === CALLBACK_ROOTS) {
+      await showRoots(ctx);
       return true;
     }
 
     // Navigate into a directory (including "up")
     const navPath = decodePathFromCallback(CALLBACK_NAV_PREFIX, data);
     if (navPath !== null) {
+      if (!isWithinAllowedRoot(navPath)) {
+        await ctx.answerCallbackQuery({ text: t("open.access_denied") });
+        return true;
+      }
       await navigateTo(ctx, navPath);
       return true;
     }
@@ -265,6 +296,10 @@ export async function handleOpenCallback(ctx: Context): Promise<boolean> {
     // Pagination
     const pageInfo = decodePaginationCallback(data);
     if (pageInfo !== null) {
+      if (!isWithinAllowedRoot(pageInfo.path)) {
+        await ctx.answerCallbackQuery({ text: t("open.access_denied") });
+        return true;
+      }
       await navigateTo(ctx, pageInfo.path, pageInfo.page);
       return true;
     }
@@ -272,6 +307,10 @@ export async function handleOpenCallback(ctx: Context): Promise<boolean> {
     // Select directory as project
     const selectPath = decodePathFromCallback(CALLBACK_SELECT_PREFIX, data);
     if (selectPath !== null) {
+      if (!isWithinAllowedRoot(selectPath)) {
+        await ctx.answerCallbackQuery({ text: t("open.access_denied") });
+        return true;
+      }
       await selectDirectory(ctx, selectPath);
       return true;
     }
@@ -282,6 +321,14 @@ export async function handleOpenCallback(ctx: Context): Promise<boolean> {
     await ctx.answerCallbackQuery({ text: t("callback.processing_error") });
     return true;
   }
+}
+
+async function showRoots(ctx: Context) {
+  const text = t("open.select_root");
+  const keyboard = buildRootsKeyboard();
+
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText(text, { reply_markup: keyboard });
 }
 
 async function navigateTo(ctx: Context, dirPath: string, page: number = 0) {
