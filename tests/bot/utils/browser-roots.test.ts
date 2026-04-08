@@ -65,6 +65,33 @@ describe("browser-roots", () => {
       const roots = getBrowserRoots();
       expect(roots[0]).toBe(path.resolve("./relative-dir"));
     });
+
+    it("should expand ~ to home directory", () => {
+      initBrowserRoots("~/projects");
+      const roots = getBrowserRoots();
+      expect(roots[0]).toBe(path.resolve(path.join(os.homedir(), "projects")));
+    });
+
+    it("should expand bare ~ to home directory", () => {
+      initBrowserRoots("~");
+      const roots = getBrowserRoots();
+      expect(roots[0]).toBe(path.resolve(os.homedir()));
+    });
+
+    it("should expand ~ in multiple comma-separated entries", () => {
+      initBrowserRoots("~/projects,~/work,/opt/repos");
+      const roots = getBrowserRoots();
+      expect(roots).toHaveLength(3);
+      expect(roots[0]).toBe(path.resolve(path.join(os.homedir(), "projects")));
+      expect(roots[1]).toBe(path.resolve(path.join(os.homedir(), "work")));
+      expect(roots[2]).toBe(path.resolve("/opt/repos"));
+    });
+
+    it("should not expand ~ in the middle of a path", () => {
+      initBrowserRoots("/home/~user/projects");
+      const roots = getBrowserRoots();
+      expect(roots[0]).toBe(path.resolve("/home/~user/projects"));
+    });
   });
 
   describe("getBrowserRoots (lazy init)", () => {

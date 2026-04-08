@@ -20,10 +20,24 @@ function isWindows(): boolean {
 }
 
 /**
- * Normalize a path for comparison: resolve, then lowercase on Windows.
+ * Expand a leading `~` or `~/` to the user's home directory.
+ * Does not handle `~user/` syntax — only the current user's home.
+ */
+function expandTilde(p: string): string {
+  if (p === "~") {
+    return os.homedir();
+  }
+  if (p.startsWith("~/") || p.startsWith("~\\")) {
+    return path.join(os.homedir(), p.slice(2));
+  }
+  return p;
+}
+
+/**
+ * Normalize a path for comparison: expand tilde, resolve, then lowercase on Windows.
  */
 function normalizePath(p: string): string {
-  const resolved = path.resolve(p);
+  const resolved = path.resolve(expandTilde(p));
   return isWindows() ? resolved.toLowerCase() : resolved;
 }
 
