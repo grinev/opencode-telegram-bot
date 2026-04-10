@@ -311,18 +311,18 @@ describe("open command", () => {
       const result = await handleOpenCallback(ctx);
 
       expect(result).toBe(true);
-      // Verify full selection flow
+      // Verify full selection flow: upsert first so getProjectByWorktree can
+      // find the directory, then switch.
+      expect(mocked.upsertSessionDirectoryMock).toHaveBeenCalledWith(dirPath, expect.any(Number));
       expect(mocked.getProjectByWorktreeMock).toHaveBeenCalledWith(dirPath);
       expect(mocked.switchToProjectMock).toHaveBeenCalledWith(
         ctx,
         expect.objectContaining({ id: "proj-1", worktree: "/home/user/my-project" }),
         "open_project_selected",
       );
-      // upsertSessionDirectory must be called AFTER switchToProject succeeds
-      expect(mocked.upsertSessionDirectoryMock).toHaveBeenCalledWith(dirPath, expect.any(Number));
-      const switchOrder = mocked.switchToProjectMock.mock.invocationCallOrder[0];
       const upsertOrder = mocked.upsertSessionDirectoryMock.mock.invocationCallOrder[0];
-      expect(switchOrder).toBeLessThan(upsertOrder);
+      const getProjectOrder = mocked.getProjectByWorktreeMock.mock.invocationCallOrder[0];
+      expect(upsertOrder).toBeLessThan(getProjectOrder);
 
       expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
       expect(ctx.reply).toHaveBeenCalledWith(
@@ -330,15 +330,6 @@ describe("open command", () => {
         expect.objectContaining({ reply_markup: expect.anything() }),
       );
       expect(ctx.deleteMessage).toHaveBeenCalled();
-    });
-
-    it("should not upsert session directory when switchToProject fails", async () => {
-      mocked.switchToProjectMock.mockRejectedValue(new Error("switch failed"));
-
-      const ctx = createCallbackContext("open:sel:/home/user/fail-dir");
-      await handleOpenCallback(ctx);
-
-      expect(mocked.upsertSessionDirectoryMock).not.toHaveBeenCalled();
     });
 
     it("should show error on select failure", async () => {

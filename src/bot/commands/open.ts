@@ -351,16 +351,19 @@ async function selectDirectory(ctx: Context, directory: string) {
   try {
     logger.info(`[Bot] Adding project directory: ${directory}`);
 
+    // Register directory in the session cache first — getProjectByWorktree
+    // needs the entry to exist so it can resolve the project. If the
+    // subsequent switch fails, the entry stays in the cache, which is
+    // acceptable: it's a real directory the user explicitly selected and
+    // will simply appear in /projects for retry.
+    await upsertSessionDirectory(directory, Date.now());
+
     const projectInfo = await getProjectByWorktree(directory);
     const replyKeyboard = await switchToProject(
       ctx,
       { ...projectInfo, name: displayPath },
       "open_project_selected",
     );
-
-    // Register directory in the session cache only after the project switch
-    // succeeded — avoids leaving a stale entry if an earlier step fails.
-    await upsertSessionDirectory(directory, Date.now());
 
     await ctx.answerCallbackQuery();
     await ctx.reply(t("open.selected", { project: displayPath }), {
