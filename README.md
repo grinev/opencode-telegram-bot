@@ -4,7 +4,7 @@
 [![CI](https://github.com/grinev/opencode-telegram-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/grinev/opencode-telegram-bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Follow updates](https://img.shields.io/badge/Follow%20updates-X-black?logo=x)](https://x.com/grin_rus)
+[![Follow updates](https://img.shields.io/badge/-Follow%20updates-black?logo=x)](https://x.com/grin_rus)
 
 OpenCode Telegram Bot is a secure Telegram client for [OpenCode](https://opencode.ai) CLI that runs on your local machine.
 
