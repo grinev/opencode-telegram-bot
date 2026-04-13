@@ -15,7 +15,7 @@ Scheduled tasks support. Turns the bot into a lightweight OpenClaw alternative f
 
 Platforms: macOS, Windows, Linux
 
-Languages: English (`en`), Deutsch (`de`), Español (`es`), Français (`fr`), Русский (`ru`), 简体中文 (`zh`)
+Languages: English (`en`), Deutsch (`de`), Español (`es`), Français (`fr`), Русский (`ru`), Türkçe (`tr`), 简体中文 (`zh`)
 
 <p align="center">
   <img src="assets/screencast.gif" width="45%" alt="OpenCode Telegram Bot screencast" />
@@ -137,7 +137,7 @@ Scheduled tasks let you prepare prompts in advance and run them automatically la
 
 ### Localization
 
-- Supported locales: `en`, `de`, `es`, `fr`, `ru`, `zh`
+- Supported locales: `en`, `de`, `es`, `fr`, `ru`, `tr`, `zh`
 - The setup wizard asks for language first
 - You can change locale later with `BOT_LOCALE`
 
@@ -159,7 +159,7 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `OPENCODE_SERVER_PASSWORD`      | Server auth password                                                                                         |    No    | —                        |
 | `OPENCODE_MODEL_PROVIDER`       | Default model provider                                                                                       |   Yes    | `opencode`               |
 | `OPENCODE_MODEL_ID`             | Default model ID                                                                                             |   Yes    | `big-pickle`             |
-| `BOT_LOCALE`                    | Bot UI language (supported locale code, e.g. `en`, `de`, `es`, `fr`, `ru`, `zh`)                             |    No    | `en`                     |
+| `BOT_LOCALE`                    | Bot UI language (supported locale code, e.g. `en`, `de`, `es`, `fr`, `ru`, `tr`, `zh`)                             |    No    | `en`                     |
 | `SESSIONS_LIST_LIMIT`           | Sessions per page in `/sessions`                                                                             |    No    | `10`                     |
 | `PROJECTS_LIST_LIMIT`           | Projects per page in `/projects`                                                                             |    No    | `10`                     |
 | `OPEN_BROWSER_ROOTS`            | Comma-separated paths `/open` is allowed to browse (supports `~`)                                            |    No    | `~` (home directory)     |
