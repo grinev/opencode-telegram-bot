@@ -546,6 +546,10 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       return;
     }
 
+    if (config.bot.hideToolFileMessages) {
+      return;
+    }
+
     try {
       await toolCallStreamer.breakSession(fileInfo.sessionId, "tool_file_boundary");
 
