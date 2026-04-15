@@ -1,5 +1,3 @@
-import { readFile, stat } from "node:fs/promises";
-import path from "node:path";
 import { opencodeClient } from "../opencode/client.js";
 import { ProjectInfo } from "../settings/manager.js";
 import { getCachedSessionProjects } from "../session/cache-manager.js";
@@ -7,33 +5,6 @@ import { logger } from "../utils/logger.js";
 
 interface InternalProject extends ProjectInfo {
   lastUpdated: number;
-}
-
-async function isLinkedGitWorktree(worktree: string): Promise<boolean> {
-  if (worktree === "/") {
-    return false;
-  }
-
-  const gitPath = path.join(worktree, ".git");
-
-  try {
-    const gitStat = await stat(gitPath);
-
-    if (!gitStat.isFile()) {
-      return false;
-    }
-
-    const gitPointer = (await readFile(gitPath, "utf-8")).trim();
-    const match = gitPointer.match(/^gitdir:\s*(.+)$/i);
-    if (!match) {
-      return false;
-    }
-
-    const gitDir = path.resolve(worktree, match[1].trim()).replace(/\\/g, "/").toLowerCase();
-    return gitDir.includes("/.git/worktrees/");
-  } catch {
-    return false;
-  }
 }
 
 function worktreeKey(worktree: string): string {
@@ -84,22 +55,36 @@ export async function getProjects(): Promise<ProjectInfo[]> {
     });
   }
 
+  // Include worktree paths from project sandboxes so git worktrees
+  // appear as selectable projects with their own session histories.
+  for (const apiProject of apiProjects) {
+    const rawSandboxes = (apiProject as unknown as { sandboxes?: string[] }).sandboxes;
+    if (Array.isArray(rawSandboxes)) {
+      for (const sandbox of rawSandboxes) {
+        if (typeof sandbox === "string" && sandbox.trim()) {
+          const key = worktreeKey(sandbox);
+          if (!mergedByWorktree.has(key)) {
+            mergedByWorktree.set(key, {
+              id: `${apiProject.id}_wt_${sandbox.split("/").pop()}`,
+              worktree: sandbox,
+              name: sandbox,
+              lastUpdated: apiProject.lastUpdated,
+            });
+          }
+        }
+      }
+    }
+  }
+
   const projectList = Array.from(mergedByWorktree.values()).sort(
     (left, right) => right.lastUpdated - left.lastUpdated,
   );
 
-  const linkedWorktreeFlags = await Promise.all(
-    projectList.map((project) => isLinkedGitWorktree(project.worktree)),
-  );
-
-  const visibleProjects = projectList.filter((_, index) => !linkedWorktreeFlags[index]);
-  const hiddenLinkedWorktrees = projectList.length - visibleProjects.length;
-
   logger.debug(
-    `[ProjectManager] Projects resolved: api=${projects.length}, cached=${cachedProjects.length}, hiddenLinkedWorktrees=${hiddenLinkedWorktrees}, total=${visibleProjects.length}`,
+    `[ProjectManager] Projects resolved: api=${projects.length}, cached=${cachedProjects.length}, total=${projectList.length}`,
   );
 
-  return visibleProjects.map(({ id, worktree, name }) => ({ id, worktree, name }));
+  return projectList.map(({ id, worktree, name }) => ({ id, worktree, name }));
 }
 
 export async function getProjectById(id: string): Promise<ProjectInfo> {
