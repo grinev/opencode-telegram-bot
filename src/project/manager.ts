@@ -102,16 +102,21 @@ async function isLinkedGitWorktree(worktree: string): Promise<boolean> {
 }
 
 function worktreeKey(worktree: string): string {
-  const normalizedWorktree = path.normalize(worktree);
-  const root = path.parse(normalizedWorktree).root;
+  const pathModule = isWindowsWorktreePath(worktree) ? path.win32 : path.posix;
+  const normalizedWorktree = pathModule.normalize(worktree);
+  const root = pathModule.parse(normalizedWorktree).root;
   const trimmedWorktree =
     normalizedWorktree === root ? normalizedWorktree : normalizedWorktree.replace(/[\\/]+$/, "");
 
-  if (process.platform === "win32") {
+  if (pathModule === path.win32) {
     return trimmedWorktree.toLowerCase();
   }
 
   return trimmedWorktree;
+}
+
+function isWindowsWorktreePath(worktree: string): boolean {
+  return process.platform === "win32" || /^[a-zA-Z]:[\\/]/.test(worktree) || /^\\\\/.test(worktree);
 }
 
 export async function getProjects(): Promise<ProjectInfo[]> {
