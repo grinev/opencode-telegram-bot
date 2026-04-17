@@ -117,7 +117,7 @@ export const config = {
     apiKey: getEnvVar("STT_API_KEY", false),
     model: getEnvVar("STT_MODEL", false) || "whisper-large-v3-turbo",
     language: getEnvVar("STT_LANGUAGE", false),
-    promptInjection: getEnvVar("STT_PROMPT_INJECTION", false),
+    notePrompt: getEnvVar("STT_NOTE_PROMPT", false),
   },
   tts: {
     apiUrl: getEnvVar("TTS_API_URL", false),
