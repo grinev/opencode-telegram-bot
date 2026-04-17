@@ -3,6 +3,7 @@ import { de } from "./de.js";
 import { es } from "./es.js";
 import { fr } from "./fr.js";
 import { ru } from "./ru.js";
+import { tr } from "./tr.js";
 import { zh } from "./zh.js";
 
 interface LocaleDefinition {
@@ -42,6 +43,12 @@ const LOCALE_DEFINITIONS = [
     label: "Русский",
     dateLocale: "ru-RU",
     dictionary: ru,
+  },
+  {
+    code: "tr",
+    label: "Türkçe",
+    dateLocale: "tr-TR",
+    dictionary: tr,
   },
   {
     code: "zh",
