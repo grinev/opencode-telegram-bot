@@ -1,13 +1,27 @@
+import { config } from "../config.js";
 import { opencodeClient } from "../opencode/client.js";
 import { logger } from "../utils/logger.js";
 import type { ScheduledTask, ScheduledTaskExecutionResult } from "./types.js";
 
 const SCHEDULED_TASK_AGENT = "build";
 const SCHEDULED_TASK_SESSION_TITLE = "Scheduled task run";
+const EXECUTION_POLL_INTERVAL_MS = 2000;
+const MAX_IDLE_POLLS_WITHOUT_RESULT = 3;
+const MODELS_DOCS_URL = "https://opencode.ai/docs/config/#models";
+const EXECUTION_TIMEOUT_ERROR_PREFIX = "Scheduled task exceeded bot execution timeout";
 
-function collectResponseText(
-  parts: Array<{ type?: string; text?: string; ignored?: boolean }>,
-): string {
+type TextLikePart = { type?: string; text?: string; ignored?: boolean };
+
+type AssistantMessageSnapshot = {
+  info: {
+    role: string;
+    time?: { completed?: number };
+    error?: unknown;
+  };
+  parts: TextLikePart[];
+};
+
+function collectResponseText(parts: TextLikePart[]): string {
   return parts
     .filter((part) => part.type === "text" && typeof part.text === "string" && !part.ignored)
     .map((part) => part.text)
@@ -15,7 +29,7 @@ function collectResponseText(
     .trim();
 }
 
-function toErrorMessage(error: unknown): string {
+function extractErrorMessage(error: unknown): string | null {
   if (error instanceof Error && error.message.trim()) {
     return error.message.trim();
   }
@@ -24,7 +38,184 @@ function toErrorMessage(error: unknown): string {
     return error.trim();
   }
 
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const typedError = error as {
+    message?: unknown;
+    name?: unknown;
+    data?: { message?: unknown };
+  };
+
+  if (typeof typedError.data?.message === "string" && typedError.data.message.trim()) {
+    return typedError.data.message.trim();
+  }
+
+  if (typeof typedError.message === "string" && typedError.message.trim()) {
+    return typedError.message.trim();
+  }
+
+  if (typeof typedError.name === "string" && typedError.name.trim()) {
+    return typedError.name.trim();
+  }
+
+  return null;
+}
+
+function isTimeoutErrorMessage(message: string): boolean {
+  return /(timed out|timeout|time out|deadline exceeded|request aborted)/i.test(message);
+}
+
+function isBotExecutionTimeoutMessage(message: string): boolean {
+  return message.startsWith(EXECUTION_TIMEOUT_ERROR_PREFIX);
+}
+
+function createExecutionTimeoutMessage(): string {
+  return `${EXECUTION_TIMEOUT_ERROR_PREFIX} after ${config.bot.scheduledTaskExecutionTimeoutMinutes} minutes.`;
+}
+
+function getExecutionTimeoutMs(): number {
+  return config.bot.scheduledTaskExecutionTimeoutMinutes * 60 * 1000;
+}
+
+function normalizeScheduledTaskErrorMessage(message: string): string {
+  if (
+    isBotExecutionTimeoutMessage(message) ||
+    !isTimeoutErrorMessage(message) ||
+    message.includes(MODELS_DOCS_URL)
+  ) {
+    return message;
+  }
+
+  return `${message} Check OpenCode model timeout settings: ${MODELS_DOCS_URL}`;
+}
+
+function toErrorMessage(error: unknown): string {
+  const message = extractErrorMessage(error);
+  if (message) {
+    return normalizeScheduledTaskErrorMessage(message);
+  }
+
   return "Unknown scheduled task execution error";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function findLatestAssistantMessage(
+  messages: Array<{ info: { role: string }; parts: TextLikePart[] }>,
+): AssistantMessageSnapshot | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.info.role === "assistant") {
+      return message;
+    }
+  }
+
+  return null;
+}
+
+function extractAssistantResult(message: AssistantMessageSnapshot | null): {
+  resultText: string | null;
+  errorMessage: string | null;
+  completed: boolean;
+} {
+  if (!message) {
+    return { resultText: null, errorMessage: null, completed: false };
+  }
+
+  const errorMessage = extractErrorMessage(message.info.error);
+  if (errorMessage) {
+    return {
+      resultText: null,
+      errorMessage: normalizeScheduledTaskErrorMessage(errorMessage),
+      completed: true,
+    };
+  }
+
+  const resultText = collectResponseText(message.parts);
+  return {
+    resultText,
+    errorMessage: null,
+    completed: Boolean(message.info.time?.completed),
+  };
+}
+
+async function loadAssistantResult(
+  sessionId: string,
+  directory: string,
+): Promise<ReturnType<typeof extractAssistantResult>> {
+  const { data: messages, error: messagesError } = await opencodeClient.session.messages({
+    sessionID: sessionId,
+    directory,
+  });
+
+  if (messagesError || !messages) {
+    throw messagesError || new Error("Failed to load scheduled task messages");
+  }
+
+  return extractAssistantResult(findLatestAssistantMessage(messages));
+}
+
+async function waitForScheduledTaskResult(sessionId: string, directory: string): Promise<string> {
+  const startedAtMs = Date.now();
+  const executionTimeoutMs = getExecutionTimeoutMs();
+  let idlePollsWithoutResult = 0;
+
+  while (true) {
+    if (Date.now() - startedAtMs >= executionTimeoutMs) {
+      throw new Error(createExecutionTimeoutMessage());
+    }
+
+    const assistantResult = await loadAssistantResult(sessionId, directory);
+
+    if (assistantResult.errorMessage) {
+      throw new Error(assistantResult.errorMessage);
+    }
+
+    if (assistantResult.completed) {
+      if (assistantResult.resultText) {
+        return assistantResult.resultText;
+      }
+
+      throw new Error("Scheduled task returned an empty assistant response");
+    }
+
+    const { data: statuses, error: statusError } = await opencodeClient.session.status({
+      directory,
+    });
+    if (statusError || !statuses) {
+      throw statusError || new Error("Failed to load scheduled task status");
+    }
+
+    const sessionStatus = statuses[sessionId];
+    if (!sessionStatus || sessionStatus.type === "idle") {
+      const confirmedAssistantResult = await loadAssistantResult(sessionId, directory);
+
+      if (confirmedAssistantResult.errorMessage) {
+        throw new Error(confirmedAssistantResult.errorMessage);
+      }
+
+      if (confirmedAssistantResult.completed) {
+        if (confirmedAssistantResult.resultText) {
+          return confirmedAssistantResult.resultText;
+        }
+
+        throw new Error("Scheduled task returned an empty assistant response");
+      }
+
+      idlePollsWithoutResult += 1;
+      if (idlePollsWithoutResult >= MAX_IDLE_POLLS_WITHOUT_RESULT) {
+        throw new Error("Scheduled task finished without a completed assistant response");
+      }
+    } else {
+      idlePollsWithoutResult = 0;
+    }
+
+    await sleep(EXECUTION_POLL_INTERVAL_MS);
+  }
 }
 
 export async function executeScheduledTask(
@@ -70,17 +261,13 @@ export async function executeScheduledTask(
       promptOptions.variant = task.model.variant;
     }
 
-    const { data: response, error: promptError } =
-      await opencodeClient.session.prompt(promptOptions);
+    const { error: promptError } = await opencodeClient.session.promptAsync(promptOptions);
 
-    if (promptError || !response) {
+    if (promptError) {
       throw promptError || new Error("Scheduled task prompt execution failed");
     }
 
-    const resultText = collectResponseText(response.parts);
-    if (!resultText) {
-      throw new Error("Scheduled task returned an empty assistant response");
-    }
+    const resultText = await waitForScheduledTaskResult(session.id, session.directory);
 
     return {
       taskId: task.id,

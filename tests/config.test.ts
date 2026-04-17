@@ -126,6 +126,14 @@ describe("config boolean env parsing", () => {
     expect(config.bot.taskLimit).toBe(10);
   });
 
+  it("uses default scheduled task execution timeout when SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES is missing", async () => {
+    vi.stubEnv("SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES", "");
+
+    const config = await loadConfig();
+
+    expect(config.bot.scheduledTaskExecutionTimeoutMinutes).toBe(120);
+  });
+
   it("uses default response stream throttle when RESPONSE_STREAM_THROTTLE_MS is missing", async () => {
     vi.stubEnv("RESPONSE_STREAM_THROTTLE_MS", "");
 
@@ -182,12 +190,28 @@ describe("config boolean env parsing", () => {
     expect(config.bot.taskLimit).toBe(25);
   });
 
+  it("parses SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES as a positive integer", async () => {
+    vi.stubEnv("SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES", "180");
+
+    const config = await loadConfig();
+
+    expect(config.bot.scheduledTaskExecutionTimeoutMinutes).toBe(180);
+  });
+
   it("falls back to default task limit on invalid TASK_LIMIT", async () => {
     vi.stubEnv("TASK_LIMIT", "zero");
 
     const config = await loadConfig();
 
     expect(config.bot.taskLimit).toBe(10);
+  });
+
+  it("falls back to default scheduled task execution timeout on invalid value", async () => {
+    vi.stubEnv("SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES", "zero");
+
+    const config = await loadConfig();
+
+    expect(config.bot.scheduledTaskExecutionTimeoutMinutes).toBe(120);
   });
 
   it("keeps TTS credentials unset when dedicated vars are missing", async () => {

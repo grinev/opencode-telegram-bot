@@ -154,6 +154,8 @@ Scheduled tasks let you prepare prompts in advance and run them automatically la
 - Scheduled executions currently always run with the `build` agent
 - Tasks run outside your active chat session, so they do not interrupt or affect the current session flow
 - The minimum recurring interval is 5 minutes
+- If a recurring task is still running when its next interval arrives, the bot does not start a parallel copy of the same task and does not replay missed intervals later
+- By default, the bot waits up to 120 minutes for one scheduled task run; change this with `SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES` if needed
 - Up to 10 scheduled tasks can exist at once by default; change this with `TASK_LIMIT` in your `.env`
 
 ## Configuration
@@ -172,41 +174,42 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 - **Windows:** `%APPDATA%\opencode-telegram-bot\.env`
 - **Linux:** `~/.config/opencode-telegram-bot/.env`
 
-| Variable                        | Description                                                                                                           | Required | Default                  |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------- | :------: | ------------------------ |
-| `TELEGRAM_BOT_TOKEN`            | Bot token from @BotFather                                                                                             |   Yes    | —                        |
-| `TELEGRAM_ALLOWED_USER_ID`      | Your numeric Telegram user ID                                                                                         |   Yes    | —                        |
-| `TELEGRAM_PROXY_URL`            | Proxy URL for Telegram API (SOCKS5/HTTP)                                                                              |    No    | —                        |
-| `OPENCODE_API_URL`              | OpenCode server URL                                                                                                   |    No    | `http://localhost:4096`  |
-| `OPENCODE_SERVER_USERNAME`      | Server auth username                                                                                                  |    No    | `opencode`               |
-| `OPENCODE_SERVER_PASSWORD`      | Server auth password                                                                                                  |    No    | —                        |
-| `OPENCODE_MODEL_PROVIDER`       | Default model provider                                                                                                |   Yes    | `opencode`               |
-| `OPENCODE_MODEL_ID`             | Default model ID                                                                                                      |   Yes    | `big-pickle`             |
-| `BOT_LOCALE`                    | Bot UI language (supported locale code, e.g. `en`, `de`, `es`, `fr`, `ru`, `zh`)                                      |    No    | `en`                     |
-| `SESSIONS_LIST_LIMIT`           | Sessions per page in `/sessions`                                                                                      |    No    | `10`                     |
-| `PROJECTS_LIST_LIMIT`           | Projects per page in `/projects`                                                                                      |    No    | `10`                     |
-| `OPEN_BROWSER_ROOTS`            | Comma-separated paths `/open` is allowed to browse (supports `~`)                                                     |    No    | `~` (home directory)     |
-| `COMMANDS_LIST_LIMIT`           | Items per page in `/commands` and `/skills`                                                                           |    No    | `10`                     |
-| `TASK_LIMIT`                    | Maximum number of scheduled tasks that can exist at once                                                              |    No    | `10`                     |
-| `BASH_TOOL_DISPLAY_MAX_LENGTH`  | Maximum displayed length for `bash` tool commands in Telegram summaries; longer commands are truncated                |    No    | `128`                    |
-| `SERVICE_MESSAGES_INTERVAL_SEC` | Service messages interval (thinking + tool calls); keep `>=2` to avoid Telegram rate limits, `0` = immediate          |    No    | `5`                      |
-| `HIDE_THINKING_MESSAGES`        | Hide `💭 Thinking...` service messages                                                                                |    No    | `false`                  |
-| `HIDE_TOOL_CALL_MESSAGES`       | Hide tool-call service messages (`💻 bash ...`, `📖 read ...`, etc.)                                                  |    No    | `false`                  |
-| `HIDE_TOOL_FILE_MESSAGES`       | Hide file edit documents sent as `.txt` attachments (`edit_*.txt`, `write_*.txt`)                                     |    No    | `false`                  |
-| `RESPONSE_STREAMING`            | Stream assistant replies while they are generated across one or more Telegram messages                                |    No    | `true`                   |
-| `MESSAGE_FORMAT_MODE`           | Assistant reply formatting mode: `markdown` (Telegram MarkdownV2) or `raw`                                            |    No    | `markdown`               |
-| `CODE_FILE_MAX_SIZE_KB`         | Max file size (KB) to send as document                                                                                |    No    | `100`                    |
-| `STT_API_URL`                   | Whisper-compatible API base URL (enables voice/audio transcription)                                                   |    No    | —                        |
-| `STT_API_KEY`                   | API key for your STT provider                                                                                         |    No    | —                        |
-| `STT_MODEL`                     | STT model name passed to `/audio/transcriptions`                                                                      |    No    | `whisper-large-v3-turbo` |
-| `STT_LANGUAGE`                  | Optional language hint (empty = provider auto-detect)                                                                 |    No    | —                        |
-| `STT_NOTE_PROMPT`               | Optional note prepended to the LLM prompt as `[Note: ...]` for voice transcriptions; empty / `false` / `0` disable it |    No    | —                        |
-| `TTS_API_URL`                   | TTS API base URL                                                                                                      |    No    | —                        |
-| `TTS_API_KEY`                   | TTS API key                                                                                                           |    No    | —                        |
-| `TTS_MODEL`                     | TTS model name passed to `/audio/speech`                                                                              |    No    | `gpt-4o-mini-tts`        |
-| `TTS_VOICE`                     | OpenAI-compatible TTS voice name                                                                                      |    No    | `alloy`                  |
-| `LOG_LEVEL`                     | Log level (`debug`, `info`, `warn`, `error`)                                                                          |    No    | `info`                   |
-| `LOG_RETENTION`                 | Number of log files to keep: launch files in `sources`, daily files in `installed`                                    |    No    | `10`                     |
+| Variable                                   | Description                                                                                                           | Required | Default                  |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | :------: | ------------------------ |
+| `TELEGRAM_BOT_TOKEN`                       | Bot token from @BotFather                                                                                             |   Yes    | —                        |
+| `TELEGRAM_ALLOWED_USER_ID`                 | Your numeric Telegram user ID                                                                                         |   Yes    | —                        |
+| `TELEGRAM_PROXY_URL`                       | Proxy URL for Telegram API (SOCKS5/HTTP)                                                                              |    No    | —                        |
+| `OPENCODE_API_URL`                         | OpenCode server URL                                                                                                   |    No    | `http://localhost:4096`  |
+| `OPENCODE_SERVER_USERNAME`                 | Server auth username                                                                                                  |    No    | `opencode`               |
+| `OPENCODE_SERVER_PASSWORD`                 | Server auth password                                                                                                  |    No    | —                        |
+| `OPENCODE_MODEL_PROVIDER`                  | Default model provider                                                                                                |   Yes    | `opencode`               |
+| `OPENCODE_MODEL_ID`                        | Default model ID                                                                                                      |   Yes    | `big-pickle`             |
+| `BOT_LOCALE`                               | Bot UI language (supported locale code, e.g. `en`, `de`, `es`, `fr`, `ru`, `zh`)                                      |    No    | `en`                     |
+| `SESSIONS_LIST_LIMIT`                      | Sessions per page in `/sessions`                                                                                      |    No    | `10`                     |
+| `PROJECTS_LIST_LIMIT`                      | Projects per page in `/projects`                                                                                      |    No    | `10`                     |
+| `OPEN_BROWSER_ROOTS`                       | Comma-separated paths `/open` is allowed to browse (supports `~`)                                                     |    No    | `~` (home directory)     |
+| `COMMANDS_LIST_LIMIT`                      | Items per page in `/commands` and `/skills`                                                                           |    No    | `10`                     |
+| `TASK_LIMIT`                               | Maximum number of scheduled tasks that can exist at once                                                              |    No    | `10`                     |
+| `SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES` | Maximum time the bot waits for one scheduled task run before marking it failed                                        |    No    | `120`                    |
+| `BASH_TOOL_DISPLAY_MAX_LENGTH`             | Maximum displayed length for `bash` tool commands in Telegram summaries; longer commands are truncated                |    No    | `128`                    |
+| `SERVICE_MESSAGES_INTERVAL_SEC`            | Service messages interval (thinking + tool calls); keep `>=2` to avoid Telegram rate limits, `0` = immediate          |    No    | `5`                      |
+| `HIDE_THINKING_MESSAGES`                   | Hide `💭 Thinking...` service messages                                                                                |    No    | `false`                  |
+| `HIDE_TOOL_CALL_MESSAGES`                  | Hide tool-call service messages (`💻 bash ...`, `📖 read ...`, etc.)                                                  |    No    | `false`                  |
+| `HIDE_TOOL_FILE_MESSAGES`                  | Hide file edit documents sent as `.txt` attachments (`edit_*.txt`, `write_*.txt`)                                     |    No    | `false`                  |
+| `RESPONSE_STREAMING`                       | Stream assistant replies while they are generated across one or more Telegram messages                                |    No    | `true`                   |
+| `MESSAGE_FORMAT_MODE`                      | Assistant reply formatting mode: `markdown` (Telegram MarkdownV2) or `raw`                                            |    No    | `markdown`               |
+| `CODE_FILE_MAX_SIZE_KB`                    | Max file size (KB) to send as document                                                                                |    No    | `100`                    |
+| `STT_API_URL`                              | Whisper-compatible API base URL (enables voice/audio transcription)                                                   |    No    | —                        |
+| `STT_API_KEY`                              | API key for your STT provider                                                                                         |    No    | —                        |
+| `STT_MODEL`                                | STT model name passed to `/audio/transcriptions`                                                                      |    No    | `whisper-large-v3-turbo` |
+| `STT_LANGUAGE`                             | Optional language hint (empty = provider auto-detect)                                                                 |    No    | —                        |
+| `STT_NOTE_PROMPT`                          | Optional note prepended to the LLM prompt as `[Note: ...]` for voice transcriptions; empty / `false` / `0` disable it |    No    | —                        |
+| `TTS_API_URL`                              | TTS API base URL                                                                                                      |    No    | —                        |
+| `TTS_API_KEY`                              | TTS API key                                                                                                           |    No    | —                        |
+| `TTS_MODEL`                                | TTS model name passed to `/audio/speech`                                                                              |    No    | `gpt-4o-mini-tts`        |
+| `TTS_VOICE`                                | OpenAI-compatible TTS voice name                                                                                      |    No    | `alloy`                  |
+| `LOG_LEVEL`                                | Log level (`debug`, `info`, `warn`, `error`)                                                                          |    No    | `info`                   |
+| `LOG_RETENTION`                            | Number of log files to keep: launch files in `sources`, daily files in `installed`                                    |    No    | `10`                     |
 
 > **Keep your `.env` file private.** It contains your bot token. Never commit it to version control.
 

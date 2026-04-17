@@ -40,6 +40,7 @@ vi.mock("../../src/opencode/client.js", () => ({
     session: {
       create: vi.fn(),
       prompt: vi.fn(),
+      promptAsync: vi.fn(),
       delete: vi.fn(),
     },
   },
@@ -110,7 +111,7 @@ function createTask(partial: Partial<ScheduledTask> = {}): ScheduledTask {
       lastStatus: "idle",
       lastError: null,
       ...partial,
-    };
+    } as ScheduledTask;
   }
 
   return {
@@ -135,7 +136,7 @@ function createTask(partial: Partial<ScheduledTask> = {}): ScheduledTask {
     lastStatus: "idle",
     lastError: null,
     ...partial,
-  };
+  } as ScheduledTask;
 }
 
 describe("scheduled-task/runtime", () => {
@@ -228,6 +229,66 @@ describe("scheduled-task/runtime", () => {
         text: expect.stringContaining("Task failed"),
       }),
     );
+
+    runtime.__resetForTests();
+    vi.useRealTimers();
+  });
+
+  it("sends the timeout error text returned by executor", async () => {
+    ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
+      await import("../../src/scheduled-task/runtime.js"));
+    ({ foregroundSessionState } = await import("../../src/scheduled-task/foreground-state.js"));
+    foregroundSessionState.__resetForTests();
+
+    const runtime = new ScheduledTaskRuntimeClass();
+    mocked.tasks = [createTask({ nextRunAt: "2026-03-16T09:59:00.000Z" })];
+    mocked.executeScheduledTaskMock.mockResolvedValue({
+      taskId: "task-1",
+      status: "error",
+      startedAt: "2026-03-16T10:00:00.000Z",
+      finishedAt: "2026-03-16T10:01:00.000Z",
+      resultText: null,
+      errorMessage:
+        "Request timed out after 300000ms. Check OpenCode model timeout settings: https://opencode.ai/docs/config/#models",
+    });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
+
+    await runtime.initialize({ api: {} } as Bot<Context>);
+    await vi.runAllTimersAsync();
+
+    expect(mocked.sendBotTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: 777,
+        format: "raw",
+        text: expect.stringContaining("https://opencode.ai/docs/config/#models"),
+      }),
+    );
+
+    runtime.__resetForTests();
+    vi.useRealTimers();
+  });
+
+  it("does not start the same scheduled task twice while it is already running", async () => {
+    ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
+      await import("../../src/scheduled-task/runtime.js"));
+    ({ foregroundSessionState } = await import("../../src/scheduled-task/foreground-state.js"));
+    foregroundSessionState.__resetForTests();
+
+    const runtime = new ScheduledTaskRuntimeClass();
+    mocked.tasks = [createTask({ kind: "cron", nextRunAt: "2026-03-16T10:00:00.000Z" })];
+    mocked.executeScheduledTaskMock.mockReturnValue(new Promise(() => undefined));
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
+
+    await runtime.initialize({ api: {} } as Bot<Context>);
+    await Promise.resolve();
+
+    (runtime as any).startExecution("task-1");
+
+    expect(mocked.executeScheduledTaskMock).toHaveBeenCalledTimes(1);
 
     runtime.__resetForTests();
     vi.useRealTimers();
