@@ -5,7 +5,7 @@ export const ru: I18nDictionary = {
   "cmd.description.new": "Создать новую сессию",
   "cmd.description.stop": "Прервать текущее действие",
   "cmd.description.sessions": "Список сессий",
-  "cmd.description.attach": "Подключиться к сессии",
+  "cmd.description.attach": "Подключиться к активной сессией OpenCode",
   "cmd.description.tts": "Переключить аудиоответы",
   "cmd.description.projects": "Список проектов",
   "cmd.description.worktree": "Переключить git worktree",

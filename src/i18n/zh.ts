@@ -5,7 +5,7 @@ export const zh: I18nDictionary = {
   "cmd.description.new": "创建新会话",
   "cmd.description.stop": "停止当前操作",
   "cmd.description.sessions": "列出会话",
-  "cmd.description.attach": "附加到会话",
+  "cmd.description.attach": "跟踪实时 OpenCode 会话",
   "cmd.description.tts": "切换语音回复",
   "cmd.description.projects": "列出项目",
   "cmd.description.worktree": "切换 git worktree",

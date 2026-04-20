@@ -5,7 +5,7 @@ export const de: I18nDictionary = {
   "cmd.description.new": "Neue Sitzung erstellen",
   "cmd.description.stop": "Aktuelle Aktion stoppen",
   "cmd.description.sessions": "Sitzungen auflisten",
-  "cmd.description.attach": "An Sitzung anhängen",
+  "cmd.description.attach": "Live-OpenCode-Sitzung verfolgen",
   "cmd.description.tts": "Audioantworten umschalten",
   "cmd.description.projects": "Projekte auflisten",
   "cmd.description.worktree": "Git-Worktrees wechseln",

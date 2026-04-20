@@ -99,6 +99,7 @@ Current command set:
 - `/new` - create a new session
 - `/abort` - stop the current task
 - `/sessions` - show and switch recent sessions
+- `/attach` - attach to an OpenCode CLI session and follow live changes
 - `/projects` - show and switch projects
 - `/worktree` - show and switch existing git worktrees for the current repository
 - `/tts` - toggle global audio replies
@@ -135,6 +136,7 @@ Model picker behavior:
 - [x] Single-user access control by allowed Telegram user ID
 - [x] OpenCode server control from Telegram (`/status`, `/opencode_start`, `/opencode_stop`)
 - [x] Project and session management from Telegram (`/projects`, `/worktree`, `/sessions`, `/new`)
+- [x] Attach to an existing OpenCode CLI session and continue it from Telegram (`/attach`), with live updates and external text input notifications
 - [x] Remote task execution and interruption support (`/abort`)
 - [x] Telegram-friendly result delivery, including sending generated code/files when needed
 - [x] Interactive question and permission handling directly in chat (buttons + custom answers)
@@ -164,12 +166,9 @@ Open tasks for upcoming iterations:
 
 - [ ] `/messages` command: browse session messages with fork/revert actions
 - [ ] `/mcps` command: browse available MCP servers
+- [ ] Model search in model switcher
 - [ ] Docker runtime support and deployment guide
 - [ ] OpenCode server monitoring with automatic restart on stop/crash
-
-## Possible Improvements
-
-Optional or longer-term enhancements:
-
-- [ ] Add project file browsing helpers (for example, `ls` and `open` flows)
 - [ ] Add a bot settings command with in-chat UI
+- [ ] Add project file browsing helpers (for example, `ls`-like flows with ability to send file to Telegram)
+

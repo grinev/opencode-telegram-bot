@@ -3,7 +3,7 @@ export const en = {
   "cmd.description.new": "Create a new session",
   "cmd.description.stop": "Stop current action",
   "cmd.description.sessions": "List sessions",
-  "cmd.description.attach": "Attach to session",
+  "cmd.description.attach": "Follow a live OpenCode session",
   "cmd.description.tts": "Toggle audio replies",
   "cmd.description.projects": "List projects",
   "cmd.description.worktree": "Switch git worktrees",
