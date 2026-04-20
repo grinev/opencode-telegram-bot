@@ -45,7 +45,7 @@ export function buildExternalUserInputNotification(text: string): ExternalUserIn
     return null;
   }
 
-  const title = t("bot.external_user_input");
+  const title = `👤 ${t("bot.external_user_input")}`;
   return {
     text: `${escapePlainTextForTelegramMarkdownV2(title)}\n\n${buildQuotedMarkdownText(normalizedText)}`,
     rawFallbackText: `${title}\n\n${buildQuotedPlainText(normalizedText)}`,

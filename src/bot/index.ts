@@ -18,7 +18,6 @@ import {
   VARIANT_BUTTON_TEXT_PATTERN,
 } from "./message-patterns.js";
 import { sessionsCommand, handleSessionSelect } from "./commands/sessions.js";
-import { attachCommand } from "./commands/attach.js";
 import { newCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
 import { worktreeCommand, handleWorktreeCallback } from "./commands/worktree.js";
@@ -91,7 +90,11 @@ import { ResponseStreamer } from "./streaming/response-streamer.js";
 import type { StreamingMessagePayload } from "./streaming/response-streamer.js";
 import { ToolCallStreamer, type ToolStreamKey } from "./streaming/tool-call-streamer.js";
 import { attachManager } from "../attach/manager.js";
-import { markAttachedSessionBusy, markAttachedSessionIdle } from "../attach/service.js";
+import {
+  markAttachedSessionBusy,
+  markAttachedSessionIdle,
+  restoreAttachedCurrentSession,
+} from "../attach/service.js";
 import { externalUserInputSuppressionManager } from "../external-input/suppression.js";
 import {
   prepareAssistantFinalStreamingPayload,
@@ -997,6 +1000,8 @@ export function createBot(): Bot<Context> {
   }
 
   const bot = new Bot(config.telegram.token, botOptions);
+  botInstance = bot;
+  chatIdInstance = config.telegram.allowedUserId;
 
   // Heartbeat for diagnostics: verify the event loop is not blocked
   let heartbeatCounter = 0;
@@ -1071,8 +1076,7 @@ export function createBot(): Bot<Context> {
   bot.command("worktree", worktreeCommand);
   bot.command("open", openCommand);
   bot.command("sessions", sessionsCommand);
-  bot.command("attach", (ctx) => attachCommand(ctx, { bot, ensureEventSubscription }));
-  bot.command("new", newCommand);
+  bot.command("new", (ctx) => newCommand(ctx, { bot, ensureEventSubscription }));
   bot.command("abort", abortCommand);
   bot.command("task", taskCommand);
   bot.command("tasklist", taskListCommand);
@@ -1097,7 +1101,7 @@ export function createBot(): Bot<Context> {
         // Clean up path index when the open-directory menu is cancelled
         clearOpenPathIndex();
       }
-      const handledSession = await handleSessionSelect(ctx);
+      const handledSession = await handleSessionSelect(ctx, { bot, ensureEventSubscription });
       const handledProject = await handleProjectSelect(ctx);
       const handledWorktree = await handleWorktreeCallback(ctx);
       const handledOpen = await handleOpenCallback(ctx);
@@ -1248,6 +1252,16 @@ export function createBot(): Bot<Context> {
 
   // Voice and audio message handlers (STT transcription -> prompt)
   const voicePromptDeps = { bot, ensureEventSubscription };
+
+  safeBackgroundTask({
+    taskName: "bot.restoreFollowedSession",
+    task: () =>
+      restoreAttachedCurrentSession({
+        bot,
+        chatId: config.telegram.allowedUserId,
+        ensureEventSubscription,
+      }),
+  });
 
   bot.on("message:voice", async (ctx) => {
     logger.debug(`[Bot] Received voice message, chatId=${ctx.chat.id}`);

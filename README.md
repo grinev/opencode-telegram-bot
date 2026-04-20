@@ -26,7 +26,7 @@ Languages: English (`en`), Deutsch (`de`), Español (`es`), Français (`fr`), Р
 
 - **Remote coding** — send prompts to OpenCode from anywhere, receive complete results with code sent as files
 - **Session management** — create new sessions or continue existing ones, just like in the TUI
-- **Attach to live session** — follow a live OpenCode CLI session; see [Attach to Existing Session](#attach-to-existing-session)
+- **Track live session** — follow a live OpenCode CLI session; see [Track Existing Session](#track-existing-session)
 - **Live status** — pinned message with current project/worktree, model, context usage, and changed files list, updated in real time
 - **Model switching** — pick models from OpenCode favorites and recent history directly in the chat (favorites are shown first)
 - **Agent modes** — switch between Plan and Build modes on the fly
@@ -130,7 +130,6 @@ opencode-telegram config
 | `/new`            | Create a new session                                    |
 | `/abort`          | Abort the current task                                  |
 | `/sessions`       | Browse and switch between recent sessions               |
-| `/attach`         | Attach to an OpenCode CLI session and follow live changes |
 | `/projects`       | Switch between OpenCode projects                        |
 | `/worktree`       | Switch between existing git worktrees                   |
 | `/open`           | Add a project by browsing directories                   |
@@ -160,17 +159,17 @@ Scheduled tasks let you prepare prompts in advance and run them automatically la
 - By default, the bot waits up to 120 minutes for one scheduled task run; change this with `SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES` if needed
 - Up to 10 scheduled tasks can exist at once by default; change this with `TASK_LIMIT` in your `.env`
 
-## Attach to Existing Session
+## Track Existing Session
 
-Use `/attach` after you select a project and session in the bot. Once attached, the bot follows live events from that session, shows external text input sent from another OpenCode TUI client, and lets you continue the same session from Telegram.
+After you create a new session, select an existing one, or let the bot auto-create one from your first prompt, the bot automatically starts tracking that session. It follows live events from the same OpenCode CLI session, shows external text input sent from another TUI client, and lets you continue the same session from Telegram.
 
 For this to work, the console OpenCode instance must be started on the same port the bot connects to. By default, OpenCode starts on a random port, so use one of the setups below.
 
 - **Single TUI, simplest setup** — start OpenCode on a fixed port: `opencode --port 4096`
-- Point the bot to `http://127.0.0.1:4096`, select the same session, then run `/attach`
+- Point the bot to `http://127.0.0.1:4096`, then select or create the same session in Telegram
 - **Multiple TUI clients, shared backend** — start one backend: `opencode serve --port 4096`
 - In each terminal client, connect with: `opencode attach http://127.0.0.1:4096`
-- In the bot, select the same session and run `/attach`
+- In the bot, select or create the same session to start tracking it automatically
 
 ## Configuration
 

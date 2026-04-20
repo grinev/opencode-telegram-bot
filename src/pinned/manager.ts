@@ -657,13 +657,6 @@ class PinnedMessageManager {
 
     lines.push(t("pinned.line.model", { model: modelName }));
 
-    if (this.state.attachActive) {
-      const attachStatus = this.state.attachBusy
-        ? t("pinned.attach.status.busy")
-        : t("pinned.attach.status.idle");
-      lines.push(t("pinned.line.attach", { status: attachStatus }));
-    }
-
     lines.push(formatContextLine(this.state.tokensUsed, this.state.tokensLimit));
 
     if (this.state.cost !== undefined && this.state.cost !== null) {

@@ -20,6 +20,7 @@ import { foregroundSessionState } from "../../scheduled-task/foreground-state.js
 import { config } from "../../config.js";
 import { assistantRunState } from "../assistant-run-state.js";
 import {
+  attachToSession,
   detachAttachedSession,
   markAttachedSessionBusy,
   markAttachedSessionIdle,
@@ -425,9 +426,12 @@ async function executeCommand(
     return;
   }
 
-  await deps.ensureEventSubscription(session.directory);
-  summaryAggregator.setSession(session.id);
-  summaryAggregator.setBotAndChatId(deps.bot, ctx.chat.id);
+  await attachToSession({
+    bot: deps.bot,
+    chatId: ctx.chat.id,
+    session,
+    ensureEventSubscription: deps.ensureEventSubscription,
+  });
 
   const sessionIsBusy = await isSessionBusy(session.id, session.directory);
   if (sessionIsBusy) {

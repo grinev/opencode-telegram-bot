@@ -36,6 +36,7 @@ const mocked = vi.hoisted(() => ({
   ensureEventSubscriptionMock: vi.fn(),
   safeBackgroundTaskMock: vi.fn(),
   suppressionRegisterMock: vi.fn(),
+  attachToSessionMock: vi.fn(),
 }));
 
 vi.mock("../../../src/settings/manager.js", () => ({
@@ -123,6 +124,13 @@ vi.mock("../../../src/external-input/suppression.js", () => ({
   },
 }));
 
+vi.mock("../../../src/attach/service.js", () => ({
+  attachToSession: mocked.attachToSessionMock,
+  detachAttachedSession: vi.fn(),
+  markAttachedSessionBusy: vi.fn().mockResolvedValue(undefined),
+  markAttachedSessionIdle: vi.fn().mockResolvedValue(undefined),
+}));
+
 function createCommandContext(messageId: number): Context {
   return {
     chat: { id: 777 },
@@ -207,6 +215,13 @@ describe("bot/commands/commands", () => {
     mocked.ensureEventSubscriptionMock.mockReset();
     mocked.safeBackgroundTaskMock.mockReset();
     mocked.suppressionRegisterMock.mockReset();
+    mocked.attachToSessionMock.mockReset();
+    mocked.attachToSessionMock.mockResolvedValue({
+      busy: false,
+      alreadyAttached: false,
+      restoredQuestion: false,
+      restoredPermissions: 0,
+    });
 
     mocked.sessionStatusMock.mockResolvedValue({
       data: {
@@ -306,8 +321,16 @@ describe("bot/commands/commands", () => {
     expect(ctx.reply).toHaveBeenCalledWith(`${t("commands.executing_prefix")}\n/poem`, {
       entities: [{ type: "code", offset: t("commands.executing_prefix").length + 1, length: 5 }],
     });
-    expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledWith("D:\\Projects\\Repo");
-    expect(mocked.setSessionSummaryMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
+      bot: expect.any(Object),
+      chatId: 777,
+      session: {
+        id: "session-1",
+        title: "Session",
+        directory: "D:\\Projects\\Repo",
+      },
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
     expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "/poem");
     expect(mocked.sessionCommandMock).toHaveBeenCalledWith({
       sessionID: "session-1",

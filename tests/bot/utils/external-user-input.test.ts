@@ -23,7 +23,7 @@ describe("bot/utils/external-user-input", () => {
 
     expect(notification).toEqual({
       text: expect.stringContaining("External user input"),
-      rawFallbackText: "External user input\n\n> Line 1\n> Line 2",
+      rawFallbackText: "👤 External user input\n\n> Line 1\n> Line 2",
     });
   });
 
@@ -42,7 +42,7 @@ describe("bot/utils/external-user-input", () => {
       expect.objectContaining({
         chatId: 777,
         format: "markdown_v2",
-        rawFallbackText: "External user input\n\n> Review the parser",
+        rawFallbackText: "👤 External user input\n\n> Review the parser",
       }),
     );
   });

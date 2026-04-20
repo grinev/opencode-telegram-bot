@@ -1,3 +1,4 @@
+import type { Bot } from "grammy";
 import { CommandContext, Context } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
@@ -5,8 +6,6 @@ import { resolveProjectAgent } from "../../agent/manager.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
-import { summaryAggregator } from "../../summary/aggregator.js";
-import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import {
   appendInlineMenuCancelButton,
@@ -18,7 +17,7 @@ import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { getDateLocale, t } from "../../i18n/index.js";
-import { detachAttachedSession } from "../../attach/service.js";
+import { attachToSession } from "../../attach/service.js";
 
 const SESSION_CALLBACK_PREFIX = "session:";
 const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
@@ -38,6 +37,11 @@ type SessionPage = {
   hasNext: boolean;
   page: number;
 };
+
+export interface SessionSelectDeps {
+  bot: Bot<Context>;
+  ensureEventSubscription: (directory: string) => Promise<void>;
+}
 
 function buildSessionPageCallback(page: number): string {
   return `${SESSION_PAGE_CALLBACK_PREFIX}${page}`;
@@ -178,7 +182,7 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
   }
 }
 
-export async function handleSessionSelect(ctx: Context): Promise<boolean> {
+export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data || !callbackQuery.data.startsWith(SESSION_CALLBACK_PREFIX)) {
     return false;
@@ -253,9 +257,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       title: session.title,
       directory: currentProject.worktree,
     };
-    detachAttachedSession("session_switched");
     setCurrentSession(sessionInfo);
-    summaryAggregator.clear();
     clearAllInteractionState("session_switched");
 
     await ctx.answerCallbackQuery();
@@ -273,24 +275,23 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       }
     }
 
-    // Initialize pinned message manager if not already
-    if (!pinnedMessageManager.isInitialized() && ctx.chat) {
-      pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
-    }
-
-    // Initialize keyboard manager if not already
-    if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
-    }
-
     try {
-      // Create new pinned message for this session
-      await pinnedMessageManager.onSessionChange(session.id, session.title);
-      // Load context from session history (for existing sessions)
-      // Wait for it to complete so keyboard has correct context
-      await pinnedMessageManager.loadContextFromHistory(session.id, currentProject.worktree);
+      await attachToSession({
+        bot: deps.bot,
+        chatId: ctx.chat!.id,
+        session: sessionInfo,
+        ensureEventSubscription: deps.ensureEventSubscription,
+      });
     } catch (err) {
-      logger.error("[Bot] Error initializing pinned message:", err);
+      if (loadingMessageId) {
+        try {
+          await ctx.api.deleteMessage(ctx.chat!.id, loadingMessageId);
+        } catch (deleteError) {
+          logger.debug("[Sessions] Failed to delete loading message after follow error:", deleteError);
+        }
+      }
+      logger.error("[Sessions] Error following selected session:", err);
+      throw err;
     }
 
     if (ctx.chat) {
@@ -299,8 +300,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
 
       keyboardManager.updateAgent(currentAgent);
 
-      // Update keyboard with loaded context (callback executes async via setImmediate, so update manually)
-      const contextInfo = pinnedMessageManager.getContextInfo();
+      const contextInfo = keyboardManager.getContextInfo();
       if (contextInfo) {
         keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
       }

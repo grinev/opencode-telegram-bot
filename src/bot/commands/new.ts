@@ -1,11 +1,10 @@
+import type { Bot } from "grammy";
 import { CommandContext, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
-import { summaryAggregator } from "../../summary/aggregator.js";
-import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
@@ -14,9 +13,14 @@ import { createMainKeyboard } from "../utils/keyboard.js";
 import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { detachAttachedSession } from "../../attach/service.js";
+import { attachToSession } from "../../attach/service.js";
 
-export async function newCommand(ctx: CommandContext<Context>) {
+export interface NewCommandDeps {
+  bot: Bot<Context>;
+  ensureEventSubscription: (directory: string) => Promise<void>;
+}
+
+export async function newCommand(ctx: CommandContext<Context>, deps: NewCommandDeps) {
   try {
     if (isForegroundBusy()) {
       await replyBusyBlocked(ctx);
@@ -49,32 +53,23 @@ export async function newCommand(ctx: CommandContext<Context>) {
       title: session.title,
       directory: currentProject.worktree,
     };
-    detachAttachedSession("session_created");
     setCurrentSession(sessionInfo);
-    summaryAggregator.clear();
     clearAllInteractionState("session_created");
     await ingestSessionInfoForCache(session);
 
-    // Initialize pinned message manager and create pinned message
-    if (!pinnedMessageManager.isInitialized()) {
-      pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
-    }
-
-    // Initialize keyboard manager if not already
-    keyboardManager.initialize(ctx.api, ctx.chat.id);
-
-    try {
-      await pinnedMessageManager.onSessionChange(session.id, session.title);
-    } catch (err) {
-      logger.error("[Bot] Error creating pinned message:", err);
-    }
+    await attachToSession({
+      bot: deps.bot,
+      chatId: ctx.chat.id,
+      session: sessionInfo,
+      ensureEventSubscription: deps.ensureEventSubscription,
+    });
 
     // Get current state for keyboard
     const currentAgent = await resolveProjectAgent(getStoredAgent());
     const currentModel = getStoredModel();
-    const contextInfo = pinnedMessageManager.getContextInfo();
-    const variantName = formatVariantForButton(currentModel.variant || "default");
     keyboardManager.updateAgent(currentAgent);
+    const contextInfo = keyboardManager.getContextInfo();
+    const variantName = formatVariantForButton(currentModel.variant || "default");
     const keyboard = createMainKeyboard(
       currentAgent,
       currentModel,
