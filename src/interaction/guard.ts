@@ -9,6 +9,7 @@ import type {
   InteractionState,
 } from "./types.js";
 import { foregroundSessionState } from "../scheduled-task/foreground-state.js";
+import { attachManager } from "../attach/manager.js";
 
 function normalizeIncomingCommand(text: string): string | null {
   const trimmed = text.trim();
@@ -130,7 +131,7 @@ function isAllowedTaskCallback(ctx: Context, state: InteractionState): boolean {
 export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
   const state = interactionManager.getSnapshot();
   const { inputType, command } = classifyIncomingInput(ctx);
-  const isBusy = foregroundSessionState.isBusy();
+  const isBusy = foregroundSessionState.isBusy() || attachManager.isBusy();
 
   if (state && interactionManager.isExpired()) {
     interactionManager.clear("expired");

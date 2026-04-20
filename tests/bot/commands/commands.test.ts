@@ -35,6 +35,7 @@ const mocked = vi.hoisted(() => ({
   clearSummaryMock: vi.fn(),
   ensureEventSubscriptionMock: vi.fn(),
   safeBackgroundTaskMock: vi.fn(),
+  suppressionRegisterMock: vi.fn(),
 }));
 
 vi.mock("../../../src/settings/manager.js", () => ({
@@ -114,6 +115,12 @@ vi.mock("../../../src/utils/safe-background-task.js", () => ({
       }
     }
   }),
+}));
+
+vi.mock("../../../src/external-input/suppression.js", () => ({
+  externalUserInputSuppressionManager: {
+    register: mocked.suppressionRegisterMock,
+  },
 }));
 
 function createCommandContext(messageId: number): Context {
@@ -199,6 +206,7 @@ describe("bot/commands/commands", () => {
     mocked.clearSummaryMock.mockReset();
     mocked.ensureEventSubscriptionMock.mockReset();
     mocked.safeBackgroundTaskMock.mockReset();
+    mocked.suppressionRegisterMock.mockReset();
 
     mocked.sessionStatusMock.mockResolvedValue({
       data: {
@@ -300,6 +308,7 @@ describe("bot/commands/commands", () => {
     });
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledWith("D:\\Projects\\Repo");
     expect(mocked.setSessionSummaryMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "/poem");
     expect(mocked.sessionCommandMock).toHaveBeenCalledWith({
       sessionID: "session-1",
       directory: "D:\\Projects\\Repo",
@@ -336,6 +345,10 @@ describe("bot/commands/commands", () => {
       {
         entities: [{ type: "code", offset: t("commands.executing_prefix").length + 1, length: 5 }],
       },
+    );
+    expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith(
+      "session-1",
+      "/poem about spring",
     );
     expect(mocked.sessionCommandMock).toHaveBeenCalledWith({
       sessionID: "session-1",

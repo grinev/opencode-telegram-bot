@@ -26,6 +26,7 @@ describe("summary/aggregator", () => {
     summaryAggregator.setOnTool(() => {});
     summaryAggregator.setOnToolFile(() => {});
     summaryAggregator.setOnPartial(() => {});
+    summaryAggregator.setOnExternalUserInput(() => {});
     summaryAggregator.setOnThinking(() => {});
     summaryAggregator.setOnSubagent(() => {});
     summaryAggregator.setOnSessionIdle(() => {});
@@ -594,6 +595,118 @@ describe("summary/aggregator", () => {
       "Partial answer",
       expect.objectContaining({}),
     );
+  });
+
+  it("emits completed external user input for the current session", async () => {
+    const onExternalUserInput = vi.fn();
+    summaryAggregator.setOnExternalUserInput(onExternalUserInput);
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-user-1",
+          sessionID: "session-1",
+          messageID: "message-user-1",
+          type: "text",
+          text: "Check the failing tests",
+          time: { start: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "message-user-1",
+          sessionID: "session-1",
+          role: "user",
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(onExternalUserInput).toHaveBeenCalledWith(
+      "session-1",
+      "message-user-1",
+      "Check the failing tests",
+    );
+  });
+
+  it("ignores external user input from a different session", async () => {
+    const onExternalUserInput = vi.fn();
+    summaryAggregator.setOnExternalUserInput(onExternalUserInput);
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-user-other",
+          sessionID: "session-2",
+          messageID: "message-user-other",
+          type: "text",
+          text: "Hello from another session",
+          time: { start: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "message-user-other",
+          sessionID: "session-2",
+          role: "user",
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(onExternalUserInput).not.toHaveBeenCalled();
+  });
+
+  it("does not emit whitespace-only external user input", async () => {
+    const onExternalUserInput = vi.fn();
+    summaryAggregator.setOnExternalUserInput(onExternalUserInput);
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-user-empty",
+          sessionID: "session-1",
+          messageID: "message-user-empty",
+          type: "text",
+          text: "   ",
+          time: { start: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "message-user-empty",
+          sessionID: "session-1",
+          role: "user",
+          time: { created: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(onExternalUserInput).not.toHaveBeenCalled();
   });
 
   it("combines multiple text parts into a single final message", () => {

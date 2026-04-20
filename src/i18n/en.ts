@@ -3,6 +3,7 @@ export const en = {
   "cmd.description.new": "Create a new session",
   "cmd.description.stop": "Stop current action",
   "cmd.description.sessions": "List sessions",
+  "cmd.description.attach": "Follow a live OpenCode session",
   "cmd.description.tts": "Toggle audio replies",
   "cmd.description.projects": "List projects",
   "cmd.description.worktree": "Switch git worktrees",
@@ -71,6 +72,7 @@ export const en = {
   "bot.session_error": "🔴 OpenCode returned an error: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nProvider keeps returning the same error on repeated retries. Use /abort to abort.",
+  "bot.external_user_input": "External user input",
   "bot.unknown_command": "⚠️ Unknown command: {command}. Use /help to see available commands.",
   "bot.photo_downloading": "⏳ Downloading photo...",
   "bot.photo_too_large": "⚠️ Photo is too large (max {maxSizeMb}MB)",
@@ -147,6 +149,22 @@ export const en = {
   "sessions.preview.title": "Recent messages:",
   "sessions.preview.you": "You:",
   "sessions.preview.agent": "Agent:",
+
+  "attach.project_not_selected":
+    "🏗 Project is not selected.\n\nFirst select a project with /projects.",
+  "attach.session_not_selected":
+    "💬 Session is not selected.\n\nFirst choose a session with /sessions.",
+  "attach.session_project_mismatch":
+    "⚠️ The selected session does not match the current project. Choose the session again via /sessions.",
+  "attach.connected": "✅ Connected to session: {title}",
+  "attach.already_connected": "ℹ️ Already connected to session: {title}",
+  "attach.status.idle_message": "Status: idle. Waiting for new events.",
+  "attach.status.busy_message": "Status: busy. New prompts are temporarily blocked.",
+  "attach.restored_question": "Recovered a pending question for this session.",
+  "attach.restored_permissions": "Recovered pending permission requests: {count}.",
+  "attach.disconnect_hint":
+    "To disconnect, switch to another session or project.",
+  "attach.error": "🔴 Failed to attach to the current session.",
 
   "new.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
@@ -298,6 +316,9 @@ export const en = {
   "pinned.line.project": "Project: {project}",
   "pinned.line.worktree": "Worktree: {worktree}",
   "pinned.line.model": "Model: {model}",
+  "pinned.line.attach": "Attach: {status}",
+  "pinned.attach.status.idle": "active, idle",
+  "pinned.attach.status.busy": "active, busy",
   "pinned.line.context": "Context: {used} / {limit} ({percent}%)",
   "pinned.line.cost": "Cost: {cost} spent",
   "subagent.header": "Subagent {agent}: {description}",

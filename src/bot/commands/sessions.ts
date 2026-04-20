@@ -18,6 +18,7 @@ import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { getDateLocale, t } from "../../i18n/index.js";
+import { detachAttachedSession } from "../../attach/service.js";
 
 const SESSION_CALLBACK_PREFIX = "session:";
 const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
@@ -252,6 +253,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       title: session.title,
       directory: currentProject.worktree,
     };
+    detachAttachedSession("session_switched");
     setCurrentSession(sessionInfo);
     summaryAggregator.clear();
     clearAllInteractionState("session_switched");

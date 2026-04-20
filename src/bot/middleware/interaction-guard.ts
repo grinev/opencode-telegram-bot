@@ -94,7 +94,7 @@ export async function interactionGuardMiddleware(ctx: Context, next: NextFunctio
   const message = decision.busy
     ? decision.state?.kind === "question" || decision.state?.kind === "permission"
       ? getInteractionBlockedMessage(decision.reason, decision.state.kind)
-      : t("interaction.blocked.finish_current")
+      : t("bot.session_busy")
     : getInteractionBlockedMessage(decision.reason, decision.state?.kind);
 
   logger.debug(

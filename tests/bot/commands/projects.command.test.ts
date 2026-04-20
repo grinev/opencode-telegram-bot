@@ -105,7 +105,7 @@ describe("bot/commands/projects command", () => {
     expect(mocked.syncSessionDirectoryCacheMock).not.toHaveBeenCalled();
     expect(mocked.getProjectsMock).not.toHaveBeenCalled();
     expect(mocked.replyWithInlineMenuMock).not.toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.finish_current"));
+    expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
   });
 
   it("marks the main project as active when the current selection is a linked worktree", async () => {

@@ -84,7 +84,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
     expect(handled).toBe(true);
     expect(mocked.getProjectsMock).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
-      text: t("interaction.blocked.finish_current"),
+      text: t("bot.session_busy"),
     });
   });
 });

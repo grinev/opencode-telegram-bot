@@ -14,6 +14,7 @@ import { createMainKeyboard } from "../utils/keyboard.js";
 import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { detachAttachedSession } from "../../attach/service.js";
 
 export async function newCommand(ctx: CommandContext<Context>) {
   try {
@@ -48,6 +49,7 @@ export async function newCommand(ctx: CommandContext<Context>) {
       title: session.title,
       directory: currentProject.worktree,
     };
+    detachAttachedSession("session_created");
     setCurrentSession(sessionInfo);
     summaryAggregator.clear();
     clearAllInteractionState("session_created");

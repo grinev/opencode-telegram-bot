@@ -26,6 +26,8 @@ export interface PinnedMessageState {
   chatId: number | null;
   sessionId: string | null;
   sessionTitle: string;
+  attachActive: boolean;
+  attachBusy: boolean;
   projectPath: string;
   projectBranch: string | null;
   projectWorktreePath: string | null;

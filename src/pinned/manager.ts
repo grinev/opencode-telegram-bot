@@ -28,6 +28,8 @@ class PinnedMessageManager {
     chatId: null,
     sessionId: null,
     sessionTitle: t("pinned.default_session_title"),
+    attachActive: false,
+    attachBusy: false,
     projectPath: "",
     projectBranch: null,
     projectWorktreePath: null,
@@ -73,6 +75,8 @@ class PinnedMessageManager {
     // Update state
     this.state.sessionId = sessionId;
     this.state.sessionTitle = sessionTitle || t("pinned.default_session_title");
+    this.state.attachActive = false;
+    this.state.attachBusy = false;
 
     await this.refreshProjectMetadata();
 
@@ -107,6 +111,17 @@ class PinnedMessageManager {
       this.state.sessionTitle = newTitle;
       await this.updatePinnedMessage();
     }
+  }
+
+  async setAttachState(active: boolean, busy: boolean): Promise<void> {
+    const nextBusy = active ? busy : false;
+    if (this.state.attachActive === active && this.state.attachBusy === nextBusy) {
+      return;
+    }
+
+    this.state.attachActive = active;
+    this.state.attachBusy = nextBusy;
+    await this.updatePinnedMessage();
   }
 
   /**
@@ -641,6 +656,14 @@ class PinnedMessageManager {
     }
 
     lines.push(t("pinned.line.model", { model: modelName }));
+
+    if (this.state.attachActive) {
+      const attachStatus = this.state.attachBusy
+        ? t("pinned.attach.status.busy")
+        : t("pinned.attach.status.idle");
+      lines.push(t("pinned.line.attach", { status: attachStatus }));
+    }
+
     lines.push(formatContextLine(this.state.tokensUsed, this.state.tokensLimit));
 
     if (this.state.cost !== undefined && this.state.cost !== null) {
@@ -832,6 +855,9 @@ class PinnedMessageManager {
       // Just reset state if not initialized
       this.state.messageId = null;
       this.state.sessionId = null;
+      this.state.sessionTitle = t("pinned.default_session_title");
+      this.state.attachActive = false;
+      this.state.attachBusy = false;
       this.state.tokensUsed = 0;
       this.state.tokensLimit = 0;
       this.state.projectPath = "";
@@ -853,6 +879,8 @@ class PinnedMessageManager {
       this.state.messageId = null;
       this.state.sessionId = null;
       this.state.sessionTitle = t("pinned.default_session_title");
+      this.state.attachActive = false;
+      this.state.attachBusy = false;
       this.state.projectPath = "";
       this.state.projectBranch = null;
       this.state.projectWorktreePath = null;

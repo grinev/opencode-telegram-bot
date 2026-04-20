@@ -5,6 +5,7 @@ export const ru: I18nDictionary = {
   "cmd.description.new": "Создать новую сессию",
   "cmd.description.stop": "Прервать текущее действие",
   "cmd.description.sessions": "Список сессий",
+  "cmd.description.attach": "Подключиться к активной сессией OpenCode",
   "cmd.description.tts": "Переключить аудиоответы",
   "cmd.description.projects": "Список проектов",
   "cmd.description.worktree": "Переключить git worktree",
@@ -70,6 +71,7 @@ export const ru: I18nDictionary = {
   "bot.session_error": "🔴 OpenCode вернул ошибку: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nПровайдер возвращает одну и ту же ошибку при повторных запросах. Используйте /abort для остановки.",
+  "bot.external_user_input": "Внешний ввод пользователя",
   "bot.unknown_command": "⚠️ Неизвестная команда: {command}. Используйте /help для списка команд.",
   "bot.photo_downloading": "⏳ Скачиваю фото...",
   "bot.photo_too_large": "⚠️ Фото слишком большое (макс. {maxSizeMb}МБ)",
@@ -147,6 +149,21 @@ export const ru: I18nDictionary = {
   "sessions.preview.title": "Последние сообщения:",
   "sessions.preview.you": "Вы:",
   "sessions.preview.agent": "Агент:",
+
+  "attach.project_not_selected": "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
+  "attach.session_not_selected":
+    "💬 Сессия не выбрана.\n\nСначала выберите сессию через /sessions.",
+  "attach.session_project_mismatch":
+    "⚠️ Выбранная сессия не соответствует текущему проекту. Повторно выберите сессию через /sessions.",
+  "attach.connected": "✅ Подключился к сессии: {title}",
+  "attach.already_connected": "ℹ️ Уже подключен к сессии: {title}",
+  "attach.status.idle_message": "Статус: idle. Жду новые события.",
+  "attach.status.busy_message": "Статус: busy. Новые промты временно заблокированы.",
+  "attach.restored_question": "Восстановил ожидающий вопрос для этой сессии.",
+  "attach.restored_permissions": "Восстановил ожидающие запросы разрешений: {count}.",
+  "attach.disconnect_hint":
+    "Чтобы отключиться, переключитесь на другую сессию или проект.",
+  "attach.error": "🔴 Не удалось подключиться к текущей сессии.",
 
   "new.project_not_selected": "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
   "new.created": "✅ Создана новая сессия: {title}",
@@ -300,6 +317,9 @@ export const ru: I18nDictionary = {
   "pinned.line.project": "Проект: {project}",
   "pinned.line.worktree": "Worktree: {worktree}",
   "pinned.line.model": "Модель: {model}",
+  "pinned.line.attach": "Attach: {status}",
+  "pinned.attach.status.idle": "активен, idle",
+  "pinned.attach.status.busy": "активен, busy",
   "pinned.line.context": "Контекст: {used} / {limit} ({percent}%)",
   "pinned.line.cost": "Стоимость: {cost} потрачено",
   "subagent.header": "Сабагент {agent}: {description}",

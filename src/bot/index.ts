@@ -18,6 +18,7 @@ import {
   VARIANT_BUTTON_TEXT_PATTERN,
 } from "./message-patterns.js";
 import { sessionsCommand, handleSessionSelect } from "./commands/sessions.js";
+import { attachCommand } from "./commands/attach.js";
 import { newCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
 import { worktreeCommand, handleWorktreeCallback } from "./commands/worktree.js";
@@ -89,11 +90,15 @@ import { assistantRunState } from "./assistant-run-state.js";
 import { ResponseStreamer } from "./streaming/response-streamer.js";
 import type { StreamingMessagePayload } from "./streaming/response-streamer.js";
 import { ToolCallStreamer, type ToolStreamKey } from "./streaming/tool-call-streamer.js";
+import { attachManager } from "../attach/manager.js";
+import { markAttachedSessionBusy, markAttachedSessionIdle } from "../attach/service.js";
+import { externalUserInputSuppressionManager } from "../external-input/suppression.js";
 import {
   prepareAssistantFinalStreamingPayload,
   prepareAssistantStreamingPayload,
   renderAssistantFinalPartsSafe,
 } from "./utils/assistant-rendering.js";
+import { deliverExternalUserInputNotification } from "./utils/external-user-input.js";
 
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
@@ -337,6 +342,39 @@ function getToolStreamKey(tool: string): ToolStreamKey {
   return "default";
 }
 
+type EventStreamItem = {
+  type: string;
+  properties: Record<string, unknown>;
+};
+
+function getEventSessionId(event: EventStreamItem): string | null {
+  const properties = event.properties as {
+    sessionID?: string;
+    info?: { sessionID?: string };
+    part?: { sessionID?: string };
+  };
+
+  return properties.sessionID || properties.info?.sessionID || properties.part?.sessionID || null;
+}
+
+function shouldMarkAttachedBusyFromEvent(event: EventStreamItem): boolean {
+  switch (event.type) {
+    case "session.status":
+      return (event.properties as { status?: { type?: string } }).status?.type === "busy";
+    case "message.updated": {
+      const info = (event.properties as { info?: { role?: string; time?: { completed?: number } } }).info;
+      return info?.role === "assistant" && !info.time?.completed;
+    }
+    case "message.part.updated":
+    case "message.part.delta":
+    case "question.asked":
+    case "permission.asked":
+      return true;
+    default:
+      return false;
+  }
+}
+
 async function ensureCommandsInitialized(ctx: Context, next: NextFunction): Promise<void> {
   if (commandsInitialized || !ctx.from || ctx.from.id !== config.telegram.allowedUserId) {
     await next();
@@ -478,6 +516,28 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     });
   });
 
+  summaryAggregator.setOnExternalUserInput(async (sessionId, _messageId, messageText) => {
+    void enqueueSessionCompletionTask(sessionId, async () => {
+      if (!botInstance || !chatIdInstance) {
+        return;
+      }
+
+      try {
+        await deliverExternalUserInputNotification({
+          api: botInstance.api,
+          chatId: chatIdInstance,
+          currentSessionId: getCurrentSession()?.id ?? null,
+          sessionId,
+          text: messageText,
+          consumeSuppressedInput: (incomingSessionId, incomingText) =>
+            externalUserInputSuppressionManager.consume(incomingSessionId, incomingText),
+        });
+      } catch (err) {
+        logger.error("[Bot] Failed to deliver external user input to Telegram:", err);
+      }
+    });
+  });
+
   summaryAggregator.setOnTool(async (toolInfo) => {
     if (!botInstance || !chatIdInstance) {
       logger.error("Bot or chat ID not available for sending tool notification");
@@ -572,19 +632,21 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
   });
 
-  summaryAggregator.setOnQuestion(async (questions, requestID) => {
+  summaryAggregator.setOnQuestion(async (questions, requestID, sessionId) => {
     if (!botInstance || !chatIdInstance) {
       logger.error("Bot or chat ID not available for showing questions");
       return;
     }
 
     const currentSession = getCurrentSession();
-    if (currentSession) {
-      await Promise.all([
-        toolMessageBatcher.flushSession(currentSession.id, "question_asked"),
-        toolCallStreamer.flushSession(currentSession.id, "question_asked"),
-      ]);
+    if (!currentSession || currentSession.id !== sessionId) {
+      return;
     }
+
+    await Promise.all([
+      toolMessageBatcher.flushSession(currentSession.id, "question_asked"),
+      toolCallStreamer.flushSession(currentSession.id, "question_asked"),
+    ]);
 
     if (questionManager.isActive()) {
       logger.warn("[Bot] Replacing active poll with a new one");
@@ -621,6 +683,11 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   summaryAggregator.setOnPermission(async (request) => {
     if (!botInstance || !chatIdInstance) {
       logger.error("Bot or chat ID not available for showing permission request");
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== request.sessionID) {
       return;
     }
 
@@ -723,6 +790,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnSessionIdle(async (sessionId) => {
+    await markAttachedSessionIdle(sessionId);
     await sessionCompletionTasks.get(sessionId)?.catch(() => undefined);
 
     const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
@@ -776,6 +844,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnSessionError(async (sessionId, message) => {
+    await markAttachedSessionIdle(sessionId);
     if (!botInstance || !chatIdInstance) {
       clearPromptResponseMode(sessionId);
       assistantRunState.clearRun(sessionId, "session_error_no_bot_context");
@@ -869,6 +938,12 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
   logger.info(`[Bot] Subscribing to OpenCode events for project: ${directory}`);
   subscribeToEvents(directory, (event) => {
+    const attached = attachManager.getSnapshot();
+    const eventSessionId = getEventSessionId(event);
+    if (attached && eventSessionId === attached.sessionId && shouldMarkAttachedBusyFromEvent(event)) {
+      void markAttachedSessionBusy(attached.sessionId);
+    }
+
     if (event.type === "session.created" || event.type === "session.updated") {
       const info = (
         event.properties as { info?: { directory?: string; time?: { updated?: number } } }
@@ -891,6 +966,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 export function createBot(): Bot<Context> {
   clearAllInteractionState("bot_startup");
   sessionCompletionTasks.clear();
+  attachManager.clear("bot_startup");
   assistantRunState.clearAll("bot_startup");
 
   if (heartbeatTimer) {
@@ -995,6 +1071,7 @@ export function createBot(): Bot<Context> {
   bot.command("worktree", worktreeCommand);
   bot.command("open", openCommand);
   bot.command("sessions", sessionsCommand);
+  bot.command("attach", (ctx) => attachCommand(ctx, { bot, ensureEventSubscription }));
   bot.command("new", newCommand);
   bot.command("abort", abortCommand);
   bot.command("task", taskCommand);

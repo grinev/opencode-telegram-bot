@@ -163,4 +163,23 @@ describe("opencode/events", () => {
     stopEventListening();
     await subscription;
   });
+
+  it("does not deliver queued callback after listener is stopped", async () => {
+    const event = { type: "session.status", properties: { sessionID: "s1" } } as Event;
+    subscribeMock.mockResolvedValueOnce({ stream: createStream([event]) });
+
+    const callback = vi.fn();
+    const subscription = subscribeToEvents("D:/repo", callback);
+
+    await vi.waitFor(() => {
+      expect(subscribeMock).toHaveBeenCalledTimes(1);
+    });
+
+    await flushImmediate();
+    stopEventListening();
+    await flushImmediate();
+    await subscription;
+
+    expect(callback).not.toHaveBeenCalled();
+  });
 });

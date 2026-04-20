@@ -13,6 +13,7 @@ let eventCallback: EventCallback | null = null;
 let isListening = false;
 let activeDirectory: string | null = null;
 let streamAbortController: AbortController | null = null;
+let listenerGeneration = 0;
 
 function getReconnectDelayMs(attempt: number): number {
   const exponentialDelay = RECONNECT_BASE_DELAY_MS * Math.pow(2, Math.max(0, attempt - 1));
@@ -57,6 +58,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
   }
 
   const controller = new AbortController();
+  const generation = ++listenerGeneration;
 
   activeDirectory = directory;
   eventCallback = callback;
@@ -94,7 +96,19 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
             // Use setImmediate to avoid blocking the event loop
             // and let grammY process incoming Telegram updates
             const callbackSnapshot = eventCallback;
-            setImmediate(() => callbackSnapshot(event));
+            setImmediate(() => {
+              if (
+                streamAbortController !== controller ||
+                controller.signal.aborted ||
+                !isListening ||
+                activeDirectory !== directory ||
+                listenerGeneration !== generation
+              ) {
+                return;
+              }
+
+              callbackSnapshot(event);
+            });
           }
         }
 
@@ -167,6 +181,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
 }
 
 export function stopEventListening(): void {
+  listenerGeneration++;
   streamAbortController?.abort();
   streamAbortController = null;
   isListening = false;

@@ -25,6 +25,7 @@ const mocked = vi.hoisted(() => ({
   pinnedLoadContextFromHistoryMock: vi.fn(),
   pinnedGetContextInfoMock: vi.fn(() => null),
   resolveProjectAgentMock: vi.fn(async () => "build"),
+  detachAttachedSessionMock: vi.fn(),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -75,6 +76,10 @@ vi.mock("../../../src/pinned/manager.js", () => ({
     loadContextFromHistory: mocked.pinnedLoadContextFromHistoryMock,
     getContextInfo: mocked.pinnedGetContextInfoMock,
   },
+}));
+
+vi.mock("../../../src/attach/service.js", () => ({
+  detachAttachedSession: mocked.detachAttachedSessionMock,
 }));
 
 vi.mock("../../../src/utils/safe-background-task.js", () => ({
@@ -174,6 +179,7 @@ describe("bot/commands/sessions", () => {
     mocked.pinnedGetContextInfoMock.mockReturnValue(null);
     mocked.resolveProjectAgentMock.mockReset();
     mocked.resolveProjectAgentMock.mockResolvedValue("build");
+    mocked.detachAttachedSessionMock.mockReset();
   });
 
   it("shows next-page button when sessions exceed page size", async () => {
@@ -203,7 +209,7 @@ describe("bot/commands/sessions", () => {
     await sessionsCommand(ctx as never);
 
     expect(mocked.sessionListMock).not.toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.finish_current"));
+    expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
   });
 
   it("handles next-page callback and renders second page with prev button", async () => {
@@ -338,6 +344,7 @@ describe("bot/commands/sessions", () => {
     expect(handled).toBe(true);
     expect(mocked.resolveProjectAgentMock).toHaveBeenCalledOnce();
     expect(mocked.keyboardUpdateAgentMock).toHaveBeenCalledWith("plan");
+    expect(mocked.detachAttachedSessionMock).toHaveBeenCalledWith("session_switched");
     expect(ctx.api.sendMessage).toHaveBeenCalledWith(
       111,
       t("sessions.selected", { title: "Session 1" }),
@@ -366,7 +373,7 @@ describe("bot/commands/sessions", () => {
     expect(mocked.sessionGetMock).not.toHaveBeenCalled();
     expect(mocked.setCurrentSessionMock).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
-      text: t("interaction.blocked.finish_current"),
+      text: t("bot.session_busy"),
     });
   });
 });

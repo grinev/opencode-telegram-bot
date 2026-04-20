@@ -5,6 +5,7 @@ export const es: I18nDictionary = {
   "cmd.description.new": "Crear una sesión nueva",
   "cmd.description.stop": "Detener la acción actual",
   "cmd.description.sessions": "Listar sesiones",
+  "cmd.description.attach": "Seguir una sesión activa de OpenCode",
   "cmd.description.tts": "Alternar respuestas de audio",
   "cmd.description.projects": "Listar proyectos",
   "cmd.description.worktree": "Cambiar worktrees de git",
@@ -74,6 +75,7 @@ export const es: I18nDictionary = {
   "bot.session_error": "🔴 OpenCode devolvió un error: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nEl proveedor devuelve el mismo error en intentos repetidos. Usa /abort para detenerlo.",
+  "bot.external_user_input": "Entrada externa del usuario",
   "bot.unknown_command":
     "⚠️ Comando desconocido: {command}. Usa /help para ver los comandos disponibles.",
   "bot.photo_downloading": "⏳ Descargando foto...",
@@ -153,6 +155,22 @@ export const es: I18nDictionary = {
   "sessions.preview.title": "Mensajes recientes:",
   "sessions.preview.you": "Tú:",
   "sessions.preview.agent": "Agente:",
+
+  "attach.project_not_selected":
+    "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
+  "attach.session_not_selected":
+    "💬 No hay una sesión seleccionada.\n\nPrimero selecciona una sesión con /sessions.",
+  "attach.session_project_mismatch":
+    "⚠️ La sesión seleccionada no coincide con el proyecto actual. Vuelve a seleccionarla con /sessions.",
+  "attach.connected": "✅ Conectado a la sesión: {title}",
+  "attach.already_connected": "ℹ️ Ya estás conectado a la sesión: {title}",
+  "attach.status.idle_message": "Estado: idle. Esperando nuevos eventos.",
+  "attach.status.busy_message": "Estado: busy. Los nuevos prompts están bloqueados temporalmente.",
+  "attach.restored_question": "Se restauró una pregunta pendiente para esta sesión.",
+  "attach.restored_permissions": "Se restauraron solicitudes de permiso pendientes: {count}.",
+  "attach.disconnect_hint":
+    "Para desconectarte, cambia a otra sesión o proyecto.",
+  "attach.error": "🔴 No se pudo conectar a la sesión actual.",
 
   "new.project_not_selected":
     "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
@@ -311,6 +329,9 @@ export const es: I18nDictionary = {
   "pinned.line.project": "Proyecto: {project}",
   "pinned.line.worktree": "Worktree: {worktree}",
   "pinned.line.model": "Modelo: {model}",
+  "pinned.line.attach": "Attach: {status}",
+  "pinned.attach.status.idle": "activo, idle",
+  "pinned.attach.status.busy": "activo, busy",
   "pinned.line.context": "Contexto: {used} / {limit} ({percent}%)",
   "pinned.line.cost": "Costo: {cost} gastado",
   "subagent.header": "Subagente {agent}: {description}",

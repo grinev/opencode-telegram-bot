@@ -32,6 +32,12 @@ type MessageCompleteCallback = (
 
 type MessagePartialCallback = (sessionId: string, messageId: string, messageText: string) => void;
 
+type ExternalUserInputCallback = (
+  sessionId: string,
+  messageId: string,
+  messageText: string,
+) => void | Promise<void>;
+
 interface MessagePartDeltaEventRaw {
   type: "message.part.delta";
   properties: {
@@ -71,7 +77,7 @@ type ToolCallback = (toolInfo: ToolInfo) => void;
 
 type ToolFileCallback = (fileInfo: ToolFileInfo) => void;
 
-type QuestionCallback = (questions: Question[], requestID: string) => void;
+type QuestionCallback = (questions: Question[], requestID: string, sessionId: string) => void;
 
 type QuestionErrorCallback = () => void;
 
@@ -190,6 +196,7 @@ class SummaryAggregator {
   private lastUpdated = 0;
   private onCompleteCallback: MessageCompleteCallback | null = null;
   private onPartialCallback: MessagePartialCallback | null = null;
+  private onExternalUserInputCallback: ExternalUserInputCallback | null = null;
   private onToolCallback: ToolCallback | null = null;
   private onToolFileCallback: ToolFileCallback | null = null;
   private onQuestionCallback: QuestionCallback | null = null;
@@ -208,6 +215,7 @@ class SummaryAggregator {
   private onClearedCallback: ClearedCallback | null = null;
   private processedToolStates: Set<string> = new Set();
   private thinkingFiredForMessages: Set<string> = new Set();
+  private deliveredExternalUserMessageIds: Set<string> = new Set();
   private knownTextPartIds: Map<string, Set<string>> = new Map();
   private bot: Bot | null = null;
   private chatId: number | null = null;
@@ -233,6 +241,10 @@ class SummaryAggregator {
 
   setOnPartial(callback: MessagePartialCallback): void {
     this.onPartialCallback = callback;
+  }
+
+  setOnExternalUserInput(callback: ExternalUserInputCallback): void {
+    this.onExternalUserInputCallback = callback;
   }
 
   setOnTool(callback: ToolCallback): void {
@@ -423,6 +435,7 @@ class SummaryAggregator {
     this.knownTextPartIds.clear();
     this.processedToolStates.clear();
     this.thinkingFiredForMessages.clear();
+    this.deliveredExternalUserMessageIds.clear();
     this.trackedSessionParents.clear();
     this.subagentStates.clear();
     this.subagentOrder = [];
@@ -961,6 +974,11 @@ class SummaryAggregator {
 
     this.messages.set(messageID, { role: info.role });
 
+    if (info.role === "user") {
+      this.emitExternalUserInputIfReady(info.sessionID, messageID);
+      return;
+    }
+
     if (info.role === "assistant") {
       if (!this.textMessageStates.has(messageID)) {
         this.textMessageStates.set(messageID, {
@@ -1038,20 +1056,12 @@ class SummaryAggregator {
           });
         }
 
-        this.textMessageStates.delete(messageID);
-        this.messages.delete(messageID);
-        this.partHashes.delete(messageID);
-        this.knownTextPartIds.delete(messageID);
+          this.cleanupCompletedMessage(messageID);
 
-        logger.debug(
-          `[Aggregator] Message completed cleanup: remaining messages=${this.textMessageStates.size}`,
-        );
-
-        if (this.textMessageStates.size === 0) {
-          logger.debug("[Aggregator] No more active messages, stopping typing indicator");
-          this.stopTypingIndicator();
+          logger.debug(
+            `[Aggregator] Message completed cleanup: remaining messages=${this.textMessageStates.size}`,
+          );
         }
-      }
 
       this.lastUpdated = Date.now();
     }
@@ -1158,6 +1168,8 @@ class SummaryAggregator {
       if (messageInfo && messageInfo.role === "assistant") {
         this.startTypingIndicator();
         this.emitPartialText(part.sessionID, messageID, fullText);
+      } else if (messageInfo && messageInfo.role === "user") {
+        this.emitExternalUserInputIfReady(part.sessionID, messageID);
       } else {
         const state = this.getOrCreateTextMessageState(messageID);
         state.optimisticUpdateCount++;
@@ -1324,8 +1336,56 @@ class SummaryAggregator {
       return;
     }
 
+    const messageInfo = this.messages.get(messageID);
+    if (messageInfo?.role === "user") {
+      this.emitExternalUserInputIfReady(sessionID, messageID);
+      return;
+    }
+
     this.startTypingIndicator();
     this.emitPartialText(sessionID, messageID, combined);
+  }
+
+  private emitExternalUserInputIfReady(sessionId: string, messageId: string): void {
+    if (sessionId !== this.currentSessionId || this.deliveredExternalUserMessageIds.has(messageId)) {
+      return;
+    }
+
+    const messageInfo = this.messages.get(messageId);
+    if (!messageInfo || messageInfo.role !== "user") {
+      return;
+    }
+
+    const messageText = this.getCombinedMessageText(messageId).trim();
+    if (!messageText) {
+      return;
+    }
+
+    this.deliveredExternalUserMessageIds.add(messageId);
+    this.cleanupCompletedMessage(messageId);
+
+    if (!this.onExternalUserInputCallback) {
+      return;
+    }
+
+    const callback = this.onExternalUserInputCallback;
+    setImmediate(() => {
+      Promise.resolve(callback(sessionId, messageId, messageText)).catch((err) => {
+        logger.error("[Aggregator] Error in external user input callback:", err);
+      });
+    });
+  }
+
+  private cleanupCompletedMessage(messageId: string): void {
+    this.textMessageStates.delete(messageId);
+    this.messages.delete(messageId);
+    this.partHashes.delete(messageId);
+    this.knownTextPartIds.delete(messageId);
+
+    if (this.textMessageStates.size === 0) {
+      logger.debug("[Aggregator] No more active messages, stopping typing indicator");
+      this.stopTypingIndicator();
+    }
   }
 
   private emitPartialText(sessionId: string, messageId: string, messageText: string): void {
@@ -1682,7 +1742,7 @@ class SummaryAggregator {
       const callback = this.onQuestionCallback;
       setImmediate(async () => {
         try {
-          await callback(questions as Question[], id);
+          await callback(questions as Question[], id, sessionID);
         } catch (err) {
           logger.error("[Aggregator] Error in question callback:", err);
         }

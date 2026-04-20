@@ -91,6 +91,6 @@ describe("bot/commands/new", () => {
     await newCommand(ctx as never);
 
     expect(mocked.sessionCreateMock).not.toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.finish_current"));
+    expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
   });
 });

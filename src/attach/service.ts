@@ -1,0 +1,212 @@
+import type { Bot, Context } from "grammy";
+import { opencodeClient } from "../opencode/client.js";
+import { stopEventListening } from "../opencode/events.js";
+import { summaryAggregator } from "../summary/aggregator.js";
+import { pinnedMessageManager } from "../pinned/manager.js";
+import { keyboardManager } from "../keyboard/manager.js";
+import { questionManager } from "../question/manager.js";
+import { permissionManager } from "../permission/manager.js";
+import { showCurrentQuestion } from "../bot/handlers/question.js";
+import { showPermissionRequest } from "../bot/handlers/permission.js";
+import type { SessionInfo } from "../session/manager.js";
+import { attachManager } from "./manager.js";
+import { logger } from "../utils/logger.js";
+
+interface EnsureAttachPinnedSessionParams {
+  api: Context["api"];
+  chatId: number;
+  session: SessionInfo;
+}
+
+export interface AttachSessionDeps {
+  bot: Bot<Context>;
+  chatId: number;
+  session: SessionInfo;
+  ensureEventSubscription: (directory: string) => Promise<void>;
+}
+
+export interface AttachSessionResult {
+  busy: boolean;
+  alreadyAttached: boolean;
+  restoredQuestion: boolean;
+  restoredPermissions: number;
+}
+
+function getAttachBusyStatus(sessionId: string, statuses: unknown): boolean {
+  if (!statuses || typeof statuses !== "object") {
+    return false;
+  }
+
+  const sessionStatus = (statuses as Record<string, { type?: string }>)[sessionId];
+  return sessionStatus?.type === "busy";
+}
+
+async function ensureAttachPinnedSession({
+  api,
+  chatId,
+  session,
+}: EnsureAttachPinnedSessionParams): Promise<void> {
+  if (!pinnedMessageManager.isInitialized()) {
+    pinnedMessageManager.initialize(api, chatId);
+  }
+
+  keyboardManager.initialize(api, chatId);
+
+  const pinnedState = pinnedMessageManager.getState();
+  if (pinnedState.sessionId === session.id && pinnedState.messageId) {
+    return;
+  }
+
+  await pinnedMessageManager.onSessionChange(session.id, session.title);
+  await pinnedMessageManager.loadContextFromHistory(session.id, session.directory);
+
+  const contextInfo = pinnedMessageManager.getContextInfo();
+  if (contextInfo) {
+    keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+  }
+}
+
+async function syncPinnedAttachState(): Promise<void> {
+  if (!pinnedMessageManager.isInitialized()) {
+    return;
+  }
+
+  const attached = attachManager.getSnapshot();
+  await pinnedMessageManager.setAttachState(attached !== null, attached?.busy ?? false);
+}
+
+async function restorePendingQuestion(
+  bot: Bot<Context>,
+  chatId: number,
+  sessionId: string,
+  directory: string,
+): Promise<boolean> {
+  const { data, error } = await opencodeClient.question.list({
+    directory,
+  });
+
+  if (error || !data) {
+    logger.warn("[Attach] Failed to load pending questions during attach:", error);
+    return false;
+  }
+
+  const pendingQuestion = data.find((request) => request.sessionID === sessionId);
+  if (!pendingQuestion) {
+    return false;
+  }
+
+  questionManager.startQuestions(pendingQuestion.questions, pendingQuestion.id);
+  await showCurrentQuestion(bot.api, chatId);
+  return true;
+}
+
+async function restorePendingPermissions(
+  bot: Bot<Context>,
+  chatId: number,
+  sessionId: string,
+  directory: string,
+): Promise<number> {
+  const { data, error } = await opencodeClient.permission.list({
+    directory,
+  });
+
+  if (error || !data) {
+    logger.warn("[Attach] Failed to load pending permissions during attach:", error);
+    return 0;
+  }
+
+  const pendingPermissions = data.filter((request) => request.sessionID === sessionId);
+  for (const request of pendingPermissions) {
+    await showPermissionRequest(bot.api, chatId, request);
+  }
+
+  return pendingPermissions.length;
+}
+
+export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSessionResult> {
+  const { bot, chatId, session, ensureEventSubscription } = deps;
+  const alreadyAttached = attachManager.isAttachedSession(session.id, session.directory);
+
+  await ensureAttachPinnedSession({
+    api: bot.api,
+    chatId,
+    session,
+  });
+
+  if (!alreadyAttached) {
+    await ensureEventSubscription(session.directory);
+    summaryAggregator.setSession(session.id);
+    summaryAggregator.setBotAndChatId(bot, chatId);
+    attachManager.attach(session.id, session.directory);
+  } else {
+    summaryAggregator.setSession(session.id);
+    summaryAggregator.setBotAndChatId(bot, chatId);
+  }
+
+  const { data: statuses, error: statusesError } = await opencodeClient.session.status({
+    directory: session.directory,
+  });
+
+  if (statusesError) {
+    logger.warn("[Attach] Failed to load session status during attach:", statusesError);
+  }
+
+  const busy = getAttachBusyStatus(session.id, statuses);
+  if (busy) {
+    attachManager.markBusy(session.id);
+  } else {
+    attachManager.markIdle(session.id);
+  }
+
+  await syncPinnedAttachState();
+
+  let restoredQuestion = false;
+  let restoredPermissions = 0;
+
+  if (!alreadyAttached && !questionManager.isActive() && !permissionManager.isActive()) {
+    restoredQuestion = await restorePendingQuestion(bot, chatId, session.id, session.directory);
+
+    if (!restoredQuestion) {
+      restoredPermissions = await restorePendingPermissions(
+        bot,
+        chatId,
+        session.id,
+        session.directory,
+      );
+    }
+  }
+
+  return {
+    busy,
+    alreadyAttached,
+    restoredQuestion,
+    restoredPermissions,
+  };
+}
+
+export function detachAttachedSession(reason: string): void {
+  if (!attachManager.isAttached()) {
+    return;
+  }
+
+  stopEventListening();
+  summaryAggregator.clear();
+  attachManager.clear(reason);
+  void syncPinnedAttachState();
+}
+
+export async function markAttachedSessionBusy(sessionId: string): Promise<void> {
+  if (!attachManager.markBusy(sessionId)) {
+    return;
+  }
+
+  await syncPinnedAttachState();
+}
+
+export async function markAttachedSessionIdle(sessionId: string): Promise<void> {
+  if (!attachManager.markIdle(sessionId)) {
+    return;
+  }
+
+  await syncPinnedAttachState();
+}

@@ -5,6 +5,7 @@ import { clearSession } from "../../session/manager.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
+import { detachAttachedSession } from "../../attach/service.js";
 import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
@@ -26,6 +27,7 @@ import { logger } from "../../utils/logger.js";
  * @param reason    short tag for `clearAllInteractionState` (e.g. "project_switched")
  */
 export async function switchToProject(ctx: Context, project: ProjectInfo, reason: string) {
+  detachAttachedSession(reason);
   setCurrentProject(project);
   clearSession();
   summaryAggregator.clear();

@@ -261,7 +261,7 @@ describe("interactionGuardMiddleware", () => {
     await interactionGuardMiddleware(ctx, next);
 
     expect(next).not.toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.finish_current"));
+    expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
   });
 
   it("blocks plain text while busy with generic blocked message", async () => {
@@ -273,7 +273,7 @@ describe("interactionGuardMiddleware", () => {
     await interactionGuardMiddleware(ctx, next);
 
     expect(next).not.toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.finish_current"));
+    expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
   });
 
   it("blocks callback while busy without active question or permission", async () => {
@@ -286,7 +286,7 @@ describe("interactionGuardMiddleware", () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
-      text: t("interaction.blocked.finish_current"),
+      text: t("bot.session_busy"),
     });
   });
 
