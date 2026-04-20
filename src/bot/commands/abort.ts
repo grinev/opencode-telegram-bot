@@ -6,7 +6,6 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
 import { assistantRunState } from "../assistant-run-state.js";
-import { detachAttachedSession } from "../../attach/service.js";
 
 type SessionState = "idle" | "busy" | "not-found";
 
@@ -17,7 +16,6 @@ interface AbortCurrentOperationOptions {
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function abortLocalStreaming(): void {
-  detachAttachedSession("abort_command");
   clearAllInteractionState("abort_command");
 }
 

@@ -21,6 +21,7 @@ import { t } from "../../i18n/index.js";
 import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
 import { assistantRunState } from "../assistant-run-state.js";
 import {
+  attachToSession,
   detachAttachedSession,
   markAttachedSessionBusy,
   markAttachedSessionIdle,
@@ -137,15 +138,8 @@ export async function processUserPrompt(
   botInstance = bot;
   chatIdInstance = ctx.chat!.id;
 
-  // Initialize pinned message manager if not already
-  if (!pinnedMessageManager.isInitialized()) {
-    pinnedMessageManager.initialize(bot.api, ctx.chat!.id);
-  }
-
-  // Initialize keyboard manager if not already
-  keyboardManager.initialize(bot.api, ctx.chat!.id);
-
   let currentSession = getCurrentSession();
+  let createdNewSession = false;
 
   if (currentSession && currentSession.directory !== currentProject.worktree) {
     logger.warn(
@@ -180,19 +174,26 @@ export async function processUserPrompt(
 
     setCurrentSession(currentSession);
     await ingestSessionInfoForCache(session);
+    createdNewSession = true;
+  } else {
+    logger.info(
+      `[Bot] Using existing session: id=${currentSession.id}, title="${currentSession.title}"`,
+    );
+  }
 
-    // Create pinned message for new session
-    try {
-      await pinnedMessageManager.onSessionChange(session.id, session.title);
-    } catch (err) {
-      logger.error("[Bot] Error creating pinned message for new session:", err);
-    }
+  await attachToSession({
+    bot,
+    chatId: ctx.chat!.id,
+    session: currentSession,
+    ensureEventSubscription,
+  });
 
+  if (createdNewSession) {
     const currentAgent = await resolveProjectAgent(getStoredAgent());
     const currentModel = getStoredModel();
-    const contextInfo = pinnedMessageManager.getContextInfo();
-    const variantName = formatVariantForButton(currentModel.variant || "default");
     keyboardManager.updateAgent(currentAgent);
+    const contextInfo = keyboardManager.getContextInfo();
+    const variantName = formatVariantForButton(currentModel.variant || "default");
     const keyboard = createMainKeyboard(
       currentAgent,
       currentModel,
@@ -200,28 +201,10 @@ export async function processUserPrompt(
       variantName,
     );
 
-    await ctx.reply(t("bot.session_created", { title: session.title }), {
+    await ctx.reply(t("bot.session_created", { title: currentSession.title }), {
       reply_markup: keyboard,
     });
-  } else {
-    logger.info(
-      `[Bot] Using existing session: id=${currentSession.id}, title="${currentSession.title}"`,
-    );
-
-    // Ensure pinned message exists for existing session
-    if (!pinnedMessageManager.getState().messageId) {
-      try {
-        await pinnedMessageManager.onSessionChange(currentSession.id, currentSession.title);
-      } catch (err) {
-        logger.error("[Bot] Error creating pinned message for existing session:", err);
-      }
-    }
   }
-
-  await ensureEventSubscription(currentSession.directory);
-
-  summaryAggregator.setSession(currentSession.id);
-  summaryAggregator.setBotAndChatId(bot, ctx.chat!.id);
 
   const sessionIsBusy = await isSessionBusy(currentSession.id, currentSession.directory);
   if (sessionIsBusy) {

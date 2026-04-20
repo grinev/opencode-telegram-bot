@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Context } from "grammy";
+import type { Bot, Context } from "grammy";
 import { sessionsCommand, handleSessionSelect } from "../../../src/bot/commands/sessions.js";
 import { interactionManager } from "../../../src/interaction/manager.js";
 import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
@@ -19,13 +19,15 @@ const mocked = vi.hoisted(() => ({
   keyboardGetKeyboardMock: vi.fn(() => ({ inline_keyboard: [] })),
   keyboardUpdateAgentMock: vi.fn(),
   keyboardUpdateContextMock: vi.fn(),
+  keyboardGetContextInfoMock: vi.fn(() => null),
   pinnedIsInitializedMock: vi.fn(() => false),
   pinnedInitializeMock: vi.fn(),
   pinnedOnSessionChangeMock: vi.fn(),
   pinnedLoadContextFromHistoryMock: vi.fn(),
   pinnedGetContextInfoMock: vi.fn(() => null),
   resolveProjectAgentMock: vi.fn(async () => "build"),
-  detachAttachedSessionMock: vi.fn(),
+  attachToSessionMock: vi.fn(),
+  ensureEventSubscriptionMock: vi.fn(),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -59,6 +61,7 @@ vi.mock("../../../src/keyboard/manager.js", () => ({
   keyboardManager: {
     initialize: mocked.keyboardInitializeMock,
     getKeyboard: mocked.keyboardGetKeyboardMock,
+    getContextInfo: mocked.keyboardGetContextInfoMock,
     updateAgent: mocked.keyboardUpdateAgentMock,
     updateContext: mocked.keyboardUpdateContextMock,
   },
@@ -79,7 +82,7 @@ vi.mock("../../../src/pinned/manager.js", () => ({
 }));
 
 vi.mock("../../../src/attach/service.js", () => ({
-  detachAttachedSession: mocked.detachAttachedSessionMock,
+  attachToSession: mocked.attachToSessionMock,
 }));
 
 vi.mock("../../../src/utils/safe-background-task.js", () => ({
@@ -141,6 +144,13 @@ function createCallbackContext(data: string, messageId: number): Context {
   } as unknown as Context;
 }
 
+function createDeps() {
+  return {
+    bot: { api: {} } as Bot<Context>,
+    ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+  };
+}
+
 function getKeyboardButtons(ctx: Context): Array<Array<{ text: string; callback_data?: string }>> {
   const calls = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls;
   const options = calls[0]?.[1] as {
@@ -166,6 +176,8 @@ describe("bot/commands/sessions", () => {
     mocked.keyboardInitializeMock.mockReset();
     mocked.keyboardGetKeyboardMock.mockReset();
     mocked.keyboardGetKeyboardMock.mockReturnValue({ inline_keyboard: [] });
+    mocked.keyboardGetContextInfoMock.mockReset();
+    mocked.keyboardGetContextInfoMock.mockReturnValue(null);
     mocked.keyboardUpdateAgentMock.mockReset();
     mocked.keyboardUpdateContextMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReset();
@@ -179,7 +191,14 @@ describe("bot/commands/sessions", () => {
     mocked.pinnedGetContextInfoMock.mockReturnValue(null);
     mocked.resolveProjectAgentMock.mockReset();
     mocked.resolveProjectAgentMock.mockResolvedValue("build");
-    mocked.detachAttachedSessionMock.mockReset();
+    mocked.attachToSessionMock.mockReset();
+    mocked.attachToSessionMock.mockResolvedValue({
+      busy: false,
+      alreadyAttached: false,
+      restoredQuestion: false,
+      restoredPermissions: 0,
+    });
+    mocked.ensureEventSubscriptionMock.mockReset();
   });
 
   it("shows next-page button when sessions exceed page size", async () => {
@@ -226,7 +245,7 @@ describe("bot/commands/sessions", () => {
     });
 
     const ctx = createCallbackContext("session:page:1", 456);
-    const handled = await handleSessionSelect(ctx);
+    const handled = await handleSessionSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.sessionListMock).toHaveBeenCalledWith({
@@ -262,7 +281,7 @@ describe("bot/commands/sessions", () => {
     });
 
     const ctx = createCallbackContext("session:page:2", 456);
-    const handled = await handleSessionSelect(ctx);
+    const handled = await handleSessionSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -287,7 +306,7 @@ describe("bot/commands/sessions", () => {
     });
 
     const ctx = createCallbackContext("session:page:1", 456);
-    const handled = await handleSessionSelect(ctx);
+    const handled = await handleSessionSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -314,7 +333,7 @@ describe("bot/commands/sessions", () => {
     });
 
     const ctx = createCallbackContext("session:session-1", 456);
-    const handled = await handleSessionSelect(ctx);
+    const handled = await handleSessionSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.clearInteractionMock).toHaveBeenCalledWith("session_select_error");
@@ -339,19 +358,28 @@ describe("bot/commands/sessions", () => {
     });
 
     const ctx = createCallbackContext("session:session-1", 456);
-    const handled = await handleSessionSelect(ctx);
+    const handled = await handleSessionSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.resolveProjectAgentMock).toHaveBeenCalledOnce();
     expect(mocked.keyboardUpdateAgentMock).toHaveBeenCalledWith("plan");
-    expect(mocked.detachAttachedSessionMock).toHaveBeenCalledWith("session_switched");
-    expect(ctx.api.sendMessage).toHaveBeenCalledWith(
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
+      bot: expect.any(Object),
+      chatId: 111,
+      session: {
+        id: "session-1",
+        title: "Session 1",
+        directory: "/repo",
+      },
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+    expect((ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([
       111,
       t("sessions.selected", { title: "Session 1" }),
       expect.objectContaining({
         reply_markup: { inline_keyboard: [] },
       }),
-    );
+    ]);
   });
 
   it("blocks session selection callback while foreground session is busy", async () => {
@@ -367,7 +395,7 @@ describe("bot/commands/sessions", () => {
     });
 
     const ctx = createCallbackContext("session:session-1", 456);
-    const handled = await handleSessionSelect(ctx);
+    const handled = await handleSessionSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.sessionGetMock).not.toHaveBeenCalled();

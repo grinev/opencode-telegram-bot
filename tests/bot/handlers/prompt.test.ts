@@ -16,6 +16,7 @@ const mocked = vi.hoisted(() => ({
   safeBackgroundTaskMock: vi.fn(),
   setSessionSummaryMock: vi.fn(),
   setBotAndChatIdMock: vi.fn(),
+  attachToSessionMock: vi.fn(),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -122,6 +123,7 @@ vi.mock("../../../src/bot/assistant-run-state.js", () => ({
 }));
 
 vi.mock("../../../src/attach/service.js", () => ({
+  attachToSession: mocked.attachToSessionMock,
   detachAttachedSession: vi.fn(),
   markAttachedSessionBusy: vi.fn().mockResolvedValue(undefined),
   markAttachedSessionIdle: vi.fn().mockResolvedValue(undefined),
@@ -162,6 +164,13 @@ describe("bot/handlers/prompt", () => {
     mocked.safeBackgroundTaskMock.mockReset();
     mocked.setSessionSummaryMock.mockReset();
     mocked.setBotAndChatIdMock.mockReset();
+    mocked.attachToSessionMock.mockReset();
+    mocked.attachToSessionMock.mockResolvedValue({
+      busy: false,
+      alreadyAttached: false,
+      restoredQuestion: false,
+      restoredPermissions: 0,
+    });
 
     mocked.sessionStatusMock.mockResolvedValue({
       data: {
@@ -176,6 +185,16 @@ describe("bot/handlers/prompt", () => {
     const handled = await processUserPrompt(createContext(), "Review README", createDeps());
 
     expect(handled).toBe(true);
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
+      bot: expect.any(Object),
+      chatId: 777,
+      session: {
+        id: "session-1",
+        title: "Session",
+        directory: "D:\\Projects\\Repo",
+      },
+      ensureEventSubscription: expect.any(Function),
+    });
     expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "Review README");
   });
 

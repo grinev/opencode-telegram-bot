@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
-import { attachCommand } from "../../../src/bot/commands/attach.js";
-import { attachManager } from "../../../src/attach/manager.js";
-import { questionManager } from "../../../src/question/manager.js";
-import { permissionManager } from "../../../src/permission/manager.js";
-import { t } from "../../../src/i18n/index.js";
+import {
+  attachToSession,
+  restoreAttachedCurrentSession,
+} from "../../src/attach/service.js";
+import { attachManager } from "../../src/attach/manager.js";
+import { questionManager } from "../../src/question/manager.js";
+import { permissionManager } from "../../src/permission/manager.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -35,15 +37,15 @@ const mocked = vi.hoisted(() => ({
   ensureEventSubscriptionMock: vi.fn(),
 }));
 
-vi.mock("../../../src/settings/manager.js", () => ({
+vi.mock("../../src/settings/manager.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../src/session/manager.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
 }));
 
-vi.mock("../../../src/opencode/client.js", () => ({
+vi.mock("../../src/opencode/client.js", () => ({
   opencodeClient: {
     session: {
       status: mocked.sessionStatusMock,
@@ -57,7 +59,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
   },
 }));
 
-vi.mock("../../../src/summary/aggregator.js", () => ({
+vi.mock("../../src/summary/aggregator.js", () => ({
   summaryAggregator: {
     setSession: mocked.setSessionSummaryMock,
     setBotAndChatId: mocked.setBotAndChatIdMock,
@@ -65,7 +67,7 @@ vi.mock("../../../src/summary/aggregator.js", () => ({
   },
 }));
 
-vi.mock("../../../src/pinned/manager.js", () => ({
+vi.mock("../../src/pinned/manager.js", () => ({
   pinnedMessageManager: {
     isInitialized: mocked.pinnedIsInitializedMock,
     initialize: mocked.pinnedInitializeMock,
@@ -77,27 +79,20 @@ vi.mock("../../../src/pinned/manager.js", () => ({
   },
 }));
 
-vi.mock("../../../src/keyboard/manager.js", () => ({
+vi.mock("../../src/keyboard/manager.js", () => ({
   keyboardManager: {
     initialize: mocked.keyboardInitializeMock,
     updateContext: mocked.keyboardUpdateContextMock,
   },
 }));
 
-vi.mock("../../../src/bot/handlers/question.js", () => ({
+vi.mock("../../src/bot/handlers/question.js", () => ({
   showCurrentQuestion: mocked.showCurrentQuestionMock,
 }));
 
-vi.mock("../../../src/bot/handlers/permission.js", () => ({
+vi.mock("../../src/bot/handlers/permission.js", () => ({
   showPermissionRequest: mocked.showPermissionRequestMock,
 }));
-
-function createCtx(): Context {
-  return {
-    chat: { id: 777 },
-    reply: vi.fn().mockResolvedValue({ message_id: 1000 }),
-  } as unknown as Context;
-}
 
 function createBot(): Bot<Context> {
   return {
@@ -107,7 +102,7 @@ function createBot(): Bot<Context> {
   } as unknown as Bot<Context>;
 }
 
-describe("bot/commands/attach", () => {
+describe("attach/service", () => {
   beforeEach(() => {
     attachManager.__resetForTests();
     questionManager.clear();
@@ -162,104 +157,53 @@ describe("bot/commands/attach", () => {
     mocked.ensureEventSubscriptionMock.mockResolvedValue(undefined);
   });
 
-  it("requires a selected project", async () => {
-    mocked.currentProject = null;
-
-    const ctx = createCtx();
-    await attachCommand(ctx as never, {
+  it("follows an idle session and updates attach state", async () => {
+    const result = await attachToSession({
       bot: createBot(),
+      chatId: 777,
+      session: mocked.currentSession!,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
-    expect(ctx.reply).toHaveBeenCalledWith(t("attach.project_not_selected"));
-  });
-
-  it("requires a selected session", async () => {
-    mocked.currentSession = null;
-
-    const ctx = createCtx();
-    await attachCommand(ctx as never, {
-      bot: createBot(),
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    expect(result).toEqual({
+      busy: false,
+      alreadyAttached: false,
+      restoredQuestion: false,
+      restoredPermissions: 0,
     });
-
-    expect(ctx.reply).toHaveBeenCalledWith(t("attach.session_not_selected"));
-  });
-
-  it("attaches to an idle session and shows disconnect hint", async () => {
-    const ctx = createCtx();
-    await attachCommand(ctx as never, {
-      bot: createBot(),
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
-    });
-
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledWith("D:\\Projects\\Repo");
     expect(mocked.setSessionSummaryMock).toHaveBeenCalledWith("session-1");
     expect(mocked.setBotAndChatIdMock).toHaveBeenCalled();
     expect(mocked.pinnedSetAttachStateMock).toHaveBeenCalledWith(true, false);
-    expect(ctx.reply).toHaveBeenCalledWith(
-      [
-        t("attach.connected", { title: "Session One" }),
-        t("attach.status.idle_message"),
-        t("attach.disconnect_hint"),
-      ].join("\n\n"),
-    );
-  });
-
-  it("attaches to a busy session and marks it busy", async () => {
-    mocked.sessionStatusMock.mockResolvedValueOnce({
-      data: {
-        "session-1": { type: "busy" },
-      },
-      error: null,
-    });
-
-    const ctx = createCtx();
-    await attachCommand(ctx as never, {
-      bot: createBot(),
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
-    });
-
     expect(attachManager.getSnapshot()).toMatchObject({
       sessionId: "session-1",
       directory: "D:\\Projects\\Repo",
-      busy: true,
+      busy: false,
     });
-    expect(mocked.pinnedSetAttachStateMock).toHaveBeenCalledWith(true, true);
-    expect(ctx.reply).toHaveBeenCalledWith(
-      [
-        t("attach.connected", { title: "Session One" }),
-        t("attach.status.busy_message"),
-        t("attach.disconnect_hint"),
-      ].join("\n\n"),
-    );
   });
 
-  it("reports already connected on repeated attach without resubscribing", async () => {
+  it("does not resubscribe when already following the same session", async () => {
     const bot = createBot();
-    const firstCtx = createCtx();
-    await attachCommand(firstCtx as never, {
+
+    await attachToSession({
       bot,
+      chatId: 777,
+      session: mocked.currentSession!,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
-    const secondCtx = createCtx();
-    await attachCommand(secondCtx as never, {
+    const result = await attachToSession({
       bot,
+      chatId: 777,
+      session: mocked.currentSession!,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
+    expect(result.alreadyAttached).toBe(true);
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledTimes(1);
-    expect(secondCtx.reply).toHaveBeenCalledWith(
-      [
-        t("attach.already_connected", { title: "Session One" }),
-        t("attach.status.idle_message"),
-        t("attach.disconnect_hint"),
-      ].join("\n\n"),
-    );
   });
 
-  it("restores a pending question for the attached session", async () => {
+  it("restores a pending question when first following a session", async () => {
     mocked.questionListMock.mockResolvedValueOnce({
       data: [
         {
@@ -277,60 +221,43 @@ describe("bot/commands/attach", () => {
       error: null,
     });
 
-    const ctx = createCtx();
-    await attachCommand(ctx as never, {
+    const result = await attachToSession({
       bot: createBot(),
+      chatId: 777,
+      session: mocked.currentSession!,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
+    expect(result.restoredQuestion).toBe(true);
     expect(mocked.showCurrentQuestionMock).toHaveBeenCalledOnce();
-    expect(ctx.reply).toHaveBeenCalledWith(
-      [
-        t("attach.connected", { title: "Session One" }),
-        t("attach.status.idle_message"),
-        t("attach.restored_question"),
-        t("attach.disconnect_hint"),
-      ].join("\n\n"),
-    );
   });
 
-  it("restores pending permissions when no question exists", async () => {
-    mocked.permissionListMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: "perm-1",
-          sessionID: "session-1",
-          permission: "bash",
-          patterns: ["npm test"],
-          metadata: {},
-          always: [],
-        },
-        {
-          id: "perm-2",
-          sessionID: "session-1",
-          permission: "read",
-          patterns: ["src/**"],
-          metadata: {},
-          always: [],
-        },
-      ],
-      error: null,
-    });
-
-    const ctx = createCtx();
-    await attachCommand(ctx as never, {
+  it("restores the saved current session on startup", async () => {
+    const restored = await restoreAttachedCurrentSession({
       bot: createBot(),
+      chatId: 777,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
-    expect(mocked.showPermissionRequestMock).toHaveBeenCalledTimes(2);
-    expect(ctx.reply).toHaveBeenCalledWith(
-      [
-        t("attach.connected", { title: "Session One" }),
-        t("attach.status.idle_message"),
-        t("attach.restored_permissions", { count: 2 }),
-        t("attach.disconnect_hint"),
-      ].join("\n\n"),
-    );
+    expect(restored).toBe(true);
+    expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledWith("D:\\Projects\\Repo");
+    expect(attachManager.getSnapshot()?.sessionId).toBe("session-1");
+  });
+
+  it("skips startup restore when stored project and session do not match", async () => {
+    mocked.currentProject = {
+      id: "project-1",
+      worktree: "D:\\Projects\\Other",
+    };
+
+    const restored = await restoreAttachedCurrentSession({
+      bot: createBot(),
+      chatId: 777,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+
+    expect(restored).toBe(false);
+    expect(mocked.ensureEventSubscriptionMock).not.toHaveBeenCalled();
+    expect(attachManager.getSnapshot()).toBeNull();
   });
 });

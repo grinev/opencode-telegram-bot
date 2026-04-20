@@ -9,6 +9,8 @@ import { permissionManager } from "../permission/manager.js";
 import { showCurrentQuestion } from "../bot/handlers/question.js";
 import { showPermissionRequest } from "../bot/handlers/permission.js";
 import type { SessionInfo } from "../session/manager.js";
+import { getCurrentSession } from "../session/manager.js";
+import { getCurrentProject } from "../settings/manager.js";
 import { attachManager } from "./manager.js";
 import { logger } from "../utils/logger.js";
 
@@ -30,6 +32,12 @@ export interface AttachSessionResult {
   alreadyAttached: boolean;
   restoredQuestion: boolean;
   restoredPermissions: number;
+}
+
+export interface RestoreAttachedCurrentSessionDeps {
+  bot: Bot<Context>;
+  chatId: number;
+  ensureEventSubscription: (directory: string) => Promise<void>;
 }
 
 function getAttachBusyStatus(sessionId: string, statuses: unknown): boolean {
@@ -182,6 +190,40 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
     restoredQuestion,
     restoredPermissions,
   };
+}
+
+export async function restoreAttachedCurrentSession(
+  deps: RestoreAttachedCurrentSessionDeps,
+): Promise<boolean> {
+  const currentProject = getCurrentProject();
+  const currentSession = getCurrentSession();
+
+  if (!currentProject || !currentSession) {
+    return false;
+  }
+
+  if (currentSession.directory !== currentProject.worktree) {
+    logger.warn(
+      `[Attach] Skipping auto-restore because project/session mismatch: sessionDirectory=${currentSession.directory}, projectDirectory=${currentProject.worktree}`,
+    );
+    return false;
+  }
+
+  try {
+    await attachToSession({
+      bot: deps.bot,
+      chatId: deps.chatId,
+      session: currentSession,
+      ensureEventSubscription: deps.ensureEventSubscription,
+    });
+    logger.info(
+      `[Attach] Restored followed session on startup: session=${currentSession.id}, directory=${currentSession.directory}`,
+    );
+    return true;
+  } catch (error) {
+    logger.error("[Attach] Failed to restore followed session on startup:", error);
+    return false;
+  }
 }
 
 export function detachAttachedSession(reason: string): void {
