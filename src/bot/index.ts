@@ -979,6 +979,21 @@ export function createBot(): Bot<Context> {
 
   const botOptions: ConstructorParameters<typeof Bot<Context>>[1] = {};
 
+  if (config.telegram.apiRoot || config.telegram.proxySecret) {
+    botOptions.client = botOptions.client ?? {};
+    if (config.telegram.apiRoot) {
+      botOptions.client.apiRoot = config.telegram.apiRoot;
+      logger.info(`[Bot] Using custom Telegram API root: ${config.telegram.apiRoot}`);
+    }
+    if (config.telegram.proxySecret) {
+      botOptions.client.baseFetchConfig = {
+        ...(botOptions.client.baseFetchConfig ?? {}),
+        headers: { "X-Proxy-Secret": config.telegram.proxySecret },
+      };
+      logger.info(`[Bot] Sending X-Proxy-Secret header to Telegram API root`);
+    }
+  }
+
   if (config.telegram.proxyUrl) {
     const proxyUrl = config.telegram.proxyUrl;
     let agent;

@@ -40,9 +40,13 @@ async function downloadTelegramFileByUrl(url: string, redirectDepth: number = 0)
     const targetUrl = new URL(url);
     const requestModule = targetUrl.protocol === "http:" ? http : https;
 
+    const proxySecret = config.telegram.proxySecret;
     const request = requestModule.get(
       targetUrl,
-      { agent: getTelegramDownloadAgent() },
+      {
+        agent: getTelegramDownloadAgent(),
+        ...(proxySecret ? { headers: { "X-Proxy-Secret": proxySecret } } : {}),
+      },
       (response) => {
         const statusCode = response.statusCode ?? 0;
 
@@ -123,7 +127,8 @@ async function downloadTelegramFile(
       return null;
     }
 
-    const fileUrl = `https://api.telegram.org/file/bot${ctx.api.token}/${file.file_path}`;
+    const apiRoot = (config.telegram.apiRoot ?? "https://api.telegram.org").replace(/\/$/, "");
+    const fileUrl = `${apiRoot}/file/bot${ctx.api.token}/${file.file_path}`;
 
     logger.debug(`[Voice] Downloading file: ${file.file_path} (${file.file_size ?? "?"} bytes)`);
 
