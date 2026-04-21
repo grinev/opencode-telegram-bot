@@ -15,11 +15,31 @@ export function createPlainRenderedBlock(text: string): TelegramRenderedBlock {
   };
 }
 
+function addMultipartMarkers(parts: TelegramRenderedPart[]): TelegramRenderedPart[] {
+  if (parts.length <= 1) {
+    return parts;
+  }
+
+  return parts.map((part, index) => {
+    const marker = `[${index + 1}/${parts.length}]\n`;
+    return {
+      ...part,
+      text: `${marker}${part.text}`,
+      fallbackText: `${marker}${part.fallbackText}`,
+    };
+  });
+}
+
 export function createPlainRenderedParts(
   text: string,
   maxPartLength: number,
 ): TelegramRenderedPart[] {
-  return chunkTelegramRenderedBlocks([createPlainRenderedBlock(text)], { maxPartLength });
+  const markerReserve = 16;
+  const chunkLimit = Math.max(1, maxPartLength - markerReserve);
+  const parts = chunkTelegramRenderedBlocks([createPlainRenderedBlock(text)], {
+    maxPartLength: chunkLimit,
+  });
+  return addMultipartMarkers(parts);
 }
 
 function useAssistantEntitiesFormat(): boolean {

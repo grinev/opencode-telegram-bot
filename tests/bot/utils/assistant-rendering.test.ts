@@ -117,7 +117,7 @@ describe("bot/utils/assistant-rendering", () => {
           source: "plain",
         },
       ],
-      { maxPartLength: 50 },
+      { maxPartLength: 34 },
     );
     expect(debug).toHaveBeenCalledWith(
       "[AssistantRender] Built final assistant parts in raw mode",
@@ -150,7 +150,7 @@ describe("bot/utils/assistant-rendering", () => {
           source: "plain",
         },
       ],
-      { maxPartLength: 40 },
+      { maxPartLength: 24 },
     );
     expect(debug).toHaveBeenCalledWith(
       "[AssistantRender] Built streaming assistant payload in raw mode",

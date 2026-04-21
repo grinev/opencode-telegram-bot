@@ -361,6 +361,7 @@ function extractFirstUpdatedFileFromTitle(title: string): string {
 
 export function formatToolInfo(toolInfo: ToolInfo): string | null {
   const { tool, input, title } = toolInfo;
+  const status = "status" in toolInfo.state ? toolInfo.state.status : undefined;
   logger.debug(
     `[Formatter] formatToolInfo: tool=${tool}, hasMetadata=${!!toolInfo.metadata}, hasFilediff=${!!toolInfo.metadata?.filediff}`,
   );
@@ -386,7 +387,11 @@ export function formatToolInfo(toolInfo: ToolInfo): string | null {
   }
 
   if (tool === "bash" && input && typeof input.command === "string") {
-    details = truncateWithEllipsis(input.command, config.bot.bashToolDisplayMaxLength);
+    const bashMaxLength =
+      status === "running" || status === "pending"
+        ? Math.max(config.bot.bashToolDisplayMaxLength, 4000)
+        : config.bot.bashToolDisplayMaxLength;
+    details = truncateWithEllipsis(input.command, bashMaxLength);
   }
 
   if (tool === "apply_patch") {

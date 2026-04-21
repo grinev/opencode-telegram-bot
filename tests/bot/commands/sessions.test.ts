@@ -375,7 +375,7 @@ describe("bot/commands/sessions", () => {
     });
     expect((ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([
       111,
-      t("sessions.selected", { title: "Session 1" }),
+      `${t("sessions.selected", { title: "Session 1" })}\n\n👀 Live watch active\n✅ Idle`,
       expect.objectContaining({
         reply_markup: { inline_keyboard: [] },
       }),

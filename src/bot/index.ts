@@ -56,7 +56,7 @@ import { clearAllInteractionState } from "../interaction/cleanup.js";
 import { keyboardManager } from "../keyboard/manager.js";
 import { stopEventListening, subscribeToEvents } from "../opencode/events.js";
 import { summaryAggregator } from "../summary/aggregator.js";
-import { formatToolInfo } from "../summary/formatter.js";
+import { escapePlainTextForTelegramMarkdownV2, formatToolInfo } from "../summary/formatter.js";
 import { renderSubagentCards } from "../summary/subagent-formatter.js";
 import { ToolMessageBatcher } from "../summary/tool-message-batcher.js";
 import { getCurrentSession } from "../session/manager.js";
@@ -79,6 +79,10 @@ import {
   sendBotText,
   sendRenderedBotPart,
 } from "./utils/telegram-text.js";
+import {
+  editMessageWithMarkdownFallback,
+  sendMessageWithMarkdownFallback,
+} from "./utils/send-with-markdown-fallback.js";
 import { formatAssistantRunFooter } from "./utils/assistant-run-footer.js";
 import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
 import { getStoredModel } from "../model/manager.js";
@@ -113,6 +117,8 @@ const RESPONSE_STREAM_THROTTLE_MS = config.bot.responseStreamThrottleMs;
 const RESPONSE_STREAM_TEXT_LIMIT = 3800;
 const SESSION_RETRY_PREFIX = "🔁";
 const SUBAGENT_STREAM_PREFIX = "🧩";
+const LIVE_TOOL_STREAM_PREFIX = "tool-live";
+const REASONING_STREAM_PREFIX = "reasoning-live";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEMP_DIR = path.join(__dirname, "..", ".tmp");
@@ -145,6 +151,14 @@ function prepareStreamingPayload(messageText: string): StreamingMessagePayload |
 
 function prepareFinalStreamingPayload(messageText: string): StreamingMessagePayload | null {
   return prepareAssistantFinalStreamingPayload(messageText, RESPONSE_STREAM_TEXT_LIMIT);
+}
+
+function formatReasoningChunk(text: string): { markdown: string; fallback: string } {
+  const normalized = text.trim();
+  return {
+    markdown: `💭 _${escapePlainTextForTelegramMarkdownV2(normalized)}_`,
+    fallback: `💭 ${normalized}`,
+  };
 }
 
 function enqueueSessionCompletionTask(sessionId: string, task: () => Promise<void>): Promise<void> {
@@ -337,6 +351,87 @@ const toolCallStreamer = new ToolCallStreamer({
   },
 });
 
+const reasoningStreamer = new ToolCallStreamer({
+  throttleMs: RESPONSE_STREAM_THROTTLE_MS,
+  sendText: async (sessionId, text) => {
+    if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+      throw new Error("Bot context missing for reasoning stream send");
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
+      throw new Error(`Reasoning stream session mismatch for send: ${sessionId}`);
+    }
+
+    const formatted = formatReasoningChunk(text);
+    const sentMessage = await sendMessageWithMarkdownFallback({
+      api: botInstance.api,
+      chatId: chatIdInstance,
+      text: formatted.markdown,
+      rawFallbackText: formatted.fallback,
+      options: { disable_notification: true },
+      parseMode: "MarkdownV2",
+    });
+
+    return sentMessage.message_id;
+  },
+  editText: async (sessionId, messageId, text) => {
+    if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+      throw new Error("Bot context missing for reasoning stream edit");
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
+      throw new Error(`Reasoning stream session mismatch for edit: ${sessionId}`);
+    }
+
+    const formatted = formatReasoningChunk(text);
+
+    try {
+      await editMessageWithMarkdownFallback({
+        api: botInstance.api,
+        chatId: chatIdInstance,
+        messageId,
+        text: formatted.markdown,
+        rawFallbackText: formatted.fallback,
+        options: undefined,
+        parseMode: "MarkdownV2",
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      if (errorMessage.includes("message is not modified")) {
+        return;
+      }
+
+      throw error;
+    }
+  },
+  deleteText: async (sessionId, messageId) => {
+    if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+      throw new Error("Bot context missing for reasoning stream delete");
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
+      throw new Error(`Reasoning stream session mismatch for delete: ${sessionId}`);
+    }
+
+    await botInstance.api.deleteMessage(chatIdInstance, messageId).catch((error) => {
+      const errorMessage =
+        error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      if (
+        errorMessage.includes("message to delete not found") ||
+        errorMessage.includes("message identifier is not specified")
+      ) {
+        return;
+      }
+
+      throw error;
+    });
+  },
+});
+
 function getToolStreamKey(tool: string): ToolStreamKey {
   if (tool === "todowrite") {
     return "todo";
@@ -417,6 +512,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   summaryAggregator.setOnCleared(() => {
     toolMessageBatcher.clearAll("summary_aggregator_clear");
     toolCallStreamer.clearAll("summary_aggregator_clear");
+    reasoningStreamer.clearAll("summary_aggregator_clear");
     responseStreamer.clearAll("summary_aggregator_clear");
   });
 
@@ -450,6 +546,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
         clearPromptResponseMode(sessionId);
         responseStreamer.clearMessage(sessionId, messageId, "bot_context_missing");
         toolCallStreamer.clearSession(sessionId, "bot_context_missing");
+        reasoningStreamer.clearSession(sessionId, "bot_context_missing");
         assistantRunState.clearRun(sessionId, "bot_context_missing");
         foregroundSessionState.markIdle(sessionId);
         return;
@@ -460,6 +557,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
         clearPromptResponseMode(sessionId);
         responseStreamer.clearMessage(sessionId, messageId, "session_mismatch");
         toolCallStreamer.clearSession(sessionId, "session_mismatch");
+        reasoningStreamer.clearSession(sessionId, "session_mismatch");
         assistantRunState.clearRun(sessionId, "session_mismatch");
         foregroundSessionState.markIdle(sessionId);
         await scheduledTaskRuntime.flushDeferredDeliveries();
@@ -485,6 +583,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
             Promise.all([
               toolMessageBatcher.flushSession(sessionId, "assistant_message_completed"),
               toolCallStreamer.breakSession(sessionId, "assistant_message_completed"),
+              reasoningStreamer.breakSession(sessionId, "assistant_message_completed"),
             ]).then(() => undefined),
           prepareStreamingPayload: prepareFinalStreamingPayload,
           renderFinalParts: (text) => renderAssistantFinalPartsSafe(text),
@@ -574,6 +673,58 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
   });
 
+  summaryAggregator.setOnToolProgress((toolInfo) => {
+    if (!botInstance || !chatIdInstance) {
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== toolInfo.sessionId) {
+      return;
+    }
+
+    if (toolInfo.tool === "task" || toolInfo.tool === "question") {
+      return;
+    }
+
+    const message = formatToolInfo(toolInfo);
+    if (!message) {
+      return;
+    }
+
+    const status = "status" in toolInfo.state ? toolInfo.state.status : undefined;
+    const prefix =
+      status === "running"
+        ? "▶ "
+        : status === "pending"
+          ? "⏳ "
+          : status === "completed"
+            ? "✅ "
+            : status === "error"
+              ? "❌ "
+              : "";
+
+    toolCallStreamer.replaceByPrefix(
+      toolInfo.sessionId,
+      LIVE_TOOL_STREAM_PREFIX,
+      `${prefix}${message}`,
+      "activity",
+    );
+  });
+
+  summaryAggregator.setOnReasoning((sessionId, _messageId, reasoningText) => {
+    if (!botInstance || !chatIdInstance) {
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
+      return;
+    }
+
+    reasoningStreamer.replaceByPrefix(sessionId, REASONING_STREAM_PREFIX, reasoningText, "reasoning");
+  });
+
   summaryAggregator.setOnSubagent(async (sessionId, subagents) => {
     if (!botInstance || !chatIdInstance) {
       return;
@@ -649,6 +800,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     await Promise.all([
       toolMessageBatcher.flushSession(currentSession.id, "question_asked"),
       toolCallStreamer.flushSession(currentSession.id, "question_asked"),
+      reasoningStreamer.flushSession(currentSession.id, "question_asked"),
     ]);
 
     if (questionManager.isActive()) {
@@ -697,6 +849,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     await Promise.all([
       toolMessageBatcher.flushSession(request.sessionID, "permission_asked"),
       toolCallStreamer.flushSession(request.sessionID, "permission_asked"),
+      reasoningStreamer.flushSession(request.sessionID, "permission_asked"),
     ]);
 
     logger.info(
@@ -718,6 +871,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     logger.debug("[Bot] Agent started thinking");
 
     await toolCallStreamer.breakSession(sessionId, "thinking_started");
+    await reasoningStreamer.breakSession(sessionId, "thinking_started");
 
     deliverThinkingMessage(sessionId, toolMessageBatcher, {
       hideThinkingMessages: config.bot.hideThinkingMessages,
@@ -815,6 +969,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       await Promise.all([
         toolMessageBatcher.flushSession(sessionId, "session_idle"),
         toolCallStreamer.flushSession(sessionId, "session_idle"),
+        reasoningStreamer.breakSession(sessionId, "session_idle"),
       ]);
 
       if (completedRun?.hasCompletedResponse) {
@@ -860,6 +1015,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       clearPromptResponseMode(sessionId);
       responseStreamer.clearSession(sessionId, "session_error_not_current");
       toolCallStreamer.clearSession(sessionId, "session_error_not_current");
+      reasoningStreamer.clearSession(sessionId, "session_error_not_current");
       assistantRunState.clearRun(sessionId, "session_error_not_current");
       foregroundSessionState.markIdle(sessionId);
       await scheduledTaskRuntime.flushDeferredDeliveries();
@@ -872,6 +1028,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     await Promise.all([
       toolMessageBatcher.flushSession(sessionId, "session_error"),
       toolCallStreamer.flushSession(sessionId, "session_error"),
+      reasoningStreamer.breakSession(sessionId, "session_error"),
     ]);
 
     const normalizedMessage = message.trim() || t("common.unknown_error");
@@ -1413,6 +1570,7 @@ export function cleanupBotRuntime(reason: string): void {
   summaryAggregator.clear();
   responseStreamer.clearAll(reason);
   toolCallStreamer.clearAll(reason);
+  reasoningStreamer.clearAll(reason);
   toolMessageBatcher.clearAll(reason);
   sessionCompletionTasks.clear();
   assistantRunState.clearAll(reason);
