@@ -12,6 +12,7 @@ const mocked = vi.hoisted(() => ({
   sessionStatusMock: vi.fn(),
   sessionPromptMock: vi.fn(),
   sessionCreateMock: vi.fn(),
+  sessionSummarizeMock: vi.fn(),
   suppressionRegisterMock: vi.fn(),
   safeBackgroundTaskMock: vi.fn(),
   setSessionSummaryMock: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
       status: mocked.sessionStatusMock,
       prompt: mocked.sessionPromptMock,
       create: mocked.sessionCreateMock,
+      summarize: mocked.sessionSummarizeMock,
     },
   },
 }));
@@ -66,6 +68,10 @@ vi.mock("../../../src/pinned/manager.js", () => ({
     onSessionChange: vi.fn(),
     clear: vi.fn(),
     getContextInfo: vi.fn(() => null),
+    getContextLimit: vi.fn(() => 0),
+    refreshContextLimit: vi.fn(),
+    loadContextFromHistory: vi.fn(),
+    onSessionCompacted: vi.fn(),
   },
 }));
 
@@ -138,6 +144,9 @@ vi.mock("../../../src/external-input/suppression.js", () => ({
 function createContext(): Context {
   return {
     chat: { id: 777 },
+    api: {
+      editMessageText: vi.fn().mockResolvedValue(undefined),
+    },
     reply: vi.fn().mockResolvedValue({ message_id: 100 }),
   } as unknown as Context;
 }
@@ -160,6 +169,7 @@ describe("bot/handlers/prompt", () => {
     mocked.sessionStatusMock.mockReset();
     mocked.sessionPromptMock.mockReset();
     mocked.sessionCreateMock.mockReset();
+    mocked.sessionSummarizeMock.mockReset();
     mocked.suppressionRegisterMock.mockReset();
     mocked.safeBackgroundTaskMock.mockReset();
     mocked.setSessionSummaryMock.mockReset();
@@ -179,6 +189,7 @@ describe("bot/handlers/prompt", () => {
       error: null,
     });
     mocked.sessionPromptMock.mockResolvedValue({ data: {}, error: null });
+    mocked.sessionSummarizeMock.mockResolvedValue({ data: true, error: null });
   });
 
   it("registers suppression entry for text prompts", async () => {
@@ -209,5 +220,25 @@ describe("bot/handlers/prompt", () => {
 
     expect(handled).toBe(true);
     expect(mocked.suppressionRegisterMock).not.toHaveBeenCalled();
+  });
+
+  it("compacts the session before prompting when context usage exceeds the model limit", async () => {
+    const { pinnedMessageManager } = await import("../../../src/pinned/manager.js");
+    vi.mocked(pinnedMessageManager.getContextInfo).mockReturnValue({
+      tokensUsed: 195_000,
+      tokensLimit: 200_000,
+    });
+
+    const ctx = createContext();
+    const handled = await processUserPrompt(ctx, "Review README", createDeps());
+
+    expect(handled).toBe(true);
+    expect(mocked.sessionSummarizeMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      directory: "D:\\Projects\\Repo",
+      providerID: "openai",
+      modelID: "gpt-5",
+    });
+    expect(ctx.reply).toHaveBeenCalledWith("⏳ Compacting context...");
   });
 });

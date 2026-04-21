@@ -32,6 +32,7 @@ import { externalUserInputSuppressionManager } from "../../external-input/suppre
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
 const promptResponseModes = new Map<string, PromptResponseMode>();
+const AUTO_COMPACT_CONTEXT_USAGE_RATIO = 0.95;
 
 export type PromptResponseMode = "text_only" | "text_and_tts";
 
@@ -59,6 +60,81 @@ export function consumePromptResponseMode(sessionId: string): PromptResponseMode
   const responseMode = promptResponseModes.get(sessionId) ?? null;
   promptResponseModes.delete(sessionId);
   return responseMode;
+}
+
+async function ensureContextInfoLoaded(session: {
+  id: string;
+  directory: string;
+}): Promise<{ tokensUsed: number; tokensLimit: number } | null> {
+  const currentContextInfo = pinnedMessageManager.getContextInfo();
+  if (currentContextInfo && currentContextInfo.tokensLimit > 0 && currentContextInfo.tokensUsed > 0) {
+    return currentContextInfo;
+  }
+
+  try {
+    if (pinnedMessageManager.getContextLimit() === 0) {
+      await pinnedMessageManager.refreshContextLimit();
+    }
+    await pinnedMessageManager.loadContextFromHistory(session.id, session.directory);
+  } catch (err) {
+    logger.warn("[Bot] Failed to preload session context before prompt:", err);
+  }
+
+  return pinnedMessageManager.getContextInfo();
+}
+
+async function compactSessionIfNeeded(
+  ctx: Context,
+  session: { id: string; directory: string },
+  storedModel: { providerID: string; modelID: string },
+): Promise<boolean> {
+  const contextInfo = await ensureContextInfoLoaded(session);
+  if (!contextInfo) {
+    return true;
+  }
+
+  const { tokensUsed, tokensLimit } = contextInfo;
+  if (!Number.isFinite(tokensUsed) || !Number.isFinite(tokensLimit) || tokensLimit <= 0) {
+    return true;
+  }
+
+  if (tokensUsed < tokensLimit * AUTO_COMPACT_CONTEXT_USAGE_RATIO) {
+    return true;
+  }
+
+  logger.warn(
+    `[Bot] Session ${session.id} is using ${tokensUsed}/${tokensLimit} context tokens. Compacting before prompt.`,
+  );
+
+  const progressMessage = await ctx.reply(t("context.progress")).catch(() => null);
+  const { error } = await opencodeClient.session.summarize({
+    sessionID: session.id,
+    directory: session.directory,
+    providerID: storedModel.providerID,
+    modelID: storedModel.modelID,
+  });
+
+  if (error) {
+    logger.error("[Bot] Automatic context compaction failed before prompt:", error);
+    if (progressMessage) {
+      await ctx.api.editMessageText(ctx.chat!.id, progressMessage.message_id, t("context.error")).catch(() => {});
+    } else {
+      await ctx.reply(t("context.error")).catch(() => {});
+    }
+    return false;
+  }
+
+  try {
+    await pinnedMessageManager.onSessionCompacted(session.id, session.directory);
+  } catch (err) {
+    logger.warn("[Bot] Failed to refresh pinned context after automatic compaction:", err);
+  }
+
+  if (progressMessage) {
+    await ctx.api.editMessageText(ctx.chat!.id, progressMessage.message_id, t("context.success")).catch(() => {});
+  }
+
+  return true;
 }
 
 async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
@@ -216,6 +292,11 @@ export async function processUserPrompt(
   try {
     const currentAgent = await resolveProjectAgent(getStoredAgent());
     const storedModel = getStoredModel();
+
+    const compacted = await compactSessionIfNeeded(ctx, currentSession, storedModel);
+    if (!compacted) {
+      return false;
+    }
 
     // Build parts array with text and files
     const parts: Array<TextPartInput | FilePartInput> = [];
