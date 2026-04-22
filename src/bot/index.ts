@@ -1,3 +1,4 @@
+import { default as nodeFetch } from "node-fetch";
 import { Bot, Context, InputFile, NextFunction } from "grammy";
 import { promises as fs } from "fs";
 import * as path from "path";
@@ -986,10 +987,16 @@ export function createBot(): Bot<Context> {
       logger.info(`[Bot] Using custom Telegram API root: ${config.telegram.apiRoot}`);
     }
     if (config.telegram.proxySecret) {
-      botOptions.client.baseFetchConfig = {
-        ...(botOptions.client.baseFetchConfig ?? {}),
-        headers: { "X-Proxy-Secret": config.telegram.proxySecret },
-      };
+      // Inject the shared-secret header via a custom fetch wrapper instead of
+      // baseFetchConfig.headers, because grammY's client spreads
+      // `{...baseFetchConfig, ...config}` and the per-request config.headers
+      // (Content-Type/Length) wipes out anything we put on baseFetchConfig.
+      const proxySecret = config.telegram.proxySecret;
+      botOptions.client.fetch = ((url, init) => {
+        const headers = new Headers((init?.headers ?? {}) as HeadersInit);
+        headers.set("X-Proxy-Secret", proxySecret);
+        return nodeFetch(url as any, { ...(init ?? {}), headers } as any) as any;
+      }) as typeof globalThis.fetch;
       logger.info(`[Bot] Sending X-Proxy-Secret header to Telegram API root`);
     }
   }
