@@ -109,6 +109,8 @@ export const config = {
     hideToolCallMessages: getOptionalBooleanEnvVar("HIDE_TOOL_CALL_MESSAGES", false),
     hideToolFileMessages: getOptionalBooleanEnvVar("HIDE_TOOL_FILE_MESSAGES", false),
     messageFormatMode: getOptionalMessageFormatModeEnvVar("MESSAGE_FORMAT_MODE", "markdown"),
+    enableReasoningStream: getOptionalBooleanEnvVar("ENABLE_REASONING_STREAM", false),
+    enableToolProgressStream: getOptionalBooleanEnvVar("ENABLE_TOOL_PROGRESS_STREAM", false),
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),

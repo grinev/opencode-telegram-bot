@@ -3,7 +3,7 @@ import { logger } from "../../utils/logger.js";
 const TELEGRAM_MESSAGE_SAFE_LENGTH = 4000;
 const DEFAULT_STREAM_KEY = "default";
 
-export type ToolStreamKey = "default" | "subagent" | "todo";
+export type ToolStreamKey = "default" | "subagent" | "todo" | "activity" | "reasoning";
 
 interface ToolCallStreamerOptions {
   throttleMs: number;
@@ -66,18 +66,28 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+function addMultipartMarkers(chunks: string[]): string[] {
+  if (chunks.length <= 1) {
+    return chunks;
+  }
+
+  return chunks.map((chunk, index) => `[${index + 1}/${chunks.length}]\n${chunk}`);
+}
+
 function splitLongText(text: string, limit: number): string[] {
   if (text.length <= limit) {
     return [text];
   }
 
+  const markerReserve = 16;
+  const safeLimit = Math.max(1, limit - markerReserve);
   const chunks: string[] = [];
   let remaining = text;
 
-  while (remaining.length > limit) {
-    let splitIndex = remaining.lastIndexOf("\n", limit);
-    if (splitIndex <= 0 || splitIndex < Math.floor(limit * 0.5)) {
-      splitIndex = limit;
+  while (remaining.length > safeLimit) {
+    let splitIndex = remaining.lastIndexOf("\n", safeLimit);
+    if (splitIndex <= 0 || splitIndex < Math.floor(safeLimit * 0.5)) {
+      splitIndex = safeLimit;
     }
 
     chunks.push(remaining.slice(0, splitIndex));
@@ -88,7 +98,7 @@ function splitLongText(text: string, limit: number): string[] {
     chunks.push(remaining);
   }
 
-  return chunks;
+  return addMultipartMarkers(chunks);
 }
 
 function buildParts(entries: StreamEntry[]): string[] {

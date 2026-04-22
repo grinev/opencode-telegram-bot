@@ -32,6 +32,8 @@ type MessageCompleteCallback = (
 
 type MessagePartialCallback = (sessionId: string, messageId: string, messageText: string) => void;
 
+type ReasoningCallback = (sessionId: string, messageId: string, reasoningText: string) => void;
+
 type ExternalUserInputCallback = (
   sessionId: string,
   messageId: string,
@@ -74,6 +76,8 @@ export interface ToolFileInfo extends ToolInfo {
 }
 
 type ToolCallback = (toolInfo: ToolInfo) => void;
+
+type ToolProgressCallback = (toolInfo: ToolInfo) => void;
 
 type ToolFileCallback = (fileInfo: ToolFileInfo) => void;
 
@@ -153,6 +157,11 @@ interface TextMessageState {
   optimisticUpdateCount: number;
 }
 
+interface ReasoningMessageState {
+  orderedPartIds: string[];
+  partTexts: Map<string, string>;
+}
+
 interface SubagentState extends SubagentInfo {
   hasSubtaskMetadata: boolean;
   hasTaskToolMetadata: boolean;
@@ -191,13 +200,16 @@ function countDiffChangesFromText(text: string): { additions: number; deletions:
 class SummaryAggregator {
   private currentSessionId: string | null = null;
   private textMessageStates: Map<string, TextMessageState> = new Map();
+  private reasoningMessageStates: Map<string, ReasoningMessageState> = new Map();
   private messages: Map<string, { role: string }> = new Map();
   private messageCount = 0;
   private lastUpdated = 0;
   private onCompleteCallback: MessageCompleteCallback | null = null;
   private onPartialCallback: MessagePartialCallback | null = null;
+  private onReasoningCallback: ReasoningCallback | null = null;
   private onExternalUserInputCallback: ExternalUserInputCallback | null = null;
   private onToolCallback: ToolCallback | null = null;
+  private onToolProgressCallback: ToolProgressCallback | null = null;
   private onToolFileCallback: ToolFileCallback | null = null;
   private onQuestionCallback: QuestionCallback | null = null;
   private onQuestionErrorCallback: QuestionErrorCallback | null = null;
@@ -243,12 +255,20 @@ class SummaryAggregator {
     this.onPartialCallback = callback;
   }
 
+  setOnReasoning(callback: ReasoningCallback): void {
+    this.onReasoningCallback = callback;
+  }
+
   setOnExternalUserInput(callback: ExternalUserInputCallback): void {
     this.onExternalUserInputCallback = callback;
   }
 
   setOnTool(callback: ToolCallback): void {
     this.onToolCallback = callback;
+  }
+
+  setOnToolProgress(callback: ToolProgressCallback): void {
+    this.onToolProgressCallback = callback;
   }
 
   setOnToolFile(callback: ToolFileCallback): void {
@@ -430,6 +450,7 @@ class SummaryAggregator {
     this.stopTypingIndicator();
     this.currentSessionId = null;
     this.textMessageStates.clear();
+    this.reasoningMessageStates.clear();
     this.messages.clear();
     this.partHashes.clear();
     this.knownTextPartIds.clear();
@@ -1128,6 +1149,22 @@ class SummaryAggregator {
     if (part.type === "text") {
       this.registerKnownTextPart(messageID, part.id);
       this.registerTextPart(messageID, part.id);
+    } else if (part.type === "reasoning") {
+      this.registerReasoningPart(messageID, part.id);
+      this.applyReasoningDelta((part as { sessionID: string }).sessionID, messageID, part.id, part.text || "");
+
+      if (!this.thinkingFiredForMessages.has(messageID) && this.onThinkingCallback) {
+        this.thinkingFiredForMessages.add(messageID);
+        const callback = this.onThinkingCallback;
+        const reasoningSessionId = part.sessionID;
+        setImmediate(() => {
+          if (typeof callback === "function") {
+            callback(reasoningSessionId);
+          }
+        });
+      }
+
+      return;
     }
 
     const deltaFromUpdated = (event.properties as { delta?: unknown }).delta;
@@ -1141,20 +1178,7 @@ class SummaryAggregator {
       return;
     }
 
-    if (part.type === "reasoning") {
-      // Fire the thinking callback once per message on the first reasoning part.
-      // This is the signal that the model is actually doing extended thinking.
-      if (!this.thinkingFiredForMessages.has(messageID) && this.onThinkingCallback) {
-        this.thinkingFiredForMessages.add(messageID);
-        const callback = this.onThinkingCallback;
-        const sessionID = part.sessionID;
-        setImmediate(() => {
-          if (typeof callback === "function") {
-            callback(sessionID);
-          }
-        });
-      }
-    } else if (part.type === "text" && "text" in part && part.text) {
+    if (part.type === "text" && "text" in part && part.text) {
       const wasUpdated =
         messageInfo && messageInfo.role === "assistant"
           ? this.setTextPartSnapshot(messageID, part.id, part.text)
@@ -1212,6 +1236,25 @@ class SummaryAggregator {
         // This ensures we have access to the requestID needed for question.reply().
       }
 
+      const toolData: ToolInfo = {
+        sessionId: part.sessionID,
+        messageId: messageID,
+        callId: part.callID,
+        tool: part.tool,
+        state: part.state,
+        input,
+        title,
+        metadata:
+          "metadata" in state
+            ? (state.metadata as { [key: string]: unknown } | undefined)
+            : undefined,
+        hasFileAttachment: false,
+      };
+
+      if (this.onToolProgressCallback) {
+        this.onToolProgressCallback(toolData);
+      }
+
       if ("status" in state && state.status === "completed") {
         logger.debug(
           `[Aggregator] Tool completed: callID=${part.callID}, tool=${part.tool}`,
@@ -1230,15 +1273,8 @@ class SummaryAggregator {
             state.metadata as { [key: string]: unknown } | undefined,
           );
 
-          const toolData: ToolInfo = {
-            sessionId: part.sessionID,
-            messageId: messageID,
-            callId: part.callID,
-            tool: part.tool,
-            state: part.state,
-            input,
-            title,
-            metadata: state.metadata as { [key: string]: unknown },
+          const completedToolData: ToolInfo = {
+            ...toolData,
             hasFileAttachment: !!preparedFileContext.fileData,
           };
 
@@ -1247,7 +1283,7 @@ class SummaryAggregator {
           );
 
           if (this.onToolCallback) {
-            this.onToolCallback(toolData);
+            this.onToolCallback(completedToolData);
           }
 
           if (preparedFileContext.fileData && this.onToolFileCallback) {
@@ -1255,7 +1291,7 @@ class SummaryAggregator {
               `[Aggregator] Sending ${part.tool} file: ${preparedFileContext.fileData.filename} (${preparedFileContext.fileData.buffer.length} bytes)`,
             );
             this.onToolFileCallback({
-              ...toolData,
+              ...completedToolData,
               hasFileAttachment: true,
               fileData: preparedFileContext.fileData,
             });
@@ -1283,13 +1319,17 @@ class SummaryAggregator {
       return;
     }
 
-    if (partType && partType !== "text") {
+    if (partType && partType !== "text" && partType !== "reasoning") {
       return;
     }
 
     if (partType === "text") {
       this.registerKnownTextPart(messageID, partID);
       this.registerTextPart(messageID, partID);
+    } else if (partType === "reasoning") {
+      this.registerReasoningPart(messageID, partID);
+      this.applyReasoningDelta(sessionID, messageID, partID, delta, part?.text);
+      return;
     } else {
       const knownTextIds = this.knownTextPartIds.get(messageID);
       const isKnownTextPart = knownTextIds?.has(partID) ?? false;
@@ -1378,6 +1418,7 @@ class SummaryAggregator {
 
   private cleanupCompletedMessage(messageId: string): void {
     this.textMessageStates.delete(messageId);
+    this.reasoningMessageStates.delete(messageId);
     this.messages.delete(messageId);
     this.partHashes.delete(messageId);
     this.knownTextPartIds.delete(messageId);
@@ -1470,6 +1511,97 @@ class SummaryAggregator {
     }
 
     return state.orderedPartIds.map((partID) => state.partTexts.get(partID) || "").join("");
+  }
+
+  private emitReasoningText(sessionId: string, messageId: string, reasoningText: string): void {
+    if (!this.onReasoningCallback || !reasoningText.trim()) {
+      return;
+    }
+
+    try {
+      this.onReasoningCallback(sessionId, messageId, reasoningText);
+    } catch (err) {
+      logger.error("[Aggregator] Error in reasoning callback:", err);
+    }
+  }
+
+  private getOrCreateReasoningMessageState(messageID: string): ReasoningMessageState {
+    const existing = this.reasoningMessageStates.get(messageID);
+    if (existing) {
+      return existing;
+    }
+
+    const state: ReasoningMessageState = {
+      orderedPartIds: [],
+      partTexts: new Map(),
+    };
+    this.reasoningMessageStates.set(messageID, state);
+    return state;
+  }
+
+  private registerReasoningPart(messageID: string, partID: string): void {
+    const state = this.getOrCreateReasoningMessageState(messageID);
+    if (!state.orderedPartIds.includes(partID)) {
+      state.orderedPartIds.push(partID);
+    }
+  }
+
+  private setReasoningPartSnapshot(messageID: string, partID: string, text: string): boolean {
+    const normalized = text;
+    const partHash = this.hashString(`reasoning\n${partID}\n${normalized}`);
+
+    if (!this.partHashes.has(messageID)) {
+      this.partHashes.set(messageID, new Set());
+    }
+
+    const hashes = this.partHashes.get(messageID)!;
+    if (hashes.has(partHash)) {
+      return false;
+    }
+
+    hashes.add(partHash);
+    this.registerReasoningPart(messageID, partID);
+    const state = this.getOrCreateReasoningMessageState(messageID);
+    state.partTexts.set(partID, normalized);
+    return true;
+  }
+
+  private getCombinedReasoningText(messageID: string): string {
+    const state = this.reasoningMessageStates.get(messageID);
+    if (!state) {
+      return "";
+    }
+
+    return state.orderedPartIds.map((partID) => state.partTexts.get(partID) || "").join("");
+  }
+
+  private applyReasoningDelta(
+    sessionID: string,
+    messageID: string,
+    partID: string,
+    delta: string,
+    fullTextHint?: string,
+  ): void {
+    if (sessionID !== this.currentSessionId) {
+      return;
+    }
+
+    this.registerReasoningPart(messageID, partID);
+    const state = this.getOrCreateReasoningMessageState(messageID);
+    const previous = state.partTexts.get(partID) || "";
+    let accumulated = `${previous}${delta}`;
+
+    if (typeof fullTextHint === "string" && fullTextHint.length > accumulated.length) {
+      accumulated = fullTextHint;
+    }
+
+    state.partTexts.set(partID, accumulated);
+    const combined = this.getCombinedReasoningText(messageID);
+    if (!combined.trim()) {
+      return;
+    }
+
+    this.emitReasoningText(sessionID, messageID, combined);
   }
 
   private prepareToolFileContext(

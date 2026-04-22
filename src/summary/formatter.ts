@@ -386,7 +386,12 @@ export function formatToolInfo(toolInfo: ToolInfo): string | null {
   }
 
   if (tool === "bash" && input && typeof input.command === "string") {
-    details = truncateWithEllipsis(input.command, config.bot.bashToolDisplayMaxLength);
+    const status = "status" in toolInfo.state ? toolInfo.state.status : undefined;
+    const bashMaxLength =
+      status === "running" || status === "pending"
+        ? Math.max(config.bot.bashToolDisplayMaxLength, 4000)
+        : config.bot.bashToolDisplayMaxLength;
+    details = truncateWithEllipsis(input.command, bashMaxLength);
   }
 
   if (tool === "apply_patch") {
