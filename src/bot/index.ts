@@ -1,4 +1,3 @@
-import { default as nodeFetch } from "node-fetch";
 import { Bot, Context, InputFile, NextFunction } from "grammy";
 import { promises as fs } from "fs";
 import * as path from "path";
@@ -991,12 +990,18 @@ export function createBot(): Bot<Context> {
       // baseFetchConfig.headers, because grammY's client spreads
       // `{...baseFetchConfig, ...config}` and the per-request config.headers
       // (Content-Type/Length) wipes out anything we put on baseFetchConfig.
+      // Using plain-object headers merge (not the Headers class) so this stays
+      // compatible with node-fetch v2's init shape (grammY's default shim on
+      // Node) and we don't need @types/node-fetch or DOM lib for HeadersInit.
       const proxySecret = config.telegram.proxySecret;
-      botOptions.client.fetch = ((url, init) => {
-        const headers = new Headers((init?.headers ?? {}) as HeadersInit);
-        headers.set("X-Proxy-Secret", proxySecret);
-        return nodeFetch(url as any, { ...(init ?? {}), headers } as any) as any;
-      }) as typeof globalThis.fetch;
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
+      const nodeFetch = require("node-fetch") as any;
+      botOptions.client.fetch = (((url: unknown, init: Record<string, unknown> | undefined) => {
+        const existing = (init?.headers as Record<string, string> | undefined) ?? {};
+        const merged = { ...existing, "X-Proxy-Secret": proxySecret };
+        return nodeFetch(url, { ...(init ?? {}), headers: merged });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any);
       logger.info(`[Bot] Sending X-Proxy-Secret header to Telegram API root`);
     }
   }
