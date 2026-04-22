@@ -1,11 +1,11 @@
 import { ToolInfo } from "./aggregator.js";
 import * as path from "path";
-import { convert } from "telegram-markdown-v2";
 import { config } from "../config.js";
 import type { MessageFormatMode } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { t } from "../i18n/index.js";
 import { getCurrentProject } from "../settings/manager.js";
+import { convertToTelegramMarkdownV2 } from "./markdown-to-telegram-v2.js";
 import { normalizeMarkdownForTelegramRendering } from "../telegram/render/markdown-normalizer.js";
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
@@ -130,7 +130,7 @@ export function escapePlainTextForTelegramMarkdownV2(text: string): string {
 function formatMarkdownForTelegram(text: string): string {
   try {
     const preprocessed = normalizeMarkdownForTelegramRendering(text);
-    return escapeMarkdownV2PipesOutsideCode(convert(preprocessed, "keep"));
+    return escapeMarkdownV2PipesOutsideCode(convertToTelegramMarkdownV2(preprocessed));
   } catch (error) {
     logger.warn("[Formatter] Failed to convert markdown summary, falling back to raw text", error);
     return text;
