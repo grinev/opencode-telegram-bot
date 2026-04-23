@@ -18,75 +18,56 @@ export function isTtsConfigured(): boolean {
 }
 
 /**
- * Strip markdown formatting from text before sending to TTS.
- * Removes: **bold**, *italic*, `code`, ```code blocks```, ~~strikethrough~~,
- *          [link text](url), # headings, > blockquotes, - / * list markers,
- *          bare URLs, HTML tags.
+ * Removes markdown syntax that TTS engines would read aloud
+ * (asterisks, backticks, heading markers, etc.).
  */
-function stripMarkdownForSpeech(text: string): string {
+export function stripMarkdownForSpeech(text: string): string {
   let clean = text;
 
-  // Code blocks (```...```) — replace with content on one line
+  // fenced code blocks → inline content
   clean = clean.replace(/```[\s\S]*?```/g, (match) => {
     const inner = match.replace(/^```\w*\n?/, "").replace(/\n?```$/, "");
     return inner.replace(/\n/g, " ");
   });
 
-  // Inline code (`...`) — just remove backticks
   clean = clean.replace(/`([^`]+)`/g, "$1");
-
-  // Bold + italic (***) — remove markers only
   clean = clean.replace(/\*\*\*(.+?)\*\*\*/g, "$1");
-
-  // Bold (**) — remove markers only
   clean = clean.replace(/\*\*(.+?)\*\*/g, "$1");
-
-  // Italic (*) — remove markers only
   clean = clean.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "$1");
-
-  // Strikethrough (~~)
   clean = clean.replace(/~~(.+?)~~/g, "$1");
-
-  // Links [text](url) → text
   clean = clean.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-
-  // Headings (# at start of line)
   clean = clean.replace(/^#{1,6}\s+/gm, "");
-
-  // Blockquotes (> at start of line)
   clean = clean.replace(/^>\s?/gm, "");
-
-  // Unordered list markers (- or * at start of line) — keep the text
-  clean = clean.replace(/^[\-\*]\s+/gm, "");
-
-  // Ordered list markers (1. at start of line)
+  clean = clean.replace(/^[-*]\s+/gm, "");
   clean = clean.replace(/^\d+\.\s+/gm, "");
-
-  // Horizontal rules (---, ***, ___)
-  clean = clean.replace(/^[\-\*\_]{3,}\s*$/gm, "");
-
-  // HTML tags
+  clean = clean.replace(/^[-*_]{3,}\s*$/gm, "");
   clean = clean.replace(/<[^>]+>/g, "");
-
-  // Collapse multiple whitespace into single space
   clean = clean.replace(/[ \t]+/g, " ");
-
-  // Collapse multiple newlines into max one
   clean = clean.replace(/\n{3,}/g, "\n\n");
 
   return clean.trim();
 }
 
-function extractLanguageCode(voiceName: string): string {
-  // Voice names follow the pattern: ll-CC-Type-Gender (e.g. "de-DE-Neural2-B")
+/** Extracts "ll-CC" from Google voice names like "de-DE-Neural2-B". */
+export function extractLanguageCode(voiceName: string): string {
   const match = voiceName.match(/^([a-z]{2}-[A-Z]{2})/);
   return match ? match[1] : "en-US";
 }
 
-async function synthesizeWithGoogle(text: string): Promise<TtsResult> {
-  const client = new textToSpeech.TextToSpeechClient();
+// --- Provider implementations ---
 
-  const voiceName = config.tts.voice || "de-DE-Neural2-B";
+let googleClient: textToSpeech.TextToSpeechClient | null = null;
+
+function getGoogleClient(): textToSpeech.TextToSpeechClient {
+  if (!googleClient) {
+    googleClient = new textToSpeech.TextToSpeechClient();
+  }
+  return googleClient;
+}
+
+async function synthesizeWithGoogle(text: string): Promise<TtsResult> {
+  const client = getGoogleClient();
+  const voiceName = config.tts.voice || "en-US-Studio-O";
   const languageCode = extractLanguageCode(voiceName);
 
   logger.debug(
@@ -95,10 +76,7 @@ async function synthesizeWithGoogle(text: string): Promise<TtsResult> {
 
   const [response] = await client.synthesizeSpeech({
     input: { text },
-    voice: {
-      languageCode,
-      name: voiceName,
-    },
+    voice: { languageCode, name: voiceName },
     audioConfig: { audioEncoding: "MP3" },
   });
 
@@ -107,25 +85,20 @@ async function synthesizeWithGoogle(text: string): Promise<TtsResult> {
     throw new Error("Google TTS API returned an empty audio response");
   }
 
-  return {
-    buffer,
-    filename: "assistant-reply.mp3",
-    mimeType: "audio/mpeg",
-  };
+  return { buffer, filename: "assistant-reply.mp3", mimeType: "audio/mpeg" };
 }
 
 async function synthesizeWithOpenAi(text: string): Promise<TtsResult> {
-  const input = text.trim();
+  const url = `${config.tts.apiUrl}/audio/speech`;
+
+  logger.debug(
+    `[TTS] OpenAI-compatible: url=${url}, model=${config.tts.model}, voice=${config.tts.voice}, chars=${text.length}`,
+  );
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TTS_REQUEST_TIMEOUT_MS);
 
   try {
-    const url = `${config.tts.apiUrl}/audio/speech`;
-
-    logger.debug(
-      `[TTS] Sending speech synthesis request: url=${url}, model=${config.tts.model}, voice=${config.tts.voice}, chars=${input.length}`,
-    );
-
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -135,7 +108,7 @@ async function synthesizeWithOpenAi(text: string): Promise<TtsResult> {
       body: JSON.stringify({
         model: config.tts.model,
         voice: config.tts.voice,
-        input,
+        input: text,
         response_format: "mp3",
       }),
       signal: controller.signal,
@@ -148,24 +121,19 @@ async function synthesizeWithOpenAi(text: string): Promise<TtsResult> {
       );
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
+    const buffer = Buffer.from(await response.arrayBuffer());
     if (buffer.length === 0) {
       throw new Error("TTS API returned an empty audio response");
     }
 
     logger.debug(`[TTS] Generated speech audio: ${buffer.length} bytes`);
-
-    return {
-      buffer,
-      filename: "assistant-reply.mp3",
-      mimeType: "audio/mpeg",
-    };
+    return { buffer, filename: "assistant-reply.mp3", mimeType: "audio/mpeg" };
   } finally {
     clearTimeout(timeout);
   }
 }
+
+// --- Public API ---
 
 export async function synthesizeSpeech(text: string): Promise<TtsResult> {
   if (!isTtsConfigured()) {
@@ -188,7 +156,6 @@ export async function synthesizeSpeech(text: string): Promise<TtsResult> {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error(`TTS request timed out after ${TTS_REQUEST_TIMEOUT_MS}ms`);
     }
-
     throw err;
   }
 }
