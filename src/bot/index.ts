@@ -1,3 +1,5 @@
+// @ts-expect-error — node-fetch v2 ships no TS types and we avoid adding @types/node-fetch
+import nodeFetch from "node-fetch";
 import { Bot, Context, InputFile, NextFunction } from "grammy";
 import { promises as fs } from "fs";
 import * as path from "path";
@@ -978,6 +980,31 @@ export function createBot(): Bot<Context> {
   }
 
   const botOptions: ConstructorParameters<typeof Bot<Context>>[1] = {};
+
+  if (config.telegram.apiRoot || config.telegram.proxySecret) {
+    botOptions.client = botOptions.client ?? {};
+    if (config.telegram.apiRoot) {
+      botOptions.client.apiRoot = config.telegram.apiRoot;
+      logger.info(`[Bot] Using custom Telegram API root: ${config.telegram.apiRoot}`);
+    }
+    if (config.telegram.proxySecret) {
+      // Inject the shared-secret header via a custom fetch wrapper instead of
+      // baseFetchConfig.headers, because grammY's client spreads
+      // `{...baseFetchConfig, ...config}` and the per-request config.headers
+      // (Content-Type/Length) wipes out anything we put on baseFetchConfig.
+      // Plain-object headers merge (not the Headers class) keeps this compatible
+      // with node-fetch v2's init shape and avoids the DOM lib HeadersInit type.
+      const proxySecret = config.telegram.proxySecret;
+      botOptions.client.fetch = (((url: unknown, init: Record<string, unknown> | undefined) => {
+        const existing = (init?.headers as Record<string, string> | undefined) ?? {};
+        const merged = { ...existing, "X-Proxy-Secret": proxySecret };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (nodeFetch as any)(url, { ...(init ?? {}), headers: merged });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any);
+      logger.info(`[Bot] Sending X-Proxy-Secret header to Telegram API root`);
+    }
+  }
 
   if (config.telegram.proxyUrl) {
     const proxyUrl = config.telegram.proxyUrl;

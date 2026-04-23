@@ -80,6 +80,8 @@ export const config = {
     token: getEnvVar("TELEGRAM_BOT_TOKEN"),
     allowedUserId: parseInt(getEnvVar("TELEGRAM_ALLOWED_USER_ID"), 10),
     proxyUrl: getEnvVar("TELEGRAM_PROXY_URL", false),
+    apiRoot: getEnvVar("TELEGRAM_API_ROOT", false),
+    proxySecret: getEnvVar("TELEGRAM_PROXY_SECRET", false),
   },
   opencode: {
     apiUrl: getEnvVar("OPENCODE_API_URL", false) || "http://localhost:4096",
