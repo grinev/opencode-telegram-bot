@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockSynthesizeSpeech = vi.hoisted(() => vi.fn());
 
 vi.mock("../../src/utils/logger.js", () => ({
   logger: {
@@ -9,10 +11,25 @@ vi.mock("../../src/utils/logger.js", () => ({
   },
 }));
 
+vi.mock("@google-cloud/text-to-speech", () => {
+  const instance = { synthesizeSpeech: mockSynthesizeSpeech };
+  return {
+    __esModule: true,
+    default: {
+      TextToSpeechClient: function () {
+        return instance;
+      },
+    },
+    TextToSpeechClient: function () {
+      return instance;
+    },
+  };
+});
+
 const mockTts = vi.hoisted(() => ({
   apiUrl: "",
   apiKey: "",
-  provider: "openai",
+  provider: "openai" as string,
   model: "gpt-4o-mini-tts",
   voice: "alloy",
 }));
@@ -55,6 +72,7 @@ import {
   synthesizeSpeech,
   stripMarkdownForSpeech,
   extractLanguageCode,
+  _resetGoogleClient,
 } from "../../src/tts/client.js";
 
 describe("isTtsConfigured", () => {
@@ -62,7 +80,6 @@ describe("isTtsConfigured", () => {
     mockTts.apiUrl = "";
     mockTts.apiKey = "";
     mockTts.provider = "openai";
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
   });
 
   it("returns false when OpenAI credentials are missing", () => {
@@ -76,16 +93,9 @@ describe("isTtsConfigured", () => {
     expect(isTtsConfigured()).toBe(true);
   });
 
-  it("returns false for google provider without GOOGLE_APPLICATION_CREDENTIALS", () => {
+  it("returns true for google provider (ADC support)", () => {
     mockTts.provider = "google";
-    expect(isTtsConfigured()).toBe(false);
-  });
-
-  it("returns true for google provider with GOOGLE_APPLICATION_CREDENTIALS", () => {
-    mockTts.provider = "google";
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = "/path/to/key.json";
     expect(isTtsConfigured()).toBe(true);
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
   });
 });
 
@@ -116,9 +126,7 @@ describe("stripMarkdownForSpeech", () => {
   });
 
   it("extracts link text and drops URL", () => {
-    expect(stripMarkdownForSpeech("click [here](https://example.com) now")).toBe(
-      "click here now",
-    );
+    expect(stripMarkdownForSpeech("click [here](https://example.com) now")).toBe("click here now");
   });
 
   it("strips heading markers", () => {
@@ -140,6 +148,11 @@ describe("stripMarkdownForSpeech", () => {
 
   it("strips HTML tags", () => {
     expect(stripMarkdownForSpeech("see <code>this</code>")).toBe("see this");
+    expect(stripMarkdownForSpeech("see <em>this</em> now")).toBe("see this now");
+  });
+
+  it("preserves angle brackets that are not HTML-like", () => {
+    expect(stripMarkdownForSpeech("check 2 < 3")).toBe("check 2 < 3");
   });
 
   it("collapses excessive whitespace", () => {
@@ -147,7 +160,8 @@ describe("stripMarkdownForSpeech", () => {
   });
 
   it("handles complex markdown from LLM output", () => {
-    const input = "## Result\n\nThe **answer** is `42`. See [docs](https://example.com) for details.\n\n> Important note\n\n- Point one\n- Point two";
+    const input =
+      "## Result\n\nThe **answer** is `42`. See [docs](https://example.com) for details.\n\n> Important note\n\n- Point one\n- Point two";
     const result = stripMarkdownForSpeech(input);
     expect(result).not.toContain("**");
     expect(result).not.toContain("`");
@@ -179,7 +193,7 @@ describe("extractLanguageCode", () => {
   });
 });
 
-describe("synthesizeSpeech", () => {
+describe("synthesizeSpeech (OpenAI)", () => {
   beforeEach(() => {
     mockTts.apiUrl = "https://api.openai.com/v1";
     mockTts.apiKey = "sk-test-key";
@@ -189,10 +203,10 @@ describe("synthesizeSpeech", () => {
     vi.restoreAllMocks();
   });
 
-  it("throws when TTS is not configured", async () => {
+  it("throws with provider-specific message when not configured", async () => {
     mockTts.apiKey = "";
 
-    await expect(synthesizeSpeech("hello")).rejects.toThrow("TTS is not configured");
+    await expect(synthesizeSpeech("hello")).rejects.toThrow("TTS_API_URL and TTS_API_KEY");
   });
 
   it("strips markdown before sending to TTS", async () => {
@@ -250,5 +264,62 @@ describe("synthesizeSpeech", () => {
     await expect(synthesizeSpeech("Hello world")).rejects.toThrow(
       "TTS API returned HTTP 400: Bad request",
     );
+  });
+});
+
+describe("synthesizeSpeech (Google)", () => {
+  beforeEach(() => {
+    mockTts.provider = "google";
+    mockTts.voice = "en-US-Studio-O";
+    _resetGoogleClient();
+    mockSynthesizeSpeech.mockResolvedValue([{ audioContent: Buffer.from([4, 5, 6]) }]);
+  });
+
+  afterEach(() => {
+    mockSynthesizeSpeech.mockReset();
+  });
+
+  it("sends correct parameters to Google TTS", async () => {
+    const result = await synthesizeSpeech("Hello world");
+
+    expect(mockSynthesizeSpeech).toHaveBeenCalledOnce();
+    const callArgs = mockSynthesizeSpeech.mock.calls[0];
+    expect(callArgs[0].input).toEqual({ text: "Hello world" });
+    expect(callArgs[0].voice).toEqual({ languageCode: "en-US", name: "en-US-Studio-O" });
+    expect(callArgs[0].audioConfig).toEqual({ audioEncoding: "MP3" });
+
+    expect(result.filename).toBe("assistant-reply.mp3");
+    expect(result.mimeType).toBe("audio/mpeg");
+    expect(result.buffer).toEqual(Buffer.from([4, 5, 6]));
+  });
+
+  it("passes timeout option to Google SDK", async () => {
+    await synthesizeSpeech("Hello");
+
+    const callArgs = mockSynthesizeSpeech.mock.calls[0];
+    expect(callArgs[1]).toHaveProperty("timeout");
+    expect(callArgs[1].timeout).toBe(60_000);
+  });
+
+  it("handles Uint8Array audioContent from Google SDK", async () => {
+    const uint8 = new Uint8Array([10, 20, 30]);
+    mockSynthesizeSpeech.mockResolvedValue([{ audioContent: uint8 }]);
+
+    const result = await synthesizeSpeech("test");
+
+    expect(result.buffer).toEqual(Buffer.from([10, 20, 30]));
+  });
+
+  it("throws on empty audio response", async () => {
+    mockSynthesizeSpeech.mockResolvedValue([{ audioContent: Buffer.alloc(0) }]);
+
+    await expect(synthesizeSpeech("test")).rejects.toThrow("empty audio response");
+  });
+
+  it("strips markdown before sending to Google TTS", async () => {
+    await synthesizeSpeech("Hello **bold** and `code`");
+
+    const callArgs = mockSynthesizeSpeech.mock.calls[0];
+    expect(callArgs[0].input).toEqual({ text: "Hello bold and code" });
   });
 });

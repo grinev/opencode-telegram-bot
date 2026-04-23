@@ -12,7 +12,7 @@ export interface TtsResult {
 
 export function isTtsConfigured(): boolean {
   if (config.tts.provider === "google") {
-    return Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    return true;
   }
   return Boolean(config.tts.apiUrl && config.tts.apiKey);
 }
@@ -41,7 +41,7 @@ export function stripMarkdownForSpeech(text: string): string {
   clean = clean.replace(/^[-*]\s+/gm, "");
   clean = clean.replace(/^\d+\.\s+/gm, "");
   clean = clean.replace(/^[-*_]{3,}\s*$/gm, "");
-  clean = clean.replace(/<[^>]+>/g, "");
+  clean = clean.replace(/<\/?[A-Za-z][^>]*>/g, "");
   clean = clean.replace(/[ \t]+/g, " ");
   clean = clean.replace(/\n{3,}/g, "\n\n");
 
@@ -65,6 +65,11 @@ function getGoogleClient(): textToSpeech.TextToSpeechClient {
   return googleClient;
 }
 
+/** @internal Reset Google client singleton (for tests only). */
+export function _resetGoogleClient(): void {
+  googleClient = null;
+}
+
 async function synthesizeWithGoogle(text: string): Promise<TtsResult> {
   const client = getGoogleClient();
   const voiceName = config.tts.voice || "en-US-Studio-O";
@@ -74,14 +79,18 @@ async function synthesizeWithGoogle(text: string): Promise<TtsResult> {
     `[TTS] Google Cloud TTS: voice=${voiceName}, languageCode=${languageCode}, chars=${text.length}`,
   );
 
-  const [response] = await client.synthesizeSpeech({
-    input: { text },
-    voice: { languageCode, name: voiceName },
-    audioConfig: { audioEncoding: "MP3" },
-  });
+  const [response] = await client.synthesizeSpeech(
+    {
+      input: { text },
+      voice: { languageCode, name: voiceName },
+      audioConfig: { audioEncoding: "MP3" },
+    },
+    { timeout: TTS_REQUEST_TIMEOUT_MS },
+  );
 
-  const buffer = response.audioContent as Buffer;
-  if (!buffer || buffer.length === 0) {
+  const raw = response.audioContent;
+  const buffer = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as Uint8Array);
+  if (buffer.length === 0) {
     throw new Error("Google TTS API returned an empty audio response");
   }
 
@@ -135,9 +144,15 @@ async function synthesizeWithOpenAi(text: string): Promise<TtsResult> {
 
 // --- Public API ---
 
+function getNotConfiguredMessage(): string {
+  return config.tts.provider === "google"
+    ? "TTS is not configured: set GOOGLE_APPLICATION_CREDENTIALS for Google Cloud TTS"
+    : "TTS is not configured: set TTS_API_URL and TTS_API_KEY";
+}
+
 export async function synthesizeSpeech(text: string): Promise<TtsResult> {
   if (!isTtsConfigured()) {
-    throw new Error("TTS is not configured: set TTS API credentials");
+    throw new Error(getNotConfiguredMessage());
   }
 
   const raw = text.trim();
