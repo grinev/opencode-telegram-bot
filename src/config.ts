@@ -126,6 +126,7 @@ export const config = {
   tts: {
     apiUrl: getEnvVar("TTS_API_URL", false),
     apiKey: getEnvVar("TTS_API_KEY", false),
+    provider: getEnvVar("TTS_PROVIDER", false) || "openai",
     model: getEnvVar("TTS_MODEL", false) || "gpt-4o-mini-tts",
     voice: getEnvVar("TTS_VOICE", false) || "alloy",
   },
