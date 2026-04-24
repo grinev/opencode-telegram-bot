@@ -164,7 +164,7 @@ Model picker behavior:
 Open tasks for upcoming iterations:
 
 - [ ] `/messages` command: browse session messages with fork/revert actions
-- [ ] `/mcps` command: browse available MCP servers
+- [x] `/mcps` command: browse available MCP servers
 - [ ] Model search in model switcher
 - [ ] Docker runtime support and deployment guide
 - [ ] OpenCode server monitoring with automatic restart on stop/crash

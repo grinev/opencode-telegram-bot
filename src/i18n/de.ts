@@ -12,6 +12,7 @@ export const de: I18nDictionary = {
   "cmd.description.tasklist": "Geplante Aufgaben anzeigen",
   "cmd.description.commands": "Benutzerdefinierte Befehle",
   "cmd.description.skills": "Skill-Katalog",
+  "cmd.description.mcps": "MCP servers",
   "cmd.description.opencode_start": "OpenCode-Server starten",
   "cmd.description.opencode_stop": "OpenCode-Server stoppen",
   "cmd.description.help": "Hilfe",
@@ -485,6 +486,25 @@ export const de: I18nDictionary = {
   "skills.page_empty_callback": "Keine Skills auf dieser Seite",
   "skills.page_load_error_callback":
     "Diese Seite konnte nicht geladen werden. Bitte versuche es erneut.",
+
+  "mcps.select": "MCP servers:",
+  "mcps.empty": "📭 No MCP servers configured.",
+  "mcps.fetch_error": "🔴 Failed to load MCP servers.",
+  "mcps.toggle_error": "🔴 Failed to toggle MCP server.",
+  "mcps.enabling": "Enabling...",
+  "mcps.disabling": "Disabling...",
+  "mcps.status.connected": "🟢 Connected",
+  "mcps.status.disabled": "🔴 Disabled",
+  "mcps.status.failed": "⚠️ Failed",
+  "mcps.status.needs_auth": "🔒 Needs auth",
+  "mcps.status.needs_client_registration": "🔒 Needs registration",
+  "mcps.detail.title": "Server: {name}",
+  "mcps.detail.status": "Status: {status}",
+  "mcps.detail.error": "Error: {error}",
+  "mcps.button.enable": "🟢 Enable",
+  "mcps.button.disable": "🔴 Disable",
+  "mcps.button.back": "⬅️ Back",
+  "mcps.auth_required": "This server requires authorization and cannot be enabled from the bot.",
 
   "cmd.description.rename": "Aktuelle Sitzung umbenennen",
 

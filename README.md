@@ -138,6 +138,7 @@ opencode-telegram config
 | `/rename`         | Rename the current session                              |
 | `/commands`       | Browse and run custom commands                          |
 | `/skills`         | Browse and run OpenCode skills                          |
+| `/mcps`           | Browse and toggle MCP servers                           |
 | `/task`           | Create a scheduled task                                 |
 | `/tasklist`       | Browse and delete scheduled tasks                       |
 | `/opencode_start` | Start the local OpenCode server on the bot machine      |

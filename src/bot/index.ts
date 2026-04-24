@@ -38,6 +38,7 @@ import {
   handleSkillsCallback,
   handleSkillTextArguments,
 } from "./commands/skills.js";
+import { mcpsCommand, handleMcpsCallback } from "./commands/mcps.js";
 import { ttsCommand } from "./commands/tts.js";
 import {
   handleQuestionCallback,
@@ -1083,6 +1084,7 @@ export function createBot(): Bot<Context> {
   bot.command("rename", renameCommand);
   bot.command("commands", commandsCommand);
   bot.command("skills", skillsCommand);
+  bot.command("mcps", mcpsCommand);
 
   bot.on("message:text", unknownCommandMiddleware);
 
@@ -1116,9 +1118,10 @@ export function createBot(): Bot<Context> {
       const handledRenameCancel = await handleRenameCancel(ctx);
       const handledCommands = await handleCommandsCallback(ctx, { bot, ensureEventSubscription });
       const handledSkills = await handleSkillsCallback(ctx, { bot, ensureEventSubscription });
+      const handledMcps = await handleMcpsCallback(ctx);
 
       logger.debug(
-        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, skills=${handledSkills}`,
+        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, skills=${handledSkills}, mcps=${handledMcps}`,
       );
 
       if (
@@ -1137,7 +1140,8 @@ export function createBot(): Bot<Context> {
         !handledTaskList &&
         !handledRenameCancel &&
         !handledCommands &&
-        !handledSkills
+        !handledSkills &&
+        !handledMcps
       ) {
         logger.debug("Unknown callback query:", ctx.callbackQuery?.data);
         await ctx.answerCallbackQuery({ text: t("callback.unknown_command") });

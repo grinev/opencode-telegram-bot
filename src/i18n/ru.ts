@@ -12,6 +12,7 @@ export const ru: I18nDictionary = {
   "cmd.description.tasklist": "Список задач по расписанию",
   "cmd.description.commands": "Пользовательские команды",
   "cmd.description.skills": "Каталог скиллов",
+  "cmd.description.mcps": "MCP серверы",
   "cmd.description.opencode_start": "Запустить OpenCode сервер",
   "cmd.description.opencode_stop": "Остановить OpenCode сервер",
   "cmd.description.help": "Справка",
@@ -471,6 +472,25 @@ export const ru: I18nDictionary = {
   "skills.page_empty_callback": "На этой странице нет скиллов",
   "skills.page_load_error_callback":
     "Не удалось загрузить эту страницу. Пожалуйста, попробуйте снова.",
+
+  "mcps.select": "MCP серверы:",
+  "mcps.empty": "📭 MCP серверы не настроены.",
+  "mcps.fetch_error": "🔴 Не удалось загрузить MCP серверы.",
+  "mcps.toggle_error": "🔴 Не удалось переключить MCP сервер.",
+  "mcps.enabling": "Включаю...",
+  "mcps.disabling": "Выключаю...",
+  "mcps.status.connected": "🟢 Подключен",
+  "mcps.status.disabled": "🔴 Отключен",
+  "mcps.status.failed": "⚠️ Ошибка",
+  "mcps.status.needs_auth": "🔒 Требуется авторизация",
+  "mcps.status.needs_client_registration": "🔒 Требуется регистрация",
+  "mcps.detail.title": "Сервер: {name}",
+  "mcps.detail.status": "Статус: {status}",
+  "mcps.detail.error": "Ошибка: {error}",
+  "mcps.button.enable": "🟢 Включить",
+  "mcps.button.disable": "🔴 Выключить",
+  "mcps.button.back": "⬅️ Назад",
+  "mcps.auth_required": "Этот сервер требует авторизации и не может быть включен из бота.",
 
   "cmd.description.rename": "Переименовать текущую сессию",
 
