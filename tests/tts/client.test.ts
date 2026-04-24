@@ -93,9 +93,17 @@ describe("isTtsConfigured", () => {
     expect(isTtsConfigured()).toBe(true);
   });
 
-  it("returns true for google provider (ADC support)", () => {
+  it("returns false for google provider without GOOGLE_APPLICATION_CREDENTIALS", () => {
     mockTts.provider = "google";
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    expect(isTtsConfigured()).toBe(false);
+  });
+
+  it("returns true for google provider with GOOGLE_APPLICATION_CREDENTIALS", () => {
+    mockTts.provider = "google";
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = "/path/to/key.json";
     expect(isTtsConfigured()).toBe(true);
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
   });
 });
 
@@ -188,6 +196,11 @@ describe("extractLanguageCode", () => {
     expect(extractLanguageCode("en-US-Neural2-F")).toBe("en-US");
   });
 
+  it("extracts 3-letter language codes like cmn-CN and yue-HK", () => {
+    expect(extractLanguageCode("cmn-CN-Wavenet-A")).toBe("cmn-CN");
+    expect(extractLanguageCode("yue-HK-Standard-A")).toBe("yue-HK");
+  });
+
   it("falls back to en-US for unrecognized patterns", () => {
     expect(extractLanguageCode("unknown")).toBe("en-US");
   });
@@ -271,15 +284,18 @@ describe("synthesizeSpeech (Google)", () => {
   beforeEach(() => {
     mockTts.provider = "google";
     mockTts.voice = "en-US-Studio-O";
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = "/path/to/key.json";
     _resetGoogleClient();
     mockSynthesizeSpeech.mockResolvedValue([{ audioContent: Buffer.from([4, 5, 6]) }]);
   });
 
   afterEach(() => {
     mockSynthesizeSpeech.mockReset();
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
   });
 
   it("sends correct parameters to Google TTS", async () => {
+    mockTts.voice = "";
     const result = await synthesizeSpeech("Hello world");
 
     expect(mockSynthesizeSpeech).toHaveBeenCalledOnce();

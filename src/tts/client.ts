@@ -12,7 +12,7 @@ export interface TtsResult {
 
 export function isTtsConfigured(): boolean {
   if (config.tts.provider === "google") {
-    return true;
+    return Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS);
   }
   return Boolean(config.tts.apiUrl && config.tts.apiKey);
 }
@@ -50,7 +50,7 @@ export function stripMarkdownForSpeech(text: string): string {
 
 /** Extracts "ll-CC" from Google voice names like "de-DE-Neural2-B". */
 export function extractLanguageCode(voiceName: string): string {
-  const match = voiceName.match(/^([a-z]{2}-[A-Z]{2})/);
+  const match = voiceName.match(/^([a-z]{2,3}-[A-Z]{2})/);
   return match ? match[1] : "en-US";
 }
 

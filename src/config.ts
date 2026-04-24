@@ -141,11 +141,15 @@ export const config = {
     language: getEnvVar("STT_LANGUAGE", false),
     notePrompt: getEnvVar("STT_NOTE_PROMPT", false),
   },
-  tts: {
-    apiUrl: getEnvVar("TTS_API_URL", false),
-    apiKey: getEnvVar("TTS_API_KEY", false),
-    provider: getOptionalTtsProviderEnvVar("TTS_PROVIDER", "openai"),
-    model: getEnvVar("TTS_MODEL", false) || "gpt-4o-mini-tts",
-    voice: getEnvVar("TTS_VOICE", false) || "alloy",
-  },
+  tts: (() => {
+    const provider = getOptionalTtsProviderEnvVar("TTS_PROVIDER", "openai");
+    const defaultVoice = provider === "google" ? "en-US-Studio-O" : "alloy";
+    return {
+      apiUrl: getEnvVar("TTS_API_URL", false),
+      apiKey: getEnvVar("TTS_API_KEY", false),
+      provider,
+      model: getEnvVar("TTS_MODEL", false) || "gpt-4o-mini-tts",
+      voice: getEnvVar("TTS_VOICE", false) || defaultVoice,
+    };
+  })(),
 };
