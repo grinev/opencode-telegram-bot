@@ -512,6 +512,29 @@ export const en = {
   "open.no_subfolders": "📭 No subfolders",
   "open.subfolder_count": "{count} subfolder",
   "open.subfolders_count": "{count} subfolders",
+
+  "cmd.description.session_delete": "Delete sessions",
+
+  "session_delete.project_not_selected":
+    "🏗 Project is not selected.\n\nFirst select a project with /projects.",
+  "session_delete.empty": "📭 No sessions found.\n\nCreate a new session with /new.",
+  "session_delete.select": "Select a session to delete:",
+  "session_delete.select_page": "Select a session to delete (page {page}):",
+  "session_delete.button.delete": "🗑 Delete",
+  "session_delete.button.cancel": "❌ Cancel",
+  "session_delete.button.prev_page": "⬅️ Prev",
+  "session_delete.button.next_page": "Next ➡️",
+  "session_delete.details":
+    "Session: {title}\nDirectory: {directory}\nCreated: {date}\n\nDelete this session?",
+  "session_delete.deleted": "🗑 Session deleted: {title}",
+  "session_delete.deleted_current":
+    "🗑 Deleted current session: {title}\n\nUse /sessions or /new to continue.",
+  "session_delete.cancelled_callback": "Cancelled",
+  "session_delete.inactive_callback": "This menu is inactive",
+  "session_delete.load_error": "🔴 Failed to load sessions.",
+  "session_delete.delete_error": "🔴 Failed to delete session.",
+  "session_delete.page_empty_callback": "No sessions on this page",
+  "session_delete.page_load_error_callback": "Cannot load this page. Please try again.",
 } as const;
 
 export type I18nKey = keyof typeof en;

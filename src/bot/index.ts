@@ -28,6 +28,7 @@ import { opencodeStopCommand } from "./commands/opencode-stop.js";
 import { renameCommand, handleRenameCancel, handleRenameTextAnswer } from "./commands/rename.js";
 import { handleTaskCallback, handleTaskTextInput, taskCommand } from "./commands/task.js";
 import { handleTaskListCallback, taskListCommand } from "./commands/tasklist.js";
+import { handleSessionDeleteCallback, sessionDeleteCommand } from "./commands/session-delete.js";
 import {
   commandsCommand,
   handleCommandsCallback,
@@ -1080,6 +1081,7 @@ export function createBot(): Bot<Context> {
   bot.command("abort", abortCommand);
   bot.command("task", taskCommand);
   bot.command("tasklist", taskListCommand);
+  bot.command("session_delete", sessionDeleteCommand);
   bot.command("rename", renameCommand);
   bot.command("commands", commandsCommand);
   bot.command("skills", skillsCommand);
@@ -1113,12 +1115,13 @@ export function createBot(): Bot<Context> {
       const handledCompactConfirm = await handleCompactConfirm(ctx);
       const handledTask = await handleTaskCallback(ctx);
       const handledTaskList = await handleTaskListCallback(ctx);
+      const handledSessionDelete = await handleSessionDeleteCallback(ctx);
       const handledRenameCancel = await handleRenameCancel(ctx);
       const handledCommands = await handleCommandsCallback(ctx, { bot, ensureEventSubscription });
       const handledSkills = await handleSkillsCallback(ctx, { bot, ensureEventSubscription });
 
       logger.debug(
-        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, skills=${handledSkills}`,
+        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, sessionDelete=${handledSessionDelete}, rename=${handledRenameCancel}, commands=${handledCommands}, skills=${handledSkills}`,
       );
 
       if (
@@ -1135,6 +1138,7 @@ export function createBot(): Bot<Context> {
         !handledCompactConfirm &&
         !handledTask &&
         !handledTaskList &&
+        !handledSessionDelete &&
         !handledRenameCancel &&
         !handledCommands &&
         !handledSkills

@@ -534,4 +534,27 @@ export const de: I18nDictionary = {
   "open.no_subfolders": "📭 Keine Unterordner",
   "open.subfolder_count": "{count} Unterordner",
   "open.subfolders_count": "{count} Unterordner",
+
+  "cmd.description.session_delete": "Sitzungen löschen",
+
+  "session_delete.project_not_selected":
+    "🏗 Es ist kein Projekt ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
+  "session_delete.empty": "📭 Keine Sitzungen gefunden.\n\nErstelle eine neue Sitzung mit /new.",
+  "session_delete.select": "Wähle eine Sitzung zum Löschen:",
+  "session_delete.select_page": "Wähle eine Sitzung zum Löschen (Seite {page}):",
+  "session_delete.button.delete": "🗑 Löschen",
+  "session_delete.button.cancel": "❌ Abbrechen",
+  "session_delete.button.prev_page": "⬅️ Zurück",
+  "session_delete.button.next_page": "Weiter ➡️",
+  "session_delete.details":
+    "Sitzung: {title}\nVerzeichnis: {directory}\nErstellt: {date}\n\nDiese Sitzung löschen?",
+  "session_delete.deleted": "🗑 Sitzung gelöscht: {title}",
+  "session_delete.deleted_current":
+    "🗑 Aktuelle Sitzung gelöscht: {title}\n\nVerwende /sessions oder /new zum Fortfahren.",
+  "session_delete.cancelled_callback": "Abgebrochen",
+  "session_delete.inactive_callback": "Dieses Menü ist inaktiv",
+  "session_delete.load_error": "🔴 Sitzungen konnten nicht geladen werden.",
+  "session_delete.delete_error": "🔴 Sitzung konnte nicht gelöscht werden.",
+  "session_delete.page_empty_callback": "Keine Sitzungen auf dieser Seite",
+  "session_delete.page_load_error_callback": "Diese Seite kann nicht geladen werden. Bitte versuche es erneut.",
 };

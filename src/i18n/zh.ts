@@ -469,4 +469,27 @@ export const zh: I18nDictionary = {
   "open.no_subfolders": "📭 无子文件夹",
   "open.subfolder_count": "{count} 个子文件夹",
   "open.subfolders_count": "{count} 个子文件夹",
+
+  "cmd.description.session_delete": "删除会话",
+
+  "session_delete.project_not_selected":
+    "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
+  "session_delete.empty": "📭 未找到会话。\n\n使用 /new 创建新会话。",
+  "session_delete.select": "选择要删除的会话：",
+  "session_delete.select_page": "选择要删除的会话（第 {page} 页）：",
+  "session_delete.button.delete": "🗑 删除",
+  "session_delete.button.cancel": "❌ 取消",
+  "session_delete.button.prev_page": "⬅️ 上一页",
+  "session_delete.button.next_page": "下一页 ➡️",
+  "session_delete.details":
+    "会话：{title}\n目录：{directory}\n创建时间：{date}\n\n删除此会话？",
+  "session_delete.deleted": "🗑 会话已删除：{title}",
+  "session_delete.deleted_current":
+    "🗑 当前会话已删除：{title}\n\n使用 /sessions 或 /new 继续。",
+  "session_delete.cancelled_callback": "已取消",
+  "session_delete.inactive_callback": "此菜单已失效",
+  "session_delete.load_error": "🔴 加载会话失败。",
+  "session_delete.delete_error": "🔴 删除会话失败。",
+  "session_delete.page_empty_callback": "此页没有会话",
+  "session_delete.page_load_error_callback": "无法加载此页，请重试。",
 };
