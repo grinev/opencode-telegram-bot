@@ -275,7 +275,7 @@ export async function processUserPrompt(
     };
 
     logger.info(
-      `[Bot] Calling session.prompt (fire-and-forget) with agent=${currentAgent}, fileCount=${fileParts.length}...`,
+      `[Bot] Calling session.promptAsync (start-only) with agent=${currentAgent}, fileCount=${fileParts.length}...`,
     );
 
     foregroundSessionState.markBusy(currentSession.id);
@@ -292,13 +292,14 @@ export async function processUserPrompt(
       externalUserInputSuppressionManager.register(currentSession.id, text);
     }
 
-    // CRITICAL: DO NOT wait for session.prompt to complete.
-    // If we wait, the handler will not finish and grammY will not call getUpdates,
-    // which blocks receiving button callback_query updates.
-    // The processing result will arrive via SSE events.
+    // CRITICAL: Use the async prompt start endpoint here.
+    // session.prompt streams the full assistant response and can outlive the original
+    // Telegram message handler, which turns late transport failures into misleading
+    // "failed to send" messages even after the run has already started.
+    // The actual assistant result still arrives via the SSE event subscription.
     safeBackgroundTask({
-      taskName: "session.prompt",
-      task: () => opencodeClient.session.prompt(promptOptions),
+      taskName: "session.promptAsync",
+      task: () => opencodeClient.session.promptAsync(promptOptions),
       onSuccess: ({ error }) => {
         if (error) {
           foregroundSessionState.markIdle(currentSession.id);
@@ -307,18 +308,18 @@ export async function processUserPrompt(
           clearPromptResponseMode(currentSession.id);
           const details = formatErrorDetails(error, 6000);
           logger.error(
-            "[Bot] OpenCode API returned an error for session.prompt",
+            "[Bot] OpenCode API returned an error for session.promptAsync",
             promptErrorLogContext,
           );
-          logger.error("[Bot] session.prompt error details:", details);
-          logger.error("[Bot] session.prompt raw API error object:", error);
+          logger.error("[Bot] session.promptAsync error details:", details);
+          logger.error("[Bot] session.promptAsync raw API error object:", error);
 
           // Send user-friendly error via API directly because ctx is no longer available
           void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
           return;
         }
 
-        logger.info("[Bot] session.prompt completed");
+        logger.info("[Bot] session.promptAsync accepted");
       },
       onError: (error) => {
         foregroundSessionState.markIdle(currentSession.id);
@@ -326,9 +327,9 @@ export async function processUserPrompt(
         assistantRunState.clearRun(currentSession.id, "session_prompt_background_error");
         clearPromptResponseMode(currentSession.id);
         const details = formatErrorDetails(error, 6000);
-        logger.error("[Bot] session.prompt background task failed", promptErrorLogContext);
-        logger.error("[Bot] session.prompt background failure details:", details);
-        logger.error("[Bot] session.prompt raw background error object:", error);
+        logger.error("[Bot] session.promptAsync background task failed", promptErrorLogContext);
+        logger.error("[Bot] session.promptAsync background failure details:", details);
+        logger.error("[Bot] session.promptAsync raw background error object:", error);
         void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
       },
     });

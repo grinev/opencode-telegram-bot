@@ -11,6 +11,7 @@ const mocked = vi.hoisted(() => ({
   } as { id: string; title: string; directory: string } | null,
   sessionStatusMock: vi.fn(),
   sessionPromptMock: vi.fn(),
+  sessionPromptAsyncMock: vi.fn(),
   sessionCreateMock: vi.fn(),
   suppressionRegisterMock: vi.fn(),
   safeBackgroundTaskMock: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
     session: {
       status: mocked.sessionStatusMock,
       prompt: mocked.sessionPromptMock,
+      promptAsync: mocked.sessionPromptAsyncMock,
       create: mocked.sessionCreateMock,
     },
   },
@@ -144,9 +146,23 @@ function createContext(): Context {
 
 function createDeps(): ProcessPromptDeps {
   return {
-    bot: { api: { sendMessage: vi.fn() } } as unknown as Bot<Context>,
+    bot: { api: { sendMessage: vi.fn().mockResolvedValue(undefined) } } as unknown as Bot<Context>,
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
   };
+}
+
+function getScheduledBackgroundTask(): {
+  task: () => Promise<unknown>;
+  onSuccess?: (value: { error: unknown | null }) => void;
+  onError?: (error: unknown) => void;
+} {
+  const [[options]] = mocked.safeBackgroundTaskMock.mock.calls as [[{
+    task: () => Promise<unknown>;
+    onSuccess?: (value: { error: unknown | null }) => void;
+    onError?: (error: unknown) => void;
+  }]];
+
+  return options;
 }
 
 describe("bot/handlers/prompt", () => {
@@ -159,6 +175,7 @@ describe("bot/handlers/prompt", () => {
     };
     mocked.sessionStatusMock.mockReset();
     mocked.sessionPromptMock.mockReset();
+    mocked.sessionPromptAsyncMock.mockReset();
     mocked.sessionCreateMock.mockReset();
     mocked.suppressionRegisterMock.mockReset();
     mocked.safeBackgroundTaskMock.mockReset();
@@ -179,6 +196,7 @@ describe("bot/handlers/prompt", () => {
       error: null,
     });
     mocked.sessionPromptMock.mockResolvedValue({ data: {}, error: null });
+    mocked.sessionPromptAsyncMock.mockResolvedValue({ data: {}, error: null });
   });
 
   it("registers suppression entry for text prompts", async () => {
@@ -196,6 +214,67 @@ describe("bot/handlers/prompt", () => {
       ensureEventSubscription: expect.any(Function),
     });
     expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "Review README");
+  });
+
+  it("starts prompts through promptAsync instead of the streaming prompt endpoint", async () => {
+    const handled = await processUserPrompt(createContext(), "Review README", createDeps());
+
+    expect(handled).toBe(true);
+
+    const backgroundTask = getScheduledBackgroundTask();
+    await backgroundTask.task();
+
+    expect(mocked.sessionPromptAsyncMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      directory: "D:\\Projects\\Repo",
+      parts: [{ type: "text", text: "Review README" }],
+      agent: "build",
+      model: {
+        providerID: "openai",
+        modelID: "gpt-5",
+      },
+      variant: "default",
+    });
+    expect(mocked.sessionPromptMock).not.toHaveBeenCalled();
+  });
+
+  it("still notifies the user when promptAsync reports a real start error", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("request start failed") });
+
+    expect(deps.bot.api.sendMessage).toHaveBeenCalledWith(
+      777,
+      "Failed to send request to OpenCode.",
+    );
+  });
+
+  it("still notifies the user when promptAsync rejects before the run starts", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    const backgroundTask = getScheduledBackgroundTask();
+    const startError = new Error("network down");
+    mocked.sessionPromptAsyncMock.mockRejectedValueOnce(startError);
+
+    await backgroundTask.task().catch((error) => {
+      backgroundTask.onError?.(error);
+    });
+
+    expect(deps.bot.api.sendMessage).toHaveBeenCalledWith(
+      777,
+      "Failed to send request to OpenCode.",
+    );
   });
 
   it("does not register suppression entry for file-only prompts", async () => {
