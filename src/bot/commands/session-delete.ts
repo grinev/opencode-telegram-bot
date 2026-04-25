@@ -45,6 +45,7 @@ interface SessionDeleteDetailMetadata {
   stage: "detail";
   messageId: number;
   sessionId: string;
+  title: string;
 }
 
 type SessionDeleteMetadata = SessionDeleteListMetadata | SessionDeleteDetailMetadata;
@@ -78,11 +79,12 @@ function parseSessionDeleteMetadata(state: InteractionState | null): SessionDele
 
   if (stage === "detail") {
     const sessionId = state.metadata.sessionId;
-    if (typeof sessionId !== "string" || !sessionId) {
+    const title = state.metadata.title;
+    if (typeof sessionId !== "string" || !sessionId || typeof title !== "string" || !title) {
       return null;
     }
 
-    return { flow, stage, messageId, sessionId };
+    return { flow, stage, messageId, sessionId, title };
   }
 
   return null;
@@ -310,6 +312,7 @@ export async function handleSessionDeleteCallback(ctx: Context): Promise<boolean
           stage: "detail",
           messageId: metadata.messageId,
           sessionId: session.id,
+          title: session.title,
         },
       });
 
@@ -382,12 +385,12 @@ export async function handleSessionDeleteCallback(ctx: Context): Promise<boolean
       }
 
       try {
-        const deleteresult = await opencodeClient.session.delete({
+        const deleteResult = await opencodeClient.session.delete({
           sessionID: sessionId,
         });
 
-        if (deleteresult.error) {
-          logger.error("[SessionDelete] Delete failed:", deleteresult.error);
+        if (deleteResult.error) {
+          logger.error("[SessionDelete] Delete failed:", deleteResult.error);
           await ctx.answerCallbackQuery({ text: t("session_delete.delete_error") });
           return true;
         }
@@ -395,13 +398,15 @@ export async function handleSessionDeleteCallback(ctx: Context): Promise<boolean
         const currentSession = getCurrentSession();
         const isCurrent = currentSession?.id === sessionId;
 
+        logger.info(`[SessionDelete] Session deleted: id=${sessionId}, title="${metadata.title}", wasCurrent=${isCurrent}`);
+
         if (isCurrent) {
           clearSession();
           clearSessionDeleteInteraction("session_delete_deleted_current");
-          await ctx.answerCallbackQuery({ text: t("session_delete.deleted_current", { title: currentSession?.title }) });
+          await ctx.answerCallbackQuery({ text: t("session_delete.deleted_current", { title: metadata.title }) });
         } else {
           clearSessionDeleteInteraction("session_delete_deleted");
-          await ctx.answerCallbackQuery({ text: t("session_delete.deleted", { title: "" }) });
+          await ctx.answerCallbackQuery({ text: t("session_delete.deleted", { title: metadata.title }) });
         }
 
         await ctx.deleteMessage().catch(() => {});
