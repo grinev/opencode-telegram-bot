@@ -1,16 +1,16 @@
 import { CommandContext, Context, InlineKeyboard } from "grammy";
 import { getDateLocale, t } from "../../i18n/index.js";
 import { opencodeClient } from "../../opencode/client.js";
-import {
-  clearSession,
-  getCurrentProject,
-  getCurrentSession,
-} from "../../settings/manager.js";
+import { getCurrentProject } from "../../settings/manager.js";
+import { clearSession, getCurrentSession } from "../../session/manager.js";
 import { interactionManager } from "../../interaction/manager.js";
 import type { InteractionState } from "../../interaction/types.js";
 import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
 import { logger } from "../../utils/logger.js";
 import { config } from "../../config.js";
+import { detachAttachedSession } from "../../attach/service.js";
+import { pinnedMessageManager } from "../../pinned/manager.js";
+import { summaryAggregator } from "../../summary/aggregator.js";
 
 const CALLBACK_PREFIX = "sesdel:";
 const OPEN_PREFIX = `${CALLBACK_PREFIX}open:`;
@@ -113,6 +113,10 @@ function parseSessionPageCallback(data: string): number | null {
   }
 
   return page;
+}
+
+function truncateTitle(title: string, maxLength: number = 120): string {
+  return title.length <= maxLength ? title : `${title.slice(0, maxLength - 3)}...`;
 }
 
 async function loadSessionPage(
@@ -233,6 +237,11 @@ export async function sessionDeleteCommand(ctx: CommandContext<Context>): Promis
 }
 
 export async function handleSessionDeleteCallback(ctx: Context): Promise<boolean> {
+  if (isForegroundBusy()) {
+    await replyBusyBlocked(ctx);
+    return true;
+  }
+
   const data = ctx.callbackQuery?.data;
   if (!data || !data.startsWith(CALLBACK_PREFIX)) {
     return false;
@@ -278,10 +287,16 @@ export async function handleSessionDeleteCallback(ctx: Context): Promise<boolean
         return true;
       }
 
-      const { data: session } = await opencodeClient.session.get({
+      const { data: session, error } = await opencodeClient.session.get({
         sessionID: sessionId,
         directory: currentProject.worktree,
       });
+
+      if (error) {
+        logger.error("[SessionDelete] Failed to fetch session details:", error);
+        await ctx.answerCallbackQuery({ text: t("session_delete.load_error") });
+        return true;
+      }
 
       if (!session) {
         clearSessionDeleteInteraction("session_delete_not_found");
@@ -330,6 +345,7 @@ export async function handleSessionDeleteCallback(ctx: Context): Promise<boolean
       const currentProject = getCurrentProject();
       if (!currentProject) {
         clearSessionDeleteInteraction("session_delete_page_no_project");
+        await ctx.answerCallbackQuery({ text: t("session_delete.cancelled_callback") }).catch(() => {});
         await ctx.deleteMessage().catch(() => {});
         return true;
       }
@@ -380,6 +396,7 @@ export async function handleSessionDeleteCallback(ctx: Context): Promise<boolean
       const currentProject = getCurrentProject();
       if (!currentProject) {
         clearSessionDeleteInteraction("session_delete_confirm_no_project");
+        await ctx.answerCallbackQuery({ text: t("session_delete.cancelled_callback") }).catch(() => {});
         await ctx.deleteMessage().catch(() => {});
         return true;
       }
@@ -397,16 +414,24 @@ export async function handleSessionDeleteCallback(ctx: Context): Promise<boolean
 
         const currentSession = getCurrentSession();
         const isCurrent = currentSession?.id === sessionId;
+        const shortTitle = truncateTitle(metadata.title);
 
         logger.info(`[SessionDelete] Session deleted: id=${sessionId}, title="${metadata.title}", wasCurrent=${isCurrent}`);
 
         if (isCurrent) {
+          detachAttachedSession("session_delete_deleted_current");
           clearSession();
+          summaryAggregator.clear();
           clearSessionDeleteInteraction("session_delete_deleted_current");
-          await ctx.answerCallbackQuery({ text: t("session_delete.deleted_current", { title: metadata.title }) });
+          try {
+            await pinnedMessageManager.clear();
+          } catch (err) {
+            logger.error("[SessionDelete] Failed to clear pinned message:", err);
+          }
+          await ctx.answerCallbackQuery({ text: t("session_delete.deleted_current", { title: shortTitle }) });
         } else {
           clearSessionDeleteInteraction("session_delete_deleted");
-          await ctx.answerCallbackQuery({ text: t("session_delete.deleted", { title: metadata.title }) });
+          await ctx.answerCallbackQuery({ text: t("session_delete.deleted", { title: shortTitle }) });
         }
 
         await ctx.deleteMessage().catch(() => {});
