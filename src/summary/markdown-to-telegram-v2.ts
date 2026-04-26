@@ -11,6 +11,14 @@ function escapeMarkdownV2(text: string): string {
   return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
+function escapeMarkdownV2Code(text: string): string {
+  return text.replace(/([`\\])/g, "\\$1");
+}
+
+function escapeMarkdownV2LinkUrl(text: string): string {
+  return text.replace(/([)\\])/g, "\\$1");
+}
+
 function renderInlineNodes(nodes: InlineNode[]): string {
   return nodes
     .map((node) => {
@@ -24,9 +32,9 @@ function renderInlineNodes(nodes: InlineNode[]): string {
         case "strike":
           return `~${renderInlineNodes(node.children)}~`;
         case "code":
-          return `\`${node.text}\``;
+          return `\`${escapeMarkdownV2Code(node.text)}\``;
         case "link":
-          return `[${renderInlineNodes(node.text)}](${node.url})`;
+          return `[${renderInlineNodes(node.text)}](${escapeMarkdownV2LinkUrl(node.url)})`;
         case "underline":
           return `__${renderInlineNodes(node.children)}__`;
         case "spoiler":
@@ -58,22 +66,22 @@ function renderBlock(block: TelegramBlock): string {
     case "list":
       return block.items
         .map((item, index) => {
-          const prefix = block.ordered ? `${index + 1}\\. ` : "- ";
+          const prefix = block.ordered ? `${index + 1}\\. ` : "\\- ";
           const body = renderInlineNodes(item);
           return `${prefix}${body}`;
         })
         .join("\n");
     case "code":
-      return `\`\`\`${block.language ?? ""}\n${block.text}\n\`\`\``;
+      return `\`\`\`${escapeMarkdownV2Code(block.language ?? "")}\n${escapeMarkdownV2Code(block.text)}\n\`\`\``;
     case "table": {
       if (block.rows.length === 0) {
         return "";
       }
-      const header = `| ${block.rows[0].map(escapeMarkdownV2).join(" | ")} |`;
-      const separator = `| ${block.rows[0].map(() => "---").join(" | ")} |`;
+      const header = `\\| ${block.rows[0].map(escapeMarkdownV2).join(" \\| ")} \\|`;
+      const separator = `\\| ${block.rows[0].map(() => "\\-\\-\\-").join(" \\| ")} \\|`;
       const body = block.rows
         .slice(1)
-        .map((row) => `| ${row.map(escapeMarkdownV2).join(" | ")} |`);
+        .map((row) => `\\| ${row.map(escapeMarkdownV2).join(" \\| ")} \\|`);
       return [header, separator, ...body].join("\n");
     }
     case "rule":

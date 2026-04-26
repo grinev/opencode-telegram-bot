@@ -50,6 +50,19 @@ function pushEntity(state: InlineRenderState, entity: MessageEntity): void {
   state.entities.push(entity);
 }
 
+function isTelegramTextLinkUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ["http:", "https:", "tg:", "mailto:"].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function isLocalReferenceUrl(url: string): boolean {
+  return url.startsWith("#") || url.startsWith("/") || url.startsWith("./") || url.startsWith("../");
+}
+
 function renderIntoState(state: InlineRenderState, nodes: InlineNode[]): void {
   for (const node of nodes) {
     switch (node.type) {
@@ -99,6 +112,13 @@ function renderIntoState(state: InlineRenderState, nodes: InlineNode[]): void {
       case "link": {
         const offset = state.text.length;
         renderIntoState(state, node.text);
+        if (!isTelegramTextLinkUrl(node.url)) {
+          if (isLocalReferenceUrl(node.url)) {
+            appendText(state, ` (${node.url})`);
+            break;
+          }
+        }
+
         pushEntity(state, {
           type: "text_link",
           offset,

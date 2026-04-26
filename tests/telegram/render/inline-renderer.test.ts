@@ -145,6 +145,19 @@ describe("telegram/render/inline-renderer", () => {
     ]);
   });
 
+  it("preserves local markdown link targets as plain text without breaking validation", () => {
+    const blocks = parseTelegramBlocks("See [security](#безопасность)");
+    const paragraph = blocks[0];
+
+    expect(paragraph).toMatchObject({ type: "paragraph" });
+    expect(paragraph.type).toBe("paragraph");
+
+    expect(renderInlineNodesValidated(paragraph.inlines)).toEqual({
+      text: "See security (#безопасность)",
+      entities: [],
+    });
+  });
+
   it("keeps newline text nodes as plain text in the output", () => {
     const nodes: InlineNode[] = [
       { type: "text", text: "line 1" },

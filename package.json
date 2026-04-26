@@ -62,7 +62,6 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "socks-proxy-agent": "^8.0.5",
-    "telegram-markdown-v2": "^0.0.4",
     "unified": "^11.0.5"
   },
   "devDependencies": {
@@ -77,8 +76,5 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
-  },
-  "overrides": {
-    "remark": "14.0.3"
   }
 }
