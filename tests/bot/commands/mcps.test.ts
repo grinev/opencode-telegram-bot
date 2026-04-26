@@ -114,8 +114,8 @@ describe("bot/commands/mcps", () => {
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
 
-    expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("mcps:select:filesystem");
-    expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("mcps:select:github");
+    expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("mcps:select:0");
+    expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("mcps:select:1");
     expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("mcps:cancel");
 
     const state = interactionManager.getSnapshot();
@@ -151,7 +151,7 @@ describe("bot/commands/mcps", () => {
       },
     });
 
-    const ctx = createCallbackContext("mcps:select:github", 200);
+    const ctx = createCallbackContext("mcps:select:1", 200);
     const handled = await handleMcpsCallback(ctx);
 
     expect(handled).toBe(true);
@@ -188,7 +188,7 @@ describe("bot/commands/mcps", () => {
       },
     });
 
-    const ctx = createCallbackContext("mcps:toggle:filesystem", 300);
+    const ctx = createCallbackContext("mcps:toggle", 300);
     const handled = await handleMcpsCallback(ctx);
 
     expect(handled).toBe(true);
@@ -224,7 +224,7 @@ describe("bot/commands/mcps", () => {
       },
     });
 
-    const ctx = createCallbackContext("mcps:toggle:github", 400);
+    const ctx = createCallbackContext("mcps:toggle", 400);
     const handled = await handleMcpsCallback(ctx);
 
     expect(handled).toBe(true);
@@ -331,7 +331,7 @@ describe("bot/commands/mcps", () => {
       },
     });
 
-    const ctx = createCallbackContext("mcps:select:oauth-server", 800);
+    const ctx = createCallbackContext("mcps:select:0", 800);
     const handled = await handleMcpsCallback(ctx);
 
     expect(handled).toBe(true);
@@ -346,9 +346,36 @@ describe("bot/commands/mcps", () => {
     ];
 
     const hasToggleButton = options.reply_markup.inline_keyboard.some((row) =>
-      row.some((btn) => btn.callback_data?.startsWith("mcps:toggle:")),
+      row.some((btn) => btn.callback_data === "mcps:toggle"),
     );
     expect(hasToggleButton).toBe(false);
+    expect(options.reply_markup.inline_keyboard.every((row) => row.length > 0)).toBe(true);
+  });
+
+  it("keeps callback data short for long MCP server names", async () => {
+    const longServerName = "very-long-mcp-server-name-".repeat(5);
+    mocked.mcpStatusMock.mockResolvedValue({
+      data: {
+        [longServerName]: { status: "connected" },
+      },
+      error: null,
+    });
+
+    const ctx = createCommandContext(850);
+    await mcpsCommand(ctx as never);
+
+    const [, options] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
+    ];
+
+    const callbackData = options.reply_markup.inline_keyboard[0]?.[0]?.callback_data;
+    expect(callbackData).toBe("mcps:select:0");
+    expect(Buffer.byteLength(callbackData ?? "", "utf-8")).toBeLessThanOrEqual(64);
+
+    const state = interactionManager.getSnapshot();
+    const servers = state?.metadata.servers as Array<{ name: string }> | undefined;
+    expect(servers?.[0]?.name).toBe(longServerName);
   });
 
   it("shows toggle error on API failure", async () => {
@@ -367,7 +394,7 @@ describe("bot/commands/mcps", () => {
       },
     });
 
-    const ctx = createCallbackContext("mcps:toggle:github", 900);
+    const ctx = createCallbackContext("mcps:toggle", 900);
     const handled = await handleMcpsCallback(ctx);
 
     expect(handled).toBe(true);
