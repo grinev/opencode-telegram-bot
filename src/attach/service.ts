@@ -65,7 +65,12 @@ async function ensureAttachPinnedSession({
     return;
   }
 
-  await pinnedMessageManager.onSessionChange(session.id, session.title);
+  if (pinnedState.messageId && pinnedState.sessionId === null) {
+    await pinnedMessageManager.restoreExistingSession(session.id, session.title);
+  } else {
+    await pinnedMessageManager.onSessionChange(session.id, session.title);
+  }
+
   await pinnedMessageManager.loadContextFromHistory(session.id, session.directory);
 
   const contextInfo = pinnedMessageManager.getContextInfo();

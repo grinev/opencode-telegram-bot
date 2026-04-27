@@ -4,11 +4,37 @@ import { formatCompactToolInfo } from "./formatter.js";
 import type { SubagentInfo } from "./aggregator.js";
 import type { ToolInfo } from "./aggregator.js";
 
+function shouldPreferInputDetails(tool: string, input?: { [key: string]: unknown }): boolean {
+  if (!input) {
+    return false;
+  }
+
+  switch (tool) {
+    case "read":
+    case "edit":
+    case "write":
+    case "apply_patch":
+      return typeof input.path === "string" || typeof input.filePath === "string";
+    case "bash":
+      return typeof input.command === "string";
+    case "grep":
+    case "glob":
+      return typeof input.pattern === "string";
+  }
+
+  return ["query", "url", "name", "prompt", "text"].some(
+    (field) => typeof input[field] === "string",
+  );
+}
+
 function formatToolStep(subagent: SubagentInfo): string {
   if (!subagent.currentTool) {
     return "";
   }
 
+  const toolTitle = shouldPreferInputDetails(subagent.currentTool, subagent.currentToolInput)
+    ? undefined
+    : subagent.currentToolTitle;
   const toolInfo: ToolInfo = {
     sessionId: subagent.sessionId ?? subagent.parentSessionId,
     messageId: subagent.cardId,
@@ -17,12 +43,12 @@ function formatToolStep(subagent: SubagentInfo): string {
     state: {
       status: "running",
       input: subagent.currentToolInput ?? {},
-      title: subagent.currentToolTitle,
+      title: toolTitle,
       metadata: {},
       time: { start: subagent.updatedAt },
     },
     input: subagent.currentToolInput,
-    title: subagent.currentToolTitle,
+    title: toolTitle,
     metadata: {},
     hasFileAttachment: false,
   };

@@ -45,7 +45,7 @@ describe("summary/subagent-formatter", () => {
     expect(text).toContain("Model: openai/gpt-5.4");
     expect(text).not.toContain("Context:");
     expect(text).not.toContain("Cost:");
-    expect(text).toContain("📖 read Reading pinned manager");
+    expect(text).toContain("📖 read src/pinned/manager.ts");
     expect(text).not.toContain("Working:");
   });
 
@@ -170,5 +170,92 @@ describe("summary/subagent-formatter", () => {
 
     expect(text).toContain("⚙️ Working...");
     expect(text).not.toContain("📖 read\n");
+  });
+
+  it("uses input details instead of internal titles for running subagent tools", async () => {
+    setRuntimeLocale("en");
+
+    const text = await renderSubagentCards([
+      {
+        cardId: "card-1",
+        sessionId: "child-1",
+        parentSessionId: "root-1",
+        agent: "explore",
+        description: "task description",
+        prompt: "task description",
+        status: "running",
+        providerID: "openai",
+        modelID: "gpt-5.4",
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        cost: 0,
+        currentTool: "grep",
+        currentToolInput: {
+          pattern: "[WARN]|[ERROR]",
+        },
+        currentToolTitle: "22460fc65b183e6921717bba0c84ccfcf4b57982",
+        updatedAt: Date.now(),
+      },
+      {
+        cardId: "card-2",
+        sessionId: "child-2",
+        parentSessionId: "root-1",
+        agent: "explore",
+        description: "read task",
+        prompt: "read task",
+        status: "running",
+        providerID: "openai",
+        modelID: "gpt-5.4",
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        cost: 0,
+        currentTool: "read",
+        currentToolInput: {
+          filePath: "src/summary/subagent-formatter.ts",
+        },
+        currentToolTitle: "22460fc65b183e6921717bba0c84ccfcf4b57982",
+        updatedAt: Date.now(),
+      },
+      {
+        cardId: "card-3",
+        sessionId: "child-3",
+        parentSessionId: "root-1",
+        agent: "explore",
+        description: "glob task",
+        prompt: "glob task",
+        status: "running",
+        providerID: "openai",
+        modelID: "gpt-5.4",
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        cost: 0,
+        currentTool: "glob",
+        currentToolInput: {
+          pattern: "**/*.ts",
+        },
+        currentToolTitle: "22460fc65b183e6921717bba0c84ccfcf4b57982",
+        updatedAt: Date.now(),
+      },
+    ]);
+
+    expect(text).toContain("🔍 grep [WARN]|[ERROR]");
+    expect(text).toContain("📖 read src/summary/subagent-formatter.ts");
+    expect(text).toContain("📁 glob **/*.ts");
+    expect(text).not.toContain("22460fc65b183e6921717bba0c84ccfcf4b57982");
   });
 });

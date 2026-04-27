@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createOpencodeServeSpawnCommand,
   findUnixListeningPidInSs,
   findWindowsListeningPidInNetstat,
 } from "../../src/opencode/process.js";
@@ -22,5 +23,24 @@ describe("opencode/process", () => {
     ].join("\n");
 
     expect(findUnixListeningPidInSs(stdout, 4096)).toBe(2222);
+  });
+
+  it("builds opencode serve command with the configured local port", () => {
+    const command = createOpencodeServeSpawnCommand({ host: "localhost", port: 4987 });
+
+    if (process.platform === "win32") {
+      expect(command).toEqual({
+        command: "cmd.exe",
+        args: ["/c", "opencode", "serve", "--port", "4987"],
+        windowsHide: true,
+      });
+      return;
+    }
+
+    expect(command).toEqual({
+      command: "opencode",
+      args: ["serve", "--port", "4987"],
+      windowsHide: false,
+    });
   });
 });

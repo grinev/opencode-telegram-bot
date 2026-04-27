@@ -103,6 +103,32 @@ class PinnedMessageManager {
   }
 
   /**
+   * Restore in-memory state for a persisted pinned message without creating a new Telegram message.
+   */
+  async restoreExistingSession(sessionId: string, sessionTitle: string): Promise<void> {
+    logger.info(`[PinnedManager] Restoring existing pinned message for session: ${sessionId}`);
+
+    this.state.sessionId = sessionId;
+    this.state.sessionTitle = sessionTitle || t("pinned.default_session_title");
+    this.state.attachActive = false;
+    this.state.attachBusy = false;
+    this.state.changedFiles = [];
+    this.lastRenderedMessageText = null;
+    this.pendingUpdate = false;
+    this.pendingForceUpdate = false;
+
+    await this.refreshProjectMetadata();
+    await this.fetchContextLimit();
+
+    if (this.onKeyboardUpdateCallback && this.state.tokensLimit > 0) {
+      this.onKeyboardUpdateCallback(this.state.tokensUsed, this.state.tokensLimit);
+    }
+
+    await this.updatePinnedMessage(true);
+    await this.loadDiffsFromApi(sessionId);
+  }
+
+  /**
    * Called when session title is updated (after first message)
    */
   async onSessionTitleUpdate(newTitle: string): Promise<void> {

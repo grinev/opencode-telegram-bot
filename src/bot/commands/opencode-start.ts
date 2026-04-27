@@ -1,8 +1,7 @@
-import { spawn } from "node:child_process";
 import { CommandContext, Context } from "grammy";
 import { config } from "../../config.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { resolveLocalOpencodeTarget } from "../../opencode/process.js";
+import { resolveLocalOpencodeTarget, startLocalOpencodeServer } from "../../opencode/process.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { editBotText } from "../utils/telegram-text.js";
@@ -61,14 +60,7 @@ export async function opencodeStartCommand(ctx: CommandContext<Context>) {
 
     const statusMessage = await ctx.reply(t("opencode_start.starting"));
 
-    const isWindows = process.platform === "win32";
-    const command = isWindows ? "cmd.exe" : "opencode";
-    const args = isWindows ? ["/c", "opencode", "serve"] : ["serve"];
-    const childProcess = spawn(command, args, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: isWindows,
-    });
+    const childProcess = startLocalOpencodeServer(localTarget);
 
     childProcess.once("error", (error) => {
       logger.error("[Bot] OpenCode server process failed to start", error);

@@ -12,6 +12,8 @@ describe("config boolean env parsing", () => {
     vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
     vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
     vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
+    vi.stubEnv("OPENCODE_AUTO_RESTART_ENABLED", "");
+    vi.stubEnv("OPENCODE_MONITOR_INTERVAL_SEC", "");
   });
 
   it("uses false defaults for hide service message flags", async () => {
@@ -212,6 +214,42 @@ describe("config boolean env parsing", () => {
     const config = await loadConfig();
 
     expect(config.bot.scheduledTaskExecutionTimeoutMinutes).toBe(120);
+  });
+
+  it("uses disabled OpenCode auto-restart by default", async () => {
+    const config = await loadConfig();
+
+    expect(config.opencode.autoRestartEnabled).toBe(false);
+  });
+
+  it("parses OPENCODE_AUTO_RESTART_ENABLED as a boolean", async () => {
+    vi.stubEnv("OPENCODE_AUTO_RESTART_ENABLED", "true");
+
+    const config = await loadConfig();
+
+    expect(config.opencode.autoRestartEnabled).toBe(true);
+  });
+
+  it("uses 300 seconds as default OpenCode monitor interval", async () => {
+    const config = await loadConfig();
+
+    expect(config.opencode.monitorIntervalSec).toBe(300);
+  });
+
+  it("parses OPENCODE_MONITOR_INTERVAL_SEC as a positive integer", async () => {
+    vi.stubEnv("OPENCODE_MONITOR_INTERVAL_SEC", "600");
+
+    const config = await loadConfig();
+
+    expect(config.opencode.monitorIntervalSec).toBe(600);
+  });
+
+  it("falls back to default OpenCode monitor interval on invalid value", async () => {
+    vi.stubEnv("OPENCODE_MONITOR_INTERVAL_SEC", "zero");
+
+    const config = await loadConfig();
+
+    expect(config.opencode.monitorIntervalSec).toBe(300);
   });
 
   it("keeps TTS credentials unset when dedicated vars are missing", async () => {

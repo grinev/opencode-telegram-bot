@@ -188,6 +188,22 @@ function countDiffChangesFromText(text: string): { additions: number; deletions:
   return { additions, deletions };
 }
 
+function normalizeSnapshotValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeSnapshotValue(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entryValue]) => [key, normalizeSnapshotValue(entryValue)]),
+    );
+  }
+
+  return value;
+}
+
 class SummaryAggregator {
   private currentSessionId: string | null = null;
   private textMessageStates: Map<string, TextMessageState> = new Map();
@@ -229,6 +245,7 @@ class SummaryAggregator {
   private pendingSubagentCardIdsByParent: Map<string, string[]> = new Map();
   private pendingChildSessionIdsByParent: Map<string, string[]> = new Map();
   private fallbackSubagentCardIdsByParent: Map<string, string[]> = new Map();
+  private lastSubagentSnapshot = "";
 
   setBotAndChatId(bot: Bot, chatId: number): void {
     this.bot = bot;
@@ -443,6 +460,7 @@ class SummaryAggregator {
     this.pendingSubagentCardIdsByParent.clear();
     this.pendingChildSessionIdsByParent.clear();
     this.fallbackSubagentCardIdsByParent.clear();
+    this.lastSubagentSnapshot = "";
     this.messageCount = 0;
     this.lastUpdated = 0;
 
@@ -531,6 +549,33 @@ class SummaryAggregator {
         terminalMessage: state.terminalMessage,
         updatedAt: state.updatedAt,
       }));
+
+    const snapshot = JSON.stringify(
+      subagents.map((subagent) => ({
+        cardId: subagent.cardId,
+        sessionId: subagent.sessionId,
+        parentSessionId: subagent.parentSessionId,
+        agent: subagent.agent,
+        description: subagent.description,
+        prompt: subagent.prompt,
+        command: subagent.command,
+        status: subagent.status,
+        providerID: subagent.providerID,
+        modelID: subagent.modelID,
+        tokens: subagent.tokens,
+        cost: subagent.cost,
+        currentTool: subagent.currentTool,
+        currentToolInput: normalizeSnapshotValue(subagent.currentToolInput),
+        currentToolTitle: subagent.currentToolTitle,
+        terminalMessage: subagent.terminalMessage,
+      })),
+    );
+
+    if (snapshot === this.lastSubagentSnapshot) {
+      return;
+    }
+
+    this.lastSubagentSnapshot = snapshot;
 
     this.onSubagentCallback(this.currentSessionId, subagents);
   }

@@ -1,4 +1,4 @@
-import { exec } from "node:child_process";
+import { exec, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
@@ -8,6 +8,12 @@ const PROCESS_EXIT_POLL_MS = 100;
 export interface LocalOpencodeTarget {
   host: string;
   port: number;
+}
+
+export interface OpencodeServeSpawnCommand {
+  command: string;
+  args: string[];
+  windowsHide: boolean;
 }
 
 function isLocalHostname(hostname: string): boolean {
@@ -35,6 +41,29 @@ export function resolveLocalOpencodeTarget(apiUrl: string): LocalOpencodeTarget 
   } catch {
     return null;
   }
+}
+
+export function createOpencodeServeSpawnCommand(
+  target: LocalOpencodeTarget,
+): OpencodeServeSpawnCommand {
+  const isWindows = process.platform === "win32";
+  const port = target.port.toString();
+
+  return {
+    command: isWindows ? "cmd.exe" : "opencode",
+    args: isWindows ? ["/c", "opencode", "serve", "--port", port] : ["serve", "--port", port],
+    windowsHide: isWindows,
+  };
+}
+
+export function startLocalOpencodeServer(target: LocalOpencodeTarget): ChildProcess {
+  const spawnCommand = createOpencodeServeSpawnCommand(target);
+
+  return spawn(spawnCommand.command, spawnCommand.args, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: spawnCommand.windowsHide,
+  });
 }
 
 function parsePid(value: string): number | null {

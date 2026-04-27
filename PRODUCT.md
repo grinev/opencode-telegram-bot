@@ -32,6 +32,7 @@ No public inbound ports are required for normal usage.
 - Check OpenCode server status (running / not running)
 - Start OpenCode server from the app (`opencode serve`)
 - Stop OpenCode server from the app
+- Optionally monitor and auto-restart a local OpenCode server
 
 ### Project management
 
@@ -158,15 +159,15 @@ Model picker behavior:
 - [x] Dynamic subagent activity display during task execution
 - [x] Git worktree switching and main-project status display for git repositories (`/worktree`)
 - [x] Create new OpenCode projects directly from Telegram
+- [x] `/mcps` command: browse available MCP servers
+- [x] Optional local OpenCode server monitoring with automatic restart
 
 ## Current Task List
 
 Open tasks for upcoming iterations:
 
 - [ ] `/messages` command: browse session messages with fork/revert actions
-- [ ] `/mcps` command: browse available MCP servers
 - [ ] Model search in model switcher
 - [ ] Docker runtime support and deployment guide
-- [ ] OpenCode server monitoring with automatic restart on stop/crash
 - [ ] Add a bot settings command with in-chat UI
 - [ ] Add project file browsing helpers (for example, `ls`-like flows with ability to send file to Telegram)

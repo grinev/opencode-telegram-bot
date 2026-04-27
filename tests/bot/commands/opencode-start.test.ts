@@ -5,8 +5,8 @@ import { t } from "../../../src/i18n/index.js";
 
 const mocked = vi.hoisted(() => ({
   healthMock: vi.fn(),
-  spawnMock: vi.fn(),
   resolveLocalOpencodeTargetMock: vi.fn(),
+  startLocalOpencodeServerMock: vi.fn(),
   editBotTextMock: vi.fn(),
   loggerInfoMock: vi.fn(),
   loggerErrorMock: vi.fn(),
@@ -15,10 +15,6 @@ const mocked = vi.hoisted(() => ({
       apiUrl: "http://localhost:4096",
     },
   },
-}));
-
-vi.mock("node:child_process", () => ({
-  spawn: mocked.spawnMock,
 }));
 
 vi.mock("../../../src/config.js", () => ({
@@ -35,6 +31,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
 
 vi.mock("../../../src/opencode/process.js", () => ({
   resolveLocalOpencodeTarget: mocked.resolveLocalOpencodeTargetMock,
+  startLocalOpencodeServer: mocked.startLocalOpencodeServerMock,
 }));
 
 vi.mock("../../../src/bot/utils/telegram-text.js", () => ({
@@ -69,8 +66,8 @@ function createChildProcess(pid: number): ChildProcess {
 describe("bot/commands/opencode-start", () => {
   beforeEach(() => {
     mocked.healthMock.mockReset();
-    mocked.spawnMock.mockReset();
     mocked.resolveLocalOpencodeTargetMock.mockReset();
+    mocked.startLocalOpencodeServerMock.mockReset();
     mocked.editBotTextMock.mockReset();
     mocked.loggerInfoMock.mockReset();
     mocked.loggerErrorMock.mockReset();
@@ -92,7 +89,7 @@ describe("bot/commands/opencode-start", () => {
     await opencodeStartCommand(ctx as never);
 
     expect(ctx.reply).toHaveBeenCalledWith(t("opencode_start.remote_configured"));
-    expect(mocked.spawnMock).not.toHaveBeenCalled();
+    expect(mocked.startLocalOpencodeServerMock).not.toHaveBeenCalled();
   });
 
   it("reports that the server is already running when health-check succeeds", async () => {
@@ -104,13 +101,13 @@ describe("bot/commands/opencode-start", () => {
     expect(ctx.reply).toHaveBeenCalledWith(
       t("opencode_start.already_running", { version: "1.2.3" }),
     );
-    expect(mocked.spawnMock).not.toHaveBeenCalled();
+    expect(mocked.startLocalOpencodeServerMock).not.toHaveBeenCalled();
   });
 
   it("starts the local server and reports success", async () => {
     const ctx = createContext();
     const childProcess = createChildProcess(123);
-    mocked.spawnMock.mockReturnValue(childProcess);
+    mocked.startLocalOpencodeServerMock.mockReturnValue(childProcess);
     mocked.healthMock
       .mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce({ data: { healthy: true, version: "1.2.3" }, error: null })
@@ -118,19 +115,7 @@ describe("bot/commands/opencode-start", () => {
 
     await opencodeStartCommand(ctx as never);
 
-    const expectedCommand = process.platform === "win32" ? "cmd.exe" : "opencode";
-    const expectedArgs = process.platform === "win32" ? ["/c", "opencode", "serve"] : ["serve"];
-    const expectedWindowsHide = process.platform === "win32";
-
-    expect(mocked.spawnMock).toHaveBeenCalledWith(
-      expectedCommand,
-      expectedArgs,
-      expect.objectContaining({
-        detached: true,
-        stdio: "ignore",
-        windowsHide: expectedWindowsHide,
-      }),
-    );
+    expect(mocked.startLocalOpencodeServerMock).toHaveBeenCalledWith({ host: "localhost", port: 4096 });
     expect(childProcess.unref).toHaveBeenCalledTimes(1);
     expect(mocked.editBotTextMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -144,7 +129,7 @@ describe("bot/commands/opencode-start", () => {
 
     const ctx = createContext();
     const childProcess = createChildProcess(321);
-    mocked.spawnMock.mockReturnValue(childProcess);
+    mocked.startLocalOpencodeServerMock.mockReturnValue(childProcess);
     mocked.healthMock.mockRejectedValue(new Error("offline"));
 
     const commandPromise = opencodeStartCommand(ctx as never);

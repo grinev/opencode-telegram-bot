@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 import { cleanupBotRuntime, createBot } from "../bot/index.js";
 import { config } from "../config.js";
+import { opencodeAutoRestartService } from "../opencode/auto-restart.js";
 import { loadSettings } from "../settings/manager.js";
 import { scheduledTaskRuntime } from "../scheduled-task/runtime.js";
 import { warmupSessionDirectoryCache } from "../session/cache-manager.js";
@@ -46,6 +47,7 @@ export async function startBotApp(): Promise<void> {
 
   await loadSettings();
   await reconcileStoredModelSelection();
+  await opencodeAutoRestartService.start();
   await warmupSessionDirectoryCache();
 
   const bot = createBot();
@@ -88,6 +90,7 @@ export async function startBotApp(): Promise<void> {
     shutdownStarted = true;
     logger.info(`[App] Received ${signal}, shutting down...`);
     cleanupBotRuntime(`app_shutdown_${signal.toLowerCase()}`);
+    opencodeAutoRestartService.stop();
     scheduledTaskRuntime.shutdown();
 
     shutdownTimeout = setTimeout(() => {
@@ -133,6 +136,7 @@ export async function startBotApp(): Promise<void> {
       shutdownTimeout = null;
     }
     cleanupBotRuntime("app_shutdown_complete");
+    opencodeAutoRestartService.stop();
     scheduledTaskRuntime.shutdown();
     await clearManagedServiceState().catch((error) => {
       logger.warn("[App] Failed to clear managed service state", error);

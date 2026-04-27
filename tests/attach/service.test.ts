@@ -27,6 +27,7 @@ const mocked = vi.hoisted(() => ({
   pinnedInitializeMock: vi.fn(),
   pinnedGetStateMock: vi.fn(),
   pinnedOnSessionChangeMock: vi.fn(),
+  pinnedRestoreExistingSessionMock: vi.fn(),
   pinnedLoadContextFromHistoryMock: vi.fn(),
   pinnedGetContextInfoMock: vi.fn(() => null),
   pinnedSetAttachStateMock: vi.fn(),
@@ -73,6 +74,7 @@ vi.mock("../../src/pinned/manager.js", () => ({
     initialize: mocked.pinnedInitializeMock,
     getState: mocked.pinnedGetStateMock,
     onSessionChange: mocked.pinnedOnSessionChangeMock,
+    restoreExistingSession: mocked.pinnedRestoreExistingSessionMock,
     loadContextFromHistory: mocked.pinnedLoadContextFromHistoryMock,
     getContextInfo: mocked.pinnedGetContextInfoMock,
     setAttachState: mocked.pinnedSetAttachStateMock,
@@ -141,6 +143,8 @@ describe("attach/service", () => {
     }));
     mocked.pinnedOnSessionChangeMock.mockReset();
     mocked.pinnedOnSessionChangeMock.mockResolvedValue(undefined);
+    mocked.pinnedRestoreExistingSessionMock.mockReset();
+    mocked.pinnedRestoreExistingSessionMock.mockResolvedValue(undefined);
     mocked.pinnedLoadContextFromHistoryMock.mockReset();
     mocked.pinnedLoadContextFromHistoryMock.mockResolvedValue(undefined);
     mocked.pinnedGetContextInfoMock.mockReset();
@@ -242,6 +246,30 @@ describe("attach/service", () => {
     expect(restored).toBe(true);
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledWith("D:\\Projects\\Repo");
     expect(attachManager.getSnapshot()?.sessionId).toBe("session-1");
+  });
+
+  it("reuses a saved pinned message after restart instead of recreating it", async () => {
+    mocked.pinnedGetStateMock.mockReturnValueOnce({
+      sessionId: null,
+      messageId: 123,
+    });
+
+    const restored = await restoreAttachedCurrentSession({
+      bot: createBot(),
+      chatId: 777,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+
+    expect(restored).toBe(true);
+    expect(mocked.pinnedRestoreExistingSessionMock).toHaveBeenCalledWith(
+      "session-1",
+      "Session One",
+    );
+    expect(mocked.pinnedOnSessionChangeMock).not.toHaveBeenCalled();
+    expect(mocked.pinnedLoadContextFromHistoryMock).toHaveBeenCalledWith(
+      "session-1",
+      "D:\\Projects\\Repo",
+    );
   });
 
   it("skips startup restore when stored project and session do not match", async () => {
