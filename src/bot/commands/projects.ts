@@ -229,12 +229,18 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     return false;
   }
 
+  const page = parseProjectPageCallback(callbackQuery.data);
+  const isProjectSelection = callbackQuery.data.startsWith("project:");
+
+  if (page === null && !isProjectSelection) {
+    return false;
+  }
+
   if (isForegroundBusy()) {
     await replyBusyBlocked(ctx);
     return true;
   }
 
-  const page = parseProjectPageCallback(callbackQuery.data);
   if (page !== null) {
     const isActiveMenu = await ensureActiveInlineMenu(ctx, "project");
     if (!isActiveMenu) {
@@ -260,10 +266,6 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     }
 
     return true;
-  }
-
-  if (!callbackQuery.data.startsWith("project:")) {
-    return false;
   }
 
   const projectId = callbackQuery.data.replace("project:", "");
