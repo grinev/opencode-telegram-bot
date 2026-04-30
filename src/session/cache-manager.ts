@@ -191,10 +191,10 @@ function upsertDirectory(worktree: string, lastUpdated: number): boolean {
   return true;
 }
 
-function buildListParams(): { limit: number; start?: number } {
-  const hasWatermark = cacheData.lastSyncedUpdatedAt > 0;
-
-  if (!hasWatermark) {
+function buildListParams(options?: {
+  force?: boolean;
+}): { limit: number; start?: number } {
+  if (options?.force || cacheData.lastSyncedUpdatedAt === 0) {
     return { limit: INITIAL_WARMUP_LIMIT };
   }
 
@@ -272,10 +272,11 @@ function isServerUnavailableError(error: unknown): boolean {
   return false;
 }
 
-async function runSync(): Promise<void> {
+async function runSync(options?: { force?: boolean }): Promise<void> {
   await ensureCacheLoaded();
 
-  const params = buildListParams();
+  const shouldPrune = options?.force || cacheData.lastSyncedUpdatedAt === 0;
+  const params = buildListParams(options);
   const { data: sessions, error } = await opencodeClient.session.list(params);
 
   if (error || !sessions) {
@@ -284,6 +285,7 @@ async function runSync(): Promise<void> {
 
   let changed = false;
   let maxUpdated = cacheData.lastSyncedUpdatedAt;
+  const seenDirectories = new Set<string>();
 
   for (const session of sessions) {
     const updatedAt = session.time?.updated ?? Date.now();
@@ -291,8 +293,27 @@ async function runSync(): Promise<void> {
       changed = true;
     }
 
+    if (session.directory && isValidWorktree(session.directory)) {
+      seenDirectories.add(worktreeKey(session.directory.trim()));
+    }
+
     if (updatedAt > maxUpdated) {
       maxUpdated = updatedAt;
+    }
+  }
+
+  const responseIsTruncated = sessions.length >= INITIAL_WARMUP_LIMIT;
+
+  if (shouldPrune && !responseIsTruncated) {
+    const before = cacheData.directories.length;
+    cacheData.directories = cacheData.directories.filter((d) =>
+      seenDirectories.has(worktreeKey(d.worktree)),
+    );
+    if (cacheData.directories.length !== before) {
+      changed = true;
+      logger.info(
+        `[SessionCache] Pruned ${before - cacheData.directories.length} stale directories from cache`,
+      );
     }
   }
 
@@ -558,7 +579,7 @@ export async function syncSessionDirectoryCache(options?: { force?: boolean }): 
     return syncInFlight;
   }
 
-  syncInFlight = runSync()
+  syncInFlight = runSync(options)
     .then(() => {
       lastSyncAttemptAt = Date.now();
     })

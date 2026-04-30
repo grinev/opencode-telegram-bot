@@ -109,7 +109,7 @@ describe("session/cache-manager", () => {
     ]);
   });
 
-  it("runs incremental sync using start watermark", async () => {
+  it("runs full sync with pruning when force is set", async () => {
     sessionListMock
       .mockResolvedValueOnce({
         data: [createSession("D:/repo-a", 1_700_000_000_500)],
@@ -124,13 +124,10 @@ describe("session/cache-manager", () => {
     await syncSessionDirectoryCache({ force: true });
 
     expect(sessionListMock).toHaveBeenNthCalledWith(1, { limit: 1000 });
-    expect(sessionListMock).toHaveBeenNthCalledWith(2, {
-      limit: 1000,
-      start: 1_700_000_000_500 - 60_000,
-    });
+    expect(sessionListMock).toHaveBeenNthCalledWith(2, { limit: 1000 });
 
     const directories = await getCachedSessionDirectories();
-    expect(directories.map((item) => item.worktree)).toEqual(["D:/repo-c", "D:/repo-a"]);
+    expect(directories.map((item) => item.worktree)).toEqual(["D:/repo-c"]);
   });
 
   it("logs friendly message when server is not running during warmup sync", async () => {
@@ -145,6 +142,66 @@ describe("session/cache-manager", () => {
     expect(loggerWarnMock).toHaveBeenCalledWith(
       "[SessionCache] OpenCode server is not running. Start it with: opencode serve",
     );
+  });
+
+  it("prunes stale directories from cache on warmup", async () => {
+    // Populate cache with directories first
+    await upsertSessionDirectory("/repo/stale", 1_700_000_000_100);
+    await upsertSessionDirectory("/repo/active-a", 1_700_000_000_200);
+    await upsertSessionDirectory("/repo/active-b", 1_700_000_000_300);
+
+    // Reset in-memory state; cache persists in settings.json
+    __resetSessionDirectoryCacheForTests();
+
+    // Mock lists only active directories
+    sessionListMock.mockResolvedValueOnce({
+      data: [
+        createSession("/repo/active-b", 1_700_000_000_400),
+        createSession("/repo/active-a", 1_700_000_000_350),
+      ],
+      error: null,
+    });
+
+    await syncSessionDirectoryCache({ force: true });
+
+    const directories = await getCachedSessionDirectories();
+    const worktrees = directories.map((d) => d.worktree);
+    expect(worktrees).toEqual(["/repo/active-b", "/repo/active-a"]);
+  });
+
+  it("logs prune count when stale directories are removed", async () => {
+    await upsertSessionDirectory("/repo/stale", 1_700_000_000_100);
+
+    __resetSessionDirectoryCacheForTests();
+    loggerInfoMock.mockClear();
+
+    sessionListMock.mockResolvedValueOnce({
+      data: [createSession("/repo/active", 1_700_000_000_200)],
+      error: null,
+    });
+
+    await syncSessionDirectoryCache({ force: true });
+
+    expect(loggerInfoMock).toHaveBeenCalledWith(
+      "[SessionCache] Pruned 1 stale directories from cache",
+    );
+  });
+
+  it("clears cache when server returns empty session list", async () => {
+    await upsertSessionDirectory("/repo/stale-a", 1_700_000_000_100);
+    await upsertSessionDirectory("/repo/stale-b", 1_700_000_000_200);
+
+    __resetSessionDirectoryCacheForTests();
+
+    sessionListMock.mockResolvedValueOnce({
+      data: [],
+      error: null,
+    });
+
+    await syncSessionDirectoryCache({ force: true });
+
+    const directories = await getCachedSessionDirectories();
+    expect(directories).toEqual([]);
   });
 
   it("updates existing directory with newer timestamp", async () => {
