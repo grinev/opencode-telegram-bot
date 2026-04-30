@@ -13,7 +13,7 @@ describe("bot/utils/telegram-text", () => {
 
     await sendBotText({
       api: { sendMessage },
-      chatId: 100,
+      target: { chatId: 100 },
       text: "plain text",
       options: { reply_markup: { keyboard: [] } },
     });
@@ -29,7 +29,7 @@ describe("bot/utils/telegram-text", () => {
 
     await sendBotText({
       api: { sendMessage },
-      chatId: 100,
+      target: { chatId: 100 },
       text: "**formatted**",
       format: "markdown_v2",
     });
@@ -51,7 +51,7 @@ describe("bot/utils/telegram-text", () => {
 
     await sendBotText({
       api: { sendMessage },
-      chatId: 100,
+      target: { chatId: 100 },
       text: "Build succeeded.",
       rawFallbackText: "Build succeeded.",
       format: "markdown_v2",
@@ -81,7 +81,7 @@ describe("bot/utils/telegram-text", () => {
     await expect(
       sendRenderedBotPart({
         api: { sendMessage },
-        chatId: 100,
+        target: { chatId: 100 },
         part: {
           text: "Hello",
           entities: [{ type: "bold", offset: 0, length: 5 }],
@@ -111,7 +111,7 @@ describe("bot/utils/telegram-text", () => {
     await expect(
       sendRenderedBotPart({
         api: { sendMessage },
-        chatId: 100,
+        target: { chatId: 100 },
         part: {
           text: "plain text",
           fallbackText: "plain text",
@@ -139,7 +139,7 @@ describe("bot/utils/telegram-text", () => {
     await expect(
       sendRenderedBotPart({
         api: { sendMessage },
-        chatId: 100,
+        target: { chatId: 100 },
         part: {
           text: "Hello",
           entities: [{ type: "bold", offset: 0, length: 5 }],

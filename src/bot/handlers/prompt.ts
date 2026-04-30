@@ -27,6 +27,7 @@ import {
   markAttachedSessionIdle,
 } from "../../attach/service.js";
 import { externalUserInputSuppressionManager } from "../../external-input/suppression.js";
+import { getTelegramTargetFromContext } from "../../telegram/target.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
@@ -137,6 +138,10 @@ export async function processUserPrompt(
 
   botInstance = bot;
   chatIdInstance = ctx.chat!.id;
+  const target = getTelegramTargetFromContext(ctx);
+  if (!target) {
+    return false;
+  }
 
   let currentSession = getCurrentSession();
   let createdNewSession = false;
@@ -183,7 +188,7 @@ export async function processUserPrompt(
 
   await attachToSession({
     bot,
-    chatId: ctx.chat!.id,
+    target,
     session: currentSession,
     ensureEventSubscription,
   });

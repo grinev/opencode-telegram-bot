@@ -11,6 +11,7 @@ import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { createMainKeyboard } from "./keyboard.js";
+import { getTelegramTargetFromContext } from "../../telegram/target.js";
 import { logger } from "../../utils/logger.js";
 
 /**
@@ -39,8 +40,9 @@ export async function switchToProject(ctx: Context, project: ProjectInfo, reason
     logger.error("[Bot] Error clearing pinned message:", err);
   }
 
-  if (ctx.chat) {
-    keyboardManager.initialize(ctx.api, ctx.chat.id);
+  const target = getTelegramTargetFromContext(ctx);
+  if (target) {
+    keyboardManager.initialize(ctx.api, target);
   }
 
   await pinnedMessageManager.refreshContextLimit();

@@ -9,16 +9,19 @@ import { clearSession } from "../../session/manager.js";
 import { clearProject } from "../../settings/manager.js";
 import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
 import { abortCurrentOperation } from "./abort.js";
+import { getTelegramTargetFromContext } from "../../telegram/target.js";
 import { t } from "../../i18n/index.js";
 import { assistantRunState } from "../assistant-run-state.js";
 import { detachAttachedSession } from "../../attach/service.js";
 
 export async function startCommand(ctx: Context): Promise<void> {
-  if (ctx.chat) {
+  const target = getTelegramTargetFromContext(ctx);
+
+  if (target) {
     if (!pinnedMessageManager.isInitialized()) {
-      pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
+      pinnedMessageManager.initialize(ctx.api, target);
     }
-    keyboardManager.initialize(ctx.api, ctx.chat.id);
+    keyboardManager.initialize(ctx.api, target);
   }
 
   await abortCurrentOperation(ctx, { notifyUser: false });

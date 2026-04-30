@@ -26,6 +26,7 @@ import {
   markAttachedSessionIdle,
 } from "../../attach/service.js";
 import { externalUserInputSuppressionManager } from "../../external-input/suppression.js";
+import { getTelegramTargetFromContext } from "../../telegram/target.js";
 
 const COMMANDS_CALLBACK_PREFIX = "commands:";
 const COMMANDS_CALLBACK_SELECT_PREFIX = `${COMMANDS_CALLBACK_PREFIX}select:`;
@@ -417,6 +418,11 @@ async function executeCommand(
     return;
   }
 
+  const target = getTelegramTargetFromContext(ctx);
+  if (!target) {
+    return;
+  }
+
   const args = params.argumentsText.trim();
   const executingMessage = formatExecutingCommandMessage(params.commandName, args);
   await ctx.reply(executingMessage.text, { entities: executingMessage.entities });
@@ -428,7 +434,7 @@ async function executeCommand(
 
   await attachToSession({
     bot: deps.bot,
-    chatId: ctx.chat.id,
+    target,
     session,
     ensureEventSubscription: deps.ensureEventSubscription,
   });

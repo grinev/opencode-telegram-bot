@@ -22,7 +22,7 @@ const mocked = vi.hoisted(() => ({
   questionListMock: vi.fn(),
   permissionListMock: vi.fn(),
   setSessionSummaryMock: vi.fn(),
-  setBotAndChatIdMock: vi.fn(),
+  setBotAndTargetMock: vi.fn(),
   pinnedIsInitializedMock: vi.fn(() => true),
   pinnedInitializeMock: vi.fn(),
   pinnedGetStateMock: vi.fn(),
@@ -63,7 +63,7 @@ vi.mock("../../src/opencode/client.js", () => ({
 vi.mock("../../src/summary/aggregator.js", () => ({
   summaryAggregator: {
     setSession: mocked.setSessionSummaryMock,
-    setBotAndChatId: mocked.setBotAndChatIdMock,
+    setBotAndTarget: mocked.setBotAndTargetMock,
     clear: vi.fn(),
   },
 }));
@@ -132,7 +132,7 @@ describe("attach/service", () => {
     mocked.permissionListMock.mockReset();
     mocked.permissionListMock.mockResolvedValue({ data: [], error: null });
     mocked.setSessionSummaryMock.mockReset();
-    mocked.setBotAndChatIdMock.mockReset();
+    mocked.setBotAndTargetMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReturnValue(true);
     mocked.pinnedInitializeMock.mockReset();
@@ -164,7 +164,7 @@ describe("attach/service", () => {
   it("follows an idle session and updates attach state", async () => {
     const result = await attachToSession({
       bot: createBot(),
-      chatId: 777,
+      target: { chatId: 777 },
       session: mocked.currentSession!,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
@@ -177,7 +177,7 @@ describe("attach/service", () => {
     });
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledWith("D:\\Projects\\Repo");
     expect(mocked.setSessionSummaryMock).toHaveBeenCalledWith("session-1");
-    expect(mocked.setBotAndChatIdMock).toHaveBeenCalled();
+    expect(mocked.setBotAndTargetMock).toHaveBeenCalled();
     expect(mocked.pinnedSetAttachStateMock).toHaveBeenCalledWith(true, false);
     expect(attachManager.getSnapshot()).toMatchObject({
       sessionId: "session-1",
@@ -191,14 +191,14 @@ describe("attach/service", () => {
 
     await attachToSession({
       bot,
-      chatId: 777,
+      target: { chatId: 777 },
       session: mocked.currentSession!,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
     const result = await attachToSession({
       bot,
-      chatId: 777,
+      target: { chatId: 777 },
       session: mocked.currentSession!,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
@@ -227,7 +227,7 @@ describe("attach/service", () => {
 
     const result = await attachToSession({
       bot: createBot(),
-      chatId: 777,
+      target: { chatId: 777 },
       session: mocked.currentSession!,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
@@ -239,7 +239,7 @@ describe("attach/service", () => {
   it("restores the saved current session on startup", async () => {
     const restored = await restoreAttachedCurrentSession({
       bot: createBot(),
-      chatId: 777,
+      target: { chatId: 777 },
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
@@ -256,7 +256,7 @@ describe("attach/service", () => {
 
     const restored = await restoreAttachedCurrentSession({
       bot: createBot(),
-      chatId: 777,
+      target: { chatId: 777 },
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
@@ -280,7 +280,7 @@ describe("attach/service", () => {
 
     const restored = await restoreAttachedCurrentSession({
       bot: createBot(),
-      chatId: 777,
+      target: { chatId: 777 },
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 

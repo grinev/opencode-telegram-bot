@@ -365,7 +365,7 @@ describe("bot/commands/sessions", () => {
     expect(mocked.keyboardUpdateAgentMock).toHaveBeenCalledWith("plan");
     expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
       bot: expect.any(Object),
-      chatId: 111,
+      target: { chatId: 111 },
       session: {
         id: "session-1",
         title: "Session 1",

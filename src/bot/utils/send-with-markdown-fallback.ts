@@ -1,5 +1,6 @@
 import { logger } from "../../utils/logger.js";
 import type { Api, RawApi } from "grammy";
+import { getTelegramTargetSendOptions, type TelegramTarget } from "../../telegram/target.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
 type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
@@ -8,7 +9,7 @@ type TelegramEditMessageOptions = Parameters<EditMessageApi["editMessageText"]>[
 
 interface SendMessageWithMarkdownFallbackParams {
   api: SendMessageApi;
-  chatId: Parameters<SendMessageApi["sendMessage"]>[0];
+  target: TelegramTarget;
   text: string;
   rawFallbackText?: string;
   options?: TelegramSendMessageOptions;
@@ -146,7 +147,7 @@ export function isTelegramMarkdownParseError(error: unknown): boolean {
 
 export async function sendMessageWithMarkdownFallback({
   api,
-  chatId,
+  target,
   text,
   rawFallbackText,
   options,
@@ -154,12 +155,16 @@ export async function sendMessageWithMarkdownFallback({
 }: SendMessageWithMarkdownFallbackParams): Promise<
   Awaited<ReturnType<SendMessageApi["sendMessage"]>>
 > {
+  const threadOptions = getTelegramTargetSendOptions(target);
+  const sendOptions =
+    Object.keys(threadOptions).length > 0 ? { ...(options || {}), ...threadOptions } : options;
+
   if (!parseMode) {
-    return api.sendMessage(chatId, text, options);
+    return api.sendMessage(target.chatId, text, sendOptions);
   }
 
   const markdownOptions: TelegramSendMessageOptions = {
-    ...(options || {}),
+    ...sendOptions,
     parse_mode: parseMode,
   };
 
@@ -167,7 +172,7 @@ export async function sendMessageWithMarkdownFallback({
     rawFallbackText ?? (parseMode === "MarkdownV2" ? unescapeTelegramMarkdownV2(text) : text);
 
   try {
-    return await api.sendMessage(chatId, text, markdownOptions);
+    return await api.sendMessage(target.chatId, text, markdownOptions);
   } catch (error) {
     if (!isTelegramMarkdownParseError(error)) {
       throw error;
@@ -179,7 +184,7 @@ export async function sendMessageWithMarkdownFallback({
         logger.warn("[Bot] Markdown parse failed, retrying message with escaped MarkdownV2", error);
 
         try {
-          return await api.sendMessage(chatId, escapedText, markdownOptions);
+          return await api.sendMessage(target.chatId, escapedText, markdownOptions);
         } catch (escapedError) {
           if (!isTelegramMarkdownParseError(escapedError)) {
             throw escapedError;
@@ -189,13 +194,17 @@ export async function sendMessageWithMarkdownFallback({
             "[Bot] Escaped Markdown parse failed, retrying message in raw mode",
             escapedError,
           );
-          return api.sendMessage(chatId, fallbackText, stripMarkdownFormattingOptions(options));
+          return api.sendMessage(
+            target.chatId,
+            fallbackText,
+            stripMarkdownFormattingOptions(sendOptions),
+          );
         }
       }
     }
 
     logger.warn("[Bot] Markdown parse failed, retrying message in raw mode", error);
-    return api.sendMessage(chatId, fallbackText, stripMarkdownFormattingOptions(options));
+    return api.sendMessage(target.chatId, fallbackText, stripMarkdownFormattingOptions(sendOptions));
   }
 }
 

@@ -19,13 +19,16 @@ import {
   formatCostLine,
   formatModelDisplayName,
 } from "./format.js";
+import { getTelegramTargetSendOptions, type TelegramTarget } from "../telegram/target.js";
 
 class PinnedMessageManager {
   private api: Api | null = null;
   private chatId: number | null = null;
+  private target: TelegramTarget | null = null;
   private state: PinnedMessageState = {
     messageId: null,
     chatId: null,
+    messageThreadId: null,
     sessionId: null,
     sessionTitle: t("pinned.default_session_title"),
     attachActive: false,
@@ -50,15 +53,17 @@ class PinnedMessageManager {
   /**
    * Initialize manager with bot API and chat ID
    */
-  initialize(api: Api, chatId: number): void {
+  initialize(api: Api, target: TelegramTarget): void {
     this.api = api;
-    this.chatId = chatId;
+    this.chatId = target.chatId;
+    this.target = target;
 
     // Restore pinned message ID from settings
     const savedMessageId = getPinnedMessageId();
     if (savedMessageId) {
       this.state.messageId = savedMessageId;
-      this.state.chatId = chatId;
+      this.state.chatId = target.chatId;
+      this.state.messageThreadId = target.messageThreadId ?? null;
     }
   }
 
@@ -724,12 +729,18 @@ class PinnedMessageManager {
 
     try {
       const text = this.formatMessage();
+      const threadOptions = this.target ? getTelegramTargetSendOptions(this.target) : undefined;
 
       // Send new message
-      const sentMessage = await this.api.sendMessage(this.chatId, text);
+      const sentMessage = await this.api.sendMessage(
+        this.chatId,
+        text,
+        threadOptions && Object.keys(threadOptions).length > 0 ? threadOptions : undefined,
+      );
 
       this.state.messageId = sentMessage.message_id;
       this.state.chatId = this.chatId;
+      this.state.messageThreadId = this.target?.messageThreadId ?? null;
       this.state.lastUpdated = Date.now();
       this.lastRenderedMessageText = text;
 
@@ -841,6 +852,7 @@ class PinnedMessageManager {
       await this.api.unpinAllChatMessages(this.chatId).catch(() => {});
 
       this.state.messageId = null;
+      this.state.messageThreadId = null;
       this.lastRenderedMessageText = null;
       this.pendingUpdate = false;
       this.pendingForceUpdate = false;
@@ -873,6 +885,7 @@ class PinnedMessageManager {
     if (!this.api || !this.chatId) {
       // Just reset state if not initialized
       this.state.messageId = null;
+      this.state.messageThreadId = null;
       this.state.sessionId = null;
       this.state.sessionTitle = t("pinned.default_session_title");
       this.state.attachActive = false;
@@ -896,6 +909,7 @@ class PinnedMessageManager {
 
       // Reset state
       this.state.messageId = null;
+      this.state.messageThreadId = null;
       this.state.sessionId = null;
       this.state.sessionTitle = t("pinned.default_session_title");
       this.state.attachActive = false;

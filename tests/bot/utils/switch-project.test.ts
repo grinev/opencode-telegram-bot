@@ -115,7 +115,7 @@ describe("switch-project", () => {
     const ctx = createCtx(456);
     await switchToProject(ctx, testProject, "test_reason");
 
-    expect(mocked.keyboardInitMock).toHaveBeenCalledWith(ctx.api, 456);
+    expect(mocked.keyboardInitMock).toHaveBeenCalledWith(ctx.api, { chatId: 456 });
     expect(mocked.keyboardUpdateMock).toHaveBeenCalledWith(0, 128000);
   });
 

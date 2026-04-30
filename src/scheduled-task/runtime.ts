@@ -4,10 +4,12 @@ import {
   escapePlainTextForTelegramMarkdownV2,
   formatSummaryWithMode,
 } from "../summary/formatter.js";
+import { createTelegramTarget, type TelegramTarget } from "../telegram/target.js";
 import { t } from "../i18n/index.js";
 import { logger } from "../utils/logger.js";
 import { safeBackgroundTask } from "../utils/safe-background-task.js";
 import { sendBotText } from "../bot/utils/telegram-text.js";
+import { getTelegramTarget } from "../settings/manager.js";
 import { executeScheduledTask } from "./executor.js";
 import { foregroundSessionState } from "./foreground-state.js";
 import { computeNextRunAt, isTaskDue } from "./next-run.js";
@@ -102,7 +104,7 @@ function buildErrorDelivery(
 
 export class ScheduledTaskRuntime {
   private botApi: Bot<Context>["api"] | null = null;
-  private chatId: number | null = null;
+  private target: TelegramTarget | null = null;
   private initialized = false;
   private timersByTaskId = new Map<string, ReturnType<typeof setTimeout>>();
   private runningTaskIds = new Set<string>();
@@ -111,7 +113,7 @@ export class ScheduledTaskRuntime {
 
   async initialize(bot: Bot<Context>): Promise<void> {
     this.botApi = bot.api;
-    this.chatId = config.telegram.allowedUserId;
+    this.target = getTelegramTarget() ?? createTelegramTarget(config.telegram.allowedUserId);
 
     if (this.initialized) {
       return;
@@ -145,7 +147,7 @@ export class ScheduledTaskRuntime {
     if (
       this.flushInProgress ||
       !this.botApi ||
-      this.chatId === null ||
+      this.target === null ||
       foregroundSessionState.isBusy() ||
       this.deliveryQueue.length === 0
     ) {
@@ -185,7 +187,7 @@ export class ScheduledTaskRuntime {
     }
 
     this.botApi = null;
-    this.chatId = null;
+    this.target = null;
     this.initialized = false;
     this.timersByTaskId.clear();
     this.runningTaskIds.clear();
@@ -461,7 +463,7 @@ export class ScheduledTaskRuntime {
   }
 
   private async sendDelivery(delivery: QueuedScheduledTaskDelivery): Promise<boolean> {
-    if (!this.botApi || this.chatId === null) {
+    if (!this.botApi || this.target === null) {
       return false;
     }
 
@@ -475,7 +477,7 @@ export class ScheduledTaskRuntime {
       for (const part of messageParts) {
         await sendBotText({
           api: this.botApi,
-          chatId: this.chatId,
+          target: this.target,
           text: part,
           format,
         });

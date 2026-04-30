@@ -1,5 +1,6 @@
 import type { ModelInfo } from "../model/types.js";
 import { cloneScheduledTask, type ScheduledTask } from "../scheduled-task/types.js";
+import type { TelegramTarget } from "../telegram/target.js";
 import path from "node:path";
 import { getRuntimePaths } from "../runtime/paths.js";
 import { logger } from "../utils/logger.js";
@@ -28,6 +29,7 @@ export interface SessionDirectoryCacheInfo {
 export interface Settings {
   currentProject?: ProjectInfo;
   currentSession?: SessionInfo;
+  telegramTarget?: TelegramTarget;
   currentAgent?: string;
   currentModel?: ModelInfo;
   pinnedMessageId?: number;
@@ -105,6 +107,20 @@ export function setCurrentSession(sessionInfo: SessionInfo): void {
 
 export function clearSession(): void {
   currentSettings.currentSession = undefined;
+  void writeSettingsFile(currentSettings);
+}
+
+export function getTelegramTarget(): TelegramTarget | undefined {
+  return currentSettings.telegramTarget;
+}
+
+export function setTelegramTarget(target: TelegramTarget): void {
+  currentSettings.telegramTarget = target;
+  void writeSettingsFile(currentSettings);
+}
+
+export function clearTelegramTarget(): void {
+  currentSettings.telegramTarget = undefined;
   void writeSettingsFile(currentSettings);
 }
 

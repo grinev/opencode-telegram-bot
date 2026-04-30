@@ -12,7 +12,7 @@ describe("bot/utils/send-with-markdown-fallback", () => {
 
     await sendMessageWithMarkdownFallback({
       api: { sendMessage },
-      chatId: 123,
+      target: { chatId: 123 },
       text: "**hello**",
       options: { reply_markup: replyMarkup },
       parseMode: "MarkdownV2",
@@ -33,7 +33,7 @@ describe("bot/utils/send-with-markdown-fallback", () => {
 
     await sendMessageWithMarkdownFallback({
       api: { sendMessage },
-      chatId: 123,
+      target: { chatId: 123 },
       text: "<broken>",
       options: { reply_markup: { keyboard: [] } },
       parseMode: "MarkdownV2",
@@ -63,7 +63,7 @@ describe("bot/utils/send-with-markdown-fallback", () => {
 
     await sendMessageWithMarkdownFallback({
       api: { sendMessage },
-      chatId: 777,
+      target: { chatId: 777 },
       text: "a+b",
       options: {
         reply_markup: { keyboard: [] },
@@ -100,7 +100,7 @@ describe("bot/utils/send-with-markdown-fallback", () => {
 
     await sendMessageWithMarkdownFallback({
       api: { sendMessage },
-      chatId: 444,
+      target: { chatId: 444 },
       text: "Done.",
       rawFallbackText: "Done.",
       parseMode: "MarkdownV2",
@@ -121,7 +121,7 @@ describe("bot/utils/send-with-markdown-fallback", () => {
 
     await sendMessageWithMarkdownFallback({
       api: { sendMessage },
-      chatId: 445,
+      target: { chatId: 445 },
       text: "Done.",
       parseMode: "MarkdownV2",
     });
@@ -140,7 +140,7 @@ describe("bot/utils/send-with-markdown-fallback", () => {
 
     await sendMessageWithMarkdownFallback({
       api: { sendMessage },
-      chatId: 888,
+      target: { chatId: 888 },
       text: "Cost (USD)",
       parseMode: "MarkdownV2",
     });
@@ -164,7 +164,7 @@ describe("bot/utils/send-with-markdown-fallback", () => {
 
     await sendMessageWithMarkdownFallback({
       api: { sendMessage },
-      chatId: 889,
+      target: { chatId: 889 },
       text: "Table \\| row \\| and dot .",
       parseMode: "MarkdownV2",
     });
@@ -186,7 +186,7 @@ describe("bot/utils/send-with-markdown-fallback", () => {
     await expect(
       sendMessageWithMarkdownFallback({
         api: { sendMessage },
-        chatId: 123,
+        target: { chatId: 123 },
         text: "hello",
         parseMode: "MarkdownV2",
       }),
@@ -214,7 +214,7 @@ describe("bot/utils/send-with-markdown-fallback", () => {
 
     await sendMessageWithMarkdownFallback({
       api: { sendMessage },
-      chatId: 321,
+      target: { chatId: 321 },
       text: "*status* project_name",
       parseMode: "Markdown",
     });

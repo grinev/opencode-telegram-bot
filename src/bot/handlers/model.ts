@@ -13,6 +13,7 @@ import {
   ensureActiveInlineMenu,
   replyWithInlineMenu,
 } from "./inline-menu.js";
+import { getTelegramTargetFromContext } from "../../telegram/target.js";
 import { t } from "../../i18n/index.js";
 
 function buildModelSelectionMenuText(modelLists: ModelSelectionLists): string {
@@ -52,7 +53,10 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
 
   try {
     if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      const target = getTelegramTargetFromContext(ctx);
+      if (target) {
+        keyboardManager.initialize(ctx.api, target);
+      }
     }
 
     // Parse callback data: "model:providerID:modelID"

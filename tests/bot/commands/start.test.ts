@@ -139,8 +139,8 @@ describe("bot/commands/start", () => {
     expect(mocked.keyboardClearContextMock).toHaveBeenCalledTimes(1);
     expect(mocked.pinnedClearMock).toHaveBeenCalledTimes(1);
 
-    expect(mocked.pinnedInitializeMock).toHaveBeenCalledWith(ctx.api, 100);
-    expect(mocked.keyboardInitializeMock).toHaveBeenCalledWith(ctx.api, 100);
+    expect(mocked.pinnedInitializeMock).toHaveBeenCalledWith(ctx.api, { chatId: 100 });
+    expect(mocked.keyboardInitializeMock).toHaveBeenCalledWith(ctx.api, { chatId: 100 });
     expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalledTimes(1);
 
     expect(ctx.reply).toHaveBeenCalledWith(t("start.welcome"), {

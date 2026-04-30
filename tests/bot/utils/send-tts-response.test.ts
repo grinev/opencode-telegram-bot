@@ -25,7 +25,7 @@ describe("bot/utils/send-tts-response", () => {
     const result = await sendTtsResponseForSession({
       api: { sendAudio: sendAudioMock, sendMessage: sendMessageMock },
       sessionId: "session-1",
-      chatId: 123,
+      target: { chatId: 123 },
       text: "Hello from audio",
       consumeResponseMode: () => "text_and_tts",
       isTtsConfigured: () => true,
@@ -49,7 +49,7 @@ describe("bot/utils/send-tts-response", () => {
     const result = await sendTtsResponseForSession({
       api: { sendAudio: sendAudioMock, sendMessage: sendMessageMock },
       sessionId: "session-1",
-      chatId: 123,
+      target: { chatId: 123 },
       text: "Hello from text",
       consumeResponseMode: () => "text_only",
       isTtsConfigured: () => true,
@@ -70,7 +70,7 @@ describe("bot/utils/send-tts-response", () => {
     const result = await sendTtsResponseForSession({
       api: { sendAudio: sendAudioMock, sendMessage: sendMessageMock },
       sessionId: "session-1",
-      chatId: 123,
+      target: { chatId: 123 },
       text: "Hello from audio",
       consumeResponseMode: () => "text_and_tts",
       isTtsConfigured: () => false,
@@ -95,7 +95,7 @@ describe("bot/utils/send-tts-response", () => {
     const result = await sendTtsResponseForSession({
       api: { sendAudio: sendAudioMock, sendMessage: sendMessageMock },
       sessionId: "session-1",
-      chatId: 123,
+      target: { chatId: 123 },
       text: "Hello from audio",
       consumeResponseMode: () => "text_and_tts",
       isTtsConfigured: () => true,
@@ -103,6 +103,6 @@ describe("bot/utils/send-tts-response", () => {
     });
 
     expect(result).toBe(false);
-    expect(sendMessageMock).toHaveBeenCalledWith(123, t("tts.failed"));
+    expect(sendMessageMock).toHaveBeenCalledWith(123, t("tts.failed"), undefined);
   });
 });

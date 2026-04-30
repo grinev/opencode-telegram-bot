@@ -13,6 +13,7 @@ import {
   replyWithInlineMenu,
 } from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
+import { getTelegramTargetFromContext } from "../../telegram/target.js";
 
 /**
  * Handle agent selection callback
@@ -35,7 +36,10 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
 
   try {
     if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      const target = getTelegramTargetFromContext(ctx);
+      if (target) {
+        keyboardManager.initialize(ctx.api, target);
+      }
     }
 
     if (pinnedMessageManager.getContextLimit() === 0) {

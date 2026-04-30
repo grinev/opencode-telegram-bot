@@ -8,6 +8,7 @@ import { getAgentDisplayName } from "../../agent/types.js";
 import { fetchCurrentModel } from "../../model/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
+import { getTelegramTargetFromContext } from "../../telegram/target.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { sendBotText } from "../utils/telegram-text.js";
@@ -78,15 +79,17 @@ export async function statusCommand(ctx: CommandContext<Context>) {
       message += t("status.session_hint");
     }
 
-    if (ctx.chat) {
+    const target = getTelegramTargetFromContext(ctx);
+
+    if (target) {
       if (!pinnedMessageManager.isInitialized()) {
-        pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
+        pinnedMessageManager.initialize(ctx.api, target);
       }
       // Fetch context limit if not yet loaded (e.g. fresh bot start)
       if (pinnedMessageManager.getContextLimit() === 0) {
         await pinnedMessageManager.refreshContextLimit();
       }
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      keyboardManager.initialize(ctx.api, target);
     }
     // Sync current context (tokens used + limit) into keyboard state
     const contextInfo = pinnedMessageManager.getContextInfo();
@@ -94,10 +97,10 @@ export async function statusCommand(ctx: CommandContext<Context>) {
       keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
     }
     const keyboard = keyboardManager.getKeyboard();
-    if (ctx.chat) {
+    if (target) {
       await sendBotText({
         api: ctx.api,
-        chatId: ctx.chat.id,
+        target,
         text: message,
         options: { reply_markup: keyboard },
       });

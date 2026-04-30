@@ -5,6 +5,11 @@ import { getCurrentProject } from "../../settings/manager.js";
 import { getCurrentSession } from "../../session/manager.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { interactionManager } from "../../interaction/manager.js";
+import {
+  getTelegramTargetFromContext,
+  getTelegramTargetSendOptions,
+  type TelegramTarget,
+} from "../../telegram/target.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { t } from "../../i18n/index.js";
@@ -251,11 +256,11 @@ async function updateQuestionMessage(ctx: Context): Promise<void> {
   }
 }
 
-export async function showCurrentQuestion(bot: Context["api"], chatId: number): Promise<void> {
+export async function showCurrentQuestion(bot: Context["api"], target: TelegramTarget): Promise<void> {
   const question = questionManager.getCurrentQuestion();
 
   if (!question) {
-    await showPollSummary(bot, chatId);
+    await showPollSummary(bot, target);
     return;
   }
 
@@ -267,10 +272,11 @@ export async function showCurrentQuestion(bot: Context["api"], chatId: number): 
     questionManager.getSelectedOptions(questionManager.getCurrentIndex()),
   );
 
-  logger.debug(`[QuestionHandler] Sending message with keyboard, chatId=${chatId}`);
+  logger.debug(`[QuestionHandler] Sending message with keyboard, chatId=${target.chatId}`);
 
   try {
-    const message = await bot.sendMessage(chatId, text, {
+    const message = await bot.sendMessage(target.chatId, text, {
+      ...getTelegramTargetSendOptions(target),
       reply_markup: keyboard,
     });
 
@@ -329,18 +335,19 @@ export async function handleQuestionTextAnswer(ctx: Context): Promise<void> {
 async function showNextQuestion(ctx: Context): Promise<void> {
   questionManager.nextQuestion();
 
-  if (!ctx.chat) {
+  const target = getTelegramTargetFromContext(ctx);
+  if (!target) {
     return;
   }
 
   if (questionManager.hasNextQuestion()) {
-    await showCurrentQuestion(ctx.api, ctx.chat.id);
+    await showCurrentQuestion(ctx.api, target);
   } else {
-    await showPollSummary(ctx.api, ctx.chat.id);
+    await showPollSummary(ctx.api, target);
   }
 }
 
-async function showPollSummary(bot: Context["api"], chatId: number): Promise<void> {
+async function showPollSummary(bot: Context["api"], target: TelegramTarget): Promise<void> {
   const answers = questionManager.getAllAnswers();
   const totalQuestions = questionManager.getTotalQuestions();
 
@@ -349,13 +356,17 @@ async function showPollSummary(bot: Context["api"], chatId: number): Promise<voi
   );
 
   // Send all answers to the OpenCode API
-  await sendAllAnswersToAgent(bot, chatId);
+  await sendAllAnswersToAgent(bot, target);
 
   if (answers.length === 0) {
-    await bot.sendMessage(chatId, t("question.completed_no_answers"));
+    await bot.sendMessage(
+      target.chatId,
+      t("question.completed_no_answers"),
+      getTelegramTargetSendOptions(target),
+    );
   } else {
     const summary = formatAnswersSummary(answers);
-    await bot.sendMessage(chatId, summary);
+    await bot.sendMessage(target.chatId, summary, getTelegramTargetSendOptions(target));
   }
 
   clearQuestionInteraction("question_completed");
@@ -363,7 +374,7 @@ async function showPollSummary(bot: Context["api"], chatId: number): Promise<voi
   logger.debug("[QuestionHandler] Poll completed and cleared");
 }
 
-async function sendAllAnswersToAgent(bot: Context["api"], chatId: number): Promise<void> {
+async function sendAllAnswersToAgent(bot: Context["api"], target: TelegramTarget): Promise<void> {
   const currentProject = getCurrentProject();
   const currentSession = getCurrentSession();
   const requestID = questionManager.getRequestID();
@@ -372,13 +383,21 @@ async function sendAllAnswersToAgent(bot: Context["api"], chatId: number): Promi
 
   if (!directory) {
     logger.error("[QuestionHandler] No project for sending answers");
-    await bot.sendMessage(chatId, t("question.no_active_project"));
+    await bot.sendMessage(
+      target.chatId,
+      t("question.no_active_project"),
+      getTelegramTargetSendOptions(target),
+    );
     return;
   }
 
   if (!requestID) {
     logger.error("[QuestionHandler] No requestID for sending answers");
-    await bot.sendMessage(chatId, t("question.no_active_request"));
+    await bot.sendMessage(
+      target.chatId,
+      t("question.no_active_request"),
+      getTelegramTargetSendOptions(target),
+    );
     return;
   }
 
@@ -422,7 +441,9 @@ async function sendAllAnswersToAgent(bot: Context["api"], chatId: number): Promi
     onSuccess: ({ error }) => {
       if (error) {
         logger.error("[QuestionHandler] Failed to send answers via question.reply:", error);
-        void bot.sendMessage(chatId, t("question.send_answers_error")).catch(() => {});
+        void bot
+          .sendMessage(target.chatId, t("question.send_answers_error"), getTelegramTargetSendOptions(target))
+          .catch(() => {});
         return;
       }
 

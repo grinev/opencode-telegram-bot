@@ -5,6 +5,7 @@ import { normalizePathForDisplay, prepareCodeFile } from "./formatter.js";
 import type { Question } from "../question/types.js";
 import type { PermissionRequest } from "../permission/types.js";
 import type { FileChange } from "../pinned/types.js";
+import { getTelegramTargetSendOptions, type TelegramTarget } from "../telegram/target.js";
 import { logger } from "../utils/logger.js";
 import { getCurrentProject } from "../settings/manager.js";
 
@@ -234,7 +235,7 @@ class SummaryAggregator {
   private deliveredExternalUserMessageIds: Set<string> = new Set();
   private knownTextPartIds: Map<string, Set<string>> = new Map();
   private bot: Bot | null = null;
-  private chatId: number | null = null;
+  private target: TelegramTarget | null = null;
   private typingTimer: ReturnType<typeof setInterval> | null = null;
   private typingIndicatorEnabled = true;
   private partHashes: Map<string, Set<string>> = new Map();
@@ -247,9 +248,9 @@ class SummaryAggregator {
   private fallbackSubagentCardIdsByParent: Map<string, string[]> = new Map();
   private lastSubagentSnapshot = "";
 
-  setBotAndChatId(bot: Bot, chatId: number): void {
+  setBotAndTarget(bot: Bot, target: TelegramTarget): void {
     this.bot = bot;
-    this.chatId = chatId;
+    this.target = target;
   }
 
   setOnComplete(callback: MessageCompleteCallback): void {
@@ -346,8 +347,10 @@ class SummaryAggregator {
     }
 
     const sendTyping = () => {
-      if (this.bot && this.chatId) {
-        this.bot.api.sendChatAction(this.chatId, "typing").catch((err) => {
+      if (this.bot && this.target) {
+        this.bot.api
+          .sendChatAction(this.target.chatId, "typing", getTelegramTargetSendOptions(this.target))
+          .catch((err) => {
           logger.error("Failed to send typing action:", err);
         });
       }

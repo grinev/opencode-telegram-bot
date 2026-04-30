@@ -129,7 +129,7 @@ describe("bot/commands/new", () => {
 
     expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
       bot: expect.any(Object),
-      chatId: 123,
+      target: { chatId: 123 },
       session: {
         id: "session-2",
         title: "Session Two",

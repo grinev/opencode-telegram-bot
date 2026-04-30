@@ -323,7 +323,7 @@ describe("bot/commands/commands", () => {
     });
     expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
       bot: expect.any(Object),
-      chatId: 777,
+      target: { chatId: 777 },
       session: {
         id: "session-1",
         title: "Session",

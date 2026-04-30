@@ -16,6 +16,11 @@ import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
+import {
+  getTelegramTargetFromContext,
+  getTelegramTargetSendOptions,
+  type TelegramTarget,
+} from "../../telegram/target.js";
 import { getDateLocale, t } from "../../i18n/index.js";
 import { attachToSession } from "../../attach/service.js";
 
@@ -265,9 +270,11 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
     let loadingMessageId: number | null = null;
     if (ctx.chat) {
       try {
+        const target = getTelegramTargetFromContext(ctx) ?? { chatId: ctx.chat.id };
         const loadingMessage = await ctx.api.sendMessage(
           ctx.chat.id,
           t("sessions.loading_context"),
+          getTelegramTargetSendOptions(target),
         );
         loadingMessageId = loadingMessage.message_id;
       } catch (err) {
@@ -276,9 +283,14 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
     }
 
     try {
+      const target = getTelegramTargetFromContext(ctx);
+      if (!target) {
+        throw new Error("Telegram target is missing for session selection");
+      }
+
       await attachToSession({
         bot: deps.bot,
-        chatId: ctx.chat!.id,
+        target,
         session: sessionInfo,
         ensureEventSubscription: deps.ensureEventSubscription,
       });
@@ -296,6 +308,7 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
 
     if (ctx.chat) {
       const chatId = ctx.chat.id;
+      const target = getTelegramTargetFromContext(ctx) ?? { chatId };
       const currentAgent = await resolveProjectAgent();
 
       keyboardManager.updateAgent(currentAgent);
@@ -318,6 +331,7 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
       const keyboard = keyboardManager.getKeyboard();
       try {
         await ctx.api.sendMessage(chatId, t("sessions.selected", { title: session.title }), {
+          ...getTelegramTargetSendOptions(target),
           reply_markup: keyboard,
         });
       } catch (err) {
@@ -330,7 +344,7 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
         task: () =>
           sendSessionPreview(
             ctx.api,
-            chatId,
+            target,
             null,
             session.title,
             session.id,
@@ -454,7 +468,7 @@ function formatSessionPreview(_sessionTitle: string, items: SessionPreviewItem[]
 
 async function sendSessionPreview(
   api: Context["api"],
-  chatId: number,
+  target: TelegramTarget,
   messageId: number | null,
   sessionTitle: string,
   sessionId: string,
@@ -465,7 +479,7 @@ async function sendSessionPreview(
 
   if (messageId) {
     try {
-      await api.editMessageText(chatId, messageId, finalText);
+      await api.editMessageText(target.chatId, messageId, finalText);
       return;
     } catch (err) {
       logger.warn("[Sessions] Failed to edit preview message, sending new one:", err);
@@ -473,7 +487,7 @@ async function sendSessionPreview(
   }
 
   try {
-    await api.sendMessage(chatId, finalText);
+    await api.sendMessage(target.chatId, finalText, getTelegramTargetSendOptions(target));
   } catch (err) {
     logger.error("[Sessions] Failed to send session preview message:", err);
   }

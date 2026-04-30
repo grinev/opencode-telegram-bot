@@ -103,9 +103,17 @@ import {
   renderAssistantFinalPartsSafe,
 } from "./utils/assistant-rendering.js";
 import { deliverExternalUserInputNotification } from "./utils/external-user-input.js";
+import {
+  createTelegramTarget,
+  getTelegramTargetFromContext,
+  getTelegramTargetSendOptions,
+  type TelegramTarget,
+} from "../telegram/target.js";
+import { getTelegramTarget, setTelegramTarget } from "../settings/manager.js";
 
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
+let telegramTargetInstance: TelegramTarget | null = null;
 let commandsInitialized = false;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -118,6 +126,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEMP_DIR = path.join(__dirname, "..", ".tmp");
 const sessionCompletionTasks = new Map<string, Promise<void>>();
+
+function getActiveTelegramTarget(): TelegramTarget | null {
+  if (telegramTargetInstance) {
+    return telegramTargetInstance;
+  }
+
+  if (chatIdInstance && chatIdInstance > 0) {
+    return createTelegramTarget(chatIdInstance);
+  }
+
+  return null;
+}
+
+function updateRuntimeTelegramTarget(ctx: Context): void {
+  const target = getTelegramTargetFromContext(ctx);
+  if (!target) {
+    return;
+  }
+
+  telegramTargetInstance = target;
+  chatIdInstance = target.chatId;
+  setTelegramTarget(target);
+}
 
 function getCurrentReplyKeyboard() {
   if (!keyboardManager.isInitialized()) {
@@ -178,6 +209,7 @@ const toolMessageBatcher = new ToolMessageBatcher({
 
     await botInstance.api.sendMessage(chatIdInstance, text, {
       disable_notification: true,
+      ...(getActiveTelegramTarget() ? getTelegramTargetSendOptions(getActiveTelegramTarget()!) : {}),
       ...(keyboard ? { reply_markup: keyboard } : {}),
     });
   },
@@ -206,6 +238,7 @@ const toolMessageBatcher = new ToolMessageBatcher({
       await botInstance.api.sendDocument(chatIdInstance, new InputFile(tempFilePath), {
         caption: fileData.caption,
         disable_notification: true,
+        ...(getActiveTelegramTarget() ? getTelegramTargetSendOptions(getActiveTelegramTarget()!) : {}),
         ...(keyboard ? { reply_markup: keyboard } : {}),
       });
     } finally {
@@ -223,7 +256,7 @@ const responseStreamer = new ResponseStreamer({
 
     return sendRenderedBotPart({
       api: botInstance.api,
-      chatId: chatIdInstance,
+      target: getActiveTelegramTarget() ?? createTelegramTarget(chatIdInstance),
       part,
       options,
     });
@@ -287,6 +320,7 @@ const toolCallStreamer = new ToolCallStreamer({
 
     const sentMessage = await botInstance.api.sendMessage(chatIdInstance, text, {
       disable_notification: true,
+      ...(getActiveTelegramTarget() ? getTelegramTargetSendOptions(getActiveTelegramTarget()!) : {}),
     });
 
     return sentMessage.message_id;
@@ -493,7 +527,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
           sendRenderedPart: async (part, options) => {
             await sendRenderedBotPart({
               api: botApi,
-              chatId,
+              target: getActiveTelegramTarget() ?? createTelegramTarget(chatId),
               part,
               options: options as Parameters<typeof sendBotText>[0]["options"],
             });
@@ -503,7 +537,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
         await sendTtsResponseForSession({
           api: botApi,
           sessionId,
-          chatId,
+          target: getActiveTelegramTarget() ?? createTelegramTarget(chatId),
           text: messageText,
         });
       } catch (err) {
@@ -529,7 +563,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       try {
         await deliverExternalUserInputNotification({
           api: botInstance.api,
-          chatId: chatIdInstance,
+          target: getActiveTelegramTarget() ?? createTelegramTarget(chatIdInstance),
           currentSessionId: getCurrentSession()?.id ?? null,
           sessionId,
           text: messageText,
@@ -665,7 +699,10 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
     logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
     questionManager.startQuestions(questions, requestID);
-    await showCurrentQuestion(botInstance.api, chatIdInstance);
+    await showCurrentQuestion(
+      botInstance.api,
+      getActiveTelegramTarget() ?? createTelegramTarget(chatIdInstance),
+    );
   });
 
   summaryAggregator.setOnQuestionError(async () => {
@@ -703,7 +740,11 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     logger.info(
       `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}`,
     );
-    await showPermissionRequest(botInstance.api, chatIdInstance, request);
+    await showPermissionRequest(
+      botInstance.api,
+      getActiveTelegramTarget() ?? createTelegramTarget(chatIdInstance),
+      request,
+    );
   });
 
   summaryAggregator.setOnThinking(async (sessionId) => {
@@ -834,6 +875,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
               elapsedMs: Date.now() - completedRun.startedAt,
             }),
             {
+              ...(getActiveTelegramTarget() ? getTelegramTargetSendOptions(getActiveTelegramTarget()!) : {}),
               ...(keyboard ? { reply_markup: keyboard } : {}),
             },
           );
@@ -882,7 +924,11 @@ async function ensureEventSubscription(directory: string): Promise<void> {
         : normalizedMessage;
 
     await botInstance.api
-      .sendMessage(chatIdInstance, t("bot.session_error", { message: truncatedMessage }))
+      .sendMessage(
+        chatIdInstance,
+        t("bot.session_error", { message: truncatedMessage }),
+        getActiveTelegramTarget() ? getTelegramTargetSendOptions(getActiveTelegramTarget()!) : undefined,
+      )
       .catch((err) => {
         logger.error("[Bot] Failed to send session.error message:", err);
       });
@@ -1002,7 +1048,8 @@ export function createBot(): Bot<Context> {
 
   const bot = new Bot(config.telegram.token, botOptions);
   botInstance = bot;
-  chatIdInstance = config.telegram.allowedUserId;
+  telegramTargetInstance = getTelegramTarget() ?? createTelegramTarget(config.telegram.allowedUserId);
+  chatIdInstance = telegramTargetInstance.chatId;
 
   // Heartbeat for diagnostics: verify the event loop is not blocked
   let heartbeatCounter = 0;
@@ -1094,7 +1141,7 @@ export function createBot(): Bot<Context> {
 
     if (ctx.chat) {
       botInstance = bot;
-      chatIdInstance = ctx.chat.id;
+      updateRuntimeTelegramTarget(ctx);
     }
 
     try {
@@ -1262,7 +1309,7 @@ export function createBot(): Bot<Context> {
     task: () =>
       restoreAttachedCurrentSession({
         bot,
-        chatId: config.telegram.allowedUserId,
+        target: getTelegramTarget() ?? createTelegramTarget(config.telegram.allowedUserId),
         ensureEventSubscription,
       }),
   });
@@ -1270,14 +1317,14 @@ export function createBot(): Bot<Context> {
   bot.on("message:voice", async (ctx) => {
     logger.debug(`[Bot] Received voice message, chatId=${ctx.chat.id}`);
     botInstance = bot;
-    chatIdInstance = ctx.chat.id;
+    updateRuntimeTelegramTarget(ctx);
     await handleVoiceMessage(ctx, voicePromptDeps);
   });
 
   bot.on("message:audio", async (ctx) => {
     logger.debug(`[Bot] Received audio message, chatId=${ctx.chat.id}`);
     botInstance = bot;
-    chatIdInstance = ctx.chat.id;
+    updateRuntimeTelegramTarget(ctx);
     await handleVoiceMessage(ctx, voicePromptDeps);
   });
 
@@ -1309,7 +1356,7 @@ export function createBot(): Bot<Context> {
         // Fall back to caption-only if present
         if (caption.trim().length > 0) {
           botInstance = bot;
-          chatIdInstance = ctx.chat.id;
+          updateRuntimeTelegramTarget(ctx);
           const promptDeps = { bot, ensureEventSubscription };
           await processUserPrompt(ctx, caption, promptDeps);
         }
@@ -1334,7 +1381,7 @@ export function createBot(): Bot<Context> {
       logger.info(`[Bot] Sending photo (${downloadedFile.buffer.length} bytes) with prompt`);
 
       botInstance = bot;
-      chatIdInstance = ctx.chat.id;
+      updateRuntimeTelegramTarget(ctx);
 
       // Send via processUserPrompt with file part
       const promptDeps = { bot, ensureEventSubscription };
@@ -1349,7 +1396,7 @@ export function createBot(): Bot<Context> {
   bot.on("message:document", async (ctx) => {
     logger.debug(`[Bot] Received document message, chatId=${ctx.chat.id}`);
     botInstance = bot;
-    chatIdInstance = ctx.chat.id;
+    updateRuntimeTelegramTarget(ctx);
     const deps = { bot, ensureEventSubscription };
     await handleDocumentMessage(ctx, deps);
   });
@@ -1361,7 +1408,7 @@ export function createBot(): Bot<Context> {
     }
 
     botInstance = bot;
-    chatIdInstance = ctx.chat.id;
+    updateRuntimeTelegramTarget(ctx);
 
     if (text.startsWith("/")) {
       return;
@@ -1428,4 +1475,5 @@ export function cleanupBotRuntime(reason: string): void {
 
   botInstance = null;
   chatIdInstance = null;
+  telegramTargetInstance = null;
 }

@@ -1,5 +1,6 @@
 import type { Api, RawApi } from "grammy";
 import { logger } from "../../utils/logger.js";
+import { getTelegramTargetSendOptions, type TelegramTarget } from "../../telegram/target.js";
 import {
   editMessageWithMarkdownFallback,
   isTelegramMarkdownParseError,
@@ -17,7 +18,7 @@ export type TelegramTextFormat = "raw" | "markdown_v2";
 
 interface SendBotTextParams {
   api: SendMessageApi;
-  chatId: Parameters<SendMessageApi["sendMessage"]>[0];
+  target: TelegramTarget;
   text: string;
   rawFallbackText?: string;
   options?: TelegramSendMessageOptions;
@@ -36,7 +37,7 @@ interface EditBotTextParams {
 
 interface SendRenderedBotPartParams {
   api: SendMessageApi;
-  chatId: Parameters<SendMessageApi["sendMessage"]>[0];
+  target: TelegramTarget;
   part: TelegramRenderedPart;
   options?: TelegramSendMessageOptions;
 }
@@ -93,7 +94,7 @@ export function getTelegramRenderedPartSignature(
 
 export async function sendBotText({
   api,
-  chatId,
+  target,
   text,
   rawFallbackText,
   options,
@@ -101,7 +102,7 @@ export async function sendBotText({
 }: SendBotTextParams): Promise<void> {
   await sendMessageWithMarkdownFallback({
     api,
-    chatId,
+    target,
     text,
     rawFallbackText,
     options,
@@ -111,11 +112,14 @@ export async function sendBotText({
 
 export async function sendRenderedBotPart({
   api,
-  chatId,
+  target,
   part,
   options,
 }: SendRenderedBotPartParams): Promise<RenderedPartSendResult> {
-  const rawOptions = stripRichFormattingOptions(options);
+  const threadOptions = getTelegramTargetSendOptions(target);
+  const sendOptions =
+    Object.keys(threadOptions).length > 0 ? { ...(options || {}), ...threadOptions } : options;
+  const rawOptions = stripRichFormattingOptions(sendOptions);
 
   logger.debug("[Bot] Sending rendered Telegram part", {
     source: part.source,
@@ -125,7 +129,7 @@ export async function sendRenderedBotPart({
   });
 
   if (!part.entities?.length) {
-    const sentMessage = await api.sendMessage(chatId, part.text, rawOptions);
+    const sentMessage = await api.sendMessage(target.chatId, part.text, rawOptions);
     return {
       messageId: sentMessage.message_id,
       deliveredSignature: getTelegramRenderedPartSignature({ text: part.text }),
@@ -133,7 +137,7 @@ export async function sendRenderedBotPart({
   }
 
   try {
-    const sentMessage = await api.sendMessage(chatId, part.text, {
+    const sentMessage = await api.sendMessage(target.chatId, part.text, {
       ...(rawOptions || {}),
       entities: part.entities,
     });
@@ -151,7 +155,7 @@ export async function sendRenderedBotPart({
       "[Bot] Entity payload rejected, retrying assistant message part in raw mode",
       error,
     );
-    const sentMessage = await api.sendMessage(chatId, part.fallbackText, rawOptions);
+    const sentMessage = await api.sendMessage(target.chatId, part.fallbackText, rawOptions);
     logger.debug("[Bot] Assistant message part sent in raw fallback mode", {
       fallbackTextLength: part.fallbackText.length,
     });

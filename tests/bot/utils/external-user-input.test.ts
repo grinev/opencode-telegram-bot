@@ -30,7 +30,7 @@ describe("bot/utils/external-user-input", () => {
   it("sends external user input when session matches and it is not suppressed", async () => {
     const delivered = await deliverExternalUserInputNotification({
       api: { sendMessage: vi.fn() } as never,
-      chatId: 777,
+      target: { chatId: 777 },
       currentSessionId: "session-1",
       sessionId: "session-1",
       text: "Review the parser",
@@ -40,7 +40,7 @@ describe("bot/utils/external-user-input", () => {
     expect(delivered).toBe(true);
     expect(mocked.sendBotTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        chatId: 777,
+        target: { chatId: 777 },
         format: "markdown_v2",
         rawFallbackText: "👤 External user input\n\n> Review the parser",
       }),
@@ -52,7 +52,7 @@ describe("bot/utils/external-user-input", () => {
 
     const delivered = await deliverExternalUserInputNotification({
       api: { sendMessage: vi.fn() } as never,
-      chatId: 777,
+      target: { chatId: 777 },
       currentSessionId: "session-1",
       sessionId: "session-1",
       text: "Review the parser",
@@ -67,7 +67,7 @@ describe("bot/utils/external-user-input", () => {
   it("does not send notification when the current session differs", async () => {
     const delivered = await deliverExternalUserInputNotification({
       api: { sendMessage: vi.fn() } as never,
-      chatId: 777,
+      target: { chatId: 777 },
       currentSessionId: "session-2",
       sessionId: "session-1",
       text: "Review the parser",

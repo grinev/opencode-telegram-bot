@@ -12,17 +12,18 @@ import type { SessionInfo } from "../session/manager.js";
 import { getCurrentSession } from "../session/manager.js";
 import { getCurrentProject } from "../settings/manager.js";
 import { attachManager } from "./manager.js";
+import type { TelegramTarget } from "../telegram/target.js";
 import { logger } from "../utils/logger.js";
 
 interface EnsureAttachPinnedSessionParams {
   api: Context["api"];
-  chatId: number;
+  target: TelegramTarget;
   session: SessionInfo;
 }
 
 export interface AttachSessionDeps {
   bot: Bot<Context>;
-  chatId: number;
+  target: TelegramTarget;
   session: SessionInfo;
   ensureEventSubscription: (directory: string) => Promise<void>;
 }
@@ -36,7 +37,7 @@ export interface AttachSessionResult {
 
 export interface RestoreAttachedCurrentSessionDeps {
   bot: Bot<Context>;
-  chatId: number;
+  target: TelegramTarget;
   ensureEventSubscription: (directory: string) => Promise<void>;
 }
 
@@ -51,14 +52,14 @@ function getAttachBusyStatus(sessionId: string, statuses: unknown): boolean {
 
 async function ensureAttachPinnedSession({
   api,
-  chatId,
+  target,
   session,
 }: EnsureAttachPinnedSessionParams): Promise<void> {
   if (!pinnedMessageManager.isInitialized()) {
-    pinnedMessageManager.initialize(api, chatId);
+    pinnedMessageManager.initialize(api, target);
   }
 
-  keyboardManager.initialize(api, chatId);
+  keyboardManager.initialize(api, target);
 
   const pinnedState = pinnedMessageManager.getState();
   if (pinnedState.sessionId === session.id && pinnedState.messageId) {
@@ -90,7 +91,7 @@ async function syncPinnedAttachState(): Promise<void> {
 
 async function restorePendingQuestion(
   bot: Bot<Context>,
-  chatId: number,
+  target: TelegramTarget,
   sessionId: string,
   directory: string,
 ): Promise<boolean> {
@@ -109,13 +110,13 @@ async function restorePendingQuestion(
   }
 
   questionManager.startQuestions(pendingQuestion.questions, pendingQuestion.id);
-  await showCurrentQuestion(bot.api, chatId);
+  await showCurrentQuestion(bot.api, target);
   return true;
 }
 
 async function restorePendingPermissions(
   bot: Bot<Context>,
-  chatId: number,
+  target: TelegramTarget,
   sessionId: string,
   directory: string,
 ): Promise<number> {
@@ -130,30 +131,30 @@ async function restorePendingPermissions(
 
   const pendingPermissions = data.filter((request) => request.sessionID === sessionId);
   for (const request of pendingPermissions) {
-    await showPermissionRequest(bot.api, chatId, request);
+    await showPermissionRequest(bot.api, target, request);
   }
 
   return pendingPermissions.length;
 }
 
 export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSessionResult> {
-  const { bot, chatId, session, ensureEventSubscription } = deps;
+  const { bot, target, session, ensureEventSubscription } = deps;
   const alreadyAttached = attachManager.isAttachedSession(session.id, session.directory);
 
   await ensureAttachPinnedSession({
     api: bot.api,
-    chatId,
+    target,
     session,
   });
 
   if (!alreadyAttached) {
     await ensureEventSubscription(session.directory);
     summaryAggregator.setSession(session.id);
-    summaryAggregator.setBotAndChatId(bot, chatId);
+    summaryAggregator.setBotAndTarget(bot, target);
     attachManager.attach(session.id, session.directory);
   } else {
     summaryAggregator.setSession(session.id);
-    summaryAggregator.setBotAndChatId(bot, chatId);
+    summaryAggregator.setBotAndTarget(bot, target);
   }
 
   const { data: statuses, error: statusesError } = await opencodeClient.session.status({
@@ -177,12 +178,12 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
   let restoredPermissions = 0;
 
   if (!alreadyAttached && !questionManager.isActive() && !permissionManager.isActive()) {
-    restoredQuestion = await restorePendingQuestion(bot, chatId, session.id, session.directory);
+    restoredQuestion = await restorePendingQuestion(bot, target, session.id, session.directory);
 
     if (!restoredQuestion) {
       restoredPermissions = await restorePendingPermissions(
         bot,
-        chatId,
+        target,
         session.id,
         session.directory,
       );
@@ -217,7 +218,7 @@ export async function restoreAttachedCurrentSession(
   try {
     await attachToSession({
       bot: deps.bot,
-      chatId: deps.chatId,
+      target: deps.target,
       session: currentSession,
       ensureEventSubscription: deps.ensureEventSubscription,
     });

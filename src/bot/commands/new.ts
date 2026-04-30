@@ -12,6 +12,7 @@ import { formatVariantForButton } from "../../variant/manager.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
 import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
 import { logger } from "../../utils/logger.js";
+import { getTelegramTargetFromContext } from "../../telegram/target.js";
 import { t } from "../../i18n/index.js";
 import { attachToSession } from "../../attach/service.js";
 
@@ -31,6 +32,11 @@ export async function newCommand(ctx: CommandContext<Context>, deps: NewCommandD
 
     if (!currentProject) {
       await ctx.reply(t("new.project_not_selected"));
+      return;
+    }
+
+    const target = getTelegramTargetFromContext(ctx);
+    if (!target) {
       return;
     }
 
@@ -59,7 +65,7 @@ export async function newCommand(ctx: CommandContext<Context>, deps: NewCommandD
 
     await attachToSession({
       bot: deps.bot,
-      chatId: ctx.chat.id,
+      target,
       session: sessionInfo,
       ensureEventSubscription: deps.ensureEventSubscription,
     });

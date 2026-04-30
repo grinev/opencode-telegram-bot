@@ -8,6 +8,11 @@ import { interactionManager } from "../../interaction/manager.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { PermissionRequest, PermissionReply } from "../../permission/types.js";
+import {
+  getTelegramTargetFromContext,
+  getTelegramTargetSendOptions,
+  type TelegramTarget,
+} from "../../telegram/target.js";
 import type { I18nKey } from "../../i18n/en.js";
 import { t } from "../../i18n/index.js";
 
@@ -159,10 +164,10 @@ async function handlePermissionReply(
 ): Promise<void> {
   const currentProject = getCurrentProject();
   const currentSession = getCurrentSession();
-  const chatId = ctx.chat?.id;
+  const target = getTelegramTargetFromContext(ctx);
   const directory = currentSession?.directory ?? currentProject?.worktree;
 
-  if (!directory || !chatId) {
+  if (!directory || !target) {
     permissionManager.clear();
     clearPermissionInteraction("permission_invalid_runtime_context");
 
@@ -202,8 +207,14 @@ async function handlePermissionReply(
     onSuccess: ({ error }) => {
       if (error) {
         logger.error("[PermissionHandler] Failed to send permission reply:", error);
-        if (ctx.api && chatId) {
-          void ctx.api.sendMessage(chatId, t("permission.send_reply_error")).catch(() => {});
+        if (ctx.api) {
+          void ctx.api
+            .sendMessage(
+              target.chatId,
+              t("permission.send_reply_error"),
+              getTelegramTargetSendOptions(target),
+            )
+            .catch(() => {});
         }
         return;
       }
@@ -229,7 +240,7 @@ async function handlePermissionReply(
  */
 export async function showPermissionRequest(
   bot: Context["api"],
-  chatId: number,
+  target: TelegramTarget,
   request: PermissionRequest,
 ): Promise<void> {
   logger.debug(`[PermissionHandler] Showing permission request: ${request.permission}`);
@@ -238,7 +249,8 @@ export async function showPermissionRequest(
   const keyboard = buildPermissionKeyboard();
 
   try {
-    const message = await bot.sendMessage(chatId, text, {
+    const message = await bot.sendMessage(target.chatId, text, {
+      ...getTelegramTargetSendOptions(target),
       reply_markup: keyboard,
     });
 

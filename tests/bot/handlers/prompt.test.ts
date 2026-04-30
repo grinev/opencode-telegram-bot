@@ -205,7 +205,7 @@ describe("bot/handlers/prompt", () => {
     expect(handled).toBe(true);
     expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
       bot: expect.any(Object),
-      chatId: 777,
+      target: { chatId: 777 },
       session: {
         id: "session-1",
         title: "Session",

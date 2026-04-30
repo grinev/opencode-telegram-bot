@@ -3,6 +3,7 @@ import { createMainKeyboard } from "../bot/utils/keyboard.js";
 import type { ModelInfo } from "../model/types.js";
 import { getStoredAgent } from "../agent/manager.js";
 import { getStoredModel } from "../model/manager.js";
+import { getTelegramTargetSendOptions, type TelegramTarget } from "../telegram/target.js";
 import { formatVariantForButton } from "../variant/manager.js";
 import { logger } from "../utils/logger.js";
 import type { ContextInfo, KeyboardState } from "./types.js";
@@ -17,6 +18,7 @@ class KeyboardManager {
 
   private api: Api | null = null;
   private chatId: number | null = null;
+  private target: TelegramTarget | null = null;
   private lastUpdateTime: number = 0;
   private readonly UPDATE_DEBOUNCE_MS = 2000; // Don't update more than once per 2 seconds
 
@@ -24,9 +26,10 @@ class KeyboardManager {
    * Initialize the keyboard manager with Telegram API and chat ID
    * Loads initial state from settings/config
    */
-  public initialize(api: Api, chatId: number): void {
+  public initialize(api: Api, target: TelegramTarget): void {
     this.api = api;
-    this.chatId = chatId;
+    this.chatId = target.chatId;
+    this.target = target;
 
     // Initialize state from settings/config on first call
     if (!this.state) {
@@ -38,10 +41,10 @@ class KeyboardManager {
         variantName: formatVariantForButton(currentModel.variant || "default"),
       };
       logger.debug(
-        `[KeyboardManager] Initialized with agent="${this.state.currentAgent}", model="${this.state.currentModel.providerID}/${this.state.currentModel.modelID}", variant="${currentModel.variant || "default"}", chatId=${chatId}`,
+        `[KeyboardManager] Initialized with agent="${this.state.currentAgent}", model="${this.state.currentModel.providerID}/${this.state.currentModel.modelID}", variant="${currentModel.variant || "default"}", chatId=${target.chatId}`,
       );
     } else {
-      logger.debug("[KeyboardManager] Already initialized, updating chatId:", chatId);
+      logger.debug("[KeyboardManager] Already initialized, updating chatId:", target.chatId);
     }
   }
 
@@ -163,6 +166,7 @@ class KeyboardManager {
       // Send a dummy message with updated keyboard
       // This is needed because Reply Keyboard updates require a message
       await this.api.sendMessage(targetChatId, t("keyboard.updated"), {
+        ...(this.target ? getTelegramTargetSendOptions(this.target) : {}),
         reply_markup: keyboard,
       });
 

@@ -185,7 +185,7 @@ describe("scheduled-task/runtime", () => {
     expect(mocked.sendBotTextMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        chatId: 777,
+        target: { chatId: 777 },
         format: "markdown_v2",
         text: expect.stringMatching(/Send report[\s\S]*All good/),
       }),
@@ -224,7 +224,7 @@ describe("scheduled-task/runtime", () => {
     expect(mocked.tasks[0]?.nextRunAt).toBe("2026-03-17T17:00:00.000Z");
     expect(mocked.sendBotTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        chatId: 777,
+        target: { chatId: 777 },
         format: "raw",
         text: expect.stringContaining("Task failed"),
       }),
@@ -260,7 +260,7 @@ describe("scheduled-task/runtime", () => {
 
     expect(mocked.sendBotTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        chatId: 777,
+        target: { chatId: 777 },
         format: "raw",
         text: expect.stringContaining("https://opencode.ai/docs/config/#models"),
       }),

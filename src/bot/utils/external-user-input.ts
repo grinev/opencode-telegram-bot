@@ -1,5 +1,6 @@
 import type { Api, RawApi } from "grammy";
 import { t } from "../../i18n/index.js";
+import type { TelegramTarget } from "../../telegram/target.js";
 import { escapePlainTextForTelegramMarkdownV2 } from "../../summary/formatter.js";
 import { sendBotText } from "./telegram-text.js";
 
@@ -12,7 +13,7 @@ interface ExternalUserInputNotification {
 
 interface DeliverExternalUserInputParams {
   api: SendMessageApi;
-  chatId: number;
+  target: TelegramTarget;
   currentSessionId: string | null;
   sessionId: string;
   text: string;
@@ -54,7 +55,7 @@ export function buildExternalUserInputNotification(text: string): ExternalUserIn
 
 export async function deliverExternalUserInputNotification({
   api,
-  chatId,
+  target,
   currentSessionId,
   sessionId,
   text,
@@ -71,7 +72,7 @@ export async function deliverExternalUserInputNotification({
 
   await sendBotText({
     api,
-    chatId,
+    target,
     text: notification.text,
     rawFallbackText: notification.rawFallbackText,
     format: "markdown_v2",

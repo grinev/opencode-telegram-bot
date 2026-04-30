@@ -74,7 +74,7 @@ describe("pinned/manager", () => {
     };
 
     // Reset manager state by re-initializing
-    pinnedMessageManager.initialize(fakeApi as never, 123);
+    pinnedMessageManager.initialize(fakeApi as never, { chatId: 123 });
 
     mocked.getCurrentSession.mockReturnValue({ id: "ses-1", title: "Test Session" });
     mocked.getCurrentProject.mockReturnValue({ id: "p1", worktree: "D:/repo", name: "repo" });
@@ -178,6 +178,7 @@ describe("pinned/manager", () => {
       expect(fakeApi.sendMessage).toHaveBeenCalledWith(
         123,
         expect.stringContaining("Project: D:/repo: main"),
+        undefined,
       );
     });
 
@@ -195,10 +196,12 @@ describe("pinned/manager", () => {
       expect(fakeApi.sendMessage).toHaveBeenCalledWith(
         123,
         expect.stringContaining("Project: D:/repo"),
+        undefined,
       );
       expect(fakeApi.sendMessage).not.toHaveBeenCalledWith(
         123,
         expect.stringContaining("Project: D:/repo:"),
+        undefined,
       );
     });
 
@@ -221,10 +224,12 @@ describe("pinned/manager", () => {
       expect(fakeApi.sendMessage).toHaveBeenCalledWith(
         123,
         expect.stringContaining("Project: D:/repo: feature/worktree"),
+        undefined,
       );
       expect(fakeApi.sendMessage).toHaveBeenCalledWith(
         123,
         expect.stringContaining("Worktree: D:/repo-feature"),
+        undefined,
       );
     });
   });
