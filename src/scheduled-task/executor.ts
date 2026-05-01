@@ -3,7 +3,7 @@ import { opencodeClient } from "../opencode/client.js";
 import { logger } from "../utils/logger.js";
 import type { ScheduledTask, ScheduledTaskExecutionResult } from "./types.js";
 
-const SCHEDULED_TASK_AGENT = "build";
+export const SCHEDULED_TASK_AGENT = "build";
 const SCHEDULED_TASK_SESSION_TITLE = "Scheduled task run";
 const EXECUTION_POLL_INTERVAL_MS = 2000;
 const MAX_IDLE_POLLS_WITHOUT_RESULT = 3;

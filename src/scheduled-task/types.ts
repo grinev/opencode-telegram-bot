@@ -111,4 +111,5 @@ export interface QueuedScheduledTaskDelivery {
   status: "success" | "error";
   notificationText: string;
   resultText?: string;
+  footerText?: string;
 }

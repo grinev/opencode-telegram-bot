@@ -8,7 +8,8 @@ import { t } from "../i18n/index.js";
 import { logger } from "../utils/logger.js";
 import { safeBackgroundTask } from "../utils/safe-background-task.js";
 import { sendBotText } from "../bot/utils/telegram-text.js";
-import { executeScheduledTask } from "./executor.js";
+import { formatAssistantRunFooter } from "../bot/utils/assistant-run-footer.js";
+import { executeScheduledTask, SCHEDULED_TASK_AGENT } from "./executor.js";
 import { foregroundSessionState } from "./foreground-state.js";
 import { computeNextRunAt, isTaskDue } from "./next-run.js";
 import {
@@ -64,8 +65,20 @@ function normalizeTaskPrompt(prompt: string): string {
   return `${normalized.slice(0, TASK_DESCRIPTION_PREVIEW_LENGTH)}...`;
 }
 
+function calculateElapsedMs(startedAt: string, finishedAt: string): number {
+  const startedAtMs = Date.parse(startedAt);
+  const finishedAtMs = Date.parse(finishedAt);
+
+  if (Number.isNaN(startedAtMs) || Number.isNaN(finishedAtMs)) {
+    return 0;
+  }
+
+  return finishedAtMs - startedAtMs;
+}
+
 function buildSuccessDelivery(
   task: ScheduledTask,
+  startedAt: string,
   runAt: string,
   resultText: string,
 ): QueuedScheduledTaskDelivery {
@@ -79,6 +92,12 @@ function buildSuccessDelivery(
       description: normalizeTaskPrompt(task.prompt),
     }),
     resultText,
+    footerText: formatAssistantRunFooter({
+      agent: SCHEDULED_TASK_AGENT,
+      providerID: task.model.providerID,
+      modelID: task.model.modelID,
+      elapsedMs: calculateElapsedMs(startedAt, runAt),
+    }),
   };
 }
 
@@ -360,6 +379,7 @@ export class ScheduledTaskRuntime {
       if (result.status === "success") {
         await this.handleSuccessfulExecution(
           runningTask,
+          result.startedAt,
           result.finishedAt,
           result.resultText || "",
         );
@@ -377,10 +397,11 @@ export class ScheduledTaskRuntime {
 
   private async handleSuccessfulExecution(
     task: ScheduledTask,
+    startedAt: string,
     finishedAt: string,
     resultText: string,
   ): Promise<void> {
-    const delivery = buildSuccessDelivery(task, finishedAt, resultText);
+    const delivery = buildSuccessDelivery(task, startedAt, finishedAt, resultText);
 
     if (task.kind === "once") {
       await removeScheduledTask(task.id);
@@ -471,6 +492,7 @@ export class ScheduledTaskRuntime {
           ? buildScheduledTaskSuccessMessageParts(delivery)
           : [delivery.notificationText];
       const format = delivery.status === "success" ? getScheduledTaskDeliveryFormat() : "raw";
+      const suppressResultNotification = delivery.status === "success" && Boolean(delivery.footerText);
 
       for (const part of messageParts) {
         await sendBotText({
@@ -478,6 +500,16 @@ export class ScheduledTaskRuntime {
           chatId: this.chatId,
           text: part,
           format,
+          ...(suppressResultNotification ? { options: { disable_notification: true } } : {}),
+        });
+      }
+
+      if (delivery.status === "success" && delivery.footerText) {
+        await sendBotText({
+          api: this.botApi,
+          chatId: this.chatId,
+          text: delivery.footerText,
+          format: "raw",
         });
       }
 

@@ -48,6 +48,7 @@ vi.mock("../../src/opencode/client.js", () => ({
 
 vi.mock("../../src/scheduled-task/executor.js", () => ({
   executeScheduledTask: mocked.executeScheduledTaskMock,
+  SCHEDULED_TASK_AGENT: "build",
 }));
 
 vi.mock("../../src/bot/utils/telegram-text.js", () => ({
@@ -181,15 +182,25 @@ describe("scheduled-task/runtime", () => {
     foregroundSessionState.markIdle("session-1");
     await runtime.flushDeferredDeliveries();
 
-    expect(mocked.sendBotTextMock).toHaveBeenCalledTimes(1);
+    expect(mocked.sendBotTextMock).toHaveBeenCalledTimes(2);
     expect(mocked.sendBotTextMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         chatId: 777,
         format: "markdown_v2",
+        options: { disable_notification: true },
         text: expect.stringMatching(/Send report[\s\S]*All good/),
       }),
     );
+    const footerCall = (mocked.sendBotTextMock as ReturnType<typeof vi.fn>).mock.calls[1]?.[0];
+    expect(footerCall).toEqual(
+      expect.objectContaining({
+        chatId: 777,
+        format: "raw",
+        text: "🛠️ Build · 🤖 openai/gpt-5 · 🕒 60.0s",
+      }),
+    );
+    expect(footerCall).not.toHaveProperty("options");
 
     runtime.__resetForTests();
     vi.useRealTimers();
@@ -227,6 +238,11 @@ describe("scheduled-task/runtime", () => {
         chatId: 777,
         format: "raw",
         text: expect.stringContaining("Task failed"),
+      }),
+    );
+    expect(mocked.sendBotTextMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Build · 🤖"),
       }),
     );
 
