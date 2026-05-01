@@ -431,6 +431,10 @@ export const es: I18nDictionary = {
   "task.kind.once": "única",
   "task.run.success": "⏰ Tarea programada completada: {description}",
   "task.run.error": "🔴 La tarea programada falló: {description}\n\nError: {error}",
+  "task.run.error.interactive_question":
+    "La tarea programada solicitó una pregunta interactiva y no puede continuar sin supervisión.",
+  "task.run.error.interactive_permission":
+    "La tarea programada solicitó un permiso interactivo y no puede continuar sin supervisión.",
 
   "tasklist.empty": "📭 Aún no hay tareas programadas.",
   "tasklist.select": "Elige una tarea programada:",

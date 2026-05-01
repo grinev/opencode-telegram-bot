@@ -415,6 +415,10 @@ export const en = {
   "task.kind.once": "one-time",
   "task.run.success": "⏰ Scheduled task completed: {description}",
   "task.run.error": "🔴 Scheduled task failed: {description}\n\nError: {error}",
+  "task.run.error.interactive_question":
+    "Scheduled task requested an interactive question and cannot continue unattended.",
+  "task.run.error.interactive_permission":
+    "Scheduled task requested interactive permission and cannot continue unattended.",
 
   "tasklist.empty": "📭 No scheduled tasks yet.",
   "tasklist.select": "Select a scheduled task:",

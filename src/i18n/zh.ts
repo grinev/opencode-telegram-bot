@@ -376,6 +376,8 @@ export const zh: I18nDictionary = {
   "task.kind.once": "一次性",
   "task.run.success": "⏰ 定时任务已完成: {description}",
   "task.run.error": "🔴 定时任务执行失败: {description}\n\n错误: {error}",
+  "task.run.error.interactive_question": "定时任务请求了交互式问题，无法在无人值守时继续。",
+  "task.run.error.interactive_permission": "定时任务请求了交互式权限，无法在无人值守时继续。",
 
   "tasklist.empty": "📭 还没有定时任务。",
   "tasklist.select": "请选择一个定时任务：",

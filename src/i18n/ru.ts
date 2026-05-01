@@ -417,6 +417,10 @@ export const ru: I18nDictionary = {
   "task.kind.once": "однократная",
   "task.run.success": "⏰ Задача по расписанию выполнена: {description}",
   "task.run.error": "🔴 Ошибка выполнения задачи по расписанию: {description}\n\nОшибка: {error}",
+  "task.run.error.interactive_question":
+    "Задача по расписанию задала интерактивный вопрос и не может продолжить выполнение без участия пользователя.",
+  "task.run.error.interactive_permission":
+    "Задача по расписанию запросила интерактивное разрешение и не может продолжить выполнение без участия пользователя.",
 
   "tasklist.empty": "📭 Задач по расписанию пока нет.",
   "tasklist.select": "Выберите задачу по расписанию:",
