@@ -191,6 +191,14 @@ Important:
 
 The project uses `src/utils/logger.ts` with level-based logging.
 
+Log files:
+
+- Runtime logs are stored in the runtime `logs` directory (`getRuntimePaths().logsDirPath`).
+- In source mode this is `<project root>/logs`; if `OPENCODE_TELEGRAM_HOME` is set, use `<OPENCODE_TELEGRAM_HOME>/logs` instead.
+- Each source-mode bot run writes to a separate file named `bot-YYYY-MM-DD_HH-MM-SS_<pid>.log`.
+- Installed mode writes under the installed app home `logs` directory and uses daily files named `bot-YYYY-MM-DD.log`.
+- If a user asks to inspect logs, look in that `logs` directory first and open the newest matching bot log file.
+
 Levels:
 
 - **DEBUG** - detailed diagnostics (callbacks, keyboard build, SSE internals, polling flow)
