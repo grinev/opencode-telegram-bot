@@ -1,6 +1,10 @@
 import type { MessageEntity } from "grammy/types";
 import type { InlineNode } from "./types.js";
-import { validateTelegramEntities } from "./validator.js";
+import {
+  isLoopbackTelegramHttpUrl,
+  isValidTelegramTextLinkUrl,
+  validateTelegramEntities,
+} from "./validator.js";
 
 export interface InlineRenderResult {
   text: string;
@@ -50,17 +54,16 @@ function pushEntity(state: InlineRenderState, entity: MessageEntity): void {
   state.entities.push(entity);
 }
 
-function isTelegramTextLinkUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return ["http:", "https:", "tg:", "mailto:"].includes(parsed.protocol);
-  } catch {
-    return false;
-  }
-}
-
 function isLocalReferenceUrl(url: string): boolean {
   return url.startsWith("#") || url.startsWith("/") || url.startsWith("./") || url.startsWith("../");
+}
+
+function appendPlainLinkTarget(state: InlineRenderState, offset: number, url: string): void {
+  if (!url || state.text.slice(offset) === url) {
+    return;
+  }
+
+  appendText(state, ` (${url})`);
 }
 
 function renderIntoState(state: InlineRenderState, nodes: InlineNode[]): void {
@@ -112,9 +115,9 @@ function renderIntoState(state: InlineRenderState, nodes: InlineNode[]): void {
       case "link": {
         const offset = state.text.length;
         renderIntoState(state, node.text);
-        if (!isTelegramTextLinkUrl(node.url)) {
-          if (isLocalReferenceUrl(node.url)) {
-            appendText(state, ` (${node.url})`);
+        if (!isValidTelegramTextLinkUrl(node.url)) {
+          if (isLocalReferenceUrl(node.url) || isLoopbackTelegramHttpUrl(node.url)) {
+            appendPlainLinkTarget(state, offset, node.url);
             break;
           }
         }

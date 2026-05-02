@@ -163,6 +163,72 @@ describe("bot/utils/telegram-text", () => {
     });
   });
 
+  it("retries rendered entity parts in raw mode when Telegram rejects an entity URL", async () => {
+    const sendMessage = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error("Bad Request: entity URL 'http://localhost:3000' is invalid: Wrong HTTP URL"),
+      )
+      .mockResolvedValueOnce({ message_id: 333 });
+
+    await expect(
+      sendRenderedBotPart({
+        api: { sendMessage },
+        chatId: 100,
+        part: {
+          text: "Open dev server",
+          entities: [{ type: "text_link", offset: 5, length: 10, url: "http://localhost:3000" }],
+          fallbackText: "Open dev server (http://localhost:3000)",
+          source: "entities",
+        },
+        options: { reply_markup: { keyboard: [] }, parse_mode: "MarkdownV2" },
+      }),
+    ).resolves.toEqual({
+      messageId: 333,
+      deliveredSignature: getTelegramRenderedPartSignature({
+        text: "Open dev server (http://localhost:3000)",
+      }),
+    });
+
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage).toHaveBeenNthCalledWith(1, 100, "Open dev server", {
+      reply_markup: { keyboard: [] },
+      entities: [{ type: "text_link", offset: 5, length: 10, url: "http://localhost:3000" }],
+    });
+    expect(sendMessage).toHaveBeenNthCalledWith(2, 100, "Open dev server (http://localhost:3000)", {
+      reply_markup: { keyboard: [] },
+    });
+  });
+
+  it("retries rendered entity parts in raw mode after any formatted send error", async () => {
+    const sendMessage = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Bad Request: unexpected entity payload error"))
+      .mockResolvedValueOnce({ message_id: 444 });
+
+    await expect(
+      sendRenderedBotPart({
+        api: { sendMessage },
+        chatId: 100,
+        part: {
+          text: "Hello",
+          entities: [{ type: "bold", offset: 0, length: 5 }],
+          fallbackText: "Hello raw",
+          source: "entities",
+        },
+        options: { reply_markup: { keyboard: [] }, parse_mode: "MarkdownV2" },
+      }),
+    ).resolves.toEqual({
+      messageId: 444,
+      deliveredSignature: getTelegramRenderedPartSignature({ text: "Hello raw" }),
+    });
+
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage).toHaveBeenNthCalledWith(2, 100, "Hello raw", {
+      reply_markup: { keyboard: [] },
+    });
+  });
+
   it("edits rendered parts with entities and raw fallback", async () => {
     const editMessageText = vi
       .fn()
@@ -191,6 +257,35 @@ describe("bot/utils/telegram-text", () => {
       reply_markup: { inline_keyboard: [] },
       entities: [{ type: "italic", offset: 0, length: 5 }],
     });
+    expect(editMessageText).toHaveBeenNthCalledWith(2, 100, 500, "Hello raw", {
+      reply_markup: { inline_keyboard: [] },
+    });
+  });
+
+  it("retries rendered entity edits in raw mode after any formatted edit error", async () => {
+    const editMessageText = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Bad Request: unexpected entity edit error"))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      editRenderedBotPart({
+        api: { editMessageText },
+        chatId: 100,
+        messageId: 500,
+        part: {
+          text: "Hello",
+          entities: [{ type: "italic", offset: 0, length: 5 }],
+          fallbackText: "Hello raw",
+          source: "entities",
+        },
+        options: { reply_markup: { inline_keyboard: [] }, parse_mode: "MarkdownV2" },
+      }),
+    ).resolves.toEqual({
+      deliveredSignature: getTelegramRenderedPartSignature({ text: "Hello raw" }),
+    });
+
+    expect(editMessageText).toHaveBeenCalledTimes(2);
     expect(editMessageText).toHaveBeenNthCalledWith(2, 100, 500, "Hello raw", {
       reply_markup: { inline_keyboard: [] },
     });

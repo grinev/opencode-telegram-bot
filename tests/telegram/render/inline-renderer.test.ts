@@ -158,6 +158,32 @@ describe("telegram/render/inline-renderer", () => {
     });
   });
 
+  it("preserves localhost links as plain text without text_link entities", () => {
+    const blocks = parseTelegramBlocks("Open [dev server](http://localhost:3000) now");
+    const paragraph = blocks[0];
+
+    expect(paragraph).toMatchObject({ type: "paragraph" });
+    expect(paragraph.type).toBe("paragraph");
+
+    expect(renderInlineNodesValidated(paragraph.inlines)).toEqual({
+      text: "Open dev server (http://localhost:3000) now",
+      entities: [],
+    });
+  });
+
+  it("does not duplicate bare localhost autolinks", () => {
+    const blocks = parseTelegramBlocks("Open http://localhost:3000 now");
+    const paragraph = blocks[0];
+
+    expect(paragraph).toMatchObject({ type: "paragraph" });
+    expect(paragraph.type).toBe("paragraph");
+
+    expect(renderInlineNodesValidated(paragraph.inlines)).toEqual({
+      text: "Open http://localhost:3000 now",
+      entities: [],
+    });
+  });
+
   it("keeps newline text nodes as plain text in the output", () => {
     const nodes: InlineNode[] = [
       { type: "text", text: "line 1" },
