@@ -33,6 +33,8 @@ const MARKDOWN_PARSE_ERROR_MARKERS = [
   "bad request: can't parse",
 ];
 
+const TELEGRAM_ENTITY_URL_ERROR_MARKERS = ["entity url", "wrong http url", "url host is empty"];
+
 const MARKDOWN_V2_RESERVED_CHARS = new Set([
   "_",
   "*",
@@ -142,6 +144,15 @@ export function isTelegramMarkdownParseError(error: unknown): boolean {
   }
 
   return MARKDOWN_PARSE_ERROR_MARKERS.some((marker) => errorText.includes(marker));
+}
+
+export function isTelegramEntityUrlError(error: unknown): boolean {
+  const errorText = getErrorText(error);
+  if (!errorText) {
+    return false;
+  }
+
+  return TELEGRAM_ENTITY_URL_ERROR_MARKERS.some((marker) => errorText.includes(marker));
 }
 
 export async function sendMessageWithMarkdownFallback({

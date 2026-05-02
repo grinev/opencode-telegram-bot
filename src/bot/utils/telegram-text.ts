@@ -2,6 +2,7 @@ import type { Api, RawApi } from "grammy";
 import { logger } from "../../utils/logger.js";
 import {
   editMessageWithMarkdownFallback,
+  isTelegramEntityUrlError,
   isTelegramMarkdownParseError,
   sendMessageWithMarkdownFallback,
 } from "./send-with-markdown-fallback.js";
@@ -143,7 +144,7 @@ export async function sendRenderedBotPart({
       deliveredSignature: getTelegramRenderedPartSignature(part),
     };
   } catch (error) {
-    if (!isTelegramMarkdownParseError(error)) {
+    if (!isTelegramMarkdownParseError(error) && !isTelegramEntityUrlError(error)) {
       throw error;
     }
 
@@ -196,7 +197,7 @@ export async function editRenderedBotPart({
       deliveredSignature: getTelegramRenderedPartSignature(part),
     };
   } catch (error) {
-    if (!isTelegramMarkdownParseError(error)) {
+    if (!isTelegramMarkdownParseError(error) && !isTelegramEntityUrlError(error)) {
       throw error;
     }
 

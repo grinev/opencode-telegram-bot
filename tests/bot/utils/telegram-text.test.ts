@@ -163,6 +163,43 @@ describe("bot/utils/telegram-text", () => {
     });
   });
 
+  it("retries rendered entity parts in raw mode when Telegram rejects an entity URL", async () => {
+    const sendMessage = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error("Bad Request: entity URL 'http://localhost:3000' is invalid: Wrong HTTP URL"),
+      )
+      .mockResolvedValueOnce({ message_id: 333 });
+
+    await expect(
+      sendRenderedBotPart({
+        api: { sendMessage },
+        chatId: 100,
+        part: {
+          text: "Open dev server",
+          entities: [{ type: "text_link", offset: 5, length: 10, url: "http://localhost:3000" }],
+          fallbackText: "Open dev server (http://localhost:3000)",
+          source: "entities",
+        },
+        options: { reply_markup: { keyboard: [] }, parse_mode: "MarkdownV2" },
+      }),
+    ).resolves.toEqual({
+      messageId: 333,
+      deliveredSignature: getTelegramRenderedPartSignature({
+        text: "Open dev server (http://localhost:3000)",
+      }),
+    });
+
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage).toHaveBeenNthCalledWith(1, 100, "Open dev server", {
+      reply_markup: { keyboard: [] },
+      entities: [{ type: "text_link", offset: 5, length: 10, url: "http://localhost:3000" }],
+    });
+    expect(sendMessage).toHaveBeenNthCalledWith(2, 100, "Open dev server (http://localhost:3000)", {
+      reply_markup: { keyboard: [] },
+    });
+  });
+
   it("edits rendered parts with entities and raw fallback", async () => {
     const editMessageText = vi
       .fn()

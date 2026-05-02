@@ -73,4 +73,15 @@ describe("telegram/render/validator", () => {
     expect(result.ok).toBe(false);
     expect(result.issues[0]?.code).toBe("invalid_link_url");
   });
+
+  it("rejects loopback http link urls", () => {
+    for (const url of ["http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000"]) {
+      const result = validateTelegramEntities("hello", [
+        { type: "text_link", offset: 0, length: 5, url },
+      ]);
+
+      expect(result.ok).toBe(false);
+      expect(result.issues[0]?.code).toBe("invalid_link_url");
+    }
+  });
 });

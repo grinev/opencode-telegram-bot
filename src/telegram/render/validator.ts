@@ -65,10 +65,43 @@ function isStyleEntity(entity: MessageEntity): boolean {
   return STYLE_ENTITY_TYPES.has(entity.type);
 }
 
-function isValidLinkUrl(url: string): boolean {
+function isLoopbackHttpHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[(.*)]$/, "$1").replace(/\.$/, "");
+
+  return (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized === "0.0.0.0" ||
+    normalized.startsWith("127.") ||
+    normalized === "::1"
+  );
+}
+
+export function isLoopbackTelegramHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return ["http:", "https:", "tg:", "mailto:"].includes(parsed.protocol);
+    return ["http:", "https:"].includes(parsed.protocol) && isLoopbackHttpHostname(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function isValidTelegramTextLinkUrl(url: string): boolean {
+  if (/\s/.test(url)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (!["http:", "https:", "tg:", "mailto:"].includes(parsed.protocol)) {
+      return false;
+    }
+
+    if (["http:", "https:"].includes(parsed.protocol)) {
+      return Boolean(parsed.hostname) && !isLoopbackTelegramHttpUrl(url);
+    }
+
+    return true;
   } catch {
     return false;
   }
@@ -113,7 +146,7 @@ function validateEntityShape(
     });
   }
 
-  if (entity.type === "text_link" && !isValidLinkUrl(entity.url)) {
+  if (entity.type === "text_link" && !isValidTelegramTextLinkUrl(entity.url)) {
     issues.push({
       code: "invalid_link_url",
       message: `Invalid Telegram text_link URL: ${entity.url}`,
