@@ -178,21 +178,21 @@ describe("bot/utils/send-with-markdown-fallback", () => {
     });
   });
 
-  it("does not swallow non-markdown Telegram errors", async () => {
+  it("retries non-markdown formatted send errors in raw mode", async () => {
     const sendMessage = vi
       .fn()
-      .mockRejectedValueOnce(new Error("Bad Request: message is too long"));
+      .mockRejectedValueOnce(new Error("Bad Request: unexpected formatted send failure"))
+      .mockResolvedValueOnce(undefined);
 
-    await expect(
-      sendMessageWithMarkdownFallback({
-        api: { sendMessage },
-        chatId: 123,
-        text: "hello",
-        parseMode: "MarkdownV2",
-      }),
-    ).rejects.toThrow("message is too long");
+    await sendMessageWithMarkdownFallback({
+      api: { sendMessage },
+      chatId: 123,
+      text: "hello",
+      parseMode: "MarkdownV2",
+    });
 
-    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage).toHaveBeenNthCalledWith(2, 123, "hello", undefined);
   });
 
   it("detects parse errors from api error description fields", () => {
@@ -331,6 +331,24 @@ describe("bot/utils/send-with-markdown-fallback", () => {
 
     expect(editMessageText).toHaveBeenCalledTimes(3);
     expect(editMessageText).toHaveBeenNthCalledWith(3, 111, 222, "Done.", undefined);
+  });
+
+  it("retries non-markdown formatted edit errors in raw mode", async () => {
+    const editMessageText = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Bad Request: unexpected formatted edit failure"))
+      .mockResolvedValueOnce(undefined);
+
+    await editMessageWithMarkdownFallback({
+      api: { editMessageText },
+      chatId: 111,
+      messageId: 222,
+      text: "Done.",
+      parseMode: "MarkdownV2",
+    });
+
+    expect(editMessageText).toHaveBeenCalledTimes(2);
+    expect(editMessageText).toHaveBeenNthCalledWith(2, 111, 222, "Done.", undefined);
   });
 
   it("unescapes MarkdownV2 text for raw edit fallback when explicit fallback is not provided", async () => {

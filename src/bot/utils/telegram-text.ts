@@ -2,8 +2,6 @@ import type { Api, RawApi } from "grammy";
 import { logger } from "../../utils/logger.js";
 import {
   editMessageWithMarkdownFallback,
-  isTelegramEntityUrlError,
-  isTelegramMarkdownParseError,
   sendMessageWithMarkdownFallback,
 } from "./send-with-markdown-fallback.js";
 import type { TelegramRenderedPart } from "../../telegram/render/types.js";
@@ -144,12 +142,8 @@ export async function sendRenderedBotPart({
       deliveredSignature: getTelegramRenderedPartSignature(part),
     };
   } catch (error) {
-    if (!isTelegramMarkdownParseError(error) && !isTelegramEntityUrlError(error)) {
-      throw error;
-    }
-
     logger.warn(
-      "[Bot] Entity payload rejected, retrying assistant message part in raw mode",
+      "[Bot] Entity payload send failed, retrying assistant message part in raw mode",
       error,
     );
     const sentMessage = await api.sendMessage(chatId, part.fallbackText, rawOptions);
@@ -197,11 +191,7 @@ export async function editRenderedBotPart({
       deliveredSignature: getTelegramRenderedPartSignature(part),
     };
   } catch (error) {
-    if (!isTelegramMarkdownParseError(error) && !isTelegramEntityUrlError(error)) {
-      throw error;
-    }
-
-    logger.warn("[Bot] Entity payload rejected, retrying assistant edit part in raw mode", error);
+    logger.warn("[Bot] Entity payload edit failed, retrying assistant edit part in raw mode", error);
     await api.editMessageText(chatId, messageId, part.fallbackText, rawOptions);
     logger.debug("[Bot] Assistant edit part applied in raw fallback mode", {
       messageId,
