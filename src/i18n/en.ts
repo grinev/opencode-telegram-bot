@@ -13,6 +13,7 @@ export const en = {
   "cmd.description.mcps": "MCP servers",
   "cmd.description.opencode_start": "Start OpenCode server",
   "cmd.description.opencode_stop": "Stop OpenCode server",
+  "cmd.description.ls": "List directory contents",
   "cmd.description.help": "Help",
 
   "callback.unknown_command": "Unknown command",
@@ -451,6 +452,14 @@ export const en = {
   "commands.button.next_page": "Next ➡️",
   "commands.page_empty_callback": "No commands on this page",
   "commands.page_load_error_callback": "Cannot load this page. Please try again.",
+  "commands.download.no_roots": "No allowed browser roots are configured.",
+  "commands.download.downloading": "Downloading file...",
+  "commands.download.not_found": "File not found",
+  "commands.download.not_file": "Path is not a file",
+  "commands.download.file_too_large": "File is too large",
+  "commands.download.size": "Size",
+  "commands.download.modified": "Modified",
+  "commands.download.error": "Failed to download file.",
 
   "skills.select": "Choose an OpenCode skill:",
   "skills.empty": "📭 No OpenCode skills are available for this project.",
@@ -536,6 +545,10 @@ export const en = {
   "open.no_subfolders": "📭 No subfolders",
   "open.subfolder_count": "{count} subfolder",
   "open.subfolders_count": "{count} subfolders",
+  "ls.access_denied": "⛔ Access denied: path is outside allowed roots",
+  "ls.scan_error": "🔴 Cannot list directory",
+  "ls.header": "Directory Listing",
+  "ls.total": "Total: {count} items",
 } as const;
 
 export type I18nKey = keyof typeof en;

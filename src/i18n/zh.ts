@@ -15,6 +15,7 @@ export const zh: I18nDictionary = {
   "cmd.description.mcps": "MCP servers",
   "cmd.description.opencode_start": "启动 OpenCode 服务器",
   "cmd.description.opencode_stop": "停止 OpenCode 服务器",
+  "cmd.description.ls": "列出目录内容",
   "cmd.description.help": "帮助",
 
   "callback.unknown_command": "未知命令",
@@ -409,6 +410,14 @@ export const zh: I18nDictionary = {
   "commands.button.next_page": "下一页 ➡️",
   "commands.page_empty_callback": "这一页没有命令",
   "commands.page_load_error_callback": "无法加载此页面。请重试。",
+  "commands.download.no_roots": "未配置允许浏览的根目录。",
+  "commands.download.downloading": "正在下载文件...",
+  "commands.download.not_found": "未找到文件",
+  "commands.download.not_file": "该路径不是文件",
+  "commands.download.file_too_large": "文件过大",
+  "commands.download.size": "大小",
+  "commands.download.modified": "修改时间",
+  "commands.download.error": "下载文件失败。",
 
   "skills.select": "请选择一个 OpenCode 技能：",
   "skills.empty": "📭 当前项目没有可用的 OpenCode 技能。",
@@ -491,4 +500,8 @@ export const zh: I18nDictionary = {
   "open.no_subfolders": "📭 无子文件夹",
   "open.subfolder_count": "{count} 个子文件夹",
   "open.subfolders_count": "{count} 个子文件夹",
+  "ls.access_denied": "⛔ 访问被拒绝：路径在允许的根目录之外",
+  "ls.scan_error": "🔴 无法列出目录",
+  "ls.header": "目录列表",
+  "ls.total": "总计：{count} 个项目",
 };

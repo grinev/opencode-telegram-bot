@@ -15,6 +15,7 @@ export const es: I18nDictionary = {
   "cmd.description.mcps": "MCP servers",
   "cmd.description.opencode_start": "Iniciar servidor OpenCode",
   "cmd.description.opencode_stop": "Detener servidor OpenCode",
+  "cmd.description.ls": "Listar contenidos del directorio",
   "cmd.description.help": "Ayuda",
 
   "callback.unknown_command": "Comando desconocido",
@@ -469,6 +470,14 @@ export const es: I18nDictionary = {
   "commands.page_empty_callback": "No hay comandos en esta página",
   "commands.page_load_error_callback":
     "No se pudo cargar esta página. Por favor, inténtalo de nuevo.",
+  "commands.download.no_roots": "No hay raíces de navegación permitidas configuradas.",
+  "commands.download.downloading": "Descargando archivo...",
+  "commands.download.not_found": "Archivo no encontrado",
+  "commands.download.not_file": "La ruta no es un archivo",
+  "commands.download.file_too_large": "El archivo es demasiado grande",
+  "commands.download.size": "Tamaño",
+  "commands.download.modified": "Modificado",
+  "commands.download.error": "No se pudo descargar el archivo.",
 
   "skills.select": "Elige un skill de OpenCode:",
   "skills.empty": "📭 No hay skills de OpenCode disponibles para este proyecto.",
@@ -558,4 +567,8 @@ export const es: I18nDictionary = {
   "open.no_subfolders": "📭 Sin subcarpetas",
   "open.subfolder_count": "{count} subcarpeta",
   "open.subfolders_count": "{count} subcarpetas",
+  "ls.access_denied": "⛔ Acceso denegado: la ruta está fuera de las raíces permitidas",
+  "ls.scan_error": "🔴 No se puede listar el directorio",
+  "ls.header": "Listado del directorio",
+  "ls.total": "Total: {count} elementos",
 };
