@@ -557,4 +557,27 @@ export const fr: I18nDictionary = {
   "open.no_subfolders": "📭 Aucun sous-dossier",
   "open.subfolder_count": "{count} sous-dossier",
   "open.subfolders_count": "{count} sous-dossiers",
+
+  "cmd.description.session_delete": "Supprimer des sessions",
+
+  "session_delete.project_not_selected":
+    "🏗 Aucun projet sélectionné.\n\nSélectionnez d'abord un projet avec /projects.",
+  "session_delete.empty": "📭 Aucune session trouvée.\n\nCréez une nouvelle session avec /new.",
+  "session_delete.select": "Sélectionnez une session à supprimer :",
+  "session_delete.select_page": "Sélectionnez une session à supprimer (page {page}) :",
+  "session_delete.button.delete": "🗑 Supprimer",
+  "session_delete.button.cancel": "❌ Annuler",
+  "session_delete.button.prev_page": "⬅️ Précédent",
+  "session_delete.button.next_page": "Suivant ➡️",
+  "session_delete.details":
+    "Session : {title}\nRépertoire : {directory}\nCréée : {date}\n\nSupprimer cette session ?",
+  "session_delete.deleted": "🗑 Session supprimée : {title}",
+  "session_delete.deleted_current":
+    "🗑 Session actuelle supprimée : {title}\n\nUtilisez /sessions ou /new pour continuer.",
+  "session_delete.cancelled_callback": "Annulé",
+  "session_delete.inactive_callback": "Ce menu est inactif",
+  "session_delete.load_error": "🔴 Impossible de charger les sessions.",
+  "session_delete.delete_error": "🔴 Impossible de supprimer la session.",
+  "session_delete.page_empty_callback": "Aucune session sur cette page",
+  "session_delete.page_load_error_callback": "Impossible de charger cette page. Veuillez réessayer.",
 };

@@ -544,4 +544,27 @@ export const ru: I18nDictionary = {
   "open.no_subfolders": "📭 Нет подпапок",
   "open.subfolder_count": "{count} подпапка",
   "open.subfolders_count": "{count} подпапок",
+
+  "cmd.description.session_delete": "Удалить сессии",
+
+  "session_delete.project_not_selected":
+    "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
+  "session_delete.empty": "📭 Сессии не найдены.\n\nСоздайте новую сессию командой /new.",
+  "session_delete.select": "Выберите сессию для удаления:",
+  "session_delete.select_page": "Выберите сессию для удаления (страница {page}):",
+  "session_delete.button.delete": "🗑 Удалить",
+  "session_delete.button.cancel": "❌ Отмена",
+  "session_delete.button.prev_page": "⬅️ Назад",
+  "session_delete.button.next_page": "Далее ➡️",
+  "session_delete.details":
+    "Сессия: {title}\nКаталог: {directory}\nСоздана: {date}\n\nУдалить эту сессию?",
+  "session_delete.deleted": "🗑 Сессия удалена: {title}",
+  "session_delete.deleted_current":
+    "🗑 Текущая сессия удалена: {title}\n\nИспользуйте /sessions или /new для продолжения.",
+  "session_delete.cancelled_callback": "Отменено",
+  "session_delete.inactive_callback": "Это меню неактивно",
+  "session_delete.load_error": "🔴 Не удалось загрузить сессии.",
+  "session_delete.delete_error": "🔴 Не удалось удалить сессию.",
+  "session_delete.page_empty_callback": "На этой странице нет сессий",
+  "session_delete.page_load_error_callback": "Не удалось загрузить эту страницу. Пожалуйста, попробуйте еще раз.",
 };

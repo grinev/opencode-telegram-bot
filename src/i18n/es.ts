@@ -558,4 +558,27 @@ export const es: I18nDictionary = {
   "open.no_subfolders": "📭 Sin subcarpetas",
   "open.subfolder_count": "{count} subcarpeta",
   "open.subfolders_count": "{count} subcarpetas",
+
+  "cmd.description.session_delete": "Eliminar sesiones",
+
+  "session_delete.project_not_selected":
+    "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
+  "session_delete.empty": "📭 No se encontraron sesiones.\n\nCrea una nueva sesión con /new.",
+  "session_delete.select": "Selecciona una sesión para eliminar:",
+  "session_delete.select_page": "Selecciona una sesión para eliminar (página {page}):",
+  "session_delete.button.delete": "🗑 Eliminar",
+  "session_delete.button.cancel": "❌ Cancelar",
+  "session_delete.button.prev_page": "⬅️ Anterior",
+  "session_delete.button.next_page": "Siguiente ➡️",
+  "session_delete.details":
+    "Sesión: {title}\nDirectorio: {directory}\nCreada: {date}\n\n¿Eliminar esta sesión?",
+  "session_delete.deleted": "🗑 Sesión eliminada: {title}",
+  "session_delete.deleted_current":
+    "🗑 Sesión actual eliminada: {title}\n\nUsa /sessions o /new para continuar.",
+  "session_delete.cancelled_callback": "Cancelado",
+  "session_delete.inactive_callback": "Este menú está inactivo",
+  "session_delete.load_error": "🔴 No se pudieron cargar las sesiones.",
+  "session_delete.delete_error": "🔴 No se pudo eliminar la sesión.",
+  "session_delete.page_empty_callback": "No hay sesiones en esta página",
+  "session_delete.page_load_error_callback": "No se puede cargar esta página. Inténtalo de nuevo.",
 };
