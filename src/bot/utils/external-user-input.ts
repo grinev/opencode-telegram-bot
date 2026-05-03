@@ -5,6 +5,8 @@ import { sendBotText } from "./telegram-text.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
 
+const EXTERNAL_USER_INPUT_MAX_DISPLAY_LENGTH = 2000;
+
 interface ExternalUserInputNotification {
   text: string;
   rawFallbackText: string;
@@ -21,6 +23,14 @@ interface DeliverExternalUserInputParams {
 
 function normalizeExternalUserInputText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
+}
+
+function truncateExternalUserInputText(text: string): string {
+  if (text.length <= EXTERNAL_USER_INPUT_MAX_DISPLAY_LENGTH) {
+    return text;
+  }
+
+  return `${text.slice(0, EXTERNAL_USER_INPUT_MAX_DISPLAY_LENGTH - 3)}...`;
 }
 
 function buildQuotedPlainText(text: string): string {
@@ -45,10 +55,11 @@ export function buildExternalUserInputNotification(text: string): ExternalUserIn
     return null;
   }
 
+  const displayText = truncateExternalUserInputText(normalizedText);
   const title = `👤 ${t("bot.external_user_input")}`;
   return {
-    text: `${escapePlainTextForTelegramMarkdownV2(title)}\n\n${buildQuotedMarkdownText(normalizedText)}`,
-    rawFallbackText: `${title}\n\n${buildQuotedPlainText(normalizedText)}`,
+    text: `${escapePlainTextForTelegramMarkdownV2(title)}\n\n${buildQuotedMarkdownText(displayText)}`,
+    rawFallbackText: `${title}\n\n${buildQuotedPlainText(displayText)}`,
   };
 }
 

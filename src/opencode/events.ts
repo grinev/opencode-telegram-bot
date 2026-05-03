@@ -1,6 +1,7 @@
 import { opencodeClient } from "./client.js";
 import { Event } from "@opencode-ai/sdk/v2";
 import { logger } from "../utils/logger.js";
+import { isExpectedOpencodeUnavailableError } from "../utils/opencode-error.js";
 
 type EventCallback = (event: Event) => void;
 
@@ -143,10 +144,16 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
 
         reconnectAttempt++;
         const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
-        logger.error(
-          `Event stream error for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})`,
-          error,
-        );
+        if (isExpectedOpencodeUnavailableError(error)) {
+          logger.warn(
+            `Event stream unavailable for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})`,
+          );
+        } else {
+          logger.error(
+            `Event stream error for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})`,
+            error,
+          );
+        }
 
         const shouldContinue = await waitWithAbort(reconnectDelay, controller.signal);
         if (!shouldContinue) {
@@ -160,7 +167,11 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
       return;
     }
 
-    logger.error("Event stream error:", error);
+    if (isExpectedOpencodeUnavailableError(error)) {
+      logger.warn("Event stream unavailable; listener stopped");
+    } else {
+      logger.error("Event stream error:", error);
+    }
     isListening = false;
     activeDirectory = null;
     streamAbortController = null;

@@ -1,6 +1,7 @@
 import type { Bot, Context } from "grammy";
 import { opencodeClient } from "../opencode/client.js";
 import { stopEventListening } from "../opencode/events.js";
+import { isOpencodeServerHealthy } from "../opencode/ready-refresh.js";
 import { summaryAggregator } from "../summary/aggregator.js";
 import { pinnedMessageManager } from "../pinned/manager.js";
 import { keyboardManager } from "../keyboard/manager.js";
@@ -13,11 +14,13 @@ import { getCurrentSession } from "../session/manager.js";
 import { getCurrentProject } from "../settings/manager.js";
 import { attachManager } from "./manager.js";
 import { logger } from "../utils/logger.js";
+import { isExpectedOpencodeUnavailableError } from "../utils/opencode-error.js";
 
 interface EnsureAttachPinnedSessionParams {
   api: Context["api"];
   chatId: number;
   session: SessionInfo;
+  forceFullRestore?: boolean;
 }
 
 export interface AttachSessionDeps {
@@ -25,6 +28,7 @@ export interface AttachSessionDeps {
   chatId: number;
   session: SessionInfo;
   ensureEventSubscription: (directory: string) => Promise<void>;
+  forceFullRestore?: boolean;
 }
 
 export interface AttachSessionResult {
@@ -38,6 +42,7 @@ export interface RestoreAttachedCurrentSessionDeps {
   bot: Bot<Context>;
   chatId: number;
   ensureEventSubscription: (directory: string) => Promise<void>;
+  forceFullRestore?: boolean;
 }
 
 function getAttachBusyStatus(sessionId: string, statuses: unknown): boolean {
@@ -53,6 +58,7 @@ async function ensureAttachPinnedSession({
   api,
   chatId,
   session,
+  forceFullRestore = false,
 }: EnsureAttachPinnedSessionParams): Promise<void> {
   if (!pinnedMessageManager.isInitialized()) {
     pinnedMessageManager.initialize(api, chatId);
@@ -62,6 +68,9 @@ async function ensureAttachPinnedSession({
 
   const pinnedState = pinnedMessageManager.getState();
   if (pinnedState.sessionId === session.id && pinnedState.messageId) {
+    if (forceFullRestore) {
+      await pinnedMessageManager.loadContextFromHistory(session.id, session.directory);
+    }
     return;
   }
 
@@ -99,7 +108,11 @@ async function restorePendingQuestion(
   });
 
   if (error || !data) {
-    logger.warn("[Attach] Failed to load pending questions during attach:", error);
+    if (isExpectedOpencodeUnavailableError(error)) {
+      logger.warn("[Attach] OpenCode server unavailable; skipping pending question restore");
+    } else {
+      logger.warn("[Attach] Failed to load pending questions during attach:", error);
+    }
     return false;
   }
 
@@ -124,7 +137,11 @@ async function restorePendingPermissions(
   });
 
   if (error || !data) {
-    logger.warn("[Attach] Failed to load pending permissions during attach:", error);
+    if (isExpectedOpencodeUnavailableError(error)) {
+      logger.warn("[Attach] OpenCode server unavailable; skipping pending permission restore");
+    } else {
+      logger.warn("[Attach] Failed to load pending permissions during attach:", error);
+    }
     return 0;
   }
 
@@ -137,13 +154,14 @@ async function restorePendingPermissions(
 }
 
 export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSessionResult> {
-  const { bot, chatId, session, ensureEventSubscription } = deps;
+  const { bot, chatId, session, ensureEventSubscription, forceFullRestore = false } = deps;
   const alreadyAttached = attachManager.isAttachedSession(session.id, session.directory);
 
   await ensureAttachPinnedSession({
     api: bot.api,
     chatId,
     session,
+    forceFullRestore,
   });
 
   if (!alreadyAttached) {
@@ -161,7 +179,11 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
   });
 
   if (statusesError) {
-    logger.warn("[Attach] Failed to load session status during attach:", statusesError);
+    if (isExpectedOpencodeUnavailableError(statusesError)) {
+      logger.warn("[Attach] OpenCode server unavailable; skipping session status restore");
+    } else {
+      logger.warn("[Attach] Failed to load session status during attach:", statusesError);
+    }
   }
 
   const busy = getAttachBusyStatus(session.id, statuses);
@@ -176,7 +198,11 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
   let restoredQuestion = false;
   let restoredPermissions = 0;
 
-  if (!alreadyAttached && !questionManager.isActive() && !permissionManager.isActive()) {
+  if (
+    (!alreadyAttached || forceFullRestore) &&
+    !questionManager.isActive() &&
+    !permissionManager.isActive()
+  ) {
     restoredQuestion = await restorePendingQuestion(bot, chatId, session.id, session.directory);
 
     if (!restoredQuestion) {
@@ -215,11 +241,19 @@ export async function restoreAttachedCurrentSession(
   }
 
   try {
+    if (!(await isOpencodeServerHealthy())) {
+      logger.warn(
+        `[Attach] OpenCode server is unavailable; skipping followed session restore: session=${currentSession.id}, directory=${currentSession.directory}`,
+      );
+      return false;
+    }
+
     await attachToSession({
       bot: deps.bot,
       chatId: deps.chatId,
       session: currentSession,
       ensureEventSubscription: deps.ensureEventSubscription,
+      forceFullRestore: deps.forceFullRestore,
     });
     logger.info(
       `[Attach] Restored followed session on startup: session=${currentSession.id}, directory=${currentSession.directory}`,

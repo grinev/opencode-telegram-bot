@@ -27,6 +27,15 @@ describe("bot/utils/external-user-input", () => {
     });
   });
 
+  it("truncates long external user input notifications", () => {
+    const longText = "x".repeat(2001);
+
+    const notification = buildExternalUserInputNotification(longText);
+
+    expect(notification?.rawFallbackText).toBe(`👤 External user input\n\n> ${"x".repeat(1997)}...`);
+    expect(notification?.text).toContain(`${"x".repeat(1997)}\\.\\.\\.`);
+  });
+
   it("sends external user input when session matches and it is not suppressed", async () => {
     const delivered = await deliverExternalUserInputNotification({
       api: { sendMessage: vi.fn() } as never,

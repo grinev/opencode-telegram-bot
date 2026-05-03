@@ -11,6 +11,12 @@ interface OpenCodeModelState {
 }
 
 const MODEL_CATALOG_CACHE_TTL_MS = 10 * 60 * 1000;
+const SERVER_UNAVAILABLE_ERROR_MARKERS = [
+  "fetch failed",
+  "econnrefused",
+  "connection refused",
+  "connect refused",
+];
 
 let cachedValidModelKeys: Set<string> | null = null;
 let modelCatalogCacheExpiresAt = 0;
@@ -55,8 +61,85 @@ function filterModelsByCatalog(
   return models.filter((model) => validModelKeys.has(getModelKey(model.providerID, model.modelID)));
 }
 
-async function getValidModelKeys(): Promise<Set<string> | null> {
-  if (cachedValidModelKeys && Date.now() < modelCatalogCacheExpiresAt) {
+function hasServerUnavailableMarker(value: string): boolean {
+  const lower = value.toLowerCase();
+  return SERVER_UNAVAILABLE_ERROR_MARKERS.some((marker) => lower.includes(marker));
+}
+
+function isServerUnavailableError(error: unknown): boolean {
+  const queue: unknown[] = [error];
+  const seen = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.pop();
+
+    if (!current || seen.has(current)) {
+      continue;
+    }
+
+    seen.add(current);
+
+    if (typeof current === "string") {
+      if (hasServerUnavailableMarker(current)) {
+        return true;
+      }
+
+      continue;
+    }
+
+    if (current instanceof Error) {
+      if (hasServerUnavailableMarker(`${current.name}: ${current.message}`)) {
+        return true;
+      }
+
+      const errorWithCause = current as Error & { cause?: unknown };
+      if (errorWithCause.cause) {
+        queue.push(errorWithCause.cause);
+      }
+
+      continue;
+    }
+
+    if (typeof current === "object") {
+      const value = current as {
+        code?: unknown;
+        message?: unknown;
+        cause?: unknown;
+      };
+
+      if (typeof value.code === "string" && hasServerUnavailableMarker(value.code)) {
+        return true;
+      }
+
+      if (typeof value.message === "string" && hasServerUnavailableMarker(value.message)) {
+        return true;
+      }
+
+      if (value.cause) {
+        queue.push(value.cause);
+      }
+    }
+  }
+
+  return false;
+}
+
+function logModelCatalogRefreshFailure(error: unknown, type: "error" | "exception"): void {
+  if (isServerUnavailableError(error)) {
+    logger.warn("[ModelManager] OpenCode server is not running; skipping model catalog refresh");
+    return;
+  }
+
+  if (type === "error") {
+    logger.warn("[ModelManager] Failed to refresh model catalog:", error);
+    return;
+  }
+
+  logger.warn("[ModelManager] Error refreshing model catalog:", error);
+}
+
+async function getValidModelKeys(options?: { force?: boolean }): Promise<Set<string> | null> {
+  if (!options?.force && cachedValidModelKeys && Date.now() < modelCatalogCacheExpiresAt) {
     logger.debug(
       `[ModelManager] Model catalog cache hit: models=${cachedValidModelKeys.size}, ttlMs=${modelCatalogCacheExpiresAt - Date.now()}`,
     );
@@ -74,7 +157,7 @@ async function getValidModelKeys(): Promise<Set<string> | null> {
       const response = await opencodeClient.config.providers();
 
       if (response.error || !response.data) {
-        logger.warn("[ModelManager] Failed to refresh model catalog:", response.error);
+        logModelCatalogRefreshFailure(response.error, "error");
 
         if (cachedValidModelKeys) {
           logger.warn("[ModelManager] Using stale model catalog cache after refresh failure");
@@ -101,7 +184,7 @@ async function getValidModelKeys(): Promise<Set<string> | null> {
 
       return cachedValidModelKeys;
     } catch (err) {
-      logger.warn("[ModelManager] Error refreshing model catalog:", err);
+      logModelCatalogRefreshFailure(err, "exception");
 
       if (cachedValidModelKeys) {
         logger.warn("[ModelManager] Using stale model catalog cache after refresh exception");
@@ -247,14 +330,16 @@ export async function getModelSelectionLists(): Promise<ModelSelectionLists> {
  * Validate stored selected model against OpenCode providers catalog.
  * If selected model is unavailable, fallback to env default model.
  */
-export async function reconcileStoredModelSelection(): Promise<void> {
+export async function reconcileStoredModelSelection(options?: {
+  forceCatalogRefresh?: boolean;
+}): Promise<void> {
   const currentModel = getCurrentModel();
 
   if (!currentModel?.providerID || !currentModel.modelID) {
     return;
   }
 
-  const validModelKeys = await getValidModelKeys();
+  const validModelKeys = await getValidModelKeys({ force: options?.forceCatalogRefresh });
 
   if (!validModelKeys) {
     logger.warn("[ModelManager] Skipping stored model validation: model catalog unavailable");

@@ -1,6 +1,7 @@
 import { opencodeClient } from "../opencode/client.js";
 import { logger } from "../utils/logger.js";
 import { DEFAULT_CONTEXT_LIMIT } from "../pinned/format.js";
+import { isExpectedOpencodeUnavailableError } from "../utils/opencode-error.js";
 
 const PROVIDER_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -28,7 +29,11 @@ async function refreshContextLimitCache(): Promise<void> {
       const { data, error } = await opencodeClient.config.providers();
 
       if (error || !data) {
-        logger.warn("[ModelContextLimit] Failed to fetch providers:", error);
+        if (isExpectedOpencodeUnavailableError(error)) {
+          logger.warn("[ModelContextLimit] OpenCode server unavailable; using default context limit");
+        } else {
+          logger.warn("[ModelContextLimit] Failed to fetch providers:", error);
+        }
         return;
       }
 
@@ -46,7 +51,11 @@ async function refreshContextLimitCache(): Promise<void> {
         `[ModelContextLimit] Cached limits for ${contextLimitCache.size} provider/model pairs`,
       );
     } catch (error) {
-      logger.warn("[ModelContextLimit] Error refreshing providers cache:", error);
+      if (isExpectedOpencodeUnavailableError(error)) {
+        logger.warn("[ModelContextLimit] OpenCode server unavailable; using default context limit");
+      } else {
+        logger.warn("[ModelContextLimit] Error refreshing providers cache:", error);
+      }
     } finally {
       providersFetchInFlight = null;
     }

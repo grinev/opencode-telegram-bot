@@ -18,6 +18,7 @@ const mocked = vi.hoisted(() => ({
     title: "Session One",
     directory: "D:\\Projects\\Repo",
   } as { id: string; title: string; directory: string } | null,
+  healthMock: vi.fn(),
   sessionStatusMock: vi.fn(),
   questionListMock: vi.fn(),
   permissionListMock: vi.fn(),
@@ -48,6 +49,9 @@ vi.mock("../../src/session/manager.js", () => ({
 
 vi.mock("../../src/opencode/client.js", () => ({
   opencodeClient: {
+    global: {
+      health: mocked.healthMock,
+    },
     session: {
       status: mocked.sessionStatusMock,
     },
@@ -120,6 +124,9 @@ describe("attach/service", () => {
       directory: "D:\\Projects\\Repo",
     };
 
+    mocked.sessionStatusMock.mockReset();
+    mocked.healthMock.mockReset();
+    mocked.healthMock.mockResolvedValue({ data: { healthy: true }, error: null });
     mocked.sessionStatusMock.mockReset();
     mocked.sessionStatusMock.mockResolvedValue({
       data: {
@@ -287,5 +294,47 @@ describe("attach/service", () => {
     expect(restored).toBe(false);
     expect(mocked.ensureEventSubscriptionMock).not.toHaveBeenCalled();
     expect(attachManager.getSnapshot()).toBeNull();
+  });
+
+  it("skips guarded startup restore when OpenCode server is unavailable", async () => {
+    mocked.healthMock.mockRejectedValueOnce(new Error("fetch failed"));
+
+    const restored = await restoreAttachedCurrentSession({
+      bot: createBot(),
+      chatId: 777,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+
+    expect(restored).toBe(false);
+    expect(mocked.pinnedLoadContextFromHistoryMock).not.toHaveBeenCalled();
+    expect(mocked.sessionStatusMock).not.toHaveBeenCalled();
+    expect(mocked.questionListMock).not.toHaveBeenCalled();
+    expect(mocked.permissionListMock).not.toHaveBeenCalled();
+    expect(mocked.ensureEventSubscriptionMock).not.toHaveBeenCalled();
+  });
+
+  it("full restore repeats API-backed state without duplicating event subscription", async () => {
+    const bot = createBot();
+
+    await attachToSession({
+      bot,
+      chatId: 777,
+      session: mocked.currentSession!,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+
+    const result = await attachToSession({
+      bot,
+      chatId: 777,
+      session: mocked.currentSession!,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      forceFullRestore: true,
+    });
+
+    expect(result.alreadyAttached).toBe(true);
+    expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledTimes(1);
+    expect(mocked.pinnedLoadContextFromHistoryMock).toHaveBeenCalledTimes(1);
+    expect(mocked.sessionStatusMock).toHaveBeenCalledTimes(2);
+    expect(mocked.questionListMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -426,6 +426,34 @@ describe("model/manager", () => {
   });
 
   describe("reconcileStoredModelSelection", () => {
+    it("logs a short warning without stack when OpenCode server is unavailable", async () => {
+      setCurrentModelState({ providerID: "openai", modelID: "gpt-4o", variant: "high" });
+      providersMock.mockResolvedValueOnce({ data: null, error: new TypeError("fetch failed") });
+
+      await reconcileStoredModelSelection();
+
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        "[ModelManager] OpenCode server is not running; skipping model catalog refresh",
+      );
+      expect(loggerWarnMock).not.toHaveBeenCalledWith(
+        "[ModelManager] Failed to refresh model catalog:",
+        expect.any(Error),
+      );
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        "[ModelManager] Skipping stored model validation: model catalog unavailable",
+      );
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+    });
+
+    it("forces model catalog refresh when requested", async () => {
+      setCurrentModelState({ providerID: "openai", modelID: "gpt-4o", variant: "high" });
+
+      await reconcileStoredModelSelection();
+      await reconcileStoredModelSelection({ forceCatalogRefresh: true });
+
+      expect(providersMock).toHaveBeenCalledTimes(2);
+    });
+
     it("falls back to env default when stored model is unavailable", async () => {
       setCurrentModelState({ providerID: "openai", modelID: "retired", variant: "high" });
 

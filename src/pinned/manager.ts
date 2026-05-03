@@ -11,6 +11,7 @@ import {
 } from "../settings/manager.js";
 import { getStoredModel } from "../model/manager.js";
 import { getModelContextLimit } from "../model/context-limit.js";
+import { isExpectedOpencodeUnavailableError } from "../utils/opencode-error.js";
 import type { FileChange, PinnedMessageState, TokensInfo } from "./types.js";
 import { t } from "../i18n/index.js";
 import {
@@ -163,7 +164,11 @@ class PinnedMessageManager {
       });
 
       if (error || !messagesData) {
-        logger.warn("[PinnedManager] Failed to load session history:", error);
+        if (isExpectedOpencodeUnavailableError(error)) {
+          logger.warn("[PinnedManager] OpenCode server unavailable; skipping session history load");
+        } else {
+          logger.warn("[PinnedManager] Failed to load session history:", error);
+        }
         return;
       }
 
@@ -219,7 +224,11 @@ class PinnedMessageManager {
 
       await this.updatePinnedMessage();
     } catch (err) {
-      logger.error("[PinnedManager] Error loading context from history:", err);
+      if (isExpectedOpencodeUnavailableError(err)) {
+        logger.warn("[PinnedManager] OpenCode server unavailable; skipping session history load");
+      } else {
+        logger.error("[PinnedManager] Error loading context from history:", err);
+      }
     }
   }
 
@@ -430,7 +439,11 @@ class PinnedMessageManager {
       logger.debug("[PinnedManager] session.diff() empty, trying loadDiffsFromMessages()");
       await this.loadDiffsFromMessages(sessionId, project.worktree);
     } catch (err) {
-      logger.debug("[PinnedManager] Could not load diffs from API:", err);
+      if (isExpectedOpencodeUnavailableError(err)) {
+        logger.debug("[PinnedManager] OpenCode server unavailable; skipping diff restore");
+      } else {
+        logger.debug("[PinnedManager] Could not load diffs from API:", err);
+      }
     }
   }
 
@@ -447,7 +460,11 @@ class PinnedMessageManager {
       });
 
       if (error || !messagesData) {
-        logger.debug(`[PinnedManager] loadDiffsFromMessages: error or no data`);
+        if (isExpectedOpencodeUnavailableError(error)) {
+          logger.debug("[PinnedManager] OpenCode server unavailable; skipping diff message restore");
+        } else {
+          logger.debug(`[PinnedManager] loadDiffsFromMessages: error or no data`);
+        }
         return;
       }
 
@@ -542,7 +559,11 @@ class PinnedMessageManager {
         logger.debug("[PinnedManager] loadDiffsFromMessages: no file changes found");
       }
     } catch (err) {
-      logger.debug("[PinnedManager] Could not load diffs from messages:", err);
+      if (isExpectedOpencodeUnavailableError(err)) {
+        logger.debug("[PinnedManager] OpenCode server unavailable; skipping diff message restore");
+      } else {
+        logger.debug("[PinnedManager] Could not load diffs from messages:", err);
+      }
     }
   }
 
@@ -568,7 +589,11 @@ class PinnedMessageManager {
         logger.debug(`[PinnedManager] Session title refreshed: ${sessionData.title}`);
       }
     } catch (err) {
-      logger.debug("[PinnedManager] Could not refresh session title:", err);
+      if (isExpectedOpencodeUnavailableError(err)) {
+        logger.debug("[PinnedManager] OpenCode server unavailable; skipping session title refresh");
+      } else {
+        logger.debug("[PinnedManager] Could not refresh session title:", err);
+      }
     }
   }
 
@@ -656,7 +681,11 @@ class PinnedMessageManager {
       this.state.tokensLimit = this.contextLimit;
       logger.debug(`[PinnedManager] Context limit: ${this.contextLimit}`);
     } catch (err) {
-      logger.error("[PinnedManager] Error fetching context limit:", err);
+      if (isExpectedOpencodeUnavailableError(err)) {
+        logger.warn("[PinnedManager] OpenCode server unavailable; using default context limit");
+      } else {
+        logger.error("[PinnedManager] Error fetching context limit:", err);
+      }
       this.contextLimit = DEFAULT_CONTEXT_LIMIT;
       this.state.tokensLimit = this.contextLimit;
     }
