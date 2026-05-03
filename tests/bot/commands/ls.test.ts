@@ -134,6 +134,55 @@ describe("bot/commands/ls", () => {
     );
   });
 
+  it("blocks the command when foreground is busy", async () => {
+    mocked.isForegroundBusyMock.mockReturnValue(true);
+
+    const ctx = createCommandContext();
+    await lsCommand(ctx as never);
+
+    expect(mocked.replyBusyBlockedMock).toHaveBeenCalledWith(ctx);
+    expect(mocked.readdirMock).not.toHaveBeenCalled();
+  });
+
+  it("uses an explicit path argument when provided", async () => {
+    const ctx = {
+      chat: { id: 123 },
+      from: { id: 42 },
+      match: "/repo/project/docs",
+      reply: vi.fn().mockResolvedValue({ message_id: 77 }),
+    } as unknown as Context;
+
+    await lsCommand(ctx as never);
+
+    expect(mocked.readdirMock).toHaveBeenCalledWith("/repo/project/docs", { withFileTypes: true });
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.stringContaining("<code>/repo/project/docs</code>"),
+      expect.objectContaining({ parse_mode: "HTML", reply_markup: expect.anything() }),
+    );
+  });
+
+  it("falls back to the first browser root when no project is selected", async () => {
+    mocked.getCurrentProjectMock.mockReturnValue(undefined);
+
+    const ctx = createCommandContext();
+    await lsCommand(ctx as never);
+
+    expect(mocked.readdirMock).toHaveBeenCalledWith("/home/user", { withFileTypes: true });
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.stringContaining("<code>~</code>"),
+      expect.objectContaining({ parse_mode: "HTML", reply_markup: expect.anything() }),
+    );
+  });
+
+  it("shows an error when the target directory cannot be listed", async () => {
+    mocked.readdirMock.mockRejectedValue(new Error("Permission denied"));
+
+    const ctx = createCommandContext();
+    await lsCommand(ctx as never);
+
+    expect(ctx.reply).toHaveBeenCalledWith(`❌ ${t("ls.scan_error")}: Permission denied`);
+  });
+
   it("lists directories before files", async () => {
     mocked.readdirMock.mockResolvedValue([
       { name: "z-last-dir", isDirectory: () => true },
@@ -183,6 +232,105 @@ describe("bot/commands/ls", () => {
     expect(mocked.sendDownloadedFileMock).toHaveBeenCalledWith(callbackCtx, "/repo/project/README.md", {
       announce: false,
     });
+  });
+
+  it("shows a next page button when directory contents exceed one page", async () => {
+    mocked.readdirMock.mockResolvedValue(
+      Array.from({ length: 9 }, (_, index) => ({
+        name: `dir-${index + 1}`,
+        isDirectory: () => true,
+      })),
+    );
+
+    const ctx = createCommandContext();
+    await lsCommand(ctx as never);
+
+    const keyboard = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.reply_markup;
+    const flatButtons = keyboard.inline_keyboard.flat();
+
+    expect(flatButtons.some((button: { text?: string }) => button.text === t("open.next_page"))).toBe(true);
+  });
+
+  it("loads the next page when tapping the next button", async () => {
+    mocked.readdirMock.mockResolvedValue(
+      Array.from({ length: 9 }, (_, index) => ({
+        name: `dir-${index + 1}`,
+        isDirectory: () => true,
+      })),
+    );
+
+    const commandCtx = createCommandContext();
+    await lsCommand(commandCtx as never);
+
+    const keyboard = (commandCtx.reply as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.reply_markup;
+    const flatButtons = keyboard.inline_keyboard.flat();
+    const nextButton = flatButtons.find((button: { text?: string }) => button.text === t("open.next_page"));
+
+    expect(nextButton?.callback_data).toBeDefined();
+
+    const callbackCtx = createCallbackContext(nextButton?.callback_data as string);
+    const handled = await handleLsCallback(callbackCtx);
+
+    expect(handled).toBe(true);
+    expect(callbackCtx.editMessageText).toHaveBeenCalledWith(
+      expect.stringContaining("(2/2)"),
+      expect.objectContaining({ parse_mode: "HTML", reply_markup: expect.anything() }),
+    );
+  });
+
+  it("blocks callbacks when foreground is busy", async () => {
+    mocked.isForegroundBusyMock.mockReturnValue(true);
+
+    const ctx = createCallbackContext("ls:nav:/repo/project/docs");
+    const handled = await handleLsCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(mocked.replyBusyBlockedMock).toHaveBeenCalledWith(ctx);
+    expect(ctx.editMessageText).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale callbacks when the inline menu is inactive", async () => {
+    mocked.ensureActiveInlineMenuMock.mockResolvedValue(false);
+
+    const ctx = createCallbackContext("ls:nav:/repo/project/docs");
+    const handled = await handleLsCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.editMessageText).not.toHaveBeenCalled();
+    expect(mocked.sendDownloadedFileMock).not.toHaveBeenCalled();
+  });
+
+  it("denies navigation outside allowed roots", async () => {
+    mocked.isWithinAllowedRootMock.mockImplementation((targetPath: string) => targetPath === "/repo/project");
+
+    const ctx = createCallbackContext("ls:nav:/etc");
+    const handled = await handleLsCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("ls.access_denied") });
+    expect(ctx.editMessageText).not.toHaveBeenCalled();
+  });
+
+  it("denies pagination outside allowed roots", async () => {
+    mocked.isWithinAllowedRootMock.mockImplementation((targetPath: string) => targetPath === "/repo/project");
+
+    const ctx = createCallbackContext("ls:pg:/etc|1");
+    const handled = await handleLsCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("ls.access_denied") });
+    expect(ctx.editMessageText).not.toHaveBeenCalled();
+  });
+
+  it("denies file downloads outside allowed roots", async () => {
+    mocked.isWithinAllowedRootMock.mockImplementation((targetPath: string) => targetPath === "/repo/project");
+
+    const ctx = createCallbackContext("ls:file:/etc/passwd");
+    const handled = await handleLsCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("ls.access_denied") });
+    expect(mocked.sendDownloadedFileMock).not.toHaveBeenCalled();
   });
 
   it("shows a back button for navigating to parent directory", async () => {

@@ -111,6 +111,7 @@ Current command set:
 - `/opencode_start` - start local OpenCode server
 - `/opencode_stop` - stop local OpenCode server
 - `/help` - show command help
+- `/ls` - interactive file browser for the current project directory
 
 Model, agent, variant, and context actions are available from the persistent bottom keyboard.
 
@@ -161,6 +162,7 @@ Model picker behavior:
 - [x] Create new OpenCode projects directly from Telegram
 - [x] `/mcps` command: browse available MCP servers
 - [x] Optional local OpenCode server monitoring with automatic restart
+- [x] Interactive project file browsing and file download from Telegram (`/ls`)
 
 ## Current Task List
 
@@ -170,4 +172,3 @@ Open tasks for upcoming iterations:
 - [ ] Model search in model switcher
 - [ ] Docker runtime support and deployment guide
 - [ ] Add a bot settings command with in-chat UI
-- [ ] Add project file browsing helpers (for example, `ls`-like flows with ability to send file to Telegram)

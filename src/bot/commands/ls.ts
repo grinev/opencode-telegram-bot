@@ -16,7 +16,7 @@ const CALLBACK_NAV_PREFIX = "ls:nav:";
 const CALLBACK_FILE_PREFIX = "ls:file:";
 const CALLBACK_PAGE_PREFIX = "ls:pg:";
 const PAGE_SEPARATOR = "|";
-const MAX_ENTRIES_PER_PAGE = 20;
+const MAX_ENTRIES_PER_PAGE = 8;
 const MAX_BUTTON_LABEL_LENGTH = 64;
 
 const sessionDirectories = new Map<number, string>();
