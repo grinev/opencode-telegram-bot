@@ -545,7 +545,7 @@ export const en = {
   "open.no_subfolders": "📭 No subfolders",
   "open.subfolder_count": "{count} subfolder",
   "open.subfolders_count": "{count} subfolders",
-  "ls.access_denied": "⛔ Access denied: path is outside allowed roots",
+  "ls.access_denied": "⛔ Access denied: path is outside the current project",
   "ls.scan_error": "🔴 Cannot list directory",
   "ls.header": "Directory Listing",
   "ls.total": "Total: {count} items",

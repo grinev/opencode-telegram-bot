@@ -567,7 +567,7 @@ export const de: I18nDictionary = {
   "open.no_subfolders": "📭 Keine Unterordner",
   "open.subfolder_count": "{count} Unterordner",
   "open.subfolders_count": "{count} Unterordner",
-  "ls.access_denied": "⛔ Zugriff verweigert: Pfad liegt außerhalb erlaubter Verzeichnisse",
+  "ls.access_denied": "⛔ Zugriff verweigert: Pfad liegt außerhalb des aktuellen Projekts",
   "ls.scan_error": "🔴 Verzeichnis kann nicht aufgelistet werden",
   "ls.header": "Verzeichnisinhalt",
   "ls.total": "Gesamt: {count} Einträge",

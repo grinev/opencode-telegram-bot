@@ -567,7 +567,7 @@ export const es: I18nDictionary = {
   "open.no_subfolders": "📭 Sin subcarpetas",
   "open.subfolder_count": "{count} subcarpeta",
   "open.subfolders_count": "{count} subcarpetas",
-  "ls.access_denied": "⛔ Acceso denegado: la ruta está fuera de las raíces permitidas",
+  "ls.access_denied": "⛔ Acceso denegado: la ruta está fuera del proyecto actual",
   "ls.scan_error": "🔴 No se puede listar el directorio",
   "ls.header": "Listado del directorio",
   "ls.total": "Total: {count} elementos",

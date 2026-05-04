@@ -553,7 +553,7 @@ export const ru: I18nDictionary = {
   "open.no_subfolders": "📭 Нет подпапок",
   "open.subfolder_count": "{count} подпапка",
   "open.subfolders_count": "{count} подпапок",
-  "ls.access_denied": "⛔ Доступ запрещён: путь за пределами разрешённых каталогов",
+  "ls.access_denied": "⛔ Доступ запрещён: путь находится за пределами текущего проекта",
   "ls.scan_error": "🔴 Не удается перечислить каталог",
   "ls.header": "Список каталога",
   "ls.total": "Всего: {count} элементов",

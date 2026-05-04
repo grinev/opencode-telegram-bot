@@ -566,7 +566,7 @@ export const fr: I18nDictionary = {
   "open.no_subfolders": "📭 Aucun sous-dossier",
   "open.subfolder_count": "{count} sous-dossier",
   "open.subfolders_count": "{count} sous-dossiers",
-  "ls.access_denied": "⛔ Accès refusé : le chemin est en dehors des répertoires autorisés",
+  "ls.access_denied": "⛔ Accès refusé : le chemin est en dehors du projet actuel",
   "ls.scan_error": "🔴 Impossible de lister le répertoire",
   "ls.header": "Liste du répertoire",
   "ls.total": "Total : {count} éléments",

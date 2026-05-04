@@ -1,7 +1,6 @@
 import { Context, InputFile } from "grammy";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { isWithinAllowedRoot } from "./browser-roots.js";
 import { formatFileSize } from "./file-download.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
@@ -23,13 +22,6 @@ export async function sendDownloadedFile(
   options?: { announce?: boolean },
 ): Promise<boolean> {
   try {
-    if (!isWithinAllowedRoot(filePath)) {
-      await ctx.reply(`❌ ${t("ls.access_denied")}: <code>${escapeHtml(filePath)}</code>`, {
-        parse_mode: "HTML",
-      });
-      return false;
-    }
-
     const stat = await fs.stat(filePath).catch(() => null);
     if (!stat) {
       await ctx.reply(`❌ ${t("commands.download.not_found")}: <code>${escapeHtml(filePath)}</code>`, {

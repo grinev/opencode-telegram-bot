@@ -500,7 +500,7 @@ export const zh: I18nDictionary = {
   "open.no_subfolders": "📭 无子文件夹",
   "open.subfolder_count": "{count} 个子文件夹",
   "open.subfolders_count": "{count} 个子文件夹",
-  "ls.access_denied": "⛔ 访问被拒绝：路径在允许的根目录之外",
+  "ls.access_denied": "⛔ 访问被拒绝：路径在当前项目之外",
   "ls.scan_error": "🔴 无法列出目录",
   "ls.header": "目录列表",
   "ls.total": "总计：{count} 个项目",
