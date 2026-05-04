@@ -22,6 +22,7 @@ import { newCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
 import { worktreeCommand, handleWorktreeCallback } from "./commands/worktree.js";
 import { openCommand, handleOpenCallback, clearOpenPathIndex } from "./commands/open.js";
+import { clearLsPathIndex, handleLsCallback, lsCommand } from "./commands/ls.js";
 import { abortCommand } from "./commands/abort.js";
 import { opencodeStartCommand } from "./commands/opencode-start.js";
 import { opencodeStopCommand } from "./commands/opencode-stop.js";
@@ -1092,6 +1093,7 @@ export function createBot(): Bot<Context> {
   bot.command("projects", projectsCommand);
   bot.command("worktree", worktreeCommand);
   bot.command("open", openCommand);
+  bot.command("ls", lsCommand);
   bot.command("sessions", sessionsCommand);
   bot.command("new", (ctx) => newCommand(ctx, { bot, ensureEventSubscription }));
   bot.command("abort", abortCommand);
@@ -1118,11 +1120,13 @@ export function createBot(): Bot<Context> {
       if (handledInlineCancel) {
         // Clean up path index when the open-directory menu is cancelled
         clearOpenPathIndex();
+        clearLsPathIndex();
       }
       const handledSession = await handleSessionSelect(ctx, { bot, ensureEventSubscription });
       const handledProject = await handleProjectSelect(ctx);
       const handledWorktree = await handleWorktreeCallback(ctx);
       const handledOpen = await handleOpenCallback(ctx);
+      const handledLs = await handleLsCallback(ctx);
       const handledQuestion = await handleQuestionCallback(ctx);
       const handledPermission = await handlePermissionCallback(ctx);
       const handledAgent = await handleAgentSelect(ctx);
@@ -1137,7 +1141,7 @@ export function createBot(): Bot<Context> {
       const handledMcps = await handleMcpsCallback(ctx);
 
       logger.debug(
-        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, skills=${handledSkills}, mcps=${handledMcps}`,
+        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, skills=${handledSkills}, mcps=${handledMcps}`,
       );
 
       if (
@@ -1146,6 +1150,7 @@ export function createBot(): Bot<Context> {
         !handledProject &&
         !handledWorktree &&
         !handledOpen &&
+        !handledLs &&
         !handledQuestion &&
         !handledPermission &&
         !handledAgent &&

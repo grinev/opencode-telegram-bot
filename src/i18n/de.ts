@@ -15,6 +15,7 @@ export const de: I18nDictionary = {
   "cmd.description.mcps": "MCP servers",
   "cmd.description.opencode_start": "OpenCode-Server starten",
   "cmd.description.opencode_stop": "OpenCode-Server stoppen",
+  "cmd.description.ls": "Verzeichnisinhalt auflisten",
   "cmd.description.help": "Hilfe",
 
   "callback.unknown_command": "Unbekannter Befehl",
@@ -469,6 +470,14 @@ export const de: I18nDictionary = {
   "commands.page_empty_callback": "Keine Befehle auf dieser Seite",
   "commands.page_load_error_callback":
     "Diese Seite konnte nicht geladen werden. Bitte versuche es erneut.",
+  "commands.download.no_roots": "Es sind keine erlaubten Browser-Wurzeln konfiguriert.",
+  "commands.download.downloading": "Datei wird heruntergeladen...",
+  "commands.download.not_found": "Datei nicht gefunden",
+  "commands.download.not_file": "Pfad ist keine Datei",
+  "commands.download.file_too_large": "Datei ist zu groß",
+  "commands.download.size": "Größe",
+  "commands.download.modified": "Geändert",
+  "commands.download.error": "Datei konnte nicht heruntergeladen werden.",
 
   "skills.select": "Wähle einen OpenCode-Skill:",
   "skills.empty": "📭 Für dieses Projekt sind keine OpenCode-Skills verfügbar.",
@@ -558,4 +567,11 @@ export const de: I18nDictionary = {
   "open.no_subfolders": "📭 Keine Unterordner",
   "open.subfolder_count": "{count} Unterordner",
   "open.subfolders_count": "{count} Unterordner",
+  "ls.access_denied": "⛔ Zugriff verweigert: Pfad liegt außerhalb des aktuellen Projekts",
+  "ls.scan_error": "🔴 Verzeichnis kann nicht aufgelistet werden",
+  "ls.header": "Verzeichnisinhalt",
+  "ls.total": "Gesamt: {count} Einträge",
+  "ls.file.header": "Dateidetails",
+  "ls.file.download": "📥 Herunterladen",
+  "ls.file.back": "⬅️ Zurück",
 };

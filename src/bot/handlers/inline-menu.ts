@@ -15,6 +15,7 @@ const INLINE_MENU_KINDS = [
   "variant",
   "context",
   "open",
+  "ls",
   "worktree",
 ] as const;
 

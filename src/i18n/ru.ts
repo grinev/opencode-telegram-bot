@@ -15,6 +15,7 @@ export const ru: I18nDictionary = {
   "cmd.description.mcps": "MCP серверы",
   "cmd.description.opencode_start": "Запустить OpenCode сервер",
   "cmd.description.opencode_stop": "Остановить OpenCode сервер",
+  "cmd.description.ls": "Список содержимого каталога",
   "cmd.description.help": "Справка",
 
   "callback.unknown_command": "Неизвестная команда",
@@ -455,6 +456,14 @@ export const ru: I18nDictionary = {
   "commands.page_empty_callback": "На этой странице нет команд",
   "commands.page_load_error_callback":
     "Не удалось загрузить эту страницу. Пожалуйста, попробуйте снова.",
+  "commands.download.no_roots": "Не настроены разрешённые корневые каталоги для просмотра.",
+  "commands.download.downloading": "Скачиваю файл...",
+  "commands.download.not_found": "Файл не найден",
+  "commands.download.not_file": "Путь не является файлом",
+  "commands.download.file_too_large": "Файл слишком большой",
+  "commands.download.size": "Размер",
+  "commands.download.modified": "Изменён",
+  "commands.download.error": "Не удалось скачать файл.",
 
   "skills.select": "Выберите скилл OpenCode:",
   "skills.empty": "📭 Для этого проекта нет доступных скиллов OpenCode.",
@@ -544,4 +553,11 @@ export const ru: I18nDictionary = {
   "open.no_subfolders": "📭 Нет подпапок",
   "open.subfolder_count": "{count} подпапка",
   "open.subfolders_count": "{count} подпапок",
+  "ls.access_denied": "⛔ Доступ запрещён: путь находится за пределами текущего проекта",
+  "ls.scan_error": "🔴 Не удается перечислить каталог",
+  "ls.header": "Список каталога",
+  "ls.total": "Всего: {count} элементов",
+  "ls.file.header": "Сведения о файле",
+  "ls.file.download": "📥 Скачать",
+  "ls.file.back": "⬅️ Назад",
 };
