@@ -504,4 +504,7 @@ export const zh: I18nDictionary = {
   "ls.scan_error": "🔴 无法列出目录",
   "ls.header": "目录列表",
   "ls.total": "总计：{count} 个项目",
+  "ls.file.header": "文件详情",
+  "ls.file.download": "📥 下载",
+  "ls.file.back": "⬅️ 返回",
 };

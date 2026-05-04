@@ -570,4 +570,7 @@ export const fr: I18nDictionary = {
   "ls.scan_error": "🔴 Impossible de lister le répertoire",
   "ls.header": "Liste du répertoire",
   "ls.total": "Total : {count} éléments",
+  "ls.file.header": "Détails du fichier",
+  "ls.file.download": "📥 Télécharger",
+  "ls.file.back": "⬅️ Retour",
 };

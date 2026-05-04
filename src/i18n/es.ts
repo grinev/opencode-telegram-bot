@@ -571,4 +571,7 @@ export const es: I18nDictionary = {
   "ls.scan_error": "🔴 No se puede listar el directorio",
   "ls.header": "Listado del directorio",
   "ls.total": "Total: {count} elementos",
+  "ls.file.header": "Detalles del archivo",
+  "ls.file.download": "📥 Descargar",
+  "ls.file.back": "⬅️ Volver",
 };

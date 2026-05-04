@@ -549,6 +549,9 @@ export const en = {
   "ls.scan_error": "🔴 Cannot list directory",
   "ls.header": "Directory Listing",
   "ls.total": "Total: {count} items",
+  "ls.file.header": "File Details",
+  "ls.file.download": "📥 Download",
+  "ls.file.back": "⬅️ Back",
 } as const;
 
 export type I18nKey = keyof typeof en;

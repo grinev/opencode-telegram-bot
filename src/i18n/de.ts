@@ -571,4 +571,7 @@ export const de: I18nDictionary = {
   "ls.scan_error": "🔴 Verzeichnis kann nicht aufgelistet werden",
   "ls.header": "Verzeichnisinhalt",
   "ls.total": "Gesamt: {count} Einträge",
+  "ls.file.header": "Dateidetails",
+  "ls.file.download": "📥 Herunterladen",
+  "ls.file.back": "⬅️ Zurück",
 };

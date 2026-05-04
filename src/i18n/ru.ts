@@ -557,4 +557,7 @@ export const ru: I18nDictionary = {
   "ls.scan_error": "🔴 Не удается перечислить каталог",
   "ls.header": "Список каталога",
   "ls.total": "Всего: {count} элементов",
+  "ls.file.header": "Сведения о файле",
+  "ls.file.download": "📥 Скачать",
+  "ls.file.back": "⬅️ Назад",
 };

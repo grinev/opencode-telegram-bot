@@ -2,18 +2,24 @@ import { CommandContext, Context, InlineKeyboard } from "grammy";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import os from "node:os";
-import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../handlers/inline-menu.js";
+import {
+  appendInlineMenuCancelButton,
+  clearActiveInlineMenu,
+  ensureActiveInlineMenu,
+} from "../handlers/inline-menu.js";
 import { interactionManager } from "../../interaction/manager.js";
 import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
-import { getBrowserRoots, isAllowedRoot, isWithinAllowedRoot } from "../utils/browser-roots.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { sendDownloadedFile } from "../utils/send-downloaded-file.js";
+import { formatFileSize } from "../utils/file-download.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 
 const CALLBACK_PREFIX = "ls:";
 const CALLBACK_NAV_PREFIX = "ls:nav:";
 const CALLBACK_FILE_PREFIX = "ls:file:";
+const CALLBACK_DOWNLOAD_PREFIX = "ls:download:";
+const CALLBACK_BACK_PREFIX = "ls:back:";
 const CALLBACK_PAGE_PREFIX = "ls:pg:";
 const PAGE_SEPARATOR = "|";
 const MAX_ENTRIES_PER_PAGE = 8;
@@ -27,6 +33,13 @@ interface LsEntry {
   name: string;
   fullPath: string;
   type: "file" | "directory";
+}
+
+interface FileDetails {
+  name: string;
+  fullPath: string;
+  size: number;
+  modified: Date;
 }
 
 function escapeHtml(text: string): string {
@@ -68,6 +81,20 @@ function isPathWithinDirectory(targetPath: string, directoryPath: string): boole
   return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
 }
 
+function getProjectRoot(): string | null {
+  return getCurrentProject()?.worktree ?? null;
+}
+
+function isWithinProjectRoot(targetPath: string): boolean {
+  const projectRoot = getProjectRoot();
+  return projectRoot !== null && isPathWithinDirectory(targetPath, projectRoot);
+}
+
+function isProjectRoot(targetPath: string): boolean {
+  const projectRoot = getProjectRoot();
+  return projectRoot !== null && targetPath === projectRoot;
+}
+
 function buildLsHeader(displayPath: string, totalCount: number, page: number, totalPages: number): string {
   let header = `📁 ${t("ls.header")}\n<code>${escapeHtml(displayPath)}</code>`;
   if (totalPages > 1) {
@@ -75,6 +102,14 @@ function buildLsHeader(displayPath: string, totalCount: number, page: number, to
   }
   header += `\n${t("ls.total", { count: totalCount })}`;
   return header;
+}
+
+function buildFileDetailsText(fileDetails: FileDetails): string {
+  return (
+    `📄 ${t("ls.file.header")}\n<code>${escapeHtml(fileDetails.name)}</code>\n` +
+    `${t("commands.download.size")}: ${formatFileSize(fileDetails.size)}\n` +
+    `${t("commands.download.modified")}: ${fileDetails.modified.toLocaleDateString()}`
+  );
 }
 
 function encodePathForCallback(prefix: string, fullPath: string, reserveBytes: number = 0): string {
@@ -101,19 +136,19 @@ function decodePathFromCallback(prefix: string, data: string): string | null {
   return raw;
 }
 
-function encodePaginationCallback(currentPath: string, page: number): string {
+function encodePathWithPageCallback(prefix: string, fullPath: string, page: number): string {
   const pageSuffix = `${PAGE_SEPARATOR}${page}`;
   const reserveBytes = Buffer.byteLength(pageSuffix, "utf-8");
-  const pathRef = encodePathForCallback(CALLBACK_PAGE_PREFIX, currentPath, reserveBytes);
+  const pathRef = encodePathForCallback(prefix, fullPath, reserveBytes);
   return `${pathRef}${pageSuffix}`;
 }
 
-function decodePaginationCallback(data: string): { path: string; page: number } | null {
-  if (!data.startsWith(CALLBACK_PAGE_PREFIX)) {
+function decodePathWithPageCallback(data: string, prefix: string): { path: string; page: number } | null {
+  if (!data.startsWith(prefix)) {
     return null;
   }
 
-  const payload = data.slice(CALLBACK_PAGE_PREFIX.length);
+  const payload = data.slice(prefix.length);
   const separatorIndex = payload.lastIndexOf(PAGE_SEPARATOR);
   if (separatorIndex < 0) {
     return null;
@@ -133,6 +168,30 @@ function decodePaginationCallback(data: string): { path: string; page: number } 
   return { path: resolvedPath, page };
 }
 
+function encodePaginationCallback(currentPath: string, page: number): string {
+  return encodePathWithPageCallback(CALLBACK_PAGE_PREFIX, currentPath, page);
+}
+
+function decodePaginationCallback(data: string): { path: string; page: number } | null {
+  return decodePathWithPageCallback(data, CALLBACK_PAGE_PREFIX);
+}
+
+function encodeFileCallback(fullPath: string, page: number): string {
+  return encodePathWithPageCallback(CALLBACK_FILE_PREFIX, fullPath, page);
+}
+
+function decodeFileCallback(data: string): { path: string; page: number } | null {
+  return decodePathWithPageCallback(data, CALLBACK_FILE_PREFIX);
+}
+
+function encodeBackCallback(directoryPath: string, page: number): string {
+  return encodePathWithPageCallback(CALLBACK_BACK_PREFIX, directoryPath, page);
+}
+
+function decodeBackCallback(data: string): { path: string; page: number } | null {
+  return decodePathWithPageCallback(data, CALLBACK_BACK_PREFIX);
+}
+
 async function scanDirectory(
   dirPath: string,
   page: number = 0,
@@ -148,7 +207,7 @@ async function scanDirectory(
   | { error: string }
 > {
   try {
-    if (!isWithinAllowedRoot(dirPath)) {
+    if (!isWithinProjectRoot(dirPath)) {
       return { error: t("ls.access_denied") };
     }
 
@@ -195,19 +254,17 @@ function buildBrowseKeyboard(
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   const totalPages = Math.max(1, Math.ceil(totalCount / MAX_ENTRIES_PER_PAGE));
-  const projectRoot = getCurrentProject()?.worktree;
-  const atProjectRoot = !!projectRoot && currentPath === projectRoot;
 
   for (const entry of entries) {
     const label = truncateLabel(buildEntryLabel(entry));
     const callbackData =
       entry.type === "directory"
         ? encodePathForCallback(CALLBACK_NAV_PREFIX, entry.fullPath)
-        : encodePathForCallback(CALLBACK_FILE_PREFIX, entry.fullPath);
+        : encodeFileCallback(entry.fullPath, page);
     keyboard.text(label, callbackData).row();
   }
 
-  if (hasParent && !isAllowedRoot(currentPath) && !atProjectRoot) {
+  if (hasParent && !isProjectRoot(currentPath)) {
     keyboard.text(t("open.back"), encodePathForCallback(CALLBACK_NAV_PREFIX, path.dirname(currentPath))).row();
   }
 
@@ -225,6 +282,25 @@ function buildBrowseKeyboard(
   return keyboard;
 }
 
+function buildFileDetailsKeyboard(filePath: string, page: number): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  const parentPath = path.dirname(filePath);
+
+  keyboard.text(t("ls.file.download"), encodePathForCallback(CALLBACK_DOWNLOAD_PREFIX, filePath));
+  keyboard.text(t("ls.file.back"), encodeBackCallback(parentPath, page));
+  keyboard.row();
+  appendInlineMenuCancelButton(keyboard, "ls");
+  return keyboard;
+}
+
+function hasBrowseActions(currentPath: string, hasParent: boolean, totalCount: number): boolean {
+  if (totalCount > 0) {
+    return true;
+  }
+
+  return hasParent && !isProjectRoot(currentPath);
+}
+
 async function renderBrowseView(dirPath: string, page: number = 0) {
   const result = await scanDirectory(dirPath, page);
   if ("error" in result) {
@@ -234,6 +310,7 @@ async function renderBrowseView(dirPath: string, page: number = 0) {
   const totalPages = Math.max(1, Math.ceil(result.totalCount / MAX_ENTRIES_PER_PAGE));
   return {
     text: buildLsHeader(result.displayPath, result.totalCount, result.page, totalPages),
+    hasActions: hasBrowseActions(result.currentPath, result.hasParent, result.totalCount),
     keyboard: buildBrowseKeyboard(
       result.entries,
       result.currentPath,
@@ -244,24 +321,56 @@ async function renderBrowseView(dirPath: string, page: number = 0) {
   };
 }
 
+async function getFileDetails(filePath: string): Promise<FileDetails | { error: string }> {
+  try {
+    if (!isWithinProjectRoot(filePath)) {
+      return { error: t("ls.access_denied") };
+    }
+
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) {
+      return { error: t("commands.download.not_file") };
+    }
+
+    return {
+      name: path.basename(filePath),
+      fullPath: filePath,
+      size: stat.size,
+      modified: stat.mtime,
+    };
+  } catch (error) {
+    return {
+      error: `${t("ls.scan_error")}: ${error instanceof Error ? error.message : "Unknown error"}`,
+    };
+  }
+}
+
+async function renderFileDetailsView(filePath: string, page: number) {
+  const fileDetails = await getFileDetails(filePath);
+  if ("error" in fileDetails) {
+    return fileDetails;
+  }
+
+  return {
+    text: buildFileDetailsText(fileDetails),
+    keyboard: buildFileDetailsKeyboard(fileDetails.fullPath, page),
+  };
+}
+
 function resolveInitialDirectory(userId?: number): string | null {
-  const currentProject = getCurrentProject()?.worktree;
+  const currentProject = getProjectRoot();
+  if (!currentProject) {
+    return null;
+  }
 
   if (userId) {
     const cachedDirectory = sessionDirectories.get(userId);
-    if (cachedDirectory) {
-      if (!currentProject || isPathWithinDirectory(cachedDirectory, currentProject)) {
-        return cachedDirectory;
-      }
+    if (cachedDirectory && isPathWithinDirectory(cachedDirectory, currentProject)) {
+      return cachedDirectory;
     }
   }
 
-  if (currentProject) {
-    return currentProject;
-  }
-
-  const browserRoots = getBrowserRoots();
-  return browserRoots[0] ?? null;
+  return currentProject;
 }
 
 export function clearLsPathIndex(): void {
@@ -281,10 +390,21 @@ export async function lsCommand(ctx: CommandContext<Context>): Promise<void> {
 
   clearLsPathIndex();
 
+  const projectRoot = getProjectRoot();
+  if (!projectRoot) {
+    await ctx.reply(t("bot.project_not_selected"));
+    return;
+  }
+
   const args = typeof ctx.match === "string" ? ctx.match.trim() : undefined;
   const targetDir = args || resolveInitialDirectory(ctx.from?.id);
   if (!targetDir) {
-    await ctx.reply(`❌ ${t("commands.download.no_roots")}`);
+    await ctx.reply(t("bot.project_not_selected"));
+    return;
+  }
+
+  if (!isWithinProjectRoot(targetDir)) {
+    await ctx.reply(`❌ ${t("ls.access_denied")}`);
     return;
   }
 
@@ -296,6 +416,11 @@ export async function lsCommand(ctx: CommandContext<Context>): Promise<void> {
 
   if (ctx.from) {
     sessionDirectories.set(ctx.from.id, targetDir);
+  }
+
+  if (!view.hasActions) {
+    await ctx.reply(view.text, { parse_mode: "HTML" });
+    return;
   }
 
   const message = await ctx.reply(view.text, { parse_mode: "HTML", reply_markup: view.keyboard });
@@ -324,6 +449,29 @@ async function navigateTo(ctx: Context, dirPath: string, page: number = 0): Prom
   await ctx.editMessageText(view.text, { parse_mode: "HTML", reply_markup: view.keyboard });
 }
 
+async function showFileDetails(ctx: Context, filePath: string, page: number): Promise<void> {
+  const view = await renderFileDetailsView(filePath, page);
+  if ("error" in view) {
+    await ctx.answerCallbackQuery({ text: view.error });
+    return;
+  }
+
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText(view.text, { parse_mode: "HTML", reply_markup: view.keyboard });
+}
+
+async function downloadFileAndClose(ctx: Context, filePath: string): Promise<void> {
+  await ctx.answerCallbackQuery({ text: t("commands.download.downloading") });
+  const downloaded = await sendDownloadedFile(ctx, filePath, { announce: false });
+  if (!downloaded) {
+    return;
+  }
+
+  clearActiveInlineMenu("ls_downloaded");
+  clearLsPathIndex();
+  await ctx.deleteMessage().catch(() => {});
+}
+
 export async function handleLsCallback(ctx: Context): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data || !data.startsWith(CALLBACK_PREFIX)) {
@@ -343,7 +491,7 @@ export async function handleLsCallback(ctx: Context): Promise<boolean> {
   try {
     const navPath = decodePathFromCallback(CALLBACK_NAV_PREFIX, data);
     if (navPath !== null) {
-      if (!isWithinAllowedRoot(navPath)) {
+      if (!isWithinProjectRoot(navPath)) {
         await ctx.answerCallbackQuery({ text: t("ls.access_denied") });
         return true;
       }
@@ -353,7 +501,7 @@ export async function handleLsCallback(ctx: Context): Promise<boolean> {
 
     const pageInfo = decodePaginationCallback(data);
     if (pageInfo !== null) {
-      if (!isWithinAllowedRoot(pageInfo.path)) {
+      if (!isWithinProjectRoot(pageInfo.path)) {
         await ctx.answerCallbackQuery({ text: t("ls.access_denied") });
         return true;
       }
@@ -361,15 +509,33 @@ export async function handleLsCallback(ctx: Context): Promise<boolean> {
       return true;
     }
 
-    const filePath = decodePathFromCallback(CALLBACK_FILE_PREFIX, data);
-    if (filePath !== null) {
-      if (!isWithinAllowedRoot(filePath)) {
+    const fileInfo = decodeFileCallback(data);
+    if (fileInfo !== null) {
+      if (!isWithinProjectRoot(fileInfo.path)) {
         await ctx.answerCallbackQuery({ text: t("ls.access_denied") });
         return true;
       }
+      await showFileDetails(ctx, fileInfo.path, fileInfo.page);
+      return true;
+    }
 
-      await ctx.answerCallbackQuery({ text: t("commands.download.downloading") });
-      await sendDownloadedFile(ctx, filePath, { announce: false });
+    const downloadPath = decodePathFromCallback(CALLBACK_DOWNLOAD_PREFIX, data);
+    if (downloadPath !== null) {
+      if (!isWithinProjectRoot(downloadPath)) {
+        await ctx.answerCallbackQuery({ text: t("ls.access_denied") });
+        return true;
+      }
+      await downloadFileAndClose(ctx, downloadPath);
+      return true;
+    }
+
+    const backInfo = decodeBackCallback(data);
+    if (backInfo !== null) {
+      if (!isWithinProjectRoot(backInfo.path)) {
+        await ctx.answerCallbackQuery({ text: t("ls.access_denied") });
+        return true;
+      }
+      await navigateTo(ctx, backInfo.path, backInfo.page);
       return true;
     }
 
