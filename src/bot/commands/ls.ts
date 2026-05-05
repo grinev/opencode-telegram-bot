@@ -72,13 +72,42 @@ function pathToDisplayPath(absolutePath: string): string {
   return absolutePath;
 }
 
+function usesWindowsPath(filePath: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(filePath) || filePath.startsWith("\\\\");
+}
+
+function getPathApi(filePath: string): typeof path.posix {
+  return usesWindowsPath(filePath) ? path.win32 : path.posix;
+}
+
+function joinPath(parentPath: string, childName: string): string {
+  return getPathApi(parentPath).join(parentPath, childName);
+}
+
+function getBaseName(filePath: string): string {
+  return getPathApi(filePath).basename(filePath);
+}
+
+function getParentPath(filePath: string): string {
+  return getPathApi(filePath).dirname(filePath);
+}
+
+function getRootPath(filePath: string): string {
+  return getPathApi(filePath).parse(filePath).root;
+}
+
+function isSamePath(leftPath: string, rightPath: string): boolean {
+  return getPathApi(rightPath).relative(rightPath, leftPath) === "";
+}
+
 function buildEntryLabel(entry: LsEntry): string {
   return `${entry.type === "directory" ? "📁" : "📄"} ${entry.name}`;
 }
 
 function isPathWithinDirectory(targetPath: string, directoryPath: string): boolean {
-  const relativePath = path.relative(directoryPath, targetPath);
-  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+  const pathApi = getPathApi(directoryPath);
+  const relativePath = pathApi.relative(directoryPath, targetPath);
+  return relativePath === "" || (!relativePath.startsWith("..") && !pathApi.isAbsolute(relativePath));
 }
 
 function getProjectRoot(): string | null {
@@ -92,7 +121,7 @@ function isWithinProjectRoot(targetPath: string): boolean {
 
 function isProjectRoot(targetPath: string): boolean {
   const projectRoot = getProjectRoot();
-  return projectRoot !== null && targetPath === projectRoot;
+  return projectRoot !== null && isSamePath(targetPath, projectRoot);
 }
 
 function buildLsHeader(displayPath: string, totalCount: number, page: number, totalPages: number): string {
@@ -215,7 +244,7 @@ async function scanDirectory(
     const entries: LsEntry[] = dirEntries
       .map((entry): LsEntry => ({
         name: entry.name,
-        fullPath: path.join(dirPath, entry.name),
+        fullPath: joinPath(dirPath, entry.name),
         type: entry.isDirectory() ? "directory" : "file",
       }))
       .sort((left, right) => {
@@ -235,7 +264,7 @@ async function scanDirectory(
       totalCount: entries.length,
       currentPath: dirPath,
       displayPath: pathToDisplayPath(dirPath),
-      hasParent: dirPath !== path.parse(dirPath).root,
+      hasParent: dirPath !== getRootPath(dirPath),
       page: safePage,
     };
   } catch (error) {
@@ -265,7 +294,7 @@ function buildBrowseKeyboard(
   }
 
   if (hasParent && !isProjectRoot(currentPath)) {
-    keyboard.text(t("open.back"), encodePathForCallback(CALLBACK_NAV_PREFIX, path.dirname(currentPath))).row();
+    keyboard.text(t("open.back"), encodePathForCallback(CALLBACK_NAV_PREFIX, getParentPath(currentPath))).row();
   }
 
   if (totalPages > 1) {
@@ -284,7 +313,7 @@ function buildBrowseKeyboard(
 
 function buildFileDetailsKeyboard(filePath: string, page: number): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  const parentPath = path.dirname(filePath);
+  const parentPath = getParentPath(filePath);
 
   keyboard.text(t("ls.file.download"), encodePathForCallback(CALLBACK_DOWNLOAD_PREFIX, filePath));
   keyboard.text(t("ls.file.back"), encodeBackCallback(parentPath, page));
@@ -333,7 +362,7 @@ async function getFileDetails(filePath: string): Promise<FileDetails | { error: 
     }
 
     return {
-      name: path.basename(filePath),
+      name: getBaseName(filePath),
       fullPath: filePath,
       size: stat.size,
       modified: stat.mtime,
