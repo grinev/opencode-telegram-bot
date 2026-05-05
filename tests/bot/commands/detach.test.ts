@@ -8,8 +8,6 @@ const mocked = vi.hoisted(() => ({
   currentSession: null as { id: string; title: string; directory: string } | null,
   clearSessionMock: vi.fn(),
   detachAttachedSessionMock: vi.fn(),
-  stopEventListeningMock: vi.fn(),
-  summaryClearMock: vi.fn(),
   clearAllInteractionStateMock: vi.fn(),
   pinnedIsInitializedMock: vi.fn(() => true),
   pinnedClearMock: vi.fn().mockResolvedValue(undefined),
@@ -33,16 +31,6 @@ vi.mock("../../../src/session/manager.js", () => ({
 
 vi.mock("../../../src/attach/service.js", () => ({
   detachAttachedSession: mocked.detachAttachedSessionMock,
-}));
-
-vi.mock("../../../src/opencode/events.js", () => ({
-  stopEventListening: mocked.stopEventListeningMock,
-}));
-
-vi.mock("../../../src/summary/aggregator.js", () => ({
-  summaryAggregator: {
-    clear: mocked.summaryClearMock,
-  },
 }));
 
 vi.mock("../../../src/interaction/cleanup.js", () => ({
@@ -100,8 +88,6 @@ describe("bot/commands/detach", () => {
 
     mocked.clearSessionMock.mockClear();
     mocked.detachAttachedSessionMock.mockClear();
-    mocked.stopEventListeningMock.mockClear();
-    mocked.summaryClearMock.mockClear();
     mocked.clearAllInteractionStateMock.mockClear();
     mocked.pinnedIsInitializedMock.mockClear();
     mocked.pinnedIsInitializedMock.mockReturnValue(true);
@@ -124,8 +110,6 @@ describe("bot/commands/detach", () => {
     await detachCommand(ctx as never);
 
     expect(mocked.detachAttachedSessionMock).toHaveBeenCalledWith("detach_command");
-    expect(mocked.stopEventListeningMock).toHaveBeenCalledTimes(1);
-    expect(mocked.summaryClearMock).toHaveBeenCalledTimes(1);
     expect(mocked.clearSessionMock).toHaveBeenCalledTimes(1);
     expect(mocked.clearAllInteractionStateMock).toHaveBeenCalledWith("detach_command");
     expect(mocked.foregroundMarkIdleMock).toHaveBeenCalledWith("session-1");
@@ -167,7 +151,6 @@ describe("bot/commands/detach", () => {
     expect(ctx.reply).toHaveBeenCalledWith(t("detach.no_active_session"));
     expect(mocked.detachAttachedSessionMock).not.toHaveBeenCalled();
     expect(mocked.clearSessionMock).not.toHaveBeenCalled();
-    expect(mocked.stopEventListeningMock).not.toHaveBeenCalled();
   });
 
   it("asks to select a project when no project is selected", async () => {

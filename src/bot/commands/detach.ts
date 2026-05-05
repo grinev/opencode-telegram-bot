@@ -2,8 +2,6 @@ import { CommandContext, Context } from "grammy";
 import { getCurrentProject } from "../../settings/manager.js";
 import { clearSession, getCurrentSession } from "../../session/manager.js";
 import { detachAttachedSession } from "../../attach/service.js";
-import { stopEventListening } from "../../opencode/events.js";
-import { summaryAggregator } from "../../summary/aggregator.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
@@ -28,8 +26,6 @@ export async function detachCommand(ctx: CommandContext<Context>): Promise<void>
     }
 
     detachAttachedSession("detach_command");
-    stopEventListening();
-    summaryAggregator.clear();
     clearPromptResponseMode(currentSession.id);
     foregroundSessionState.markIdle(currentSession.id);
     assistantRunState.clearRun(currentSession.id, "detach_command");
