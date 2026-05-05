@@ -4,6 +4,7 @@ export const fr: I18nDictionary = {
   "cmd.description.status": "Statut du serveur et de la session",
   "cmd.description.new": "Créer une nouvelle session",
   "cmd.description.stop": "Arrêter l'action en cours",
+  "cmd.description.detach": "Se détacher de la session actuelle",
   "cmd.description.sessions": "Lister les sessions",
   "cmd.description.tts": "Basculer les réponses audio",
   "cmd.description.projects": "Lister les projets",
@@ -173,6 +174,13 @@ export const fr: I18nDictionary = {
   "attach.disconnect_hint":
     "Pour vous déconnecter, passez simplement à une autre session ou à un autre projet.",
   "attach.error": "🔴 Impossible de se connecter à la session actuelle.",
+
+  "detach.project_not_selected":
+    "🏗 Aucun projet n'est sélectionné.\n\nSélectionnez d'abord un projet avec /projects.",
+  "detach.no_active_session": "ℹ️ Le bot n'est déjà attaché à aucune session.",
+  "detach.success":
+    "✅ Détaché de la session : {title}\n\nLa session OpenCode n'a pas été arrêtée. Si elle est toujours en cours, elle continuera séparément. Pour la consulter plus tard, sélectionnez-la à nouveau via /sessions.",
+  "detach.error": "🔴 Impossible de se détacher de la session actuelle.",
 
   "new.project_not_selected":
     "🏗 Aucun projet n'est sélectionné.\n\nSélectionnez d'abord un projet avec /projects.",

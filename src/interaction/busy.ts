@@ -1,6 +1,6 @@
 import type { InteractionKind } from "./types.js";
 
-export const BUSY_ALLOWED_COMMANDS = ["/abort", "/status", "/help"] as const;
+export const BUSY_ALLOWED_COMMANDS = ["/abort", "/detach", "/status", "/help"] as const;
 
 const BUSY_ALLOWED_COMMAND_SET = new Set<string>(BUSY_ALLOWED_COMMANDS);
 

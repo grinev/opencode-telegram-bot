@@ -4,6 +4,7 @@ export const de: I18nDictionary = {
   "cmd.description.status": "Server- und Sitzungsstatus",
   "cmd.description.new": "Neue Sitzung erstellen",
   "cmd.description.stop": "Aktuelle Aktion stoppen",
+  "cmd.description.detach": "Von aktueller Sitzung trennen",
   "cmd.description.sessions": "Sitzungen auflisten",
   "cmd.description.tts": "Audioantworten umschalten",
   "cmd.description.projects": "Projekte auflisten",
@@ -173,6 +174,13 @@ export const de: I18nDictionary = {
   "attach.disconnect_hint":
     "Zum Trennen einfach zu einer anderen Sitzung oder einem anderen Projekt wechseln.",
   "attach.error": "🔴 Verbindung mit der aktuellen Sitzung fehlgeschlagen.",
+
+  "detach.project_not_selected":
+    "🏗 Projekt ist nicht ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
+  "detach.no_active_session": "ℹ️ Der Bot ist bereits von allen Sitzungen getrennt.",
+  "detach.success":
+    "✅ Von Sitzung getrennt: {title}\n\nDie OpenCode-Sitzung wurde nicht gestoppt. Falls sie noch läuft, läuft sie separat weiter. Um sie später zu prüfen, wähle sie erneut über /sessions aus.",
+  "detach.error": "🔴 Trennen von der aktuellen Sitzung fehlgeschlagen.",
 
   "new.project_not_selected":
     "🏗 Projekt ist nicht ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",

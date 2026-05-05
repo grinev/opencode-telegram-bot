@@ -29,10 +29,10 @@ describe("interactionManager", () => {
     const state = interactionManager.start({
       kind: "inline",
       expectedInput: "callback",
-      allowedCommands: ["/Help", "status", "/help", " /STATUS@MyBot ", "", " / "],
+      allowedCommands: ["/Help", "status", "/help", " /STATUS@MyBot ", "detach", "", " / "],
     });
 
-    expect(state.allowedCommands).toEqual(["/help", "/status"]);
+    expect(state.allowedCommands).toEqual(["/help", "/status", "/detach"]);
   });
 
   it("transitions active interaction", () => {

@@ -299,10 +299,11 @@ describe("interaction guard", () => {
     expect(decision.inputType).toBe("other");
   });
 
-  it("allows only abort, status, and help commands while busy without interaction", () => {
+  it("allows only abort, detach, status, and help commands while busy without interaction", () => {
     foregroundSessionState.markBusy("session-1");
 
     expect(resolveInteractionGuardDecision(createContext({ text: "/abort" })).allow).toBe(true);
+    expect(resolveInteractionGuardDecision(createContext({ text: "/detach" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/status" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/help" })).allow).toBe(true);
 
@@ -342,6 +343,7 @@ describe("interaction guard", () => {
     );
     const textDecision = resolveInteractionGuardDecision(createContext({ text: "custom answer" }));
     const commandDecision = resolveInteractionGuardDecision(createContext({ text: "/status" }));
+    const detachDecision = resolveInteractionGuardDecision(createContext({ text: "/detach" }));
     const blockedCommand = resolveInteractionGuardDecision(createContext({ text: "/new" }));
 
     expect(callbackDecision.allow).toBe(true);
@@ -349,6 +351,7 @@ describe("interaction guard", () => {
     expect(textDecision.allow).toBe(true);
     expect(textDecision.busy).toBe(true);
     expect(commandDecision.allow).toBe(true);
+    expect(detachDecision.allow).toBe(true);
     expect(blockedCommand.allow).toBe(false);
     expect(blockedCommand.reason).toBe("command_not_allowed");
   });

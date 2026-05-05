@@ -4,6 +4,7 @@ export const zh: I18nDictionary = {
   "cmd.description.status": "服务器和会话状态",
   "cmd.description.new": "创建新会话",
   "cmd.description.stop": "停止当前操作",
+  "cmd.description.detach": "从当前会话分离",
   "cmd.description.sessions": "列出会话",
   "cmd.description.tts": "切换语音回复",
   "cmd.description.projects": "列出项目",
@@ -149,6 +150,12 @@ export const zh: I18nDictionary = {
   "attach.restored_permissions": "已恢复待处理权限请求：{count}。",
   "attach.disconnect_hint": "如需断开连接，只需切换到其他会话或项目。",
   "attach.error": "🔴 无法连接到当前会话。",
+
+  "detach.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
+  "detach.no_active_session": "ℹ️ 机器人当前未附加到任何会话。",
+  "detach.success":
+    "✅ 已从会话分离：{title}\n\nOpenCode 会话未停止。如果它仍在运行，将继续独立执行。稍后可通过 /sessions 重新选择它来查看。",
+  "detach.error": "🔴 无法从当前会话分离。",
 
   "new.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
   "new.created": "✅ 新会话已创建：{title}",

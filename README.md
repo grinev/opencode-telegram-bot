@@ -131,6 +131,7 @@ opencode-telegram config
 | `/status`         | Server health, current project, session, and model info |
 | `/new`            | Create a new session                                    |
 | `/abort`          | Abort the current task                                  |
+| `/detach`         | Detach from the current session without stopping it     |
 | `/sessions`       | Browse and switch between recent sessions               |
 | `/projects`       | Switch between OpenCode projects                        |
 | `/worktree`       | Switch between existing git worktrees                   |

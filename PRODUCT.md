@@ -99,6 +99,7 @@ Current command set:
 - `/status` - server, project, and session status
 - `/new` - create a new session
 - `/abort` - stop the current task
+- `/detach` - detach the bot from the current session without stopping it
 - `/sessions` - show and switch recent sessions
 - `/projects` - show and switch projects
 - `/worktree` - show and switch existing git worktrees for the current repository
@@ -121,9 +122,9 @@ Interaction routing rules:
 
 - Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills)
 - While an interaction is active, unrelated input is blocked with a contextual hint
-- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`
+- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`
 - Unknown slash commands return an explicit fallback message
-- Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/abort`, reset/cleanup)
+- Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/abort`, `/detach`, reset/cleanup)
 
 Model picker behavior:
 
@@ -138,7 +139,7 @@ Model picker behavior:
 - [x] OpenCode server control from Telegram (`/status`, `/opencode_start`, `/opencode_stop`)
 - [x] Project and session management from Telegram (`/projects`, `/worktree`, `/sessions`, `/new`)
 - [x] Automatic tracking of the current OpenCode CLI session, including continuing it from Telegram, live updates, and external text input notifications
-- [x] Remote task execution and interruption support (`/abort`)
+- [x] Remote task execution, interruption, and local detachment support (`/abort`, `/detach`)
 - [x] Telegram-friendly result delivery, including sending generated code/files when needed
 - [x] Interactive question and permission handling directly in chat (buttons + custom answers)
 - [x] Live pinned session status in chat (project, model, context usage, changed files)

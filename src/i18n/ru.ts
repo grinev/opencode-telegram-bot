@@ -4,6 +4,7 @@ export const ru: I18nDictionary = {
   "cmd.description.status": "Статус сервера и сессии",
   "cmd.description.new": "Создать новую сессию",
   "cmd.description.stop": "Прервать текущее действие",
+  "cmd.description.detach": "Отсоединиться от текущей сессии",
   "cmd.description.sessions": "Список сессий",
   "cmd.description.tts": "Переключить аудиоответы",
   "cmd.description.projects": "Список проектов",
@@ -165,6 +166,12 @@ export const ru: I18nDictionary = {
   "attach.disconnect_hint":
     "Чтобы отключиться, переключитесь на другую сессию или проект.",
   "attach.error": "🔴 Не удалось подключиться к текущей сессии.",
+
+  "detach.project_not_selected": "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
+  "detach.no_active_session": "ℹ️ Бот уже не привязан ни к одной сессии.",
+  "detach.success":
+    "✅ Отсоединился от сессии: {title}\n\nOpenCode-сессия не остановлена. Если она еще выполняется, выполнение продолжится отдельно. Чтобы проверить ее позже, снова выберите эту сессию через /sessions.",
+  "detach.error": "🔴 Не удалось отсоединиться от текущей сессии.",
 
   "new.project_not_selected": "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
   "new.created": "✅ Создана новая сессия: {title}",

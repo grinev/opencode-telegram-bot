@@ -24,6 +24,7 @@ import { worktreeCommand, handleWorktreeCallback } from "./commands/worktree.js"
 import { openCommand, handleOpenCallback, clearOpenPathIndex } from "./commands/open.js";
 import { clearLsPathIndex, handleLsCallback, lsCommand } from "./commands/ls.js";
 import { abortCommand } from "./commands/abort.js";
+import { detachCommand } from "./commands/detach.js";
 import { opencodeStartCommand } from "./commands/opencode-start.js";
 import { opencodeStopCommand } from "./commands/opencode-stop.js";
 import { renameCommand, handleRenameCancel, handleRenameTextAnswer } from "./commands/rename.js";
@@ -1097,6 +1098,7 @@ export function createBot(): Bot<Context> {
   bot.command("sessions", sessionsCommand);
   bot.command("new", (ctx) => newCommand(ctx, { bot, ensureEventSubscription }));
   bot.command("abort", abortCommand);
+  bot.command("detach", detachCommand);
   bot.command("task", taskCommand);
   bot.command("tasklist", taskListCommand);
   bot.command("rename", renameCommand);
