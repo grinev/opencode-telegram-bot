@@ -6,12 +6,15 @@ import { summaryAggregator } from "../../summary/aggregator.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import { detachAttachedSession } from "../../attach/service.js";
+import { stopEventListening } from "../../opencode/events.js";
+import { backgroundSessionTracker } from "../../background-session/tracker.js";
 import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { createMainKeyboard } from "./keyboard.js";
 import { logger } from "../../utils/logger.js";
+import { config } from "../../config.js";
 
 /**
  * Shared logic for switching the active project.
@@ -26,8 +29,19 @@ import { logger } from "../../utils/logger.js";
  * @param project   the project to switch to
  * @param reason    short tag for `clearAllInteractionState` (e.g. "project_switched")
  */
-export async function switchToProject(ctx: Context, project: ProjectInfo, reason: string) {
+interface SwitchToProjectOptions {
+  ensureEventSubscription?: (directory: string) => Promise<void>;
+}
+
+export async function switchToProject(
+  ctx: Context,
+  project: ProjectInfo,
+  reason: string,
+  options: SwitchToProjectOptions = {},
+) {
   detachAttachedSession(reason);
+  stopEventListening();
+  backgroundSessionTracker.clear();
   setCurrentProject(project);
   clearSession();
   summaryAggregator.clear();
@@ -52,6 +66,10 @@ export async function switchToProject(ctx: Context, project: ProjectInfo, reason
   const contextInfo = { tokensUsed: 0, tokensLimit: contextLimit };
   const variantName = formatVariantForButton(currentModel.variant || "default");
   keyboardManager.updateAgent(currentAgent);
+
+  if (config.bot.trackBackgroundSessions && options.ensureEventSubscription) {
+    await options.ensureEventSubscription(project.worktree);
+  }
 
   return createMainKeyboard(currentAgent, currentModel, contextInfo, variantName);
 }

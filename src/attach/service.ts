@@ -1,6 +1,5 @@
 import type { Bot, Context } from "grammy";
 import { opencodeClient } from "../opencode/client.js";
-import { stopEventListening } from "../opencode/events.js";
 import { isOpencodeServerHealthy } from "../opencode/ready-refresh.js";
 import { summaryAggregator } from "../summary/aggregator.js";
 import { pinnedMessageManager } from "../pinned/manager.js";
@@ -270,7 +269,6 @@ export function detachAttachedSession(reason: string): void {
     return;
   }
 
-  stopEventListening();
   summaryAggregator.clear();
   attachManager.clear(reason);
   void syncPinnedAttachState();

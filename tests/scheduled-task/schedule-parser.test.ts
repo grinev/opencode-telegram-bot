@@ -5,6 +5,8 @@ const mocked = vi.hoisted(() => ({
   sessionCreateMock: vi.fn(),
   sessionPromptMock: vi.fn(),
   sessionDeleteMock: vi.fn(),
+  cleanupIgnoresMock: vi.fn(),
+  registerIgnoreMock: vi.fn(),
   loggerErrorMock: vi.fn(),
   loggerWarnMock: vi.fn(),
 }));
@@ -28,11 +30,18 @@ vi.mock("../../src/utils/logger.js", () => ({
   },
 }));
 
+vi.mock("../../src/scheduled-task/session-ignore.js", () => ({
+  cleanupScheduledTaskSessionIgnores: mocked.cleanupIgnoresMock,
+  registerScheduledTaskSessionIgnore: mocked.registerIgnoreMock,
+}));
+
 describe("scheduled-task/schedule-parser", () => {
   beforeEach(() => {
     mocked.sessionCreateMock.mockReset();
     mocked.sessionPromptMock.mockReset();
     mocked.sessionDeleteMock.mockReset();
+    mocked.cleanupIgnoresMock.mockReset();
+    mocked.registerIgnoreMock.mockReset();
     mocked.loggerErrorMock.mockReset();
     mocked.loggerWarnMock.mockReset();
 
@@ -41,6 +50,8 @@ describe("scheduled-task/schedule-parser", () => {
       error: null,
     });
     mocked.sessionDeleteMock.mockResolvedValue({ data: true, error: null });
+    mocked.cleanupIgnoresMock.mockResolvedValue(0);
+    mocked.registerIgnoreMock.mockResolvedValue(undefined);
   });
 
   it("parses recurring schedule JSON and removes temporary session", async () => {
@@ -75,6 +86,8 @@ describe("scheduled-task/schedule-parser", () => {
       directory: "D:/Projects/Repo",
       title: "Scheduled task schedule parser",
     });
+    expect(mocked.cleanupIgnoresMock).toHaveBeenCalledTimes(1);
+    expect(mocked.registerIgnoreMock).toHaveBeenCalledWith("temp-session");
     expect(mocked.sessionDeleteMock).toHaveBeenCalledWith({ sessionID: "temp-session" });
   });
 

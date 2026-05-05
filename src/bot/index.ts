@@ -70,6 +70,7 @@ import { safeBackgroundTask } from "../utils/safe-background-task.js";
 import { withTelegramRateLimitRetry } from "../utils/telegram-rate-limit-retry.js";
 import { pinnedMessageManager } from "../pinned/manager.js";
 import { t } from "../i18n/index.js";
+import { getCurrentProject } from "../settings/manager.js";
 import { clearPromptResponseMode, processUserPrompt } from "./handlers/prompt.js";
 import { handleVoiceMessage } from "./handlers/voice.js";
 import { handleDocumentMessage } from "./handlers/document.js";
@@ -106,6 +107,10 @@ import {
   renderAssistantFinalPartsSafe,
 } from "./utils/assistant-rendering.js";
 import { deliverExternalUserInputNotification } from "./utils/external-user-input.js";
+import {
+  backgroundSessionTracker,
+  type BackgroundSessionNotification,
+} from "../background-session/tracker.js";
 
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
@@ -350,6 +355,49 @@ function getToolStreamKey(tool: string): ToolStreamKey {
   return "default";
 }
 
+function formatShortSessionId(sessionId: string): string {
+  return sessionId.length <= 8 ? sessionId : sessionId.slice(0, 8);
+}
+
+function getBackgroundSessionLabel(notification: BackgroundSessionNotification): string {
+  const title = notification.sessionTitle?.trim();
+  if (title) {
+    return title;
+  }
+
+  return t("background.session_fallback", { id: formatShortSessionId(notification.sessionId) });
+}
+
+function formatBackgroundSessionNotification(notification: BackgroundSessionNotification): string {
+  const session = getBackgroundSessionLabel(notification);
+
+  switch (notification.kind) {
+    case "assistant_response":
+      return t("background.assistant_response", { session });
+    case "question_asked":
+      return t("background.question_asked", { session });
+    case "permission_asked":
+      return t("background.permission_asked", { session });
+  }
+}
+
+async function deliverBackgroundSessionNotification(
+  notification: BackgroundSessionNotification,
+): Promise<void> {
+  if (!botInstance || !chatIdInstance) {
+    return;
+  }
+
+  const keyboard = getCurrentReplyKeyboard();
+  await botInstance.api.sendMessage(
+    chatIdInstance,
+    formatBackgroundSessionNotification(notification),
+    {
+      ...(keyboard ? { reply_markup: keyboard } : {}),
+    },
+  );
+}
+
 type EventStreamItem = {
   type: string;
   properties: Record<string, unknown>;
@@ -370,7 +418,8 @@ function shouldMarkAttachedBusyFromEvent(event: EventStreamItem): boolean {
     case "session.status":
       return (event.properties as { status?: { type?: string } }).status?.type === "busy";
     case "message.updated": {
-      const info = (event.properties as { info?: { role?: string; time?: { completed?: number } } }).info;
+      const info = (event.properties as { info?: { role?: string; time?: { completed?: number } } })
+        .info;
       return info?.role === "assistant" && !info.time?.completed;
     }
     case "message.part.updated":
@@ -419,6 +468,13 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   }
 
   summaryAggregator.setTypingIndicatorEnabled(true);
+  backgroundSessionTracker.setDirectory(directory);
+  backgroundSessionTracker.setOnNotification(deliverBackgroundSessionNotification);
+
+  if (!config.bot.trackBackgroundSessions) {
+    backgroundSessionTracker.clear();
+  }
+
   summaryAggregator.setOnCleared(() => {
     toolMessageBatcher.clearAll("summary_aggregator_clear");
     toolCallStreamer.clearAll("summary_aggregator_clear");
@@ -948,7 +1004,11 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   subscribeToEvents(directory, (event) => {
     const attached = attachManager.getSnapshot();
     const eventSessionId = getEventSessionId(event);
-    if (attached && eventSessionId === attached.sessionId && shouldMarkAttachedBusyFromEvent(event)) {
+    if (
+      attached &&
+      eventSessionId === attached.sessionId &&
+      shouldMarkAttachedBusyFromEvent(event)
+    ) {
       void markAttachedSessionBusy(attached.sessionId);
     }
 
@@ -965,6 +1025,10 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       }
     }
 
+    if (config.bot.trackBackgroundSessions) {
+      backgroundSessionTracker.processEvent(event, getCurrentSession()?.id ?? null);
+    }
+
     summaryAggregator.processEvent(event);
   }).catch((err) => {
     logger.error("Failed to subscribe to events:", err);
@@ -976,6 +1040,7 @@ export function createBot(): Bot<Context> {
   sessionCompletionTasks.clear();
   attachManager.clear("bot_startup");
   assistantRunState.clearAll("bot_startup");
+  backgroundSessionTracker.clear();
 
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
@@ -1019,6 +1084,15 @@ export function createBot(): Bot<Context> {
 
     if (restored) {
       logger.info(`[Bot] Restored followed session after OpenCode ready: reason=${reason}`);
+      return;
+    }
+
+    const currentProject = getCurrentProject();
+    if (config.bot.trackBackgroundSessions && currentProject?.worktree) {
+      await ensureEventSubscription(currentProject.worktree);
+      logger.info(
+        `[Bot] Started background session tracking after OpenCode ready: reason=${reason}, directory=${currentProject.worktree}`,
+      );
     }
   });
 
@@ -1125,9 +1199,9 @@ export function createBot(): Bot<Context> {
         clearLsPathIndex();
       }
       const handledSession = await handleSessionSelect(ctx, { bot, ensureEventSubscription });
-      const handledProject = await handleProjectSelect(ctx);
-      const handledWorktree = await handleWorktreeCallback(ctx);
-      const handledOpen = await handleOpenCallback(ctx);
+      const handledProject = await handleProjectSelect(ctx, { ensureEventSubscription });
+      const handledWorktree = await handleWorktreeCallback(ctx, { ensureEventSubscription });
+      const handledOpen = await handleOpenCallback(ctx, { ensureEventSubscription });
       const handledLs = await handleLsCallback(ctx);
       const handledQuestion = await handleQuestionCallback(ctx);
       const handledPermission = await handlePermissionCallback(ctx);
@@ -1430,6 +1504,7 @@ export function cleanupBotRuntime(reason: string): void {
   unsubscribeReadyRestore = null;
   stopEventListening();
   summaryAggregator.clear();
+  backgroundSessionTracker.clear();
   responseStreamer.clearAll(reason);
   toolCallStreamer.clearAll(reason);
   toolMessageBatcher.clearAll(reason);

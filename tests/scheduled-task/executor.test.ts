@@ -12,6 +12,8 @@ const mocked = vi.hoisted(() => ({
   questionRejectMock: vi.fn(),
   permissionListMock: vi.fn(),
   permissionReplyMock: vi.fn(),
+  cleanupIgnoresMock: vi.fn(),
+  registerIgnoreMock: vi.fn(),
   loggerWarnMock: vi.fn(),
 }));
 
@@ -51,6 +53,11 @@ vi.mock("../../src/utils/logger.js", () => ({
     debug: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock("../../src/scheduled-task/session-ignore.js", () => ({
+  cleanupScheduledTaskSessionIgnores: mocked.cleanupIgnoresMock,
+  registerScheduledTaskSessionIgnore: mocked.registerIgnoreMock,
 }));
 
 function createTask(partial: Partial<ScheduledOnceTask> = {}): ScheduledOnceTask {
@@ -132,6 +139,8 @@ describe("scheduled-task/executor", () => {
     mocked.questionRejectMock.mockReset();
     mocked.permissionListMock.mockReset();
     mocked.permissionReplyMock.mockReset();
+    mocked.cleanupIgnoresMock.mockReset();
+    mocked.registerIgnoreMock.mockReset();
     mocked.loggerWarnMock.mockReset();
     mocked.questionListMock.mockResolvedValue({ data: [], error: null });
     mocked.questionRejectMock.mockResolvedValue({ data: true, error: null });
@@ -139,6 +148,8 @@ describe("scheduled-task/executor", () => {
     mocked.permissionReplyMock.mockResolvedValue({ data: true, error: null });
     mocked.abortMock.mockResolvedValue({ data: true, error: null });
     mocked.deleteMock.mockResolvedValue(undefined);
+    mocked.cleanupIgnoresMock.mockResolvedValue(0);
+    mocked.registerIgnoreMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -184,6 +195,8 @@ describe("scheduled-task/executor", () => {
     );
     expect(mocked.statusMock).toHaveBeenCalledTimes(1);
     expect(mocked.messagesMock).toHaveBeenCalledTimes(2);
+    expect(mocked.cleanupIgnoresMock).toHaveBeenCalledTimes(1);
+    expect(mocked.registerIgnoreMock).toHaveBeenCalledWith("session-1");
     expect(mocked.deleteMock).toHaveBeenCalledWith({ sessionID: "session-1" });
   });
 

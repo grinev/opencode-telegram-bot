@@ -66,6 +66,10 @@ export const zh: I18nDictionary = {
   "bot.session_error": "🔴 OpenCode 返回错误：{message}",
   "bot.session_retry": "🔁 {message}\n\n提供方在重复重试时持续返回同一错误。使用 /abort 可停止。",
   "bot.external_user_input": "外部用户输入",
+  "background.session_fallback": "会话 {id}",
+  "background.assistant_response": "🔔 助手已在后台会话中回复：{session}",
+  "background.question_asked": "❓ 后台会话需要回答：{session}",
+  "background.permission_asked": "🔐 后台会话请求了权限：{session}",
   "bot.unknown_command": "⚠️ 未知命令：{command}。使用 /help 查看可用命令。",
   "bot.photo_downloading": "⏳ 正在下载照片...",
   "bot.photo_too_large": "⚠️ 照片过大（最大 {maxSizeMb}MB）",
@@ -140,8 +144,7 @@ export const zh: I18nDictionary = {
 
   "attach.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
   "attach.session_not_selected": "💬 未选择会话。\n\n请先使用 /sessions 选择一个会话。",
-  "attach.session_project_mismatch":
-    "⚠️ 选中的会话与当前项目不匹配。请通过 /sessions 重新选择。",
+  "attach.session_project_mismatch": "⚠️ 选中的会话与当前项目不匹配。请通过 /sessions 重新选择。",
   "attach.connected": "✅ 已连接到会话：{title}",
   "attach.already_connected": "ℹ️ 已经连接到会话：{title}",
   "attach.status.idle_message": "状态：idle。正在等待新事件。",

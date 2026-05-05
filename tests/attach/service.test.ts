@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
 import {
   attachToSession,
+  detachAttachedSession,
   restoreAttachedCurrentSession,
 } from "../../src/attach/service.js";
 import { attachManager } from "../../src/attach/manager.js";
@@ -37,6 +38,7 @@ const mocked = vi.hoisted(() => ({
   showCurrentQuestionMock: vi.fn(),
   showPermissionRequestMock: vi.fn(),
   ensureEventSubscriptionMock: vi.fn(),
+  stopEventListeningMock: vi.fn(),
 }));
 
 vi.mock("../../src/settings/manager.js", () => ({
@@ -62,6 +64,10 @@ vi.mock("../../src/opencode/client.js", () => ({
       list: mocked.permissionListMock,
     },
   },
+}));
+
+vi.mock("../../src/opencode/events.js", () => ({
+  stopEventListening: mocked.stopEventListeningMock,
 }));
 
 vi.mock("../../src/summary/aggregator.js", () => ({
@@ -166,6 +172,7 @@ describe("attach/service", () => {
     mocked.showPermissionRequestMock.mockResolvedValue(undefined);
     mocked.ensureEventSubscriptionMock.mockReset();
     mocked.ensureEventSubscriptionMock.mockResolvedValue(undefined);
+    mocked.stopEventListeningMock.mockReset();
   });
 
   it("follows an idle session and updates attach state", async () => {
@@ -336,5 +343,14 @@ describe("attach/service", () => {
     expect(mocked.pinnedLoadContextFromHistoryMock).toHaveBeenCalledTimes(1);
     expect(mocked.sessionStatusMock).toHaveBeenCalledTimes(2);
     expect(mocked.questionListMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("detaches locally without stopping the directory event listener", () => {
+    attachManager.attach("session-1", "D:\\Projects\\Repo");
+
+    detachAttachedSession("detach_command");
+
+    expect(mocked.stopEventListeningMock).not.toHaveBeenCalled();
+    expect(attachManager.getSnapshot()).toBeNull();
   });
 });

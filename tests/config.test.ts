@@ -28,6 +28,30 @@ describe("config boolean env parsing", () => {
     expect(config.bot.hideToolFileMessages).toBe(false);
   });
 
+  it("tracks background sessions by default", async () => {
+    vi.stubEnv("TRACK_BACKGROUND_SESSIONS", "");
+
+    const config = await loadConfig();
+
+    expect(config.bot.trackBackgroundSessions).toBe(true);
+  });
+
+  it("parses falsy values for background session tracking", async () => {
+    vi.stubEnv("TRACK_BACKGROUND_SESSIONS", "off");
+
+    const config = await loadConfig();
+
+    expect(config.bot.trackBackgroundSessions).toBe(false);
+  });
+
+  it("falls back to enabled background session tracking on invalid value", async () => {
+    vi.stubEnv("TRACK_BACKGROUND_SESSIONS", "banana");
+
+    const config = await loadConfig();
+
+    expect(config.bot.trackBackgroundSessions).toBe(true);
+  });
+
   it("parses truthy values for hide service message flags", async () => {
     vi.stubEnv("HIDE_THINKING_MESSAGES", "YES");
     vi.stubEnv("HIDE_TOOL_CALL_MESSAGES", "1");

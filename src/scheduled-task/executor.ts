@@ -2,6 +2,10 @@ import { config } from "../config.js";
 import { t } from "../i18n/index.js";
 import { opencodeClient } from "../opencode/client.js";
 import { logger } from "../utils/logger.js";
+import {
+  cleanupScheduledTaskSessionIgnores,
+  registerScheduledTaskSessionIgnore,
+} from "./session-ignore.js";
 import type { ScheduledTask, ScheduledTaskExecutionResult } from "./types.js";
 
 export const SCHEDULED_TASK_AGENT = "build";
@@ -485,6 +489,8 @@ export async function executeScheduledTask(
   let deleteTemporarySession = true;
 
   try {
+    await cleanupScheduledTaskSessionIgnores();
+
     const { data: session, error: createError } = await opencodeClient.session.create({
       directory: task.projectWorktree,
       title: SCHEDULED_TASK_SESSION_TITLE,
@@ -495,6 +501,7 @@ export async function executeScheduledTask(
     }
 
     sessionId = session.id;
+    await registerScheduledTaskSessionIgnore(session.id);
 
     const promptOptions: {
       sessionID: string;

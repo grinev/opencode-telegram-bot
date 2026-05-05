@@ -21,6 +21,10 @@ import { ProjectInfo } from "../../settings/manager.js";
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 const PROJECT_PAGE_CALLBACK_PREFIX = "projects:page:";
 
+interface ProjectSelectDeps {
+  ensureEventSubscription?: (directory: string) => Promise<void>;
+}
+
 interface ProjectsPaginationRange {
   page: number;
   totalPages: number;
@@ -223,7 +227,10 @@ export async function projectsCommand(ctx: CommandContext<Context>) {
   }
 }
 
-export async function handleProjectSelect(ctx: Context): Promise<boolean> {
+export async function handleProjectSelect(
+  ctx: Context,
+  deps: ProjectSelectDeps = {},
+): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data) {
     return false;
@@ -287,7 +294,11 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
 
     logger.info(`[Bot] Project selected: ${projectName} (id: ${projectId})`);
 
-    const keyboard = await switchToProject(ctx, selectedProject, "project_switched");
+    const keyboard = deps.ensureEventSubscription
+      ? await switchToProject(ctx, selectedProject, "project_switched", {
+          ensureEventSubscription: deps.ensureEventSubscription,
+        })
+      : await switchToProject(ctx, selectedProject, "project_switched");
 
     await ctx.answerCallbackQuery();
     await ctx.reply(t("projects.selected", { project: projectName }), {

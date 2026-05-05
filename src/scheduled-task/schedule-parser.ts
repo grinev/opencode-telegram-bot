@@ -1,5 +1,9 @@
 import { opencodeClient } from "../opencode/client.js";
 import { logger } from "../utils/logger.js";
+import {
+  cleanupScheduledTaskSessionIgnores,
+  registerScheduledTaskSessionIgnore,
+} from "./session-ignore.js";
 import type { ParsedTaskSchedule } from "./types.js";
 
 const SCHEDULE_PARSE_SESSION_TITLE = "Scheduled task schedule parser";
@@ -168,6 +172,11 @@ export async function parseTaskSchedule(
   let sessionId: string | null = null;
 
   try {
+    logger.debug(
+      `[ScheduledTaskScheduleParser] Parsing schedule: directory=${trimmedDirectory}, textLength=${trimmedScheduleText.length}`,
+    );
+    await cleanupScheduledTaskSessionIgnores();
+
     const { data: session, error: createError } = await opencodeClient.session.create({
       directory: trimmedDirectory,
       title: SCHEDULE_PARSE_SESSION_TITLE,
@@ -178,6 +187,8 @@ export async function parseTaskSchedule(
     }
 
     sessionId = session.id;
+    await registerScheduledTaskSessionIgnore(session.id);
+    logger.debug(`[ScheduledTaskScheduleParser] Created temporary session: sessionId=${session.id}`);
 
     const { data: response, error: promptError } = await opencodeClient.session.prompt({
       sessionID: session.id,
@@ -192,6 +203,9 @@ export async function parseTaskSchedule(
     }
 
     const responseText = collectResponseText(response.parts);
+    logger.debug(
+      `[ScheduledTaskScheduleParser] Received parser response: sessionId=${session.id}, textLength=${responseText.length}`,
+    );
     if (!responseText) {
       throw new Error("Schedule parser returned an empty response");
     }

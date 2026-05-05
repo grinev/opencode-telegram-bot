@@ -8,6 +8,7 @@ const mocked = vi.hoisted(() => ({
   sendBotTextMock: vi.fn(),
   replaceScheduledTasksMock: vi.fn(),
   removeScheduledTaskMock: vi.fn(),
+  cleanupIgnoresMock: vi.fn(),
 }));
 
 function cloneTask(task: ScheduledTask): ScheduledTask {
@@ -49,6 +50,10 @@ vi.mock("../../src/opencode/client.js", () => ({
 vi.mock("../../src/scheduled-task/executor.js", () => ({
   executeScheduledTask: mocked.executeScheduledTaskMock,
   SCHEDULED_TASK_AGENT: "build",
+}));
+
+vi.mock("../../src/scheduled-task/session-ignore.js", () => ({
+  cleanupScheduledTaskSessionIgnores: mocked.cleanupIgnoresMock,
 }));
 
 vi.mock("../../src/bot/utils/telegram-text.js", () => ({
@@ -150,6 +155,8 @@ describe("scheduled-task/runtime", () => {
     mocked.sendBotTextMock.mockReset();
     mocked.replaceScheduledTasksMock.mockReset();
     mocked.removeScheduledTaskMock.mockReset();
+    mocked.cleanupIgnoresMock.mockReset();
+    mocked.cleanupIgnoresMock.mockResolvedValue(0);
   });
 
   it("queues scheduled task result while foreground session is busy and flushes later", async () => {
@@ -174,6 +181,8 @@ describe("scheduled-task/runtime", () => {
     foregroundSessionState.markBusy("session-1");
 
     await runtime.initialize({ api: {} } as Bot<Context>);
+
+    expect(mocked.cleanupIgnoresMock).toHaveBeenCalledTimes(1);
     await vi.runAllTimersAsync();
 
     expect(mocked.removeScheduledTaskMock).toHaveBeenCalledWith("task-1");

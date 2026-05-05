@@ -11,6 +11,7 @@ import { sendBotText } from "../bot/utils/telegram-text.js";
 import { formatAssistantRunFooter } from "../bot/utils/assistant-run-footer.js";
 import { executeScheduledTask, SCHEDULED_TASK_AGENT } from "./executor.js";
 import { foregroundSessionState } from "./foreground-state.js";
+import { cleanupScheduledTaskSessionIgnores } from "./session-ignore.js";
 import { computeNextRunAt, isTaskDue } from "./next-run.js";
 import {
   getScheduledTask,
@@ -137,6 +138,7 @@ export class ScheduledTaskRuntime {
     }
 
     this.initialized = true;
+    await cleanupScheduledTaskSessionIgnores();
     await this.recoverTasksOnStartup();
     await this.flushDeferredDeliveries();
   }

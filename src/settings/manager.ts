@@ -25,6 +25,11 @@ export interface SessionDirectoryCacheInfo {
   }>;
 }
 
+export interface ScheduledTaskSessionIgnoreInfo {
+  sessionId: string;
+  createdAt: string;
+}
+
 export interface Settings {
   currentProject?: ProjectInfo;
   currentSession?: SessionInfo;
@@ -34,10 +39,17 @@ export interface Settings {
   ttsEnabled?: boolean;
   sessionDirectoryCache?: SessionDirectoryCacheInfo;
   scheduledTasks?: ScheduledTask[];
+  scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[];
 }
 
 function cloneScheduledTasks(tasks: ScheduledTask[] | undefined): ScheduledTask[] | undefined {
   return tasks?.map((task) => cloneScheduledTask(task));
+}
+
+function cloneScheduledTaskSessionIgnores(
+  ignores: ScheduledTaskSessionIgnoreInfo[] | undefined,
+): ScheduledTaskSessionIgnoreInfo[] | undefined {
+  return ignores?.map((ignore) => ({ ...ignore }));
 }
 
 function getSettingsFilePath(): string {
@@ -182,6 +194,17 @@ export function setScheduledTasks(tasks: ScheduledTask[]): Promise<void> {
   return writeSettingsFile(currentSettings);
 }
 
+export function getScheduledTaskSessionIgnores(): ScheduledTaskSessionIgnoreInfo[] {
+  return cloneScheduledTaskSessionIgnores(currentSettings.scheduledTaskSessionIgnores) ?? [];
+}
+
+export function setScheduledTaskSessionIgnores(
+  ignores: ScheduledTaskSessionIgnoreInfo[],
+): Promise<void> {
+  currentSettings.scheduledTaskSessionIgnores = cloneScheduledTaskSessionIgnores(ignores);
+  return writeSettingsFile(currentSettings);
+}
+
 export function __resetSettingsForTests(): void {
   currentSettings = {};
   settingsWriteQueue = Promise.resolve();
@@ -207,6 +230,8 @@ export async function loadSettings(): Promise<void> {
 
   currentSettings = loadedSettings;
   currentSettings.scheduledTasks = cloneScheduledTasks(loadedSettings.scheduledTasks) ?? [];
+  currentSettings.scheduledTaskSessionIgnores =
+    cloneScheduledTaskSessionIgnores(loadedSettings.scheduledTaskSessionIgnores) ?? [];
 
   if (requiresRewrite) {
     void writeSettingsFile(currentSettings);

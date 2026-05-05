@@ -78,6 +78,11 @@ export const de: I18nDictionary = {
   "bot.session_retry":
     "🔁 {message}\n\nDer Provider liefert bei wiederholten Versuchen immer wieder denselben Fehler. Mit /abort abbrechen.",
   "bot.external_user_input": "Externe Benutzereingabe",
+  "background.session_fallback": "Sitzung {id}",
+  "background.assistant_response":
+    "🔔 Assistent hat in einer Hintergrundsitzung geantwortet: {session}",
+  "background.question_asked": "❓ Hintergrundsitzung benötigt eine Antwort: {session}",
+  "background.permission_asked": "🔐 Hintergrundsitzung hat Berechtigungen angefordert: {session}",
   "bot.unknown_command":
     "⚠️ Unbekannter Befehl: {command}. Nutze /help, um verfügbare Befehle zu sehen.",
   "bot.photo_downloading": "⏳ Lade Foto herunter...",

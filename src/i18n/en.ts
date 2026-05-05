@@ -75,6 +75,10 @@ export const en = {
   "bot.session_retry":
     "🔁 {message}\n\nProvider keeps returning the same error on repeated retries. Use /abort to abort.",
   "bot.external_user_input": "External user input",
+  "background.session_fallback": "session {id}",
+  "background.assistant_response": "🔔 Assistant replied in background session: {session}",
+  "background.question_asked": "❓ Background session needs an answer: {session}",
+  "background.permission_asked": "🔐 Background session requested permissions: {session}",
   "bot.unknown_command": "⚠️ Unknown command: {command}. Use /help to see available commands.",
   "bot.photo_downloading": "⏳ Downloading photo...",
   "bot.photo_too_large": "⚠️ Photo is too large (max {maxSizeMb}MB)",
@@ -164,8 +168,7 @@ export const en = {
   "attach.status.busy_message": "Status: busy. New prompts are temporarily blocked.",
   "attach.restored_question": "Recovered a pending question for this session.",
   "attach.restored_permissions": "Recovered pending permission requests: {count}.",
-  "attach.disconnect_hint":
-    "To disconnect, switch to another session or project.",
+  "attach.disconnect_hint": "To disconnect, switch to another session or project.",
   "attach.error": "🔴 Failed to attach to the current session.",
 
   "detach.project_not_selected":

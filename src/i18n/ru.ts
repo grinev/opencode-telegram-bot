@@ -74,6 +74,10 @@ export const ru: I18nDictionary = {
   "bot.session_retry":
     "🔁 {message}\n\nПровайдер возвращает одну и ту же ошибку при повторных запросах. Используйте /abort для остановки.",
   "bot.external_user_input": "Внешний ввод пользователя",
+  "background.session_fallback": "сессия {id}",
+  "background.assistant_response": "🔔 В фоновой сессии пришёл ответ ассистента: {session}",
+  "background.question_asked": "❓ В фоновой сессии нужен ответ: {session}",
+  "background.permission_asked": "🔐 В фоновой сессии запрошены права: {session}",
   "bot.unknown_command": "⚠️ Неизвестная команда: {command}. Используйте /help для списка команд.",
   "bot.photo_downloading": "⏳ Скачиваю фото...",
   "bot.photo_too_large": "⚠️ Фото слишком большое (макс. {maxSizeMb}МБ)",
@@ -152,7 +156,8 @@ export const ru: I18nDictionary = {
   "sessions.preview.you": "Вы:",
   "sessions.preview.agent": "Агент:",
 
-  "attach.project_not_selected": "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
+  "attach.project_not_selected":
+    "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
   "attach.session_not_selected":
     "💬 Сессия не выбрана.\n\nСначала выберите сессию через /sessions.",
   "attach.session_project_mismatch":
@@ -163,11 +168,11 @@ export const ru: I18nDictionary = {
   "attach.status.busy_message": "Статус: busy. Новые промты временно заблокированы.",
   "attach.restored_question": "Восстановил ожидающий вопрос для этой сессии.",
   "attach.restored_permissions": "Восстановил ожидающие запросы разрешений: {count}.",
-  "attach.disconnect_hint":
-    "Чтобы отключиться, переключитесь на другую сессию или проект.",
+  "attach.disconnect_hint": "Чтобы отключиться, переключитесь на другую сессию или проект.",
   "attach.error": "🔴 Не удалось подключиться к текущей сессии.",
 
-  "detach.project_not_selected": "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
+  "detach.project_not_selected":
+    "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
   "detach.no_active_session": "ℹ️ Бот уже не привязан ни к одной сессии.",
   "detach.success":
     "✅ Отсоединился от сессии: {title}\n\nOpenCode-сессия не остановлена. Если она еще выполняется, выполнение продолжится отдельно. Чтобы проверить ее позже, снова выберите эту сессию через /sessions.",

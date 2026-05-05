@@ -78,6 +78,11 @@ export const es: I18nDictionary = {
   "bot.session_retry":
     "🔁 {message}\n\nEl proveedor devuelve el mismo error en intentos repetidos. Usa /abort para detenerlo.",
   "bot.external_user_input": "Entrada externa del usuario",
+  "background.session_fallback": "sesión {id}",
+  "background.assistant_response":
+    "🔔 El asistente respondió en una sesión en segundo plano: {session}",
+  "background.question_asked": "❓ Una sesión en segundo plano necesita una respuesta: {session}",
+  "background.permission_asked": "🔐 Una sesión en segundo plano solicitó permisos: {session}",
   "bot.unknown_command":
     "⚠️ Comando desconocido: {command}. Usa /help para ver los comandos disponibles.",
   "bot.photo_downloading": "⏳ Descargando foto...",
@@ -170,8 +175,7 @@ export const es: I18nDictionary = {
   "attach.status.busy_message": "Estado: busy. Los nuevos prompts están bloqueados temporalmente.",
   "attach.restored_question": "Se restauró una pregunta pendiente para esta sesión.",
   "attach.restored_permissions": "Se restauraron solicitudes de permiso pendientes: {count}.",
-  "attach.disconnect_hint":
-    "Para desconectarte, cambia a otra sesión o proyecto.",
+  "attach.disconnect_hint": "Para desconectarte, cambia a otra sesión o proyecto.",
   "attach.error": "🔴 No se pudo conectar a la sesión actual.",
 
   "detach.project_not_selected":

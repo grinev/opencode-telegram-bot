@@ -9,6 +9,12 @@ import {
   listScheduledTasks,
   removeScheduledTask,
 } from "../../src/scheduled-task/store.js";
+import {
+  cleanupScheduledTaskSessionIgnores,
+  isScheduledTaskSessionIgnored,
+  registerScheduledTaskSessionIgnore,
+  removeScheduledTaskSessionIgnore,
+} from "../../src/scheduled-task/session-ignore.js";
 import type { ScheduledTask } from "../../src/scheduled-task/types.js";
 
 function createScheduledTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
@@ -87,5 +93,35 @@ describe("scheduled-task/store", () => {
     await removeScheduledTask("task-1");
 
     expect(listScheduledTasks()).toEqual([secondTask]);
+  });
+
+  it("persists scheduled task session ignores and prunes stale entries", async () => {
+    await registerScheduledTaskSessionIgnore("fresh-session", new Date("2026-03-16T10:00:00.000Z"));
+    await registerScheduledTaskSessionIgnore("stale-session", new Date("2026-03-15T09:59:59.000Z"));
+
+    expect(isScheduledTaskSessionIgnored("fresh-session", new Date("2026-03-16T12:00:00.000Z"))).toBe(
+      true,
+    );
+    expect(isScheduledTaskSessionIgnored("stale-session", new Date("2026-03-16T12:00:00.000Z"))).toBe(
+      false,
+    );
+
+    const removed = await cleanupScheduledTaskSessionIgnores(new Date("2026-03-16T12:00:00.000Z"));
+
+    expect(removed).toBe(1);
+
+    const settingsPath = path.join(tempHome, "settings.json");
+    const settingsFile = JSON.parse(await readFile(settingsPath, "utf-8")) as {
+      scheduledTaskSessionIgnores?: Array<{ sessionId: string; createdAt: string }>;
+    };
+    expect(settingsFile.scheduledTaskSessionIgnores).toEqual([
+      { sessionId: "fresh-session", createdAt: "2026-03-16T10:00:00.000Z" },
+    ]);
+
+    await removeScheduledTaskSessionIgnore("fresh-session");
+
+    expect(isScheduledTaskSessionIgnored("fresh-session", new Date("2026-03-16T12:00:00.000Z"))).toBe(
+      false,
+    );
   });
 });

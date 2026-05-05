@@ -20,6 +20,10 @@ const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 const WORKTREE_CALLBACK_PREFIX = "worktree:";
 const WORKTREE_PAGE_CALLBACK_PREFIX = "worktree:page:";
 
+interface WorktreeCallbackDeps {
+  ensureEventSubscription?: (directory: string) => Promise<void>;
+}
+
 function formatWorktreeButtonLabel(label: string, isActive: boolean): string {
   const prefix = isActive ? "✅ " : "";
   const availableLength = MAX_INLINE_BUTTON_LABEL_LENGTH - prefix.length;
@@ -179,7 +183,10 @@ export async function worktreeCommand(ctx: CommandContext<Context>) {
   }
 }
 
-export async function handleWorktreeCallback(ctx: Context): Promise<boolean> {
+export async function handleWorktreeCallback(
+  ctx: Context,
+  deps: WorktreeCallbackDeps = {},
+): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data || !callbackQuery.data.startsWith(WORKTREE_CALLBACK_PREFIX)) {
     return false;
@@ -248,11 +255,12 @@ export async function handleWorktreeCallback(ctx: Context): Promise<boolean> {
 
     await upsertSessionDirectory(selectedWorktree.path, Date.now());
     const projectInfo = await getProjectByWorktree(selectedWorktree.path);
-    const replyKeyboard = await switchToProject(
-      ctx,
-      { ...projectInfo, name: selectedWorktree.path },
-      "worktree_switched",
-    );
+    const selectedProjectInfo = { ...projectInfo, name: selectedWorktree.path };
+    const replyKeyboard = deps.ensureEventSubscription
+      ? await switchToProject(ctx, selectedProjectInfo, "worktree_switched", {
+          ensureEventSubscription: deps.ensureEventSubscription,
+        })
+      : await switchToProject(ctx, selectedProjectInfo, "worktree_switched");
 
     await ctx.answerCallbackQuery();
     await ctx.reply(t("worktree.selected", { worktree: selectedWorktree.path }), {

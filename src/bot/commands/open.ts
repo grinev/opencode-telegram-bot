@@ -26,6 +26,10 @@ const CALLBACK_PAGE_PREFIX = "open:pg:";
 const CALLBACK_ROOTS = "open:roots";
 const MAX_BUTTON_LABEL_LENGTH = 64;
 
+interface OpenCallbackDeps {
+  ensureEventSubscription?: (directory: string) => Promise<void>;
+}
+
 /**
  * Separator used inside pagination callback data between the encoded path
  * reference and the page number. We avoid `:` because it appears in Windows
@@ -259,7 +263,10 @@ export async function openCommand(ctx: CommandContext<Context>) {
   }
 }
 
-export async function handleOpenCallback(ctx: Context): Promise<boolean> {
+export async function handleOpenCallback(
+  ctx: Context,
+  deps: OpenCallbackDeps = {},
+): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data || !data.startsWith(CALLBACK_PREFIX)) {
     return false;
@@ -311,7 +318,7 @@ export async function handleOpenCallback(ctx: Context): Promise<boolean> {
         await ctx.answerCallbackQuery({ text: t("open.access_denied") });
         return true;
       }
-      await selectDirectory(ctx, selectPath);
+      await selectDirectory(ctx, selectPath, deps);
       return true;
     }
 
@@ -345,7 +352,7 @@ async function navigateTo(ctx: Context, dirPath: string, page: number = 0) {
   });
 }
 
-async function selectDirectory(ctx: Context, directory: string) {
+async function selectDirectory(ctx: Context, directory: string, deps: OpenCallbackDeps = {}) {
   const displayPath = pathToDisplayPath(directory);
 
   try {
@@ -359,11 +366,12 @@ async function selectDirectory(ctx: Context, directory: string) {
     await upsertSessionDirectory(directory, Date.now());
 
     const projectInfo = await getProjectByWorktree(directory);
-    const replyKeyboard = await switchToProject(
-      ctx,
-      { ...projectInfo, name: displayPath },
-      "open_project_selected",
-    );
+    const selectedProjectInfo = { ...projectInfo, name: displayPath };
+    const replyKeyboard = deps.ensureEventSubscription
+      ? await switchToProject(ctx, selectedProjectInfo, "open_project_selected", {
+          ensureEventSubscription: deps.ensureEventSubscription,
+        })
+      : await switchToProject(ctx, selectedProjectInfo, "open_project_selected");
 
     await ctx.answerCallbackQuery();
     await ctx.reply(t("open.selected", { project: displayPath }), {
