@@ -11,9 +11,10 @@ const mocked = vi.hoisted(() => ({
   clearAllInteractionStateMock: vi.fn(),
   pinnedIsInitializedMock: vi.fn(() => true),
   pinnedClearMock: vi.fn().mockResolvedValue(undefined),
+  pinnedRefreshContextLimitMock: vi.fn().mockResolvedValue(undefined),
+  pinnedGetContextLimitMock: vi.fn(() => 200000),
   keyboardInitializeMock: vi.fn(),
-  keyboardIsInitializedMock: vi.fn(() => true),
-  keyboardClearContextMock: vi.fn(),
+  keyboardUpdateContextMock: vi.fn(),
   keyboardGetKeyboardMock: vi.fn(() => ({ keyboard: true })),
   foregroundMarkIdleMock: vi.fn(),
   assistantClearRunMock: vi.fn(),
@@ -41,14 +42,15 @@ vi.mock("../../../src/pinned/manager.js", () => ({
   pinnedMessageManager: {
     isInitialized: mocked.pinnedIsInitializedMock,
     clear: mocked.pinnedClearMock,
+    refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
+    getContextLimit: mocked.pinnedGetContextLimitMock,
   },
 }));
 
 vi.mock("../../../src/keyboard/manager.js", () => ({
   keyboardManager: {
     initialize: mocked.keyboardInitializeMock,
-    isInitialized: mocked.keyboardIsInitializedMock,
-    clearContext: mocked.keyboardClearContextMock,
+    updateContext: mocked.keyboardUpdateContextMock,
     getKeyboard: mocked.keyboardGetKeyboardMock,
   },
 }));
@@ -93,10 +95,12 @@ describe("bot/commands/detach", () => {
     mocked.pinnedIsInitializedMock.mockReturnValue(true);
     mocked.pinnedClearMock.mockClear();
     mocked.pinnedClearMock.mockResolvedValue(undefined);
+    mocked.pinnedRefreshContextLimitMock.mockClear();
+    mocked.pinnedRefreshContextLimitMock.mockResolvedValue(undefined);
+    mocked.pinnedGetContextLimitMock.mockClear();
+    mocked.pinnedGetContextLimitMock.mockReturnValue(200000);
     mocked.keyboardInitializeMock.mockClear();
-    mocked.keyboardIsInitializedMock.mockClear();
-    mocked.keyboardIsInitializedMock.mockReturnValue(true);
-    mocked.keyboardClearContextMock.mockClear();
+    mocked.keyboardUpdateContextMock.mockClear();
     mocked.keyboardGetKeyboardMock.mockClear();
     mocked.keyboardGetKeyboardMock.mockReturnValue({ keyboard: true });
     mocked.foregroundMarkIdleMock.mockClear();
@@ -116,7 +120,12 @@ describe("bot/commands/detach", () => {
     expect(mocked.assistantClearRunMock).toHaveBeenCalledWith("session-1", "detach_command");
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
     expect(mocked.pinnedClearMock).toHaveBeenCalledTimes(1);
-    expect(mocked.keyboardClearContextMock).toHaveBeenCalledTimes(1);
+    expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalledTimes(1);
+    expect(mocked.pinnedGetContextLimitMock).toHaveBeenCalledTimes(1);
+    expect(mocked.keyboardUpdateContextMock).toHaveBeenCalledWith(0, 200000);
+    expect(mocked.keyboardUpdateContextMock.mock.invocationCallOrder[0]).toBeLessThan(
+      mocked.keyboardGetKeyboardMock.mock.invocationCallOrder[0],
+    );
     expect(ctx.reply).toHaveBeenCalledWith(
       t("detach.success", { title: "Long Run" }),
       expect.objectContaining({ reply_markup: { keyboard: true } }),

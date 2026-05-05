@@ -43,9 +43,10 @@ export async function detachCommand(ctx: CommandContext<Context>): Promise<void>
     if (ctx.chat) {
       keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
-    if (keyboardManager.isInitialized()) {
-      keyboardManager.clearContext();
-    }
+
+    await pinnedMessageManager.refreshContextLimit();
+    const contextLimit = pinnedMessageManager.getContextLimit();
+    keyboardManager.updateContext(0, contextLimit);
 
     const keyboard = keyboardManager.getKeyboard();
 
