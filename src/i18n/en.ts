@@ -79,6 +79,7 @@ export const en = {
   "background.assistant_response": "🔔 Assistant replied in background session: {session}",
   "background.question_asked": "❓ Background session needs an answer: {session}",
   "background.permission_asked": "🔐 Background session requested permissions: {session}",
+  "background.open_session_button": "Open session",
   "bot.unknown_command": "⚠️ Unknown command: {command}. Use /help to see available commands.",
   "bot.photo_downloading": "⏳ Downloading photo...",
   "bot.photo_too_large": "⚠️ Photo is too large (max {maxSizeMb}MB)",

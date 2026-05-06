@@ -83,6 +83,7 @@ export const de: I18nDictionary = {
     "🔔 Assistent hat in einer Hintergrundsitzung geantwortet: {session}",
   "background.question_asked": "❓ Hintergrundsitzung benötigt eine Antwort: {session}",
   "background.permission_asked": "🔐 Hintergrundsitzung hat Berechtigungen angefordert: {session}",
+  "background.open_session_button": "Sitzung öffnen",
   "bot.unknown_command":
     "⚠️ Unbekannter Befehl: {command}. Nutze /help, um verfügbare Befehle zu sehen.",
   "bot.photo_downloading": "⏳ Lade Foto herunter...",

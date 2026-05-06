@@ -17,7 +17,12 @@ import {
   MODEL_BUTTON_TEXT_PATTERN,
   VARIANT_BUTTON_TEXT_PATTERN,
 } from "./message-patterns.js";
-import { sessionsCommand, handleSessionSelect } from "./commands/sessions.js";
+import {
+  buildBackgroundSessionOpenKeyboard,
+  handleBackgroundSessionOpen,
+  handleSessionSelect,
+  sessionsCommand,
+} from "./commands/sessions.js";
 import { newCommand } from "./commands/new.js";
 import { projectsCommand, handleProjectSelect } from "./commands/projects.js";
 import { worktreeCommand, handleWorktreeCallback } from "./commands/worktree.js";
@@ -388,12 +393,11 @@ async function deliverBackgroundSessionNotification(
     return;
   }
 
-  const keyboard = getCurrentReplyKeyboard();
   await botInstance.api.sendMessage(
     chatIdInstance,
     formatBackgroundSessionNotification(notification),
     {
-      ...(keyboard ? { reply_markup: keyboard } : {}),
+      reply_markup: buildBackgroundSessionOpenKeyboard(notification.sessionId),
     },
   );
 }
@@ -1192,6 +1196,10 @@ export function createBot(): Bot<Context> {
     }
 
     try {
+      const handledBackgroundSession = await handleBackgroundSessionOpen(ctx, {
+        bot,
+        ensureEventSubscription,
+      });
       const handledInlineCancel = await handleInlineMenuCancel(ctx);
       if (handledInlineCancel) {
         // Clean up path index when the open-directory menu is cancelled
@@ -1217,10 +1225,11 @@ export function createBot(): Bot<Context> {
       const handledMcps = await handleMcpsCallback(ctx);
 
       logger.debug(
-        `[Bot] Callback handled: inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, skills=${handledSkills}, mcps=${handledMcps}`,
+        `[Bot] Callback handled: backgroundSession=${handledBackgroundSession}, inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, skills=${handledSkills}, mcps=${handledMcps}`,
       );
 
       if (
+        !handledBackgroundSession &&
         !handledInlineCancel &&
         !handledSession &&
         !handledProject &&

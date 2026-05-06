@@ -83,6 +83,7 @@ export const es: I18nDictionary = {
     "🔔 El asistente respondió en una sesión en segundo plano: {session}",
   "background.question_asked": "❓ Una sesión en segundo plano necesita una respuesta: {session}",
   "background.permission_asked": "🔐 Una sesión en segundo plano solicitó permisos: {session}",
+  "background.open_session_button": "Abrir sesión",
   "bot.unknown_command":
     "⚠️ Comando desconocido: {command}. Usa /help para ver los comandos disponibles.",
   "bot.photo_downloading": "⏳ Descargando foto...",

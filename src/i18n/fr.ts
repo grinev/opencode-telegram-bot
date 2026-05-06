@@ -84,6 +84,7 @@ export const fr: I18nDictionary = {
   "background.question_asked": "❓ Une session en arrière-plan attend une réponse : {session}",
   "background.permission_asked":
     "🔐 Une session en arrière-plan a demandé des autorisations : {session}",
+  "background.open_session_button": "Ouvrir la session",
   "bot.unknown_command":
     "⚠️ Commande inconnue : {command}. Utilisez /help pour voir les commandes disponibles.",
   "bot.photo_downloading": "⏳ Téléchargement de la photo...",

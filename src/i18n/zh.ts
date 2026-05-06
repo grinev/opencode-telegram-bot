@@ -70,6 +70,7 @@ export const zh: I18nDictionary = {
   "background.assistant_response": "🔔 助手已在后台会话中回复：{session}",
   "background.question_asked": "❓ 后台会话需要回答：{session}",
   "background.permission_asked": "🔐 后台会话请求了权限：{session}",
+  "background.open_session_button": "打开会话",
   "bot.unknown_command": "⚠️ 未知命令：{command}。使用 /help 查看可用命令。",
   "bot.photo_downloading": "⏳ 正在下载照片...",
   "bot.photo_too_large": "⚠️ 照片过大（最大 {maxSizeMb}MB）",

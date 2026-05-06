@@ -78,6 +78,7 @@ export const ru: I18nDictionary = {
   "background.assistant_response": "🔔 В фоновой сессии пришёл ответ ассистента: {session}",
   "background.question_asked": "❓ В фоновой сессии нужен ответ: {session}",
   "background.permission_asked": "🔐 В фоновой сессии запрошены права: {session}",
+  "background.open_session_button": "Открыть сессию",
   "bot.unknown_command": "⚠️ Неизвестная команда: {command}. Используйте /help для списка команд.",
   "bot.photo_downloading": "⏳ Скачиваю фото...",
   "bot.photo_too_large": "⚠️ Фото слишком большое (макс. {maxSizeMb}МБ)",

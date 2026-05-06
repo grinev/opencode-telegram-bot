@@ -6,6 +6,7 @@ import { resolveProjectAgent } from "../../agent/manager.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
+import { interactionManager } from "../../interaction/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import {
   appendInlineMenuCancelButton,
@@ -21,6 +22,7 @@ import { attachToSession } from "../../attach/service.js";
 
 const SESSION_CALLBACK_PREFIX = "session:";
 const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
+const BACKGROUND_SESSION_CALLBACK_PREFIX = "background-session:";
 const SESSION_FETCH_EXTRA_COUNT = 1;
 
 type SessionListItem = {
@@ -41,6 +43,12 @@ type SessionPage = {
 export interface SessionSelectDeps {
   bot: Bot<Context>;
   ensureEventSubscription: (directory: string) => Promise<void>;
+}
+
+interface SelectSessionByIdOptions {
+  source: "menu" | "background_notification";
+  deleteCallbackMessage: boolean;
+  removeCallbackReplyMarkup: boolean;
 }
 
 function buildSessionPageCallback(page: number): string {
@@ -72,6 +80,30 @@ function parseSessionIdCallback(data: string): string | null {
 
   const sessionId = data.slice(SESSION_CALLBACK_PREFIX.length);
   return sessionId.length > 0 ? sessionId : null;
+}
+
+function parseBackgroundSessionCallback(data: string): string | null {
+  if (!data.startsWith(BACKGROUND_SESSION_CALLBACK_PREFIX)) {
+    return null;
+  }
+
+  const sessionId = data.slice(BACKGROUND_SESSION_CALLBACK_PREFIX.length);
+  return sessionId.length > 0 ? sessionId : null;
+}
+
+async function removeCallbackReplyMarkup(ctx: Context): Promise<void> {
+  try {
+    await ctx.editMessageReplyMarkup();
+  } catch (err) {
+    logger.debug("[Sessions] Failed to remove background session button:", err);
+  }
+}
+
+export function buildBackgroundSessionOpenKeyboard(sessionId: string): InlineKeyboard {
+  return new InlineKeyboard().text(
+    t("background.open_session_button"),
+    `${BACKGROUND_SESSION_CALLBACK_PREFIX}${sessionId}`,
+  );
 }
 
 function formatSessionsSelectText(page: number): string {
@@ -182,6 +214,169 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
   }
 }
 
+async function selectSessionById(
+  ctx: Context,
+  deps: SessionSelectDeps,
+  sessionId: string,
+  options: SelectSessionByIdOptions,
+): Promise<void> {
+  const currentProject = getCurrentProject();
+
+  if (!currentProject) {
+    clearAllInteractionState("session_select_project_missing");
+    await ctx.answerCallbackQuery();
+    await ctx.reply(t("sessions.select_project_first"));
+    return;
+  }
+
+  const { data: session, error } = await opencodeClient.session.get({
+    sessionID: sessionId,
+    directory: currentProject.worktree,
+  });
+
+  if (error || !session) {
+    throw error || new Error("Failed to get session details");
+  }
+
+  logger.info(
+    `[Bot] Session selected: id=${session.id}, title="${session.title}", project=${currentProject.worktree}, source=${options.source}`,
+  );
+
+  const sessionInfo: SessionInfo = {
+    id: session.id,
+    title: session.title,
+    directory: currentProject.worktree,
+  };
+  setCurrentSession(sessionInfo);
+  clearAllInteractionState("session_switched");
+
+  await ctx.answerCallbackQuery();
+
+  let loadingMessageId: number | null = null;
+  if (ctx.chat) {
+    try {
+      const loadingMessage = await ctx.api.sendMessage(ctx.chat.id, t("sessions.loading_context"));
+      loadingMessageId = loadingMessage.message_id;
+    } catch (err) {
+      logger.error("[Sessions] Failed to send loading message:", err);
+    }
+  }
+
+  try {
+    await attachToSession({
+      bot: deps.bot,
+      chatId: ctx.chat!.id,
+      session: sessionInfo,
+      ensureEventSubscription: deps.ensureEventSubscription,
+    });
+  } catch (err) {
+    if (loadingMessageId) {
+      try {
+        await ctx.api.deleteMessage(ctx.chat!.id, loadingMessageId);
+      } catch (deleteError) {
+        logger.debug("[Sessions] Failed to delete loading message after follow error:", deleteError);
+      }
+    }
+    logger.error("[Sessions] Error following selected session:", err);
+    throw err;
+  }
+
+  if (ctx.chat) {
+    const chatId = ctx.chat.id;
+    const currentAgent = await resolveProjectAgent();
+
+    keyboardManager.updateAgent(currentAgent);
+
+    const contextInfo = keyboardManager.getContextInfo();
+    if (contextInfo) {
+      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+    }
+
+    if (loadingMessageId) {
+      try {
+        await ctx.api.deleteMessage(chatId, loadingMessageId);
+      } catch (err) {
+        logger.debug("[Sessions] Failed to delete loading message:", err);
+      }
+    }
+
+    const keyboard = keyboardManager.getKeyboard();
+    try {
+      await ctx.api.sendMessage(chatId, t("sessions.selected", { title: session.title }), {
+        reply_markup: keyboard,
+      });
+    } catch (err) {
+      logger.error("[Sessions] Failed to send selection message:", err);
+    }
+
+    safeBackgroundTask({
+      taskName: "sessions.sendPreview",
+      task: () =>
+        sendSessionPreview(
+          ctx.api,
+          chatId,
+          null,
+          session.title,
+          session.id,
+          currentProject.worktree,
+        ),
+    });
+  }
+
+  if (options.removeCallbackReplyMarkup) {
+    await removeCallbackReplyMarkup(ctx);
+  }
+
+  if (options.deleteCallbackMessage) {
+    await ctx.deleteMessage();
+  }
+}
+
+function shouldBlockBackgroundSessionOpen(): boolean {
+  const activeInteraction = interactionManager.getSnapshot();
+  return activeInteraction !== null && activeInteraction.kind !== "inline";
+}
+
+export async function handleBackgroundSessionOpen(
+  ctx: Context,
+  deps: SessionSelectDeps,
+): Promise<boolean> {
+  const data = ctx.callbackQuery?.data;
+  if (!data) {
+    return false;
+  }
+
+  const sessionId = parseBackgroundSessionCallback(data);
+  if (!sessionId) {
+    return false;
+  }
+
+  if (isForegroundBusy()) {
+    await replyBusyBlocked(ctx);
+    return true;
+  }
+
+  if (shouldBlockBackgroundSessionOpen()) {
+    await ctx.answerCallbackQuery({ text: t("interaction.blocked.finish_current") }).catch(() => {});
+    return true;
+  }
+
+  try {
+    await selectSessionById(ctx, deps, sessionId, {
+      source: "background_notification",
+      deleteCallbackMessage: false,
+      removeCallbackReplyMarkup: true,
+    });
+  } catch (error) {
+    logger.error("[Sessions] Error selecting background session:", error);
+    await ctx.answerCallbackQuery({ text: t("sessions.select_error"), show_alert: true }).catch(
+      () => {},
+    );
+  }
+
+  return true;
+}
+
 export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data || !callbackQuery.data.startsWith(SESSION_CALLBACK_PREFIX)) {
@@ -239,107 +434,11 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
       return true;
     }
 
-    const { data: session, error } = await opencodeClient.session.get({
-      sessionID: sessionId,
-      directory: currentProject.worktree,
+    await selectSessionById(ctx, deps, sessionId, {
+      source: "menu",
+      deleteCallbackMessage: true,
+      removeCallbackReplyMarkup: false,
     });
-
-    if (error || !session) {
-      throw error || new Error("Failed to get session details");
-    }
-
-    logger.info(
-      `[Bot] Session selected: id=${session.id}, title="${session.title}", project=${currentProject.worktree}`,
-    );
-
-    const sessionInfo: SessionInfo = {
-      id: session.id,
-      title: session.title,
-      directory: currentProject.worktree,
-    };
-    setCurrentSession(sessionInfo);
-    clearAllInteractionState("session_switched");
-
-    await ctx.answerCallbackQuery();
-
-    let loadingMessageId: number | null = null;
-    if (ctx.chat) {
-      try {
-        const loadingMessage = await ctx.api.sendMessage(
-          ctx.chat.id,
-          t("sessions.loading_context"),
-        );
-        loadingMessageId = loadingMessage.message_id;
-      } catch (err) {
-        logger.error("[Sessions] Failed to send loading message:", err);
-      }
-    }
-
-    try {
-      await attachToSession({
-        bot: deps.bot,
-        chatId: ctx.chat!.id,
-        session: sessionInfo,
-        ensureEventSubscription: deps.ensureEventSubscription,
-      });
-    } catch (err) {
-      if (loadingMessageId) {
-        try {
-          await ctx.api.deleteMessage(ctx.chat!.id, loadingMessageId);
-        } catch (deleteError) {
-          logger.debug("[Sessions] Failed to delete loading message after follow error:", deleteError);
-        }
-      }
-      logger.error("[Sessions] Error following selected session:", err);
-      throw err;
-    }
-
-    if (ctx.chat) {
-      const chatId = ctx.chat.id;
-      const currentAgent = await resolveProjectAgent();
-
-      keyboardManager.updateAgent(currentAgent);
-
-      const contextInfo = keyboardManager.getContextInfo();
-      if (contextInfo) {
-        keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
-      }
-
-      // Delete loading message
-      if (loadingMessageId) {
-        try {
-          await ctx.api.deleteMessage(chatId, loadingMessageId);
-        } catch (err) {
-          logger.debug("[Sessions] Failed to delete loading message:", err);
-        }
-      }
-
-      // Send session selection confirmation with updated keyboard
-      const keyboard = keyboardManager.getKeyboard();
-      try {
-        await ctx.api.sendMessage(chatId, t("sessions.selected", { title: session.title }), {
-          reply_markup: keyboard,
-        });
-      } catch (err) {
-        logger.error("[Sessions] Failed to send selection message:", err);
-      }
-
-      // Send preview asynchronously
-      safeBackgroundTask({
-        taskName: "sessions.sendPreview",
-        task: () =>
-          sendSessionPreview(
-            ctx.api,
-            chatId,
-            null,
-            session.title,
-            session.id,
-            currentProject.worktree,
-          ),
-      });
-    }
-
-    await ctx.deleteMessage();
   } catch (error) {
     clearAllInteractionState("session_select_error");
     logger.error("[Sessions] Error selecting session:", error);
