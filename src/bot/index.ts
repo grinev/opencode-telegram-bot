@@ -397,7 +397,7 @@ async function deliverBackgroundSessionNotification(
     chatIdInstance,
     formatBackgroundSessionNotification(notification),
     {
-      reply_markup: buildBackgroundSessionOpenKeyboard(notification.sessionId),
+      reply_markup: buildBackgroundSessionOpenKeyboard(notification.sessionId, notification.kind),
     },
   );
 }

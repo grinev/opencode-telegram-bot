@@ -19,6 +19,8 @@ import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { getDateLocale, t } from "../../i18n/index.js";
 import { attachToSession } from "../../attach/service.js";
+import { renderAssistantFinalPartsSafe } from "../utils/assistant-rendering.js";
+import { sendRenderedBotPart } from "../utils/telegram-text.js";
 
 const SESSION_CALLBACK_PREFIX = "session:";
 const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
@@ -49,7 +51,27 @@ interface SelectSessionByIdOptions {
   source: "menu" | "background_notification";
   deleteCallbackMessage: boolean;
   removeCallbackReplyMarkup: boolean;
+  postSelectAction: "preview" | "latest_assistant_response" | "none";
 }
+
+type BackgroundSessionOpenKind = "assistant_response" | "question_asked" | "permission_asked";
+
+interface BackgroundSessionCallbackPayload {
+  sessionId: string;
+  kind: BackgroundSessionOpenKind | null;
+}
+
+const BACKGROUND_SESSION_KIND_CALLBACK_MARKERS: Record<BackgroundSessionOpenKind, string> = {
+  assistant_response: "a",
+  question_asked: "q",
+  permission_asked: "p",
+};
+
+const BACKGROUND_SESSION_KIND_BY_CALLBACK_MARKER: Record<string, BackgroundSessionOpenKind> = {
+  a: "assistant_response",
+  q: "question_asked",
+  p: "permission_asked",
+};
 
 function buildSessionPageCallback(page: number): string {
   return `${SESSION_PAGE_CALLBACK_PREFIX}${page}`;
@@ -82,13 +104,25 @@ function parseSessionIdCallback(data: string): string | null {
   return sessionId.length > 0 ? sessionId : null;
 }
 
-function parseBackgroundSessionCallback(data: string): string | null {
+function parseBackgroundSessionCallback(data: string): BackgroundSessionCallbackPayload | null {
   if (!data.startsWith(BACKGROUND_SESSION_CALLBACK_PREFIX)) {
     return null;
   }
 
-  const sessionId = data.slice(BACKGROUND_SESSION_CALLBACK_PREFIX.length);
-  return sessionId.length > 0 ? sessionId : null;
+  const payload = data.slice(BACKGROUND_SESSION_CALLBACK_PREFIX.length);
+  const markerSeparatorIndex = payload.indexOf(":");
+  if (markerSeparatorIndex < 0) {
+    return payload.length > 0 ? { sessionId: payload, kind: null } : null;
+  }
+
+  const marker = payload.slice(0, markerSeparatorIndex);
+  const sessionId = payload.slice(markerSeparatorIndex + 1);
+  const kind = BACKGROUND_SESSION_KIND_BY_CALLBACK_MARKER[marker];
+  if (!kind || sessionId.length === 0) {
+    return null;
+  }
+
+  return { sessionId, kind };
 }
 
 async function removeCallbackReplyMarkup(ctx: Context): Promise<void> {
@@ -99,10 +133,14 @@ async function removeCallbackReplyMarkup(ctx: Context): Promise<void> {
   }
 }
 
-export function buildBackgroundSessionOpenKeyboard(sessionId: string): InlineKeyboard {
+export function buildBackgroundSessionOpenKeyboard(
+  sessionId: string,
+  kind: BackgroundSessionOpenKind,
+): InlineKeyboard {
+  const marker = BACKGROUND_SESSION_KIND_CALLBACK_MARKERS[kind];
   return new InlineKeyboard().text(
     t("background.open_session_button"),
-    `${BACKGROUND_SESSION_CALLBACK_PREFIX}${sessionId}`,
+    `${BACKGROUND_SESSION_CALLBACK_PREFIX}${marker}:${sessionId}`,
   );
 }
 
@@ -309,18 +347,27 @@ async function selectSessionById(
       logger.error("[Sessions] Failed to send selection message:", err);
     }
 
-    safeBackgroundTask({
-      taskName: "sessions.sendPreview",
-      task: () =>
-        sendSessionPreview(
-          ctx.api,
-          chatId,
-          null,
-          session.title,
-          session.id,
-          currentProject.worktree,
-        ),
-    });
+    if (options.postSelectAction === "preview") {
+      safeBackgroundTask({
+        taskName: "sessions.sendPreview",
+        task: () =>
+          sendSessionPreview(
+            ctx.api,
+            chatId,
+            null,
+            session.title,
+            session.id,
+            currentProject.worktree,
+          ),
+      });
+    }
+
+    if (options.postSelectAction === "latest_assistant_response") {
+      safeBackgroundTask({
+        taskName: "sessions.sendLatestAssistantResponse",
+        task: () => sendLatestAssistantResponse(ctx.api, chatId, session.id, currentProject.worktree),
+      });
+    }
   }
 
   if (options.removeCallbackReplyMarkup) {
@@ -346,8 +393,8 @@ export async function handleBackgroundSessionOpen(
     return false;
   }
 
-  const sessionId = parseBackgroundSessionCallback(data);
-  if (!sessionId) {
+  const payload = parseBackgroundSessionCallback(data);
+  if (!payload) {
     return false;
   }
 
@@ -362,10 +409,11 @@ export async function handleBackgroundSessionOpen(
   }
 
   try {
-    await selectSessionById(ctx, deps, sessionId, {
+    await selectSessionById(ctx, deps, payload.sessionId, {
       source: "background_notification",
       deleteCallbackMessage: false,
       removeCallbackReplyMarkup: true,
+      postSelectAction: payload.kind === "assistant_response" ? "latest_assistant_response" : "none",
     });
   } catch (error) {
     logger.error("[Sessions] Error selecting background session:", error);
@@ -438,6 +486,7 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
       source: "menu",
       deleteCallbackMessage: true,
       removeCallbackReplyMarkup: false,
+      postSelectAction: "preview",
     });
   } catch (error) {
     clearAllInteractionState("session_select_error");
@@ -456,10 +505,25 @@ type SessionPreviewItem = {
 };
 
 const PREVIEW_MESSAGES_LIMIT = 6;
+const LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT = 20;
 const PREVIEW_ITEM_MAX_LENGTH = 420;
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 
-function extractTextParts(parts: Array<{ type: string; text?: string }>): string | null {
+type SessionMessageLike = {
+  info: {
+    role?: string;
+    summary?: boolean;
+    time?: {
+      created?: number;
+    };
+  };
+  parts: Array<{ type: string; text?: string }>;
+};
+
+function extractTextParts(
+  parts: Array<{ type: string; text?: string }>,
+  options: { trim?: boolean } = {},
+): string | null {
   const textParts = parts
     .filter((part) => part.type === "text" && typeof part.text === "string")
     .map((part) => part.text as string);
@@ -468,8 +532,9 @@ function extractTextParts(parts: Array<{ type: string; text?: string }>): string
     return null;
   }
 
-  const text = textParts.join("").trim();
-  return text.length > 0 ? text : null;
+  const text = textParts.join("");
+  const normalizedText = options.trim === false ? text : text.trim();
+  return normalizedText.trim().length > 0 ? normalizedText : null;
 }
 
 function truncateText(text: string, maxLength: number): string {
@@ -575,5 +640,70 @@ async function sendSessionPreview(
     await api.sendMessage(chatId, finalText);
   } catch (err) {
     logger.error("[Sessions] Failed to send session preview message:", err);
+  }
+}
+
+async function loadLatestAssistantResponse(
+  sessionId: string,
+  directory: string,
+): Promise<string | null> {
+  try {
+    const { data: messages, error } = await opencodeClient.session.messages({
+      sessionID: sessionId,
+      directory,
+      limit: LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT,
+    });
+
+    if (error || !messages) {
+      logger.warn("[Sessions] Failed to fetch latest assistant response:", error);
+      return null;
+    }
+
+    const latestResponse = (messages as SessionMessageLike[]).reduce<{
+      text: string;
+      created: number;
+    } | null>((latest, message) => {
+      if (message.info.role !== "assistant" || message.info.summary) {
+        return latest;
+      }
+
+      const text = extractTextParts(message.parts, { trim: false });
+      if (!text) {
+        return latest;
+      }
+
+      const created = message.info.time?.created ?? 0;
+      if (!latest || created >= latest.created) {
+        return { text, created };
+      }
+
+      return latest;
+    }, null);
+
+    return latestResponse?.text ?? null;
+  } catch (err) {
+    logger.error("[Sessions] Error loading latest assistant response:", err);
+    return null;
+  }
+}
+
+async function sendLatestAssistantResponse(
+  api: Context["api"],
+  chatId: number,
+  sessionId: string,
+  directory: string,
+): Promise<void> {
+  const responseText = await loadLatestAssistantResponse(sessionId, directory);
+  if (!responseText) {
+    return;
+  }
+
+  const parts = renderAssistantFinalPartsSafe(responseText, TELEGRAM_MESSAGE_LIMIT);
+  for (const part of parts) {
+    await sendRenderedBotPart({
+      api,
+      chatId,
+      part,
+    });
   }
 }

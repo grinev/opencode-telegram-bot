@@ -9,6 +9,7 @@ import {
 import { interactionManager } from "../../../src/interaction/manager.js";
 import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
 import { t } from "../../../src/i18n/index.js";
+import { safeBackgroundTask } from "../../../src/utils/safe-background-task.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -17,6 +18,7 @@ const mocked = vi.hoisted(() => ({
   } as { id: string; worktree: string; name?: string } | null,
   sessionListMock: vi.fn(),
   sessionGetMock: vi.fn(),
+  sessionMessagesMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
   clearSummaryMock: vi.fn(),
   clearInteractionMock: vi.fn(),
@@ -40,6 +42,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
     session: {
       list: mocked.sessionListMock,
       get: mocked.sessionGetMock,
+      messages: mocked.sessionMessagesMock,
     },
   },
 }));
@@ -94,6 +97,8 @@ vi.mock("../../../src/utils/safe-background-task.js", () => ({
   safeBackgroundTask: vi.fn(),
 }));
 
+const safeBackgroundTaskMock = vi.mocked(safeBackgroundTask);
+
 type SessionStub = {
   id: string;
   title: string;
@@ -101,6 +106,17 @@ type SessionStub = {
   time: {
     created: number;
   };
+};
+
+type SessionMessageStub = {
+  info: {
+    role: "user" | "assistant";
+    summary?: boolean;
+    time: {
+      created: number;
+    };
+  };
+  parts: Array<{ type: string; text?: string }>;
 };
 
 function createSession(index: number): SessionStub {
@@ -111,6 +127,24 @@ function createSession(index: number): SessionStub {
     time: {
       created: 1700000000000 + index * 1000,
     },
+  };
+}
+
+function createSessionMessage(
+  role: "user" | "assistant",
+  text: string | null,
+  created: number,
+  summary = false,
+): SessionMessageStub {
+  return {
+    info: {
+      role,
+      summary,
+      time: {
+        created,
+      },
+    },
+    parts: text === null ? [] : [{ type: "text", text }],
   };
 }
 
@@ -176,6 +210,7 @@ describe("bot/commands/sessions", () => {
 
     mocked.sessionListMock.mockReset();
     mocked.sessionGetMock.mockReset();
+    mocked.sessionMessagesMock.mockReset();
     mocked.setCurrentSessionMock.mockReset();
     mocked.clearSummaryMock.mockReset();
     mocked.clearInteractionMock.mockReset();
@@ -205,6 +240,7 @@ describe("bot/commands/sessions", () => {
       restoredPermissions: 0,
     });
     mocked.ensureEventSubscriptionMock.mockReset();
+    safeBackgroundTaskMock.mockReset();
   });
 
   it("shows next-page button when sessions exceed page size", async () => {
@@ -386,6 +422,11 @@ describe("bot/commands/sessions", () => {
         reply_markup: { inline_keyboard: [] },
       }),
     ]);
+    expect(safeBackgroundTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskName: "sessions.sendPreview",
+      }),
+    );
   });
 
   it("blocks session selection callback while foreground session is busy", async () => {
@@ -412,11 +453,11 @@ describe("bot/commands/sessions", () => {
   });
 
   it("builds a persistent background session open button", () => {
-    const keyboard = buildBackgroundSessionOpenKeyboard("session-1");
+    const keyboard = buildBackgroundSessionOpenKeyboard("session-1", "assistant_response");
 
     expect(keyboard.inline_keyboard[0]?.[0]).toEqual({
       text: t("background.open_session_button"),
-      callback_data: "background-session:session-1",
+      callback_data: "background-session:a:session-1",
     });
   });
 
@@ -458,6 +499,70 @@ describe("bot/commands/sessions", () => {
         reply_markup: { inline_keyboard: [] },
       }),
     ]);
+    expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the full latest assistant response after opening an assistant background notification", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+    const latestResponse = `Final assistant response. ${"More details. ".repeat(380)}`.trimEnd();
+    mocked.sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        createSessionMessage("assistant", "Old assistant response", 100),
+        createSessionMessage("user", "User prompt should not be forwarded", 200),
+        createSessionMessage("assistant", "Summary should be ignored", 300, true),
+        createSessionMessage("assistant", latestResponse, 400),
+      ],
+      error: null,
+    });
+
+    const ctx = createCallbackContext("background-session:a:session-1", 456);
+    const handled = await handleBackgroundSessionOpen(ctx, createDeps());
+
+    expect(handled).toBe(true);
+    expect(safeBackgroundTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskName: "sessions.sendLatestAssistantResponse",
+      }),
+    );
+
+    const taskOptions = safeBackgroundTaskMock.mock.calls[0]?.[0];
+    if (!taskOptions) {
+      throw new Error("Expected latest assistant response background task");
+    }
+
+    const sendMessageMock = ctx.api.sendMessage as ReturnType<typeof vi.fn>;
+    const previousSendCount = sendMessageMock.mock.calls.length;
+    await taskOptions.task();
+
+    expect(mocked.sessionMessagesMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      directory: "/repo",
+      limit: 20,
+    });
+
+    const assistantResponseCalls = sendMessageMock.mock.calls.slice(previousSendCount);
+    expect(assistantResponseCalls.length).toBeGreaterThan(1);
+    expect(assistantResponseCalls.map((call) => call[1]).join("")).toBe(latestResponse);
+    expect(assistantResponseCalls.map((call) => call[1]).join("")).not.toContain(
+      "User prompt should not be forwarded",
+    );
+  });
+
+  it("does not send preview or latest assistant response for background question notifications", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+
+    const ctx = createCallbackContext("background-session:q:session-1", 456);
+    const handled = await handleBackgroundSessionOpen(ctx, createDeps());
+
+    expect(handled).toBe(true);
+    expect(mocked.sessionMessagesMock).not.toHaveBeenCalled();
+    expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
   });
 
   it("keeps background session button usable when another inline menu is active", async () => {
