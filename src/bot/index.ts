@@ -80,6 +80,7 @@ import { clearPromptResponseMode, processUserPrompt } from "./handlers/prompt.js
 import { handleVoiceMessage } from "./handlers/voice.js";
 import { handleDocumentMessage } from "./handlers/document.js";
 import { downloadTelegramFile, toDataUri } from "./utils/file-download.js";
+import { reconcileBusyState } from "./utils/busy-reconciliation.js";
 import { finalizeAssistantResponse } from "./utils/finalize-assistant-response.js";
 import { sendTtsResponseForSession } from "./utils/send-tts-response.js";
 import { deliverThinkingMessage } from "./utils/thinking-message.js";
@@ -1006,6 +1007,10 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
   logger.info(`[Bot] Subscribing to OpenCode events for project: ${directory}`);
   subscribeToEvents(directory, (event) => {
+    if ((event as EventStreamItem).type === "server.heartbeat") {
+      void reconcileBusyState(directory);
+    }
+
     const attached = attachManager.getSnapshot();
     const eventSessionId = getEventSessionId(event);
     if (

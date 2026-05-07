@@ -253,7 +253,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks disallowed command while busy with generic blocked message", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("/new");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -265,7 +265,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks plain text while busy with generic blocked message", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -277,7 +277,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks callback while busy without active question or permission", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("project:123");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -291,7 +291,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows abort, detach, status, and help while busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     for (const command of ["/abort", "/detach", "/status", "/help"]) {
       const ctx = createTextContext(command);
@@ -305,7 +305,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows active question callback while busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     interactionManager.start({
       kind: "question",
       expectedInput: "mixed",
@@ -321,7 +321,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows active permission callback while busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     interactionManager.start({
       kind: "permission",
       expectedInput: "callback",

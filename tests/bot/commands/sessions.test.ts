@@ -264,7 +264,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("blocks sessions command while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCommandContext();
     await sessionsCommand(ctx as never);
@@ -430,7 +430,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("blocks session selection callback while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     interactionManager.start({
       kind: "inline",
@@ -619,7 +619,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("blocks background session open while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("background-session:session-2", 456);
     const handled = await handleBackgroundSessionOpen(ctx, createDeps());

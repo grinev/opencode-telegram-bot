@@ -76,7 +76,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
   });
 
   it("blocks project selection callback while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("project:abc");
     const handled = await handleProjectSelect(ctx);
@@ -89,7 +89,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
   });
 
   it("does not block permission callbacks while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("permission:once");
     const handled = await handleProjectSelect(ctx);
@@ -100,7 +100,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
   });
 
   it("does not block question callbacks while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("question:select:0:1");
     const handled = await handleProjectSelect(ctx);

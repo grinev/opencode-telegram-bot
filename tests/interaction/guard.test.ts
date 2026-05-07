@@ -300,7 +300,7 @@ describe("interaction guard", () => {
   });
 
   it("allows only abort, detach, status, and help commands while busy without interaction", () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     expect(resolveInteractionGuardDecision(createContext({ text: "/abort" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/detach" })).allow).toBe(true);
@@ -314,7 +314,7 @@ describe("interaction guard", () => {
   });
 
   it("blocks start, plain text, and media while busy without interaction", () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const startDecision = resolveInteractionGuardDecision(createContext({ text: "/start" }));
     const textDecision = resolveInteractionGuardDecision(createContext({ text: "hello" }));
@@ -332,7 +332,7 @@ describe("interaction guard", () => {
   });
 
   it("allows valid question answers while busy", () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     interactionManager.start({
       kind: "question",
       expectedInput: "mixed",
@@ -357,7 +357,7 @@ describe("interaction guard", () => {
   });
 
   it("allows valid permission callback while busy and blocks other inputs", () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     interactionManager.start({
       kind: "permission",
       expectedInput: "callback",
@@ -376,7 +376,7 @@ describe("interaction guard", () => {
   });
 
   it("does not allow rename callback to bypass busy state", () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     interactionManager.start({
       kind: "rename",
       expectedInput: "text",

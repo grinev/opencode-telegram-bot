@@ -109,7 +109,7 @@ describe("bot/commands/new", () => {
   });
 
   it("blocks new session creation while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createContext();
     await newCommand(ctx as never, createDeps());

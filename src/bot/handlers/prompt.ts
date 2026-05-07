@@ -278,7 +278,7 @@ export async function processUserPrompt(
       `[Bot] Calling session.promptAsync (start-only) with agent=${currentAgent}, fileCount=${fileParts.length}...`,
     );
 
-    foregroundSessionState.markBusy(currentSession.id);
+    foregroundSessionState.markBusy(currentSession.id, currentSession.directory);
     await markAttachedSessionBusy(currentSession.id);
     assistantRunState.startRun(currentSession.id, {
       startedAt: Date.now(),

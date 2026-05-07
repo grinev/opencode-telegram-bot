@@ -178,7 +178,7 @@ describe("scheduled-task/runtime", () => {
 
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     await runtime.initialize({ api: {} } as Bot<Context>);
 

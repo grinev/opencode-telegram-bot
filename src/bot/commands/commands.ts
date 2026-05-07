@@ -446,7 +446,7 @@ async function executeCommand(
       ? `${storedModel.providerID}/${storedModel.modelID}`
       : undefined;
 
-  foregroundSessionState.markBusy(session.id);
+  foregroundSessionState.markBusy(session.id, session.directory);
   await markAttachedSessionBusy(session.id);
   assistantRunState.startRun(session.id, {
     startedAt: Date.now(),
