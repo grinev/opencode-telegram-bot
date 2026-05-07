@@ -1,16 +1,19 @@
 import { logger } from "../utils/logger.js";
 
-class ForegroundSessionState {
-  private activeSessionIds = new Set<string>();
+const DEFAULT_BUSY_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
-  markBusy(sessionId: string): void {
+class ForegroundSessionState {
+  // sessionId → expiration timestamp (Date.now() + ttlMs)
+  private activeSessions = new Map<string, number>();
+
+  markBusy(sessionId: string, ttlMs: number = DEFAULT_BUSY_TTL_MS): void {
     if (!sessionId) {
       return;
     }
 
-    this.activeSessionIds.add(sessionId);
+    this.activeSessions.set(sessionId, Date.now() + ttlMs);
     logger.debug(
-      `[ScheduledTaskForeground] Marked session busy: session=${sessionId}, count=${this.activeSessionIds.size}`,
+      `[ScheduledTaskForeground] Marked session busy: session=${sessionId}, count=${this.activeSessions.size}`,
     );
   }
 
@@ -19,29 +22,48 @@ class ForegroundSessionState {
       return;
     }
 
-    this.activeSessionIds.delete(sessionId);
+    this.activeSessions.delete(sessionId);
     logger.debug(
-      `[ScheduledTaskForeground] Marked session idle: session=${sessionId}, count=${this.activeSessionIds.size}`,
+      `[ScheduledTaskForeground] Marked session idle: session=${sessionId}, count=${this.activeSessions.size}`,
     );
   }
 
+  // Remove entries whose TTL has expired. Called automatically by isBusy().
+  sweepExpired(): number {
+    const now = Date.now();
+    let removed = 0;
+    for (const [sessionId, expiresAt] of this.activeSessions) {
+      if (expiresAt <= now) {
+        this.activeSessions.delete(sessionId);
+        removed++;
+      }
+    }
+    if (removed > 0) {
+      logger.info(
+        `[ScheduledTaskForeground] Swept ${removed} expired busy session(s), remaining=${this.activeSessions.size}`,
+      );
+    }
+    return removed;
+  }
+
   isBusy(): boolean {
-    return this.activeSessionIds.size > 0;
+    this.sweepExpired();
+    return this.activeSessions.size > 0;
   }
 
   clearAll(reason: string): void {
-    if (this.activeSessionIds.size === 0) {
+    if (this.activeSessions.size === 0) {
       return;
     }
 
     logger.info(
-      `[ScheduledTaskForeground] Cleared foreground busy state: reason=${reason}, count=${this.activeSessionIds.size}`,
+      `[ScheduledTaskForeground] Cleared foreground busy state: reason=${reason}, count=${this.activeSessions.size}`,
     );
-    this.activeSessionIds.clear();
+    this.activeSessions.clear();
   }
 
   __resetForTests(): void {
-    this.activeSessionIds.clear();
+    this.activeSessions.clear();
   }
 }
 
