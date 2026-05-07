@@ -53,6 +53,15 @@ class ForegroundSessionState {
   __resetForTests(): void {
     this.activeSessions.clear();
   }
+
+  __setMarkedAtForTests(sessionId: string, markedAt: number): void {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+
+    this.activeSessions.set(sessionId, { ...session, markedAt });
+  }
 }
 
 export const foregroundSessionState = new ForegroundSessionState();

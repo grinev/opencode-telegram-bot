@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocked = vi.hoisted(() => ({
   sessionStatusMock: vi.fn(),
@@ -50,11 +50,9 @@ function markForegroundBusyAt(
   sessionId: string,
   directory: string,
   markedAt: number = 10_000,
-  now: number = 13_000,
 ): void {
-  vi.spyOn(Date, "now").mockReturnValue(markedAt);
   foregroundSessionState.markBusy(sessionId, directory);
-  vi.mocked(Date.now).mockReturnValue(now);
+  foregroundSessionState.__setMarkedAtForTests(sessionId, markedAt);
 }
 
 describe("busy reconciliation", () => {
@@ -74,10 +72,6 @@ describe("busy reconciliation", () => {
     mocked.flushDeferredDeliveriesMock.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("clears stale foreground busy state when the server reports idle", async () => {
     markForegroundBusyAt("session-1", "D:/repo");
     mocked.sessionStatusMock.mockResolvedValue({
@@ -85,7 +79,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo");
+    await reconcileBusyStateNow("D:/repo", 13_000);
 
     expect(foregroundSessionState.isBusy()).toBe(false);
     expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
@@ -95,13 +89,13 @@ describe("busy reconciliation", () => {
   });
 
   it("keeps newly marked foreground busy state during the grace period", async () => {
-    markForegroundBusyAt("session-1", "D:/repo", 10_000, 11_000);
+    markForegroundBusyAt("session-1", "D:/repo", 10_000);
     mocked.sessionStatusMock.mockResolvedValue({
       data: { "session-1": { type: "idle" } },
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo");
+    await reconcileBusyStateNow("D:/repo", 11_000);
 
     expect(foregroundSessionState.isBusy()).toBe(true);
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
@@ -117,7 +111,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo");
+    await reconcileBusyStateNow("D:/repo", 13_000);
 
     expect(foregroundSessionState.isBusy()).toBe(true);
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
@@ -132,7 +126,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo");
+    await reconcileBusyStateNow("D:/repo", 13_000);
 
     expect(mocked.markAttachedSessionBusyMock).toHaveBeenCalledWith("session-1");
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
@@ -146,7 +140,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo");
+    await reconcileBusyStateNow("D:/repo", 13_000);
 
     expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
     expect(mocked.markAttachedSessionBusyMock).not.toHaveBeenCalled();
@@ -161,7 +155,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo");
+    await reconcileBusyStateNow("D:/repo", 13_000);
 
     expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledTimes(1);
     expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
@@ -171,13 +165,13 @@ describe("busy reconciliation", () => {
   it("keeps attached busy during the foreground grace period for the same session", async () => {
     attachManager.attach("session-1", "D:/repo");
     attachManager.markBusy("session-1");
-    markForegroundBusyAt("session-1", "D:/repo", 10_000, 11_000);
+    markForegroundBusyAt("session-1", "D:/repo", 10_000);
     mocked.sessionStatusMock.mockResolvedValue({
       data: { "session-1": { type: "idle" } },
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo");
+    await reconcileBusyStateNow("D:/repo", 11_000);
 
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
     expect(foregroundSessionState.isBusy()).toBe(true);
@@ -191,7 +185,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo");
+    await reconcileBusyStateNow("D:/repo", 13_000);
 
     expect(mocked.sessionStatusMock).not.toHaveBeenCalled();
     expect(mocked.markAttachedSessionBusyMock).not.toHaveBeenCalled();
@@ -204,7 +198,7 @@ describe("busy reconciliation", () => {
       error: new Error("server unavailable"),
     });
 
-    await reconcileBusyStateNow("D:/repo");
+    await reconcileBusyStateNow("D:/repo", 13_000);
 
     expect(foregroundSessionState.isBusy()).toBe(true);
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
@@ -212,21 +206,18 @@ describe("busy reconciliation", () => {
   });
 
   it("does not spend throttle interval when there are no tracked sessions", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(10_000);
-
-    await reconcileBusyState("D:/repo");
+    await reconcileBusyState("D:/repo", 10_000);
 
     expect(mocked.sessionStatusMock).not.toHaveBeenCalled();
 
-    vi.mocked(Date.now).mockReturnValue(7_000);
     foregroundSessionState.markBusy("session-1", "D:/repo");
-    vi.mocked(Date.now).mockReturnValue(10_001);
+    foregroundSessionState.__setMarkedAtForTests("session-1", 7_000);
     mocked.sessionStatusMock.mockResolvedValue({
       data: { "session-1": { type: "idle" } },
       error: null,
     });
 
-    await reconcileBusyState("D:/repo");
+    await reconcileBusyState("D:/repo", 10_001);
 
     expect(mocked.sessionStatusMock).toHaveBeenCalledTimes(1);
     expect(foregroundSessionState.isBusy()).toBe(false);
