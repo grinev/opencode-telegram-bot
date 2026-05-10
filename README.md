@@ -198,6 +198,8 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `TELEGRAM_BOT_TOKEN`                       | Bot token from @BotFather                                                                                             |   Yes    | —                        |
 | `TELEGRAM_ALLOWED_USER_ID`                 | Your numeric Telegram user ID                                                                                         |   Yes    | —                        |
 | `TELEGRAM_PROXY_URL`                       | Proxy URL for Telegram API (SOCKS5/HTTP)                                                                              |    No    | —                        |
+| `TELEGRAM_API_ROOT`                        | Custom Telegram Bot API root URL (e.g. nginx reverse-proxying `api.telegram.org`); applied to API calls and file downloads | No | `https://api.telegram.org` |
+| `TELEGRAM_PROXY_SECRET`                    | Shared secret sent as `X-Proxy-Secret` header on every Bot API request and file download (used with `TELEGRAM_API_ROOT`) | No | —                        |
 | `OPENCODE_API_URL`                         | OpenCode server URL                                                                                                   |    No    | `http://localhost:4096`  |
 | `OPENCODE_AUTO_RESTART_ENABLED`            | Automatically restart a local OpenCode server when health-checks fail                                                 |    No    | `false`                  |
 | `OPENCODE_MONITOR_INTERVAL_SEC`            | Health monitor interval in seconds when OpenCode auto-restart is enabled                                              |    No    | `300`                    |
@@ -238,6 +240,44 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 > **Keep your `.env` file private.** It contains your bot token. Never commit it to version control.
 
 Logs are written to `./logs` when running from sources and to the runtime config directory `logs/` folder in `installed` mode. Log rotation depends on runtime mode: `sources` creates one file per bot launch, while `installed` appends to one file per day. Old log files are removed according to `LOG_RETENTION`.
+
+### Reverse Proxy (Optional)
+
+For environments that block `api.telegram.org` but allow your own HTTPS endpoint (corporate networks, restricted regions), you can route Bot API traffic through a reverse proxy you control. This is an alternative to the SOCKS/HTTP forward proxy configured with `TELEGRAM_PROXY_URL`.
+
+Set `TELEGRAM_API_ROOT` to your reverse-proxy URL — both Bot API calls and file downloads (including voice/audio files) will use it. Optionally set `TELEGRAM_PROXY_SECRET` so the bot sends an `X-Proxy-Secret` header your proxy can use to authorize callers.
+
+`.env`:
+
+```env
+TELEGRAM_API_ROOT=https://tg-proxy.yourdomain.com
+TELEGRAM_PROXY_SECRET=some-long-random-string
+```
+
+Example nginx config:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name tg-proxy.yourdomain.com;
+
+    ssl_certificate     /etc/letsencrypt/live/tg-proxy.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tg-proxy.yourdomain.com/privkey.pem;
+
+    access_log off;  # the bot token appears in URL paths
+    client_max_body_size 50m;
+
+    if ($http_x_proxy_secret != "some-long-random-string") { return 403; }
+
+    location / {
+        proxy_pass https://api.telegram.org;
+        proxy_ssl_server_name on;
+        proxy_set_header Host api.telegram.org;
+    }
+}
+```
+
+`TELEGRAM_API_ROOT` and `TELEGRAM_PROXY_URL` are independent — the former picks the URL the bot connects to (a reverse proxy on your side), the latter tunnels TCP through a forward proxy. They can be combined, though that is unusual.
 
 ### Voice and Audio Transcription (Optional)
 

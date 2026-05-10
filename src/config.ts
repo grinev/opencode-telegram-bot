@@ -93,12 +93,44 @@ function getOptionalTtsProviderEnvVar(key: string, defaultValue: TtsProvider): T
   return defaultValue;
 }
 
-export const config = {
-  telegram: {
+export function buildTelegramConfig(): {
+  token: string;
+  allowedUserId: number;
+  proxyUrl: string;
+  apiRoot: string;
+  proxySecret: string;
+} {
+  const proxyUrl = getEnvVar("TELEGRAM_PROXY_URL", false);
+  // grammY rejects an apiRoot ending with `/`, so normalize once at config
+  // load instead of leaking the concern into every consumer.
+  const apiRoot = getEnvVar("TELEGRAM_API_ROOT", false).replace(/\/+$/, "");
+  const proxySecret = getEnvVar("TELEGRAM_PROXY_SECRET", false);
+
+  if (proxyUrl && apiRoot) {
+    throw new Error(
+      "TELEGRAM_PROXY_URL and TELEGRAM_API_ROOT are alternative connectivity modes and cannot be used together. " +
+        "TELEGRAM_PROXY_URL tunnels TCP through a SOCKS/HTTP forward proxy; " +
+        "TELEGRAM_API_ROOT routes API calls through an HTTPS reverse proxy. Pick one.",
+    );
+  }
+  if (proxySecret && !apiRoot) {
+    throw new Error(
+      "TELEGRAM_PROXY_SECRET requires TELEGRAM_API_ROOT to be set. " +
+        "Without a custom API root, the secret header would be sent to api.telegram.org.",
+    );
+  }
+
+  return {
     token: getEnvVar("TELEGRAM_BOT_TOKEN"),
     allowedUserId: parseInt(getEnvVar("TELEGRAM_ALLOWED_USER_ID"), 10),
-    proxyUrl: getEnvVar("TELEGRAM_PROXY_URL", false),
-  },
+    proxyUrl,
+    apiRoot,
+    proxySecret,
+  };
+}
+
+export const config = {
+  telegram: buildTelegramConfig(),
   opencode: {
     apiUrl: getEnvVar("OPENCODE_API_URL", false) || "http://localhost:4096",
     username: getEnvVar("OPENCODE_SERVER_USERNAME", false) || "opencode",

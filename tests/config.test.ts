@@ -291,3 +291,87 @@ describe("config boolean env parsing", () => {
     expect(config.tts.voice).toBe("alloy");
   });
 });
+
+describe("config telegram reverse-proxy", () => {
+  beforeEach(() => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-telegram-token");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
+    vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
+    vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
+    delete process.env.TELEGRAM_PROXY_URL;
+    delete process.env.TELEGRAM_API_ROOT;
+    delete process.env.TELEGRAM_PROXY_SECRET;
+  });
+
+  // Drive buildTelegramConfig directly: re-importing the whole config module to
+  // observe a top-level throw turned out to be flaky under vitest (the module
+  // evaluation error propagates through the module loader rather than as a
+  // simple promise rejection). The exported builder is the unit under test.
+  async function loadBuilder() {
+    const module = await import("../src/config.js");
+    return module.buildTelegramConfig;
+  }
+
+  it("leaves apiRoot and proxySecret empty when neither env var is set", async () => {
+    const buildTelegramConfig = await loadBuilder();
+    const telegram = buildTelegramConfig();
+
+    expect(telegram.apiRoot).toBe("");
+    expect(telegram.proxySecret).toBe("");
+  });
+
+  it("strips a trailing slash from TELEGRAM_API_ROOT", async () => {
+    vi.stubEnv("TELEGRAM_API_ROOT", "https://tg-proxy.example.com/");
+    const buildTelegramConfig = await loadBuilder();
+
+    expect(buildTelegramConfig().apiRoot).toBe("https://tg-proxy.example.com");
+  });
+
+  it("strips multiple trailing slashes from TELEGRAM_API_ROOT", async () => {
+    vi.stubEnv("TELEGRAM_API_ROOT", "https://tg-proxy.example.com///");
+    const buildTelegramConfig = await loadBuilder();
+
+    expect(buildTelegramConfig().apiRoot).toBe("https://tg-proxy.example.com");
+  });
+
+  it("preserves TELEGRAM_API_ROOT that has no trailing slash", async () => {
+    vi.stubEnv("TELEGRAM_API_ROOT", "https://tg-proxy.example.com");
+    const buildTelegramConfig = await loadBuilder();
+
+    expect(buildTelegramConfig().apiRoot).toBe("https://tg-proxy.example.com");
+  });
+
+  it("accepts TELEGRAM_API_ROOT together with TELEGRAM_PROXY_SECRET", async () => {
+    vi.stubEnv("TELEGRAM_API_ROOT", "https://tg-proxy.example.com");
+    vi.stubEnv("TELEGRAM_PROXY_SECRET", "shared-secret");
+    const buildTelegramConfig = await loadBuilder();
+
+    const telegram = buildTelegramConfig();
+    expect(telegram.apiRoot).toBe("https://tg-proxy.example.com");
+    expect(telegram.proxySecret).toBe("shared-secret");
+  });
+
+  it("allows TELEGRAM_PROXY_URL alone without TELEGRAM_API_ROOT", async () => {
+    vi.stubEnv("TELEGRAM_PROXY_URL", "socks5://forward.example.com:1080");
+    const buildTelegramConfig = await loadBuilder();
+
+    const telegram = buildTelegramConfig();
+    expect(telegram.proxyUrl).toBe("socks5://forward.example.com:1080");
+    expect(telegram.apiRoot).toBe("");
+  });
+
+  it("rejects TELEGRAM_PROXY_URL combined with TELEGRAM_API_ROOT", async () => {
+    vi.stubEnv("TELEGRAM_PROXY_URL", "socks5://forward.example.com:1080");
+    vi.stubEnv("TELEGRAM_API_ROOT", "https://tg-proxy.example.com");
+    const buildTelegramConfig = await loadBuilder();
+
+    expect(() => buildTelegramConfig()).toThrow(/cannot be used together/i);
+  });
+
+  it("rejects TELEGRAM_PROXY_SECRET without TELEGRAM_API_ROOT", async () => {
+    vi.stubEnv("TELEGRAM_PROXY_SECRET", "shared-secret");
+    const buildTelegramConfig = await loadBuilder();
+
+    expect(() => buildTelegramConfig()).toThrow(/TELEGRAM_PROXY_SECRET requires TELEGRAM_API_ROOT/);
+  });
+});
