@@ -60,7 +60,14 @@ import { questionManager } from "../question/manager.js";
 import { interactionManager } from "../interaction/manager.js";
 import { clearAllInteractionState } from "../interaction/cleanup.js";
 import { keyboardManager } from "../keyboard/manager.js";
-import { stopEventListening, subscribeToEvents } from "../opencode/events.js";
+import {
+  getActiveEventDirectory,
+  getConsecutiveReconnectAttempts,
+  getLastSseEventTime,
+  isEventListening,
+  stopEventListening,
+  subscribeToEvents,
+} from "../opencode/events.js";
 import { opencodeReadyLifecycle } from "../opencode/ready-lifecycle.js";
 import { summaryAggregator } from "../summary/aggregator.js";
 import { formatToolInfo } from "../summary/formatter.js";
@@ -121,6 +128,7 @@ let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
 let commandsInitialized = false;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let sseWatchdogTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeReadyRestore: (() => void) | null = null;
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
@@ -1055,6 +1063,11 @@ export function createBot(): Bot<Context> {
     heartbeatTimer = null;
   }
 
+  if (sseWatchdogTimer) {
+    clearInterval(sseWatchdogTimer);
+    sseWatchdogTimer = null;
+  }
+
   const botOptions = createTelegramBotOptions(config.telegram);
 
   const bot = new Bot(config.telegram.token, botOptions);
@@ -1093,6 +1106,37 @@ export function createBot(): Bot<Context> {
       logger.debug(`[Bot] Heartbeat #${heartbeatCounter} - event loop alive`);
     }
   }, 5000);
+
+  // SSE health-check watchdog. The for-await loop cannot detect a silently
+  // dead stream (no events arrive), so on each tick we look at the last
+  // event timestamp and the reconnect counter. If we have not seen an event
+  // for 30s or have piled up >=5 reconnect attempts, we forcibly tear down
+  // the subscription and re-establish it.
+  const SSE_STALE_THRESHOLD_MS = 30_000;
+  const SSE_RECONNECT_LIMIT = 5;
+  sseWatchdogTimer = setInterval(() => {
+    if (!isEventListening()) {
+      return;
+    }
+    const lastEventAt = getLastSseEventTime();
+    const reconnects = getConsecutiveReconnectAttempts();
+    const timeSinceLastEvent = Date.now() - lastEventAt;
+    const noEventsForTooLong = lastEventAt > 0 && timeSinceLastEvent > SSE_STALE_THRESHOLD_MS;
+    const tooManyReconnects = reconnects >= SSE_RECONNECT_LIMIT;
+
+    if (!noEventsForTooLong && !tooManyReconnects) {
+      return;
+    }
+
+    const directory = getActiveEventDirectory();
+    logger.warn(
+      `[SSE Watchdog] Restarting SSE subscription (noEvents=${timeSinceLastEvent}ms, reconnects=${reconnects}, directory=${directory ?? "<none>"})`,
+    );
+    stopEventListening();
+    if (directory) {
+      void ensureEventSubscription(directory);
+    }
+  }, 30_000);
 
   // Log all API calls for diagnostics
   let lastGetUpdatesTime = Date.now();
@@ -1507,6 +1551,11 @@ export function cleanupBotRuntime(reason: string): void {
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
+  }
+
+  if (sseWatchdogTimer) {
+    clearInterval(sseWatchdogTimer);
+    sseWatchdogTimer = null;
   }
 
   botInstance = null;

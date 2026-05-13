@@ -30,6 +30,12 @@ let activeDirectory: string | null = null;
 let streamAbortController: AbortController | null = null;
 let listenerGeneration = 0;
 
+// SSE health tracking — a silently dead stream cannot be detected from inside
+// the for-await loop (no events arrive). Expose timestamps + reconnect counter
+// so an external watchdog can decide when to forcibly restart the subscription.
+let lastSseEventTime = 0;
+let consecutiveReconnectAttempts = 0;
+
 function getReconnectDelayMs(attempt: number): number {
   const exponentialDelay = RECONNECT_BASE_DELAY_MS * Math.pow(2, Math.max(0, attempt - 1));
   return Math.min(exponentialDelay, RECONNECT_MAX_DELAY_MS);
@@ -201,6 +207,10 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
             break;
           }
 
+          // Mark stream as healthy: any event proves the SSE channel is alive.
+          lastSseEventTime = Date.now();
+          consecutiveReconnectAttempts = 0;
+
           // CRITICAL: Explicitly yield to the event loop BEFORE processing the event
           // This allows grammY to handle getUpdates between SSE events
           await new Promise<void>((resolve) => setImmediate(resolve));
@@ -249,6 +259,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
         }
 
         reconnectAttempt++;
+        consecutiveReconnectAttempts++;
         const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
         logger.warn(
           `Event stream ended for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})`,
@@ -272,6 +283,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
         }
 
         reconnectAttempt++;
+        consecutiveReconnectAttempts++;
         const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
         if (isExpectedOpencodeUnavailableError(error)) {
           logger.warn(
@@ -329,4 +341,20 @@ export function stopEventListening(): void {
   eventStream = null;
   activeDirectory = null;
   logger.info("Event listener stopped");
+}
+
+export function getLastSseEventTime(): number {
+  return lastSseEventTime;
+}
+
+export function getConsecutiveReconnectAttempts(): number {
+  return consecutiveReconnectAttempts;
+}
+
+export function isEventListening(): boolean {
+  return isListening;
+}
+
+export function getActiveEventDirectory(): string | null {
+  return activeDirectory;
 }
