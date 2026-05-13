@@ -121,6 +121,7 @@ let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
 let commandsInitialized = false;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let busyReconciliationTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeReadyRestore: (() => void) | null = null;
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
@@ -1055,6 +1056,11 @@ export function createBot(): Bot<Context> {
     heartbeatTimer = null;
   }
 
+  if (busyReconciliationTimer) {
+    clearInterval(busyReconciliationTimer);
+    busyReconciliationTimer = null;
+  }
+
   const botOptions = createTelegramBotOptions(config.telegram);
 
   const bot = new Bot(config.telegram.token, botOptions);
@@ -1093,6 +1099,20 @@ export function createBot(): Bot<Context> {
       logger.debug(`[Bot] Heartbeat #${heartbeatCounter} - event loop alive`);
     }
   }, 5000);
+
+  // Periodic busy-state reconciliation, independent of the SSE stream.
+  // reconcileBusyState() is normally triggered by server.heartbeat SSE events,
+  // but if the stream silently dies the bot can wedge in "busy" forever.
+  // The function has its own RECONCILE_MIN_INTERVAL_MS=10s throttle, so this
+  // 15s timer naturally respects it.
+  busyReconciliationTimer = setInterval(() => {
+    const currentProject = getCurrentProject();
+    const directory = currentProject?.worktree;
+    if (!directory) {
+      return;
+    }
+    void reconcileBusyState(directory);
+  }, 15_000);
 
   // Log all API calls for diagnostics
   let lastGetUpdatesTime = Date.now();
@@ -1507,6 +1527,11 @@ export function cleanupBotRuntime(reason: string): void {
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
+  }
+
+  if (busyReconciliationTimer) {
+    clearInterval(busyReconciliationTimer);
+    busyReconciliationTimer = null;
   }
 
   botInstance = null;

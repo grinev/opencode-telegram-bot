@@ -6,6 +6,8 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
 import { assistantRunState } from "../assistant-run-state.js";
+import { markAttachedSessionIdle } from "../../attach/service.js";
+import { clearPromptResponseMode } from "../handlers/prompt.js";
 
 type SessionState = "idle" | "busy" | "not-found";
 
@@ -106,6 +108,11 @@ export async function abortCurrentOperation(
 
       if (abortError) {
         logger.warn("[Abort] Abort request failed:", abortError);
+        // Safety net: clear attach-manager busy + prompt-response mode even when the
+        // server did not confirm the abort, otherwise the bot can wedge in "busy"
+        // forever due to two parallel busy trackers (attachManager + foregroundState).
+        await markAttachedSessionIdle(currentSession.id);
+        clearPromptResponseMode(currentSession.id);
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
           await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_unconfirmed"));
         }
@@ -128,6 +135,8 @@ export async function abortCurrentOperation(
       if (finalStatus === "idle" || finalStatus === "not-found") {
         foregroundSessionState.markIdle(currentSession.id);
         assistantRunState.clearRun(currentSession.id, "abort_confirmed");
+        await markAttachedSessionIdle(currentSession.id);
+        clearPromptResponseMode(currentSession.id);
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
           await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.success"));
         }
@@ -138,6 +147,11 @@ export async function abortCurrentOperation(
       }
     } catch (error) {
       clearTimeout(timeoutId);
+
+      // Safety net for AbortError / generic errors: release attach-manager busy
+      // so a transient network failure does not permanently wedge the bot.
+      await markAttachedSessionIdle(currentSession.id);
+      clearPromptResponseMode(currentSession.id);
 
       if (error instanceof Error && error.name === "AbortError") {
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
