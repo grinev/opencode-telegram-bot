@@ -1,7 +1,7 @@
 import { Context, InlineKeyboard } from "grammy";
-import { selectAgent, getAvailableAgents, fetchCurrentAgent } from "../../agent/manager.js";
+import { selectAgent, getAvailableAgents, fetchCurrentAgent, getModelForAgent } from "../../agent/manager.js";
 import { getAgentDisplayName } from "../../agent/types.js";
-import { getStoredModel } from "../../model/manager.js";
+import { getStoredModel, selectModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { logger } from "../../utils/logger.js";
 import { createMainKeyboard } from "../utils/keyboard.js";
@@ -47,7 +47,16 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
     // Select agent and persist
     selectAgent(agentName);
 
-    // Update keyboard manager state
+    const agentModel = await getModelForAgent(agentName);
+    if (agentModel) {
+      selectModel({
+        providerID: agentModel.providerID,
+        modelID: agentModel.modelID,
+        variant: "default",
+      });
+      await pinnedMessageManager.refreshContextLimit();
+    }
+
     keyboardManager.updateAgent(agentName);
 
     // Update Reply Keyboard with new agent, current model, and context
