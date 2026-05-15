@@ -146,6 +146,24 @@ export const zh: I18nDictionary = {
   "sessions.preview.title": "最近消息：",
   "sessions.preview.you": "你：",
   "sessions.preview.agent": "代理：",
+  "sessions.button.select": "✅ 选择",
+  "sessions.button.rename": "✏️ 重命名",
+  "sessions.button.delete": "🗑 删除",
+  "sessions.button.close": "✖ 关闭",
+  "sessions.current_session": "已选择",
+  "sessions.rename.prompt": "📝 输入新标题：\n\n当前：{title}",
+  "sessions.rename.cancel": "❌ 取消",
+  "sessions.rename.empty": "⚠️ 标题不能为空。",
+  "sessions.rename.success": "✅ 会话已重命名为：{title}",
+  "sessions.rename.error": "🔴 重命名会话失败。",
+  "sessions.delete.confirm":
+    '⚠️ 删除会话\n\n"{title}"\n所有消息和历史记录将被永久删除。',
+  "sessions.delete.yes": "✅ 是，删除",
+  "sessions.delete.no": "❌ 否",
+  "sessions.delete.success": "✅ 会话已删除：{title}",
+  "sessions.delete.not_found": "🔴 会话未找到。可能已被删除。",
+  "sessions.delete.error": "🔴 删除会话失败。",
+  "sessions.deleted_external": "🗑 会话已被删除：{title}\n您已自动分离。",
 
   "attach.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
   "attach.session_not_selected": "💬 未选择会话。\n\n请先使用 /sessions 选择一个会话。",
@@ -351,18 +369,6 @@ export const zh: I18nDictionary = {
   "runtime.wizard.tty_required":
     "交互式向导需要 TTY 终端。请在交互式 shell 中运行 `opencode-telegram config`。",
 
-  "rename.no_session": "⚠️ 没有活动会话。请先创建或选择一个会话。",
-  "rename.prompt": "📝 请输入会话的新标题：\n\n当前：{title}",
-  "rename.empty_title": "⚠️ 标题不能为空。",
-  "rename.success": "✅ 会话已重命名为：{title}",
-  "rename.error": "🔴 重命名会话失败。",
-  "rename.cancelled": "❌ 重命名已取消。",
-  "rename.inactive_callback": "重命名请求已失效",
-  "rename.inactive": "⚠️ 重命名请求未激活。请再次运行 /rename。",
-  "rename.blocked.expected_name": "⚠️ 请以文本输入新会话名称，或在重命名消息中点击取消。",
-  "rename.blocked.command_not_allowed": "⚠️ 重命名等待新名称期间不可用此命令。",
-  "rename.button.cancel": "❌ 取消",
-
   "task.prompt.schedule":
     "⏰ 请用自然语言发送任务的时间安排。\n\n示例：\n- 每 5 分钟\n- 每天 17:00\n- 明天 12:00",
   "task.schedule_empty": "⚠️ 时间安排不能为空。",
@@ -470,8 +476,6 @@ export const zh: I18nDictionary = {
   "mcps.button.disable": "🔴 Disable",
   "mcps.button.back": "⬅️ Back",
   "mcps.auth_required": "This server requires authorization and cannot be enabled from the bot.",
-
-  "cmd.description.rename": "重命名当前会话",
 
   "legacy.models.fetch_error": "🔴 获取模型列表失败。请使用 /status 检查服务器状态。",
   "legacy.models.empty": "📋 没有可用模型。请在 OpenCode 中配置 providers。",

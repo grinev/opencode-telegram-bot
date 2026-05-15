@@ -2,11 +2,13 @@ import type { Bot } from "grammy";
 import { CommandContext, Context } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
-import { resolveProjectAgent } from "../../agent/manager.js";
-import { setCurrentSession, SessionInfo } from "../../session/manager.js";
+import { fetchCurrentAgent } from "../../agent/manager.js";
+import { clearCurrentAgent } from "../../settings/manager.js";
+import { clearSession, getCurrentSession, setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { clearAllInteractionState } from "../../interaction/cleanup.js";
 import { interactionManager } from "../../interaction/manager.js";
+import { fetchCurrentModelFromSession } from "../../model/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
 import {
   appendInlineMenuCancelButton,
@@ -18,14 +20,32 @@ import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { getDateLocale, t } from "../../i18n/index.js";
-import { attachToSession } from "../../attach/service.js";
+import type { I18nKey } from "../../i18n/en.js";
+import { attachToSession, detachAttachedSession } from "../../attach/service.js";
+import { pinnedMessageManager } from "../../pinned/manager.js";
+import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
+import { assistantRunState } from "../assistant-run-state.js";
+import { clearPromptResponseMode } from "../handlers/prompt.js";
 import { renderAssistantFinalPartsSafe } from "../utils/assistant-rendering.js";
 import { sendRenderedBotPart } from "../utils/telegram-text.js";
 
 const SESSION_CALLBACK_PREFIX = "session:";
 const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
 const BACKGROUND_SESSION_CALLBACK_PREFIX = "background-session:";
+const SESSION_PREVIEW_PREFIX = "session:preview:";
+const SESSION_SELECT_PREFIX = "session:select:";
+const SESSION_RENAME_PREFIX = "session:rename:";
+const SESSION_DELETE_PREFIX = "session:delete:";
+const SESSION_DELETE_CONFIRM_PREFIX = "session:delete:confirm:";
+const SESSION_DELETE_CANCEL_PREFIX = "session:delete:cancel:";
+const RENAME_CANCEL_CALLBACK = "rename:cancel";
 const SESSION_FETCH_EXTRA_COUNT = 1;
+
+type SessionTranslationParams = Record<string, string | number | boolean | null | undefined>;
+
+function sessionT(key: string, params?: SessionTranslationParams): string {
+  return t(key as I18nKey, params);
+}
 
 type SessionListItem = {
   id: string;
@@ -192,7 +212,7 @@ function buildSessionsKeyboard(pageData: SessionPage, pageSize: number): InlineK
   pageData.sessions.forEach((session, index) => {
     const date = new Date(session.time.created).toLocaleDateString(localeForDate);
     const label = `${pageStartIndex + index + 1}. ${session.title} (${date})`;
-    keyboard.text(label, `${SESSION_CALLBACK_PREFIX}${session.id}`).row();
+    keyboard.text(label, `${SESSION_PREVIEW_PREFIX}${session.id}`).row();
   });
 
   if (pageData.page > 0) {
@@ -207,6 +227,17 @@ function buildSessionsKeyboard(pageData: SessionPage, pageSize: number): InlineK
     keyboard.row();
   }
 
+  return keyboard;
+}
+
+function buildSessionPreviewKeyboard(sessionId: string): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  keyboard
+    .text(sessionT("sessions.button.select"), `${SESSION_SELECT_PREFIX}${sessionId}`)
+    .text(sessionT("sessions.button.rename"), `${SESSION_RENAME_PREFIX}${sessionId}`)
+    .row()
+    .text(sessionT("sessions.button.delete"), `${SESSION_DELETE_PREFIX}${sessionId}`)
+    .text(sessionT("sessions.button.close"), "inline:cancel:session");
   return keyboard;
 }
 
@@ -321,11 +352,32 @@ async function selectSessionById(
 
   if (ctx.chat) {
     const chatId = ctx.chat.id;
-    const currentAgent = await resolveProjectAgent();
 
+    clearCurrentAgent();
+
+    const currentAgent = await fetchCurrentAgent();
     keyboardManager.updateAgent(currentAgent);
 
-    const contextInfo = keyboardManager.getContextInfo();
+    const currentModel = await fetchCurrentModelFromSession();
+    keyboardManager.updateModel(currentModel);
+
+    // Refresh context limit AFTER model sync — fetchContextLimit() reads getStoredModel()
+    await pinnedMessageManager.refreshContextLimit();
+
+    // Re-read tokensUsed from history — onSessionChange() was called inside
+    // attachToSession() with the OLD model, so loadContextFromHistory() may have
+    // used the wrong tokensLimit when building the pinned message. Reload to
+    // ensure the new model's limit is reflected in the pinned message.
+    const currentSession = getCurrentSession();
+    const currentProjectWorktree = currentProject.worktree;
+    if (currentSession) {
+      await pinnedMessageManager.loadContextFromHistory(
+        currentSession.id,
+        currentProjectWorktree,
+      );
+    }
+
+    const contextInfo = pinnedMessageManager.getContextInfo();
     if (contextInfo) {
       keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
     }
@@ -482,12 +534,58 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
       return true;
     }
 
-    await selectSessionById(ctx, deps, sessionId, {
-      source: "menu",
-      deleteCallbackMessage: true,
-      removeCallbackReplyMarkup: false,
-      postSelectAction: "preview",
-    });
+    if (callbackQuery.data.startsWith(SESSION_PREVIEW_PREFIX)) {
+      const previewSessionId = callbackQuery.data.slice(SESSION_PREVIEW_PREFIX.length);
+      if (!previewSessionId) {
+        await ctx.answerCallbackQuery({ text: t("callback.processing_error") });
+        return true;
+      }
+      await handleSessionPreviewCallback(ctx, deps, previewSessionId, currentProject.worktree);
+    } else if (callbackQuery.data.startsWith(SESSION_SELECT_PREFIX)) {
+      const selectSessionId = callbackQuery.data.slice(SESSION_SELECT_PREFIX.length);
+      if (!selectSessionId) {
+        await ctx.answerCallbackQuery({ text: t("callback.processing_error") });
+        return true;
+      }
+      await selectSessionById(ctx, deps, selectSessionId, {
+        source: "menu",
+        deleteCallbackMessage: false,
+        removeCallbackReplyMarkup: true,
+        postSelectAction: "none",
+      });
+    } else if (callbackQuery.data.startsWith(SESSION_RENAME_PREFIX)) {
+      const renameSessionId = callbackQuery.data.slice(SESSION_RENAME_PREFIX.length);
+      if (!renameSessionId) {
+        await ctx.answerCallbackQuery({ text: t("callback.processing_error") });
+        return true;
+      }
+      await handleSessionRenameCallback(ctx, renameSessionId, currentProject.worktree);
+    } else if (callbackQuery.data.startsWith(SESSION_DELETE_PREFIX)) {
+      if (callbackQuery.data.startsWith(SESSION_DELETE_CANCEL_PREFIX)) {
+        await handleSessionDeleteCancelCallback(ctx, currentProject.worktree);
+      } else if (callbackQuery.data.startsWith(SESSION_DELETE_CONFIRM_PREFIX)) {
+        const confirmSessionId = callbackQuery.data.slice(SESSION_DELETE_CONFIRM_PREFIX.length);
+        if (!confirmSessionId) {
+          await ctx.answerCallbackQuery({ text: t("callback.processing_error") });
+          return true;
+        }
+        await handleSessionDeleteConfirmCallback(ctx, deps, confirmSessionId, currentProject.worktree);
+      } else {
+        const deleteSessionId = callbackQuery.data.slice(SESSION_DELETE_PREFIX.length);
+        if (!deleteSessionId) {
+          await ctx.answerCallbackQuery({ text: t("callback.processing_error") });
+          return true;
+        }
+        await handleSessionDeleteCallback(ctx, deleteSessionId, currentProject.worktree);
+      }
+    } else {
+      await selectSessionById(ctx, deps, sessionId, {
+        source: "menu",
+        deleteCallbackMessage: true,
+        removeCallbackReplyMarkup: false,
+        postSelectAction: "preview",
+      });
+    }
   } catch (error) {
     clearAllInteractionState("session_select_error");
     logger.error("[Sessions] Error selecting session:", error);
@@ -496,6 +594,324 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
   }
 
   return true;
+}
+
+async function handleSessionPreviewCallback(
+  ctx: Context,
+  _deps: SessionSelectDeps,
+  sessionId: string,
+  directory: string,
+): Promise<void> {
+  const { data: session, error } = await opencodeClient.session.get({
+    sessionID: sessionId,
+    directory,
+  });
+
+  if (error || !session) {
+    await ctx.answerCallbackQuery({ text: t("sessions.select_error"), show_alert: true });
+    return;
+  }
+
+  const previewItems = await loadSessionPreview(sessionId, directory);
+  const previewText = formatSessionPreview(session.title, previewItems);
+  const keyboard = buildSessionPreviewKeyboard(sessionId);
+
+  try {
+    await ctx.editMessageText(previewText, { reply_markup: keyboard });
+  } catch (err) {
+    logger.warn("[Sessions] Failed to edit message for preview, sending new:", err);
+    await ctx.reply(previewText, { reply_markup: keyboard });
+  }
+
+  await ctx.answerCallbackQuery();
+  logger.info(`[Sessions] Preview shown for session: id=${sessionId}, title="${session.title}"`);
+}
+
+async function handleSessionRenameCallback(
+  ctx: Context,
+  sessionId: string,
+  directory: string,
+): Promise<void> {
+  const { data: session, error } = await opencodeClient.session.get({
+    sessionID: sessionId,
+    directory,
+  });
+
+  if (error || !session) {
+    await ctx.answerCallbackQuery({ text: t("sessions.select_error"), show_alert: true });
+    return;
+  }
+
+  const keyboard = new InlineKeyboard().text(sessionT("sessions.rename.cancel"), RENAME_CANCEL_CALLBACK);
+  const text = sessionT("sessions.rename.prompt", { title: session.title });
+
+  try {
+    await ctx.editMessageText(text, { reply_markup: keyboard });
+  } catch (err) {
+    logger.warn("[Sessions] Failed to edit message for rename prompt:", err);
+  }
+
+  interactionManager.start({
+    kind: "custom",
+    expectedInput: "text",
+    metadata: {
+      action: "session_rename",
+      sessionId,
+      directory,
+      currentTitle: session.title,
+    },
+  });
+
+  await ctx.answerCallbackQuery();
+  logger.info(`[Sessions] Rename flow started for session: id=${sessionId}`);
+}
+
+export async function handleRenameCancelCallback(ctx: Context): Promise<boolean> {
+  const data = ctx.callbackQuery?.data;
+  if (data !== RENAME_CANCEL_CALLBACK) {
+    return false;
+  }
+
+  const state = interactionManager.getSnapshot();
+  if (!state || state.kind !== "custom" || state.metadata?.action !== "session_rename") {
+    await ctx.answerCallbackQuery({ text: t("callback.processing_error") });
+    return true;
+  }
+
+  const { sessionId, directory } = state.metadata as {
+    sessionId: string;
+    directory: string;
+    currentTitle: string;
+  };
+
+  interactionManager.clear("rename_cancelled");
+
+  const { data: session } = await opencodeClient.session.get({
+    sessionID: sessionId,
+    directory,
+  });
+
+  if (session && ctx.chat) {
+    const previewItems = await loadSessionPreview(sessionId, directory);
+    const previewText = formatSessionPreview(session.title, previewItems);
+    const keyboard = buildSessionPreviewKeyboard(sessionId);
+    try {
+      await ctx.editMessageText(previewText, { reply_markup: keyboard });
+    } catch (err) {
+      logger.warn("[Sessions] Failed to restore preview after rename cancel:", err);
+    }
+  }
+
+  await ctx.answerCallbackQuery();
+  logger.info(`[Sessions] Rename cancelled for session: id=${sessionId}`);
+  return true;
+}
+
+export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
+  const state = interactionManager.getSnapshot();
+  if (!state || state.kind !== "custom" || state.metadata?.action !== "session_rename") {
+    return false;
+  }
+
+  const text = ctx.message?.text;
+  if (!text || text.startsWith("/")) {
+    return false;
+  }
+
+  const { sessionId, directory } = state.metadata as {
+    sessionId: string;
+    directory: string;
+    currentTitle: string;
+  };
+
+  const newTitle = text.trim();
+  if (!newTitle) {
+    await ctx.reply(sessionT("sessions.rename.empty"));
+    return true;
+  }
+
+  logger.info(`[Sessions] Renaming session ${sessionId} to: ${newTitle}`);
+
+  try {
+    const { data: updatedSession, error } = await opencodeClient.session.update({
+      sessionID: sessionId,
+      directory,
+      title: newTitle,
+    });
+
+    if (error || !updatedSession) {
+      throw error || new Error("Failed to update session");
+    }
+
+    const currentSession = getCurrentSession();
+    if (currentSession && currentSession.id === sessionId) {
+      setCurrentSession({ id: sessionId, title: newTitle, directory });
+      if (pinnedMessageManager.isInitialized()) {
+        await pinnedMessageManager.onSessionChange(sessionId, newTitle);
+      }
+    }
+
+    interactionManager.clear("rename_completed");
+    await ctx.reply(sessionT("sessions.rename.success", { title: newTitle }));
+    logger.info(`[Sessions] Session renamed successfully: ${newTitle}`);
+  } catch (error) {
+    logger.error("[Sessions] Error renaming session:", error);
+    await ctx.reply(sessionT("sessions.rename.error"));
+  }
+
+  return true;
+}
+
+async function handleSessionDeleteCallback(
+  ctx: Context,
+  sessionId: string,
+  directory: string,
+): Promise<void> {
+  const { data: session, error } = await opencodeClient.session.get({
+    sessionID: sessionId,
+    directory,
+  });
+
+  if (error || !session) {
+    await ctx.answerCallbackQuery({ text: t("sessions.select_error"), show_alert: true });
+    return;
+  }
+
+  const text = sessionT("sessions.delete.confirm", { title: session.title });
+  const keyboard = new InlineKeyboard()
+    .text(sessionT("sessions.delete.yes"), `${SESSION_DELETE_CONFIRM_PREFIX}${sessionId}`)
+    .text(sessionT("sessions.delete.no"), `${SESSION_DELETE_CANCEL_PREFIX}${sessionId}`);
+
+  try {
+    await ctx.editMessageText(text, { reply_markup: keyboard });
+  } catch (err) {
+    logger.warn("[Sessions] Failed to edit message for delete confirm:", err);
+  }
+
+  await ctx.answerCallbackQuery();
+  logger.info(`[Sessions] Delete confirmation shown for session: id=${sessionId}`);
+}
+
+async function handleSessionDeleteConfirmCallback(
+  ctx: Context,
+  _deps: SessionSelectDeps,
+  sessionId: string,
+  directory: string,
+): Promise<void> {
+  try {
+    const { data: sessionBeforeDelete, error: getError } = await opencodeClient.session.get({
+      sessionID: sessionId,
+      directory,
+    });
+    if (getError) {
+      logger.warn("[Sessions] Failed to fetch session before delete:", getError);
+    }
+    const deletedTitle = sessionBeforeDelete?.title ?? sessionId;
+
+    const { error } = await opencodeClient.session.delete({
+      sessionID: sessionId,
+      directory,
+    });
+
+    if (error) {
+      const isNotFound = (error as { status?: number })?.status === 404;
+      const errorMessage = isNotFound
+        ? sessionT("sessions.delete.not_found")
+        : sessionT("sessions.delete.error");
+      await ctx.editMessageText(errorMessage).catch(() => {});
+      await ctx.answerCallbackQuery({ text: errorMessage, show_alert: true });
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (currentSession && currentSession.id === sessionId) {
+      detachAttachedSession("session_deleted");
+      clearPromptResponseMode(sessionId);
+      foregroundSessionState.markIdle(sessionId);
+      assistantRunState.clearRun(sessionId, "session_deleted");
+      clearAllInteractionState("session_deleted");
+      clearSession();
+
+      if (pinnedMessageManager.isInitialized()) {
+        try {
+          await pinnedMessageManager.clear();
+        } catch (err) {
+          logger.error("[Sessions] Failed to clear pinned message after delete:", err);
+        }
+      }
+
+      if (ctx.chat) {
+        keyboardManager.initialize(ctx.api, ctx.chat.id);
+      }
+
+      await pinnedMessageManager.refreshContextLimit();
+      const contextLimit = pinnedMessageManager.getContextLimit();
+      keyboardManager.updateContext(0, contextLimit);
+    } else {
+      clearAllInteractionState("session_deleted_other");
+    }
+
+    const successMessage = sessionT("sessions.delete.success", { title: deletedTitle });
+    try {
+      await ctx.editMessageText(successMessage);
+    } catch (err) {
+      logger.warn("[Sessions] Failed to edit message after delete:", err);
+      await ctx.reply(successMessage);
+    }
+
+    await ctx.answerCallbackQuery();
+    logger.info(`[Sessions] Session deleted: id=${sessionId}`);
+  } catch (error) {
+    logger.error("[Sessions] Error deleting session:", error);
+    try {
+      await ctx.editMessageText(sessionT("sessions.delete.error"));
+    } catch (err) {
+      logger.warn("[Sessions] Failed to edit message after delete error:", err);
+      await ctx.reply(sessionT("sessions.delete.error"));
+    }
+    await ctx
+      .answerCallbackQuery({ text: sessionT("sessions.delete.error"), show_alert: true })
+      .catch(() => {});
+  }
+}
+
+async function handleSessionDeleteCancelCallback(ctx: Context, directory: string): Promise<void> {
+  const data = ctx.callbackQuery?.data;
+  const sessionId = data?.startsWith(SESSION_DELETE_CANCEL_PREFIX)
+    ? data.slice(SESSION_DELETE_CANCEL_PREFIX.length)
+    : null;
+
+  if (sessionId) {
+    const { data: session } = await opencodeClient.session.get({
+      sessionID: sessionId,
+      directory,
+    });
+    if (session) {
+      const previewItems = await loadSessionPreview(sessionId, directory);
+      const previewText = formatSessionPreview(session.title, previewItems);
+      const keyboard = buildSessionPreviewKeyboard(sessionId);
+      try {
+        await ctx.editMessageText(previewText, { reply_markup: keyboard });
+      } catch (err) {
+        logger.warn("[Sessions] Failed to restore preview after delete cancel:", err);
+      }
+    } else {
+      try {
+        await ctx.editMessageReplyMarkup();
+      } catch (err) {
+        logger.debug("[Sessions] Failed to remove reply markup after delete cancel:", err);
+      }
+    }
+  } else {
+    try {
+      await ctx.editMessageReplyMarkup();
+    } catch (err) {
+      logger.debug("[Sessions] Failed to remove reply markup after delete cancel:", err);
+    }
+  }
+
+  await ctx.answerCallbackQuery();
+  logger.info(`[Sessions] Delete cancelled for session: id=${sessionId}`);
 }
 
 type SessionPreviewItem = {

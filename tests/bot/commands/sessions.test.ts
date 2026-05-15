@@ -3,6 +3,8 @@ import type { Bot, Context } from "grammy";
 import {
   buildBackgroundSessionOpenKeyboard,
   handleBackgroundSessionOpen,
+  handleRenameCancelCallback,
+  handleRenameTextAnswer,
   handleSessionSelect,
   sessionsCommand,
 } from "../../../src/bot/commands/sessions.js";
@@ -17,41 +19,62 @@ const mocked = vi.hoisted(() => ({
     worktree: "/repo",
   } as { id: string; worktree: string; name?: string } | null,
   sessionListMock: vi.fn(),
+  sessionDeleteMock: vi.fn(),
   sessionGetMock: vi.fn(),
   sessionMessagesMock: vi.fn(),
+  sessionUpdateMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
+  detachAttachedSessionMock: vi.fn(),
+  clearSessionMock: vi.fn(),
+  getCurrentSessionMock: vi.fn(() => null),
   clearSummaryMock: vi.fn(),
   clearInteractionMock: vi.fn(),
   keyboardInitializeMock: vi.fn(),
   keyboardGetKeyboardMock: vi.fn(() => ({ inline_keyboard: [] })),
   keyboardUpdateAgentMock: vi.fn(),
+  keyboardUpdateModelMock: vi.fn(),
   keyboardUpdateContextMock: vi.fn(),
   keyboardGetContextInfoMock: vi.fn(() => null),
   pinnedIsInitializedMock: vi.fn(() => false),
   pinnedInitializeMock: vi.fn(),
+  pinnedClearMock: vi.fn(),
   pinnedOnSessionChangeMock: vi.fn(),
   pinnedLoadContextFromHistoryMock: vi.fn(),
+  pinnedRefreshContextLimitMock: vi.fn(() => {}),
+  pinnedGetContextLimitMock: vi.fn(() => 100000),
   pinnedGetContextInfoMock: vi.fn(() => null),
-  resolveProjectAgentMock: vi.fn(async () => "build"),
+  fetchCurrentAgentMock: vi.fn(() => "build"),
+  fetchCurrentModelFromSessionMock: vi.fn(),
+  setCurrentAgentMock: vi.fn(),
   attachToSessionMock: vi.fn(),
+  foregroundBusy: false,
+  foregroundMarkIdleMock: vi.fn(),
+  assistantClearRunMock: vi.fn(),
+  clearPromptResponseModeMock: vi.fn(),
   ensureEventSubscriptionMock: vi.fn(),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
   opencodeClient: {
     session: {
+      delete: mocked.sessionDeleteMock,
       list: mocked.sessionListMock,
       get: mocked.sessionGetMock,
       messages: mocked.sessionMessagesMock,
+      update: mocked.sessionUpdateMock,
     },
   },
 }));
 
 vi.mock("../../../src/settings/manager.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
+  setCurrentAgent: mocked.setCurrentAgentMock,
+  clearCurrentAgent: mocked.setCurrentAgentMock,
 }));
 
 vi.mock("../../../src/session/manager.js", () => ({
+  clearSession: mocked.clearSessionMock,
+  getCurrentSession: mocked.getCurrentSessionMock,
   setCurrentSession: mocked.setCurrentSessionMock,
 }));
 
@@ -71,26 +94,58 @@ vi.mock("../../../src/keyboard/manager.js", () => ({
     getKeyboard: mocked.keyboardGetKeyboardMock,
     getContextInfo: mocked.keyboardGetContextInfoMock,
     updateAgent: mocked.keyboardUpdateAgentMock,
+    updateModel: mocked.keyboardUpdateModelMock,
     updateContext: mocked.keyboardUpdateContextMock,
   },
 }));
 
 vi.mock("../../../src/agent/manager.js", () => ({
-  resolveProjectAgent: mocked.resolveProjectAgentMock,
+  fetchCurrentAgent: mocked.fetchCurrentAgentMock,
+}));
+
+vi.mock("../../../src/model/manager.js", () => ({
+  fetchCurrentModelFromSession: mocked.fetchCurrentModelFromSessionMock,
 }));
 
 vi.mock("../../../src/pinned/manager.js", () => ({
   pinnedMessageManager: {
     isInitialized: mocked.pinnedIsInitializedMock,
     initialize: mocked.pinnedInitializeMock,
+    clear: mocked.pinnedClearMock,
     onSessionChange: mocked.pinnedOnSessionChangeMock,
     loadContextFromHistory: mocked.pinnedLoadContextFromHistoryMock,
+    refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
+    getContextLimit: mocked.pinnedGetContextLimitMock,
     getContextInfo: mocked.pinnedGetContextInfoMock,
   },
 }));
 
 vi.mock("../../../src/attach/service.js", () => ({
   attachToSession: mocked.attachToSessionMock,
+  detachAttachedSession: mocked.detachAttachedSessionMock,
+}));
+
+vi.mock("../../../src/scheduled-task/foreground-state.js", () => ({
+  foregroundSessionState: {
+    __resetForTests: vi.fn(() => {
+      mocked.foregroundBusy = false;
+    }),
+    isBusy: vi.fn(() => mocked.foregroundBusy),
+    markBusy: vi.fn(() => {
+      mocked.foregroundBusy = true;
+    }),
+    markIdle: mocked.foregroundMarkIdleMock,
+  },
+}));
+
+vi.mock("../../../src/bot/assistant-run-state.js", () => ({
+  assistantRunState: {
+    clearRun: mocked.assistantClearRunMock,
+  },
+}));
+
+vi.mock("../../../src/bot/handlers/prompt.js", () => ({
+  clearPromptResponseMode: mocked.clearPromptResponseModeMock,
 }));
 
 vi.mock("../../../src/utils/safe-background-task.js", () => ({
@@ -209,9 +264,17 @@ describe("bot/commands/sessions", () => {
     };
 
     mocked.sessionListMock.mockReset();
+    mocked.sessionDeleteMock.mockReset();
+    mocked.sessionDeleteMock.mockResolvedValue({ data: true, error: null });
     mocked.sessionGetMock.mockReset();
     mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock.mockResolvedValue({ data: [], error: null });
+    mocked.sessionUpdateMock.mockReset();
     mocked.setCurrentSessionMock.mockReset();
+    mocked.detachAttachedSessionMock.mockReset();
+    mocked.clearSessionMock.mockReset();
+    mocked.getCurrentSessionMock.mockReset();
+    mocked.getCurrentSessionMock.mockReturnValue(null);
     mocked.clearSummaryMock.mockReset();
     mocked.clearInteractionMock.mockReset();
     mocked.keyboardInitializeMock.mockReset();
@@ -220,18 +283,31 @@ describe("bot/commands/sessions", () => {
     mocked.keyboardGetContextInfoMock.mockReset();
     mocked.keyboardGetContextInfoMock.mockReturnValue(null);
     mocked.keyboardUpdateAgentMock.mockReset();
+    mocked.keyboardUpdateModelMock.mockReset();
     mocked.keyboardUpdateContextMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReturnValue(false);
     mocked.pinnedInitializeMock.mockReset();
+    mocked.pinnedClearMock.mockReset();
+    mocked.pinnedClearMock.mockResolvedValue(undefined);
     mocked.pinnedOnSessionChangeMock.mockReset();
     mocked.pinnedOnSessionChangeMock.mockResolvedValue(undefined);
     mocked.pinnedLoadContextFromHistoryMock.mockReset();
     mocked.pinnedLoadContextFromHistoryMock.mockResolvedValue(undefined);
+    mocked.pinnedRefreshContextLimitMock.mockReset();
+    mocked.pinnedRefreshContextLimitMock.mockResolvedValue(undefined);
+    mocked.pinnedGetContextLimitMock.mockReset();
+    mocked.pinnedGetContextLimitMock.mockReturnValue(100000);
     mocked.pinnedGetContextInfoMock.mockReset();
     mocked.pinnedGetContextInfoMock.mockReturnValue(null);
-    mocked.resolveProjectAgentMock.mockReset();
-    mocked.resolveProjectAgentMock.mockResolvedValue("build");
+    mocked.fetchCurrentAgentMock.mockReset();
+    mocked.fetchCurrentAgentMock.mockReturnValue("code");
+    mocked.fetchCurrentModelFromSessionMock.mockReset();
+    mocked.fetchCurrentModelFromSessionMock.mockResolvedValue({
+      providerID: "anthropic",
+      modelID: "claude-3.5-sonnet",
+      variant: "default",
+    });
     mocked.attachToSessionMock.mockReset();
     mocked.attachToSessionMock.mockResolvedValue({
       busy: false,
@@ -239,6 +315,9 @@ describe("bot/commands/sessions", () => {
       restoredQuestion: false,
       restoredPermissions: 0,
     });
+    mocked.foregroundMarkIdleMock.mockReset();
+    mocked.assistantClearRunMock.mockReset();
+    mocked.clearPromptResponseModeMock.mockReset();
     mocked.ensureEventSubscriptionMock.mockReset();
     safeBackgroundTaskMock.mockReset();
   });
@@ -257,8 +336,8 @@ describe("bot/commands/sessions", () => {
     });
 
     const keyboardRows = getKeyboardButtons(ctx);
-    expect(keyboardRows[0]?.[0]?.callback_data).toBe("session:session-1");
-    expect(keyboardRows[9]?.[0]?.callback_data).toBe("session:session-10");
+    expect(keyboardRows[0]?.[0]?.callback_data).toBe("session:preview:session-1");
+    expect(keyboardRows[9]?.[0]?.callback_data).toBe("session:preview:session-10");
     expect(keyboardRows[10]?.[0]?.callback_data).toBe("session:page:1");
     expect(keyboardRows[11]?.[0]?.callback_data).toBe("inline:cancel:session");
   });
@@ -304,8 +383,8 @@ describe("bot/commands/sessions", () => {
 
     expect(text).toBe(t("sessions.select_page", { page: 2 }));
     const inlineRows = options.reply_markup.inline_keyboard;
-    expect(inlineRows[0]?.[0]?.callback_data).toBe("session:session-11");
-    expect(inlineRows[1]?.[0]?.callback_data).toBe("session:session-12");
+    expect(inlineRows[0]?.[0]?.callback_data).toBe("session:preview:session-11");
+    expect(inlineRows[1]?.[0]?.callback_data).toBe("session:preview:session-12");
     expect(inlineRows[2]?.[0]?.callback_data).toBe("session:page:0");
     expect(inlineRows[3]?.[0]?.callback_data).toBe("inline:cancel:session");
   });
@@ -374,21 +453,22 @@ describe("bot/commands/sessions", () => {
       },
     });
 
-    const ctx = createCallbackContext("session:session-1", 456);
+    const ctx = createCallbackContext("session:preview:session-1", 456);
     const handled = await handleSessionSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
-    expect(mocked.clearInteractionMock).toHaveBeenCalledWith("session_select_error");
-    expect(ctx.answerCallbackQuery).toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("sessions.select_error"));
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("sessions.select_error"),
+      show_alert: true,
+    });
   });
 
-  it("resolves the project agent before sending the keyboard for an existing session", async () => {
+  it("syncs context, agent, and model before sending the keyboard for an existing session", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
       data: createSession(0),
       error: null,
     });
-    mocked.resolveProjectAgentMock.mockResolvedValueOnce("plan");
+    mocked.fetchCurrentAgentMock.mockReturnValueOnce("plan");
 
     interactionManager.start({
       kind: "inline",
@@ -399,12 +479,17 @@ describe("bot/commands/sessions", () => {
       },
     });
 
-    const ctx = createCallbackContext("session:session-1", 456);
+    const ctx = createCallbackContext("session:select:session-1", 456);
     const handled = await handleSessionSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
-    expect(mocked.resolveProjectAgentMock).toHaveBeenCalledOnce();
+    expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalled();
+    expect(mocked.fetchCurrentAgentMock).toHaveBeenCalled();
+    expect(mocked.fetchCurrentModelFromSessionMock).toHaveBeenCalled();
     expect(mocked.keyboardUpdateAgentMock).toHaveBeenCalledWith("plan");
+    expect(mocked.keyboardUpdateModelMock).toHaveBeenCalledWith(
+      expect.objectContaining({ providerID: "anthropic", modelID: "claude-3.5-sonnet" }),
+    );
     expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
       bot: expect.any(Object),
       chatId: 111,
@@ -415,18 +500,17 @@ describe("bot/commands/sessions", () => {
       },
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
-    expect((ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([
+    const sendMessageCalls = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls;
+    const selectedCall = sendMessageCalls.find(
+      (call: unknown[]) => typeof call[1] === "string" && (call[1] as string).includes("Session 1"),
+    );
+    expect(selectedCall).toEqual([
       111,
       t("sessions.selected", { title: "Session 1" }),
       expect.objectContaining({
         reply_markup: { inline_keyboard: [] },
       }),
     ]);
-    expect(safeBackgroundTaskMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskName: "sessions.sendPreview",
-      }),
-    );
   });
 
   it("blocks session selection callback while foreground session is busy", async () => {
@@ -441,7 +525,7 @@ describe("bot/commands/sessions", () => {
       },
     });
 
-    const ctx = createCallbackContext("session:session-1", 456);
+    const ctx = createCallbackContext("session:preview:session-1", 456);
     const handled = await handleSessionSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
@@ -658,5 +742,401 @@ describe("bot/commands/sessions", () => {
     expect(handled).toBe(false);
     expect(mocked.sessionGetMock).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
+  });
+
+  describe("session preview panel", () => {
+    it("shows preview with action buttons when session:preview:{id} is clicked", async () => {
+      mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+      mocked.sessionMessagesMock.mockResolvedValueOnce({
+        data: [
+          createSessionMessage("user", "Please inspect the bug", 100),
+          createSessionMessage("assistant", "The issue is fixed", 200),
+        ],
+        error: null,
+      });
+      interactionManager.start({
+        kind: "inline",
+        expectedInput: "callback",
+        metadata: {
+          menuKind: "session",
+          messageId: 456,
+        },
+      });
+
+      const ctx = createCallbackContext("session:preview:session-1", 456);
+      const handled = await handleSessionSelect(ctx, createDeps());
+
+      expect(handled).toBe(true);
+      expect(mocked.sessionGetMock).toHaveBeenCalledWith({
+        sessionID: "session-1",
+        directory: "/repo",
+      });
+      expect(mocked.sessionMessagesMock).toHaveBeenCalledWith({
+        sessionID: "session-1",
+        directory: "/repo",
+        limit: 6,
+      });
+      expect(ctx.editMessageText).toHaveBeenCalledTimes(1);
+
+      const [text, options] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [
+        string,
+        { reply_markup: { inline_keyboard: Array<Array<{ text: string; callback_data?: string }>> } },
+      ];
+
+      expect(text).toContain(t("sessions.preview.title"));
+      expect(text).toContain(`${t("sessions.preview.you")} Please inspect the bug`);
+      expect(text).toContain(`${t("sessions.preview.agent")} The issue is fixed`);
+      expect(options.reply_markup.inline_keyboard).toEqual([
+        [
+          { text: t("sessions.button.select"), callback_data: "session:select:session-1" },
+          { text: t("sessions.button.rename"), callback_data: "session:rename:session-1" },
+        ],
+        [
+          { text: t("sessions.button.delete"), callback_data: "session:delete:session-1" },
+          { text: t("sessions.button.close"), callback_data: "inline:cancel:session" },
+        ],
+      ]);
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
+    });
+
+    it("answers callback with error when preview fetch fails", async () => {
+      mocked.sessionGetMock.mockResolvedValueOnce({
+        data: null,
+        error: new Error("session get failed"),
+      });
+      interactionManager.start({
+        kind: "inline",
+        expectedInput: "callback",
+        metadata: {
+          menuKind: "session",
+          messageId: 456,
+        },
+      });
+
+      const ctx = createCallbackContext("session:preview:session-1", 456);
+      const handled = await handleSessionSelect(ctx, createDeps());
+
+      expect(handled).toBe(true);
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+        text: t("sessions.select_error"),
+        show_alert: true,
+      });
+      expect(ctx.editMessageText).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("session select from preview panel", () => {
+    it("selects session when session:select:{id} is clicked", async () => {
+      mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+      mocked.fetchCurrentAgentMock.mockReturnValueOnce("plan");
+      interactionManager.start({
+        kind: "inline",
+        expectedInput: "callback",
+        metadata: {
+          menuKind: "session",
+          messageId: 456,
+        },
+      });
+
+      const ctx = createCallbackContext("session:select:session-1", 456);
+      const handled = await handleSessionSelect(ctx, createDeps());
+
+      expect(handled).toBe(true);
+      expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith({
+        id: "session-1",
+        title: "Session 1",
+        directory: "/repo",
+      });
+      expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
+        bot: expect.any(Object),
+        chatId: 111,
+        session: {
+          id: "session-1",
+          title: "Session 1",
+          directory: "/repo",
+        },
+        ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      });
+      expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalled();
+      expect(mocked.fetchCurrentAgentMock).toHaveBeenCalled();
+      expect(mocked.fetchCurrentModelFromSessionMock).toHaveBeenCalled();
+      expect(mocked.keyboardUpdateAgentMock).toHaveBeenCalledWith("plan");
+      expect(mocked.keyboardUpdateModelMock).toHaveBeenCalledWith(
+        expect.objectContaining({ providerID: "anthropic", modelID: "claude-3.5-sonnet" }),
+      );
+      expect(ctx.editMessageReplyMarkup).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("session rename flow", () => {
+    it("enters rename mode when session:rename:{id} is clicked", async () => {
+      mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+      interactionManager.start({
+        kind: "inline",
+        expectedInput: "callback",
+        metadata: {
+          menuKind: "session",
+          messageId: 456,
+        },
+      });
+
+      const ctx = createCallbackContext("session:rename:session-1", 456);
+      const handled = await handleSessionSelect(ctx, createDeps());
+
+      expect(handled).toBe(true);
+      expect(ctx.editMessageText).toHaveBeenCalledWith(t("sessions.rename.prompt", { title: "Session 1" }), {
+        reply_markup: expect.objectContaining({
+          inline_keyboard: [[{ text: t("sessions.rename.cancel"), callback_data: "rename:cancel" }]],
+        }),
+      });
+
+      const snapshot = interactionManager.getSnapshot();
+      expect(snapshot?.kind).toBe("custom");
+      expect(snapshot?.metadata).toEqual({
+        action: "session_rename",
+        sessionId: "session-1",
+        directory: "/repo",
+        currentTitle: "Session 1",
+      });
+    });
+
+    it("processes rename text input successfully", async () => {
+      interactionManager.start({
+        kind: "custom",
+        expectedInput: "text",
+        metadata: {
+          action: "session_rename",
+          sessionId: "session-1",
+          directory: "/repo",
+          currentTitle: "Session 1",
+        },
+      });
+      mocked.sessionUpdateMock.mockResolvedValueOnce({
+        data: { ...createSession(0), title: "New Title" },
+        error: null,
+      });
+
+      const ctx = {
+        ...createCommandContext(),
+        message: { text: "New Title" },
+      } as unknown as Context;
+      const handled = await handleRenameTextAnswer(ctx);
+
+      expect(handled).toBe(true);
+      expect(mocked.sessionUpdateMock).toHaveBeenCalledWith({
+        sessionID: "session-1",
+        directory: "/repo",
+        title: "New Title",
+      });
+      expect(ctx.reply).toHaveBeenCalledWith(t("sessions.rename.success", { title: "New Title" }));
+      expect(interactionManager.getSnapshot()).toBeNull();
+    });
+
+    it("rejects empty title during rename", async () => {
+      interactionManager.start({
+        kind: "custom",
+        expectedInput: "text",
+        metadata: {
+          action: "session_rename",
+          sessionId: "session-1",
+          directory: "/repo",
+          currentTitle: "Session 1",
+        },
+      });
+
+      const ctx = {
+        ...createCommandContext(),
+        message: { text: "   " },
+      } as unknown as Context;
+      const handled = await handleRenameTextAnswer(ctx);
+
+      expect(handled).toBe(true);
+      expect(ctx.reply).toHaveBeenCalledWith(t("sessions.rename.empty"));
+      expect(mocked.sessionUpdateMock).not.toHaveBeenCalled();
+      expect(interactionManager.getSnapshot()).toEqual(
+        expect.objectContaining({
+          kind: "custom",
+          metadata: expect.objectContaining({ action: "session_rename" }),
+        }),
+      );
+    });
+
+    it("cancels rename when cancel button is clicked", async () => {
+      interactionManager.start({
+        kind: "custom",
+        expectedInput: "text",
+        metadata: {
+          action: "session_rename",
+          sessionId: "session-1",
+          directory: "/repo",
+          currentTitle: "Session 1",
+        },
+      });
+      mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+      mocked.sessionMessagesMock.mockResolvedValueOnce({ data: [], error: null });
+
+      const ctx = createCallbackContext("rename:cancel", 456);
+      const handled = await handleRenameCancelCallback(ctx);
+
+      expect(handled).toBe(true);
+      expect(interactionManager.getSnapshot()).toBeNull();
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
+      expect(ctx.editMessageText).toHaveBeenCalledWith(t("sessions.preview.empty"), {
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.any(Array),
+        }),
+      });
+    });
+
+    it("ignores text input when not in rename interaction", async () => {
+      const ctx = {
+        ...createCommandContext(),
+        message: { text: "New Title" },
+      } as unknown as Context;
+      const handled = await handleRenameTextAnswer(ctx);
+
+      expect(handled).toBe(false);
+      expect(mocked.sessionUpdateMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("session delete flow", () => {
+    it("shows delete confirmation when session:delete:{id} is clicked", async () => {
+      mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+      interactionManager.start({
+        kind: "inline",
+        expectedInput: "callback",
+        metadata: {
+          menuKind: "session",
+          messageId: 456,
+        },
+      });
+
+      const ctx = createCallbackContext("session:delete:session-1", 456);
+      const handled = await handleSessionSelect(ctx, createDeps());
+
+      expect(handled).toBe(true);
+      expect(ctx.editMessageText).toHaveBeenCalledWith(t("sessions.delete.confirm", { title: "Session 1" }), {
+        reply_markup: expect.objectContaining({
+          inline_keyboard: [
+            [
+              { text: t("sessions.delete.yes"), callback_data: "session:delete:confirm:session-1" },
+              { text: t("sessions.delete.no"), callback_data: "session:delete:cancel:session-1" },
+            ],
+          ],
+        }),
+      });
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
+    });
+
+    it("deletes session when session:delete:confirm:{id} is clicked", async () => {
+      mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+      mocked.sessionDeleteMock.mockResolvedValueOnce({ data: true, error: null });
+      interactionManager.start({
+        kind: "inline",
+        expectedInput: "callback",
+        metadata: {
+          menuKind: "session",
+          messageId: 456,
+        },
+      });
+
+      const ctx = createCallbackContext("session:delete:confirm:session-1", 456);
+      const handled = await handleSessionSelect(ctx, createDeps());
+
+      expect(handled).toBe(true);
+      expect(mocked.sessionDeleteMock).toHaveBeenCalledWith({
+        sessionID: "session-1",
+        directory: "/repo",
+      });
+      expect(mocked.clearInteractionMock).toHaveBeenCalledWith("session_deleted_other");
+      expect(ctx.editMessageText).toHaveBeenCalledWith(
+        t("sessions.delete.success", { title: "Session 1" }),
+      );
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
+    });
+
+    it("cleans up local state when deleting current active session", async () => {
+      mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+      mocked.sessionDeleteMock.mockResolvedValueOnce({ data: true, error: null });
+      mocked.getCurrentSessionMock.mockReturnValueOnce({
+        id: "session-1",
+        title: "Session 1",
+        directory: "/repo",
+      });
+      interactionManager.start({
+        kind: "inline",
+        expectedInput: "callback",
+        metadata: {
+          menuKind: "session",
+          messageId: 456,
+        },
+      });
+
+      const ctx = createCallbackContext("session:delete:confirm:session-1", 456);
+      const handled = await handleSessionSelect(ctx, createDeps());
+
+      expect(handled).toBe(true);
+      expect(mocked.detachAttachedSessionMock).toHaveBeenCalledWith("session_deleted");
+      expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
+      expect(mocked.foregroundMarkIdleMock).toHaveBeenCalledWith("session-1");
+      expect(mocked.assistantClearRunMock).toHaveBeenCalledWith("session-1", "session_deleted");
+      expect(mocked.clearInteractionMock).toHaveBeenCalledWith("session_deleted");
+      expect(mocked.clearSessionMock).toHaveBeenCalledOnce();
+      expect(mocked.keyboardInitializeMock).toHaveBeenCalledWith(ctx.api, 111);
+      expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalledOnce();
+      expect(mocked.keyboardUpdateContextMock).toHaveBeenCalledWith(0, 100000);
+    });
+
+    it("cancels delete when no button is clicked", async () => {
+      mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+      mocked.sessionMessagesMock.mockResolvedValueOnce({ data: [], error: null });
+      interactionManager.start({
+        kind: "inline",
+        expectedInput: "callback",
+        metadata: {
+          menuKind: "session",
+          messageId: 456,
+        },
+      });
+
+      const ctx = createCallbackContext("session:delete:cancel:session-1", 456);
+      const handled = await handleSessionSelect(ctx, createDeps());
+
+      expect(handled).toBe(true);
+      expect(mocked.sessionDeleteMock).not.toHaveBeenCalled();
+      expect(ctx.editMessageText).toHaveBeenCalledWith(t("sessions.preview.empty"), {
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.any(Array),
+        }),
+      });
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
+    });
+
+    it("handles delete failure gracefully", async () => {
+      mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+      mocked.sessionDeleteMock.mockResolvedValueOnce({
+        data: null,
+        error: new Error("delete failed"),
+      });
+      interactionManager.start({
+        kind: "inline",
+        expectedInput: "callback",
+        metadata: {
+          menuKind: "session",
+          messageId: 456,
+        },
+      });
+
+      const ctx = createCallbackContext("session:delete:confirm:session-1", 456);
+      const handled = await handleSessionSelect(ctx, createDeps());
+
+      expect(handled).toBe(true);
+      expect(ctx.editMessageText).toHaveBeenCalledWith(t("sessions.delete.error"));
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+        text: t("sessions.delete.error"),
+        show_alert: true,
+      });
+    });
   });
 });

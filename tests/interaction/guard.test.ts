@@ -169,7 +169,7 @@ describe("interaction guard", () => {
 
   it("blocks voice input when text input is expected", () => {
     interactionManager.start({
-      kind: "rename",
+      kind: "task",
       expectedInput: "text",
     });
 
@@ -233,24 +233,9 @@ describe("interaction guard", () => {
     expect(decision.state?.kind).toBe("question");
   });
 
-  it("allows rename cancel callback when rename expects text", () => {
+  it("blocks non-cancel callback while task expects text", () => {
     interactionManager.start({
-      kind: "rename",
-      expectedInput: "text",
-    });
-
-    const decision = resolveInteractionGuardDecision(
-      createContext({ callbackData: "rename:cancel" }),
-    );
-
-    expect(decision.allow).toBe(true);
-    expect(decision.inputType).toBe("callback");
-    expect(decision.state?.kind).toBe("rename");
-  });
-
-  it("blocks non-rename callback while rename expects text", () => {
-    interactionManager.start({
-      kind: "rename",
+      kind: "task",
       expectedInput: "text",
     });
 
@@ -260,21 +245,7 @@ describe("interaction guard", () => {
 
     expect(decision.allow).toBe(false);
     expect(decision.reason).toBe("expected_text");
-    expect(decision.state?.kind).toBe("rename");
-  });
-
-  it("blocks photo input when text input is expected (rename)", () => {
-    interactionManager.start({
-      kind: "rename",
-      expectedInput: "text",
-    });
-
-    const decision = resolveInteractionGuardDecision(createContext({ photo: true }));
-
-    expect(decision.allow).toBe(false);
-    expect(decision.reason).toBe("expected_text");
-    expect(decision.inputType).toBe("other");
-    expect(decision.state?.kind).toBe("rename");
+    expect(decision.state?.kind).toBe("task");
   });
 
   it("blocks photo input when mixed input is expected (question)", () => {
@@ -375,15 +346,15 @@ describe("interaction guard", () => {
     expect(textDecision.busy).toBe(true);
   });
 
-  it("does not allow rename callback to bypass busy state", () => {
+  it("does not allow task callback to bypass busy state", () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     interactionManager.start({
-      kind: "rename",
+      kind: "task",
       expectedInput: "text",
     });
 
     const decision = resolveInteractionGuardDecision(
-      createContext({ callbackData: "rename:cancel" }),
+      createContext({ callbackData: "task:cancel" }),
     );
 
     expect(decision.allow).toBe(false);

@@ -1,4 +1,4 @@
-export type InteractionKind = "inline" | "permission" | "question" | "rename" | "task" | "custom";
+export type InteractionKind = "inline" | "permission" | "question" | "task" | "custom";
 
 export type ExpectedInput = "callback" | "text" | "command" | "mixed";
 

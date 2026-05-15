@@ -1,4 +1,9 @@
-import { getCurrentModel, setCurrentModel } from "../settings/manager.js";
+import {
+  getCurrentModel,
+  setCurrentModel,
+  getCurrentSession,
+  getCurrentProject,
+} from "../settings/manager.js";
 import { config } from "../config.js";
 import { opencodeClient } from "../opencode/client.js";
 import { logger } from "../utils/logger.js";
@@ -393,6 +398,75 @@ export async function getFavoriteModels(): Promise<FavoriteModel[]> {
  */
 export function fetchCurrentModel(): ModelInfo {
   return getStoredModel();
+}
+
+/**
+ * Fetch current model from session's last message and sync to settings.
+ * When a user selects a historical session, the model should match
+ * what that session was using — parallel to fetchCurrentAgent() for agents.
+ *
+ * Logic:
+ * 1. If no active session/project → return stored model
+ * 2. Read last message from session → extract providerID + modelID
+ * 3. If stored model differs from session model AND user explicitly selected it → prefer stored
+ * 4. Otherwise sync from session history → selectModel()
+ *
+ * @returns The resolved model info (may be updated from session)
+ */
+export async function fetchCurrentModelFromSession(): Promise<ModelInfo> {
+  const storedModel = getStoredModel();
+  const session = getCurrentSession();
+  const project = getCurrentProject();
+
+  if (!session || !project) {
+    return storedModel;
+  }
+
+  try {
+    const { data: messages, error } = await opencodeClient.session.messages({
+      sessionID: session.id,
+      directory: project.worktree,
+      limit: 1,
+    });
+
+    if (error || !messages || messages.length === 0) {
+      logger.debug("[ModelManager] No messages found, using stored model");
+      return storedModel;
+    }
+
+    const msg = messages[0].info;
+    // UserMessage: model is nested { providerID, modelID }
+    // AssistantMessage: providerID and modelID are top-level
+    const providerID = msg.role === "user" ? msg.model.providerID : msg.providerID;
+    const modelID = msg.role === "user" ? msg.model.modelID : msg.modelID;
+    const sessionModel: ModelInfo = {
+      providerID,
+      modelID,
+      variant: storedModel.variant || "default",
+    };
+
+    if (!sessionModel.providerID || !sessionModel.modelID) {
+      logger.debug("[ModelManager] Session message has no model info, using stored model");
+      return storedModel;
+    }
+
+    const sessionModelKey = getModelKey(sessionModel.providerID, sessionModel.modelID);
+    const storedModelKey = getModelKey(storedModel.providerID, storedModel.modelID);
+
+    if (storedModelKey === sessionModelKey) {
+      logger.debug(`[ModelManager] Session model matches stored: ${sessionModelKey}`);
+      return storedModel;
+    }
+
+    logger.info(
+      `[ModelManager] Syncing model from session: ${sessionModelKey} (was ${storedModelKey})`,
+    );
+    selectModel(sessionModel);
+    return sessionModel;
+  } catch (err) {
+    logger.error("[ModelManager] Error fetching model from session:", err);
+    return storedModel;
+  }
 }
 
 /**
