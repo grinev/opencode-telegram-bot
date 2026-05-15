@@ -8,7 +8,7 @@ import { summaryAggregator } from "../../app/managers/summary-aggregation-manage
 import { formatToolInfo } from "../../app/formatters/summary-formatter.js";
 import { renderSubagentCards } from "../../app/formatters/subagent-formatter.js";
 import { ToolMessageBatcher } from "../../app/formatters/tool-message-batcher.js";
-import { getCurrentSession } from "../../app/services/session-service.js";
+import { clearSession, getCurrentSession } from "../../app/services/session-service.js";
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
@@ -40,6 +40,7 @@ import { ResponseStreamer, type StreamingMessagePayload } from "../streaming/res
 import { ToolCallStreamer, type ToolStreamKey } from "../streaming/tool-call-streamer.js";
 import { attachManager } from "../../app/managers/attach-manager.js";
 import {
+  detachAttachedSession,
   markAttachedSessionBusy,
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
@@ -810,6 +811,43 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             taskName: `session.cache.${event.type}`,
             task: () => ingestSessionInfoForCache(info),
           });
+        }
+      }
+
+      if (event.type === "session.deleted") {
+        const props = event.properties as { info?: { id?: string; title?: string } };
+        const deletedId = props.info?.id;
+        const deletedTitle = props.info?.title ?? deletedId ?? "unknown";
+        const currentSession = getCurrentSession();
+
+        if (deletedId && currentSession?.id === deletedId) {
+          logger.info(`[Bot] Current session was deleted externally: id=${deletedId}`);
+          detachAttachedSession("session_deleted_external");
+          clearPromptResponseMode(deletedId);
+          foregroundSessionState.markIdle(deletedId);
+          assistantRunState.clearRun(deletedId, "session_deleted_external");
+          clearAllInteractionState("session_deleted_external");
+          clearSession();
+
+          const bot = this.botInstance;
+          const chatId = this.chatIdInstance;
+          if (bot && chatId) {
+            void (async () => {
+              if (pinnedMessageManager.isInitialized()) {
+                await pinnedMessageManager.clear();
+              }
+
+              keyboardManager.initialize(bot.api, chatId);
+              await pinnedMessageManager.refreshContextLimit();
+              keyboardManager.updateContext(0, pinnedMessageManager.getContextLimit());
+              await bot.api.sendMessage(
+                chatId,
+                t("sessions.deleted_external", { title: deletedTitle }),
+              );
+            })().catch((err) => {
+              logger.error("[Bot] Failed to handle external session deletion:", err);
+            });
+          }
         }
       }
 

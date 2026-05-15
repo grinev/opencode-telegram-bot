@@ -172,6 +172,25 @@ export const de: I18nDictionary = {
   "sessions.preview.title": "Letzte Nachrichten:",
   "sessions.preview.you": "Du:",
   "sessions.preview.agent": "Agent:",
+  "sessions.button.select": "✅ Auswählen",
+  "sessions.button.rename": "✏️ Umbenennen",
+  "sessions.button.delete": "🗑 Löschen",
+  "sessions.button.close": "✖ Schließen",
+  "sessions.current_session": "Bereits ausgewählt",
+  "sessions.rename.prompt": "📝 Neuen Titel eingeben:\n\nAktuell: {title}",
+  "sessions.rename.cancel": "❌ Abbrechen",
+  "sessions.rename.empty": "⚠️ Titel darf nicht leer sein.",
+  "sessions.rename.success": "✅ Sitzung umbenannt zu: {title}",
+  "sessions.rename.error": "🔴 Sitzung konnte nicht umbenannt werden.",
+  "sessions.delete.confirm":
+    '⚠️ Sitzung löschen\n\n"{title}"\nAlle Nachrichten und Verlauf werden dauerhaft entfernt.',
+  "sessions.delete.yes": "✅ Ja, löschen",
+  "sessions.delete.no": "❌ Nein",
+  "sessions.delete.success": "✅ Sitzung gelöscht: {title}",
+  "sessions.delete.not_found":
+    "🔴 Sitzung nicht gefunden. Möglicherweise wurde sie bereits gelöscht.",
+  "sessions.delete.error": "🔴 Sitzung konnte nicht gelöscht werden.",
+  "sessions.deleted_external": "🗑 Sitzung wurde gelöscht: {title}\nSie wurden abgemeldet.",
 
   "messages.project_not_selected":
     "🏗 Kein Projekt ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
@@ -438,20 +457,6 @@ export const de: I18nDictionary = {
   "runtime.wizard.tty_required":
     "Der interaktive Assistent erfordert ein TTY-Terminal. Führe `opencode-telegram config` in einer interaktiven Shell aus.",
 
-  "rename.no_session": "⚠️ Keine aktive Sitzung. Erstelle oder wähle zuerst eine Sitzung.",
-  "rename.prompt": "📝 Neuen Titel für die Sitzung eingeben:\n\nAktuell: {title}",
-  "rename.empty_title": "⚠️ Titel darf nicht leer sein.",
-  "rename.success": "✅ Sitzung umbenannt in: {title}",
-  "rename.error": "🔴 Sitzung konnte nicht umbenannt werden.",
-  "rename.cancelled": "❌ Umbenennen abgebrochen.",
-  "rename.inactive_callback": "Umbenennen-Anfrage ist inaktiv",
-  "rename.inactive": "⚠️ Umbenennen-Anfrage ist nicht aktiv. Starte /rename erneut.",
-  "rename.blocked.expected_name":
-    "⚠️ Sende den neuen Sitzungsnamen als Text oder tippe in der Umbenennen-Nachricht auf Abbrechen.",
-  "rename.blocked.command_not_allowed":
-    "⚠️ Dieser Befehl ist nicht verfügbar, solange beim Umbenennen auf einen neuen Namen gewartet wird.",
-  "rename.button.cancel": "❌ Abbrechen",
-
   "task.prompt.schedule":
     "⏰ Sende den Zeitplan der Aufgabe in natürlicher Sprache.\n\nBeispiele:\n- alle 5 Minuten\n- jeden Tag um 17:00\n- morgen um 12:00",
   "task.schedule_empty": "⚠️ Der Zeitplan darf nicht leer sein.",
@@ -571,8 +576,6 @@ export const de: I18nDictionary = {
   "mcps.button.disable": "🔴 Disable",
   "mcps.button.back": "⬅️ Back",
   "mcps.auth_required": "This server requires authorization and cannot be enabled from the bot.",
-
-  "cmd.description.rename": "Aktuelle Sitzung umbenennen",
 
   "legacy.models.fetch_error":
     "🔴 Modellliste konnte nicht geladen werden. Prüfe den Serverstatus mit /status.",

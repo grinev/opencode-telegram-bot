@@ -124,18 +124,19 @@ function createBusyBlockDecision(
   };
 }
 
-function isAllowedRenameCancelCallback(ctx: Context, state: InteractionState): boolean {
-  return (
-    state.kind === "rename" &&
-    state.expectedInput === "text" &&
-    ctx.callbackQuery?.data === "rename:cancel"
-  );
-}
-
 function isAllowedTaskCallback(ctx: Context, state: InteractionState): boolean {
   return (
     state.kind === "task" &&
     (ctx.callbackQuery?.data === "task:cancel" || ctx.callbackQuery?.data === "task:retry-schedule")
+  );
+}
+
+function isAllowedSessionRenameCancelCallback(ctx: Context, state: InteractionState): boolean {
+  return (
+    state.kind === "custom" &&
+    state.expectedInput === "text" &&
+    state.metadata?.action === "session_rename" &&
+    ctx.callbackQuery?.data === "rename:cancel"
   );
 }
 
@@ -206,7 +207,7 @@ export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
     return createBlockDecision(inputType, state, "expected_text", command);
   }
 
-  if (inputType === "callback" && isAllowedRenameCancelCallback(ctx, state)) {
+  if (inputType === "callback" && isAllowedSessionRenameCancelCallback(ctx, state)) {
     return createAllowDecision(inputType, state, command);
   }
 

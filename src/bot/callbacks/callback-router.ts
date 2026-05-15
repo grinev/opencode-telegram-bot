@@ -17,9 +17,9 @@ import {
 import { handlePermissionCallback } from "./permission-callback-handler.js";
 import { handleProjectSelect } from "./project-callback-handler.js";
 import { handleQuestionCallback } from "./question-callback-handler.js";
-import { handleRenameCancel } from "./rename-callback-handler.js";
 import {
   handleBackgroundSessionOpen,
+  handleRenameCancelCallback,
   handleSessionSelect,
 } from "./session-callback-handler.js";
 import { handleSkillsCallback } from "./skills-catalog-callback-handler.js";
@@ -79,7 +79,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
       const handledCompactConfirm = await handleCompactConfirm(ctx);
       const handledTask = await handleTaskCallback(ctx);
       const handledTaskList = await handleTaskListCallback(ctx);
-      const handledRenameCancel = await handleRenameCancel(ctx);
+      const handledRenameCancel = await handleRenameCancelCallback(ctx);
       const handledCommands = await handleCommandsCallback(ctx, {
         bot,
         ensureEventSubscription: deps.ensureEventSubscription,
