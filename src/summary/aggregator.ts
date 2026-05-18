@@ -482,6 +482,13 @@ class SummaryAggregator {
     return this.trackedSessionParents.has(sessionId) && sessionId !== this.currentSessionId;
   }
 
+  /**
+   * Public check: is this session a tracked subagent (child) of the current root session?
+   */
+  isSubagentSession(sessionId: string): boolean {
+    return this.isTrackedChildSession(sessionId);
+  }
+
   private getQueue(map: Map<string, string[]>, parentSessionId: string): string[] {
     const existing = map.get(parentSessionId);
     if (existing) {
@@ -1833,7 +1840,10 @@ class SummaryAggregator {
   ): void {
     const request = event.properties;
 
-    if (request.sessionID !== this.currentSessionId) {
+    const isCurrent = request.sessionID === this.currentSessionId;
+    const isTrackedChild = this.isTrackedChildSession(request.sessionID);
+
+    if (!isCurrent && !isTrackedChild) {
       logger.debug(
         `[Aggregator] Ignoring permission.asked for different session: ${request.sessionID} (current: ${this.currentSessionId})`,
       );
@@ -1841,7 +1851,7 @@ class SummaryAggregator {
     }
 
     logger.info(
-      `[Aggregator] Permission asked: requestID=${request.id}, type=${request.permission}, patterns=${request.patterns.length}`,
+      `[Aggregator] Permission asked: requestID=${request.id}, type=${request.permission}, patterns=${request.patterns.length}, subagent=${isTrackedChild}`,
     );
 
     if (this.onPermissionCallback) {

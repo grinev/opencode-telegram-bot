@@ -756,7 +756,9 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
 
     const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== request.sessionID) {
+    const isCurrent = currentSession?.id === request.sessionID;
+    const isSubagent = summaryAggregator.isSubagentSession(request.sessionID);
+    if (!currentSession || (!isCurrent && !isSubagent)) {
       return;
     }
 
@@ -766,7 +768,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     ]);
 
     logger.info(
-      `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}`,
+      `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}, subagent=${isSubagent}`,
     );
     await showPermissionRequest(botInstance.api, chatIdInstance, request);
   });
