@@ -1520,4 +1520,90 @@ describe("summary/aggregator", () => {
 
     expect(onTokens).not.toHaveBeenCalled();
   });
+
+  it("forwards permission.asked events from tracked subagent (child) sessions", async () => {
+    const onPermission = vi.fn();
+    summaryAggregator.setOnPermission(onPermission);
+    summaryAggregator.setSession("root-session");
+
+    // Register a tracked child session via the task tool flow.
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "subtask-1",
+          sessionID: "root-session",
+          messageID: "root-message",
+          type: "subtask",
+          prompt: "Edit file",
+          description: "Edit file",
+          agent: "general",
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "session.created",
+      properties: {
+        info: {
+          id: "child-session-1",
+          parentID: "root-session",
+          title: "Edit file (@general subagent)",
+          slug: "child",
+          directory: "D:/repo",
+          projectID: "p1",
+          version: "1",
+          time: { created: Date.now(), updated: Date.now() },
+        },
+      },
+    } as unknown as Event);
+
+    // permission.asked from the child (subagent) session must reach the callback.
+    summaryAggregator.processEvent({
+      type: "permission.asked",
+      properties: {
+        id: "req-child-1",
+        sessionID: "child-session-1",
+        permission: "write",
+        patterns: ["src/foo.ts"],
+        metadata: {},
+        always: [],
+      },
+    } as unknown as Event);
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onPermission).toHaveBeenCalledTimes(1);
+    expect(onPermission.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        id: "req-child-1",
+        sessionID: "child-session-1",
+        permission: "write",
+      }),
+    );
+    expect(summaryAggregator.isSubagentSession("child-session-1")).toBe(true);
+  });
+
+  it("ignores permission.asked events from unrelated sessions", async () => {
+    const onPermission = vi.fn();
+    summaryAggregator.setOnPermission(onPermission);
+    summaryAggregator.setSession("root-session");
+
+    summaryAggregator.processEvent({
+      type: "permission.asked",
+      properties: {
+        id: "req-other",
+        sessionID: "some-other-session",
+        permission: "write",
+        patterns: ["src/foo.ts"],
+        metadata: {},
+        always: [],
+      },
+    } as unknown as Event);
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onPermission).not.toHaveBeenCalled();
+    expect(summaryAggregator.isSubagentSession("some-other-session")).toBe(false);
+  });
 });
