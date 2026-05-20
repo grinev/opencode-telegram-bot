@@ -6,10 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const {
   configMock,
   providersMock,
+  sessionMessagesMock,
   getCurrentModelMock,
   setCurrentModelMock,
+  getCurrentProjectMock,
+  getCurrentSessionMock,
   setCurrentModelState,
   getCurrentModelState,
+  setCurrentProjectState,
+  setCurrentSessionState,
   resetCurrentModelState,
   loggerInfoMock,
   loggerWarnMock,
@@ -17,8 +22,12 @@ const {
   loggerDebugMock,
 } = vi.hoisted(() => {
   let currentModel: { providerID: string; modelID: string; variant?: string } | undefined;
+  let currentProject: { name: string; path: string; worktree: string } | undefined;
+  let currentSession: { id: string; title: string; directory: string } | null | undefined;
 
   const getCurrentModelMock = vi.fn(() => currentModel);
+  const getCurrentProjectMock = vi.fn(() => currentProject);
+  const getCurrentSessionMock = vi.fn(() => currentSession);
   const setCurrentModelMock = vi.fn(
     (modelInfo: { providerID: string; modelID: string; variant?: string }) => {
       currentModel = modelInfo;
@@ -35,8 +44,11 @@ const {
       },
     },
     providersMock: vi.fn(),
+    sessionMessagesMock: vi.fn(),
     getCurrentModelMock,
     setCurrentModelMock,
+    getCurrentProjectMock,
+    getCurrentSessionMock,
     setCurrentModelState: (modelInfo?: {
       providerID: string;
       modelID: string;
@@ -45,10 +57,20 @@ const {
       currentModel = modelInfo;
     },
     getCurrentModelState: () => currentModel,
+    setCurrentProjectState: (project?: { name: string; path: string; worktree: string }) => {
+      currentProject = project;
+    },
+    setCurrentSessionState: (session?: { id: string; title: string; directory: string } | null) => {
+      currentSession = session;
+    },
     resetCurrentModelState: () => {
       currentModel = undefined;
+      currentProject = undefined;
+      currentSession = undefined;
       getCurrentModelMock.mockClear();
       setCurrentModelMock.mockClear();
+      getCurrentProjectMock.mockClear();
+      getCurrentSessionMock.mockClear();
     },
     loggerInfoMock: vi.fn(),
     loggerWarnMock: vi.fn(),
@@ -66,11 +88,16 @@ vi.mock("../../src/opencode/client.js", () => ({
     config: {
       providers: providersMock,
     },
+    session: {
+      messages: sessionMessagesMock,
+    },
   },
 }));
 
 vi.mock("../../src/settings/manager.js", () => ({
   getCurrentModel: getCurrentModelMock,
+  getCurrentProject: getCurrentProjectMock,
+  getCurrentSession: getCurrentSessionMock,
   setCurrentModel: setCurrentModelMock,
 }));
 
@@ -85,6 +112,7 @@ vi.mock("../../src/utils/logger.js", () => ({
 
 import {
   __resetModelCatalogCacheForTests,
+  fetchCurrentModelFromSession,
   getFavoriteModels,
   getModelSelectionLists,
   reconcileStoredModelSelection,
@@ -98,6 +126,20 @@ function createProvidersResponse(modelsByProvider: Record<string, string[]>) {
         models: Object.fromEntries(modelIDs.map((modelID) => [modelID, { id: modelID }])),
       })),
     },
+    error: null,
+  };
+}
+
+function createSessionMessagesResponse(providerID: string, modelID: string) {
+  return {
+    data: [
+      {
+        info: {
+          providerID,
+          modelID,
+        },
+      },
+    ],
     error: null,
   };
 }
@@ -121,6 +163,7 @@ describe("model/manager", () => {
     loggerDebugMock.mockReset();
 
     providersMock.mockReset();
+    sessionMessagesMock.mockReset();
     providersMock.mockResolvedValue(
       createProvidersResponse({
         opencode: ["big-pickle"],
@@ -478,6 +521,141 @@ describe("model/manager", () => {
         variant: "high",
       });
       expect(setCurrentModelMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("fetchCurrentModelFromSession", () => {
+    const storedModel = { providerID: "openai", modelID: "gpt-4o", variant: "high" };
+
+    function setActiveSessionContext() {
+      setCurrentProjectState({ name: "test", path: "/test", worktree: "/test" });
+      setCurrentSessionState({ id: "test-session", title: "Test", directory: "/test" });
+    }
+
+    it("returns stored model when no active session", async () => {
+      setCurrentModelState(storedModel);
+      setCurrentProjectState({ name: "test", path: "/test", worktree: "/test" });
+      setCurrentSessionState(null);
+
+      const result = await fetchCurrentModelFromSession();
+
+      expect(result).toEqual(storedModel);
+      expect(sessionMessagesMock).not.toHaveBeenCalled();
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+    });
+
+    it("returns stored model when no active project", async () => {
+      setCurrentModelState(storedModel);
+      setCurrentSessionState({ id: "test-session", title: "Test", directory: "/test" });
+      setCurrentProjectState(undefined);
+
+      const result = await fetchCurrentModelFromSession();
+
+      expect(result).toEqual(storedModel);
+      expect(sessionMessagesMock).not.toHaveBeenCalled();
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+    });
+
+    it("returns stored model when session messages API returns error", async () => {
+      setCurrentModelState(storedModel);
+      setActiveSessionContext();
+      sessionMessagesMock.mockResolvedValueOnce({ data: null, error: new Error("failed") });
+
+      const result = await fetchCurrentModelFromSession();
+
+      expect(result).toEqual(storedModel);
+      expect(sessionMessagesMock).toHaveBeenCalledWith({
+        sessionID: "test-session",
+        directory: "/test",
+        limit: 1,
+      });
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+    });
+
+    it("returns stored model when session has no messages", async () => {
+      setCurrentModelState(storedModel);
+      setActiveSessionContext();
+      sessionMessagesMock.mockResolvedValueOnce({ data: [], error: null });
+
+      const result = await fetchCurrentModelFromSession();
+
+      expect(result).toEqual(storedModel);
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+    });
+
+    it("returns stored model when message has no model info", async () => {
+      setCurrentModelState(storedModel);
+      setActiveSessionContext();
+      sessionMessagesMock.mockResolvedValueOnce(createSessionMessagesResponse("", ""));
+
+      const result = await fetchCurrentModelFromSession();
+
+      expect(result).toEqual(storedModel);
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+    });
+
+    it("returns stored model when it matches session model", async () => {
+      setCurrentModelState(storedModel);
+      setActiveSessionContext();
+      sessionMessagesMock.mockResolvedValueOnce(
+        createSessionMessagesResponse(storedModel.providerID, storedModel.modelID),
+      );
+
+      const result = await fetchCurrentModelFromSession();
+
+      expect(result).toEqual(storedModel);
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+    });
+
+    it("syncs model from session when different from stored", async () => {
+      setCurrentModelState(storedModel);
+      setActiveSessionContext();
+      sessionMessagesMock.mockResolvedValueOnce(
+        createSessionMessagesResponse("anthropic", "claude-sonnet"),
+      );
+
+      const result = await fetchCurrentModelFromSession();
+
+      expect(result).toEqual({
+        providerID: "anthropic",
+        modelID: "claude-sonnet",
+        variant: "high",
+      });
+      expect(setCurrentModelMock).toHaveBeenCalledWith({
+        providerID: "anthropic",
+        modelID: "claude-sonnet",
+        variant: "high",
+      });
+    });
+
+    it("preserves stored variant when syncing from session", async () => {
+      setCurrentModelState({ providerID: "openai", modelID: "gpt-4o", variant: "low" });
+      setActiveSessionContext();
+      sessionMessagesMock.mockResolvedValueOnce(createSessionMessagesResponse("google", "gemini-pro"));
+
+      const result = await fetchCurrentModelFromSession();
+
+      expect(result).toEqual({ providerID: "google", modelID: "gemini-pro", variant: "low" });
+      expect(setCurrentModelMock).toHaveBeenCalledWith({
+        providerID: "google",
+        modelID: "gemini-pro",
+        variant: "low",
+      });
+    });
+
+    it("returns stored model on API exception", async () => {
+      setCurrentModelState(storedModel);
+      setActiveSessionContext();
+      sessionMessagesMock.mockRejectedValueOnce(new Error("network down"));
+
+      const result = await fetchCurrentModelFromSession();
+
+      expect(result).toEqual(storedModel);
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+      expect(loggerErrorMock).toHaveBeenCalledWith(
+        "[ModelManager] Error fetching model from session:",
+        expect.any(Error),
+      );
     });
   });
 });

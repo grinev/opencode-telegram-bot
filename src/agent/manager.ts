@@ -26,9 +26,17 @@ export async function getAvailableAgents(): Promise<AgentInfo[]> {
     }
 
     // Filter out hidden agents and subagents (only show primary and all)
-    const filtered = agents.filter(
-      (agent) => !agent.hidden && (agent.mode === "primary" || agent.mode === "all"),
-    );
+    const filtered = agents
+      .filter((agent) => !agent.hidden && (agent.mode === "primary" || agent.mode === "all"))
+      .map((agent) => ({
+        name: agent.name,
+        description: agent.description,
+        color: agent.color,
+        mode: agent.mode,
+        hidden: agent.hidden,
+        steps: agent.steps,
+        model: agent.model ? { modelID: agent.model.modelID, providerID: agent.model.providerID } : undefined,
+      }));
 
     logger.debug(`[AgentManager] Fetched ${filtered.length} available agents`);
     return filtered;
@@ -136,6 +144,12 @@ export async function fetchCurrentAgent(): Promise<string> {
 export function selectAgent(agentName: string): void {
   logger.info(`[AgentManager] Selected agent: ${agentName}`);
   setCurrentAgent(agentName);
+}
+
+export async function getModelForAgent(agentName: string): Promise<{ modelID: string; providerID: string } | null> {
+  const agents = await getAvailableAgents();
+  const agent = agents.find((a) => a.name === agentName);
+  return agent?.model ?? null;
 }
 
 /**

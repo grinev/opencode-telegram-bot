@@ -18,6 +18,8 @@ import {
 import {
   buildBackgroundSessionOpenKeyboard,
   handleBackgroundSessionOpen,
+  handleRenameCancelCallback,
+  handleRenameTextAnswer,
   handleSessionSelect,
   sessionsCommand,
 } from "./commands/sessions.js";
@@ -30,7 +32,6 @@ import { abortCommand } from "./commands/abort.js";
 import { detachCommand } from "./commands/detach.js";
 import { opencodeStartCommand } from "./commands/opencode-start.js";
 import { opencodeStopCommand } from "./commands/opencode-stop.js";
-import { renameCommand, handleRenameCancel, handleRenameTextAnswer } from "./commands/rename.js";
 import { handleTaskCallback, handleTaskTextInput, taskCommand } from "./commands/task.js";
 import { handleTaskListCallback, taskListCommand } from "./commands/tasklist.js";
 import {
@@ -66,7 +67,7 @@ import { summaryAggregator } from "../summary/aggregator.js";
 import { formatToolInfo } from "../summary/formatter.js";
 import { renderSubagentCards } from "../summary/subagent-formatter.js";
 import { ToolMessageBatcher } from "../summary/tool-message-batcher.js";
-import { getCurrentSession } from "../session/manager.js";
+import { clearSession, getCurrentSession } from "../session/manager.js";
 import { ingestSessionInfoForCache } from "../session/cache-manager.js";
 import { logger } from "../utils/logger.js";
 import { safeBackgroundTask } from "../utils/safe-background-task.js";
@@ -103,6 +104,7 @@ import type { StreamingMessagePayload } from "./streaming/response-streamer.js";
 import { ToolCallStreamer, type ToolStreamKey } from "./streaming/tool-call-streamer.js";
 import { attachManager } from "../attach/manager.js";
 import {
+  detachAttachedSession,
   markAttachedSessionBusy,
   markAttachedSessionIdle,
   restoreAttachedCurrentSession,
@@ -1044,7 +1046,64 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       }
     }
 
-    if (config.bot.trackBackgroundSessions) {
+    if (event.type === "session.deleted") {
+      const props = event.properties as { info?: { id?: string; title?: string } };
+      const deletedId = props.info?.id;
+      const deletedTitle = props.info?.title ?? deletedId ?? "unknown";
+
+      if (deletedId) {
+        if (config.bot.trackBackgroundSessions) {
+          backgroundSessionTracker.processEvent(event, getCurrentSession()?.id ?? null);
+        }
+
+        const currentSession = getCurrentSession();
+        if (currentSession && currentSession.id === deletedId) {
+          logger.info(`[Bot] Current session was deleted externally: id=${deletedId}`);
+
+          detachAttachedSession("session_deleted_external");
+
+          try {
+            clearPromptResponseMode(deletedId);
+          } catch (e) {
+            logger.debug("[Bot] Failed to clear prompt response mode after external delete:", e);
+          }
+
+          foregroundSessionState.markIdle(deletedId);
+          assistantRunState.clearRun(deletedId, "session_deleted_external");
+          clearAllInteractionState("session_deleted_external");
+          clearSession();
+
+          const bot = botInstance;
+          const chatId = chatIdInstance;
+          if (bot && chatId) {
+            void (async () => {
+              if (pinnedMessageManager.isInitialized()) {
+                pinnedMessageManager.clear().catch((err: unknown) => {
+                  logger.error("[Bot] Failed to clear pinned message after external delete:", err);
+                });
+              }
+
+              keyboardManager.initialize(bot.api, chatId);
+
+              await pinnedMessageManager.refreshContextLimit();
+              const contextLimit = pinnedMessageManager.getContextLimit();
+              keyboardManager.updateContext(0, contextLimit);
+
+              try {
+                await bot.api.sendMessage(
+                  chatId,
+                  t("sessions.deleted_external", { title: deletedTitle }),
+                );
+              } catch (err) {
+                logger.error("[Bot] Failed to send session deleted notification:", err);
+              }
+            })();
+          }
+        }
+      }
+    }
+
+    if (config.bot.trackBackgroundSessions && event.type !== "session.deleted") {
       backgroundSessionTracker.processEvent(event, getCurrentSession()?.id ?? null);
     }
 
@@ -1174,7 +1233,6 @@ export function createBot(): Bot<Context> {
   bot.command("detach", detachCommand);
   bot.command("task", taskCommand);
   bot.command("tasklist", taskListCommand);
-  bot.command("rename", renameCommand);
   bot.command("commands", commandsCommand);
   bot.command("skills", skillsCommand);
   bot.command("mcps", mcpsCommand);
@@ -1201,6 +1259,7 @@ export function createBot(): Bot<Context> {
         clearOpenPathIndex();
         clearLsPathIndex();
       }
+      const handledRenameCancel = await handleRenameCancelCallback(ctx);
       const handledSession = await handleSessionSelect(ctx, { bot, ensureEventSubscription });
       const handledProject = await handleProjectSelect(ctx, { ensureEventSubscription });
       const handledWorktree = await handleWorktreeCallback(ctx, { ensureEventSubscription });
@@ -1214,18 +1273,18 @@ export function createBot(): Bot<Context> {
       const handledCompactConfirm = await handleCompactConfirm(ctx);
       const handledTask = await handleTaskCallback(ctx);
       const handledTaskList = await handleTaskListCallback(ctx);
-      const handledRenameCancel = await handleRenameCancel(ctx);
       const handledCommands = await handleCommandsCallback(ctx, { bot, ensureEventSubscription });
       const handledSkills = await handleSkillsCallback(ctx, { bot, ensureEventSubscription });
       const handledMcps = await handleMcpsCallback(ctx);
 
       logger.debug(
-        `[Bot] Callback handled: backgroundSession=${handledBackgroundSession}, inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, skills=${handledSkills}, mcps=${handledMcps}`,
+        `[Bot] Callback handled: backgroundSession=${handledBackgroundSession}, inlineCancel=${handledInlineCancel}, renameCancel=${handledRenameCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, commands=${handledCommands}, skills=${handledSkills}, mcps=${handledMcps}`,
       );
 
       if (
         !handledBackgroundSession &&
         !handledInlineCancel &&
+        !handledRenameCancel &&
         !handledSession &&
         !handledProject &&
         !handledWorktree &&
@@ -1239,7 +1298,6 @@ export function createBot(): Bot<Context> {
         !handledCompactConfirm &&
         !handledTask &&
         !handledTaskList &&
-        !handledRenameCancel &&
         !handledCommands &&
         !handledSkills &&
         !handledMcps

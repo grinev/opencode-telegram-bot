@@ -4,7 +4,6 @@ import { abortCommand, abortCurrentOperation } from "../../../src/bot/commands/a
 import { clearAllInteractionState } from "../../../src/interaction/cleanup.js";
 import { questionManager } from "../../../src/question/manager.js";
 import { permissionManager } from "../../../src/permission/manager.js";
-import { renameManager } from "../../../src/rename/manager.js";
 import { interactionManager } from "../../../src/interaction/manager.js";
 import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
 import type { Question } from "../../../src/question/types.js";
@@ -72,11 +71,10 @@ const TEST_PERMISSION: PermissionRequest = {
 function activateInteractionState(): void {
   questionManager.startQuestions([TEST_QUESTION], "req-abort");
   permissionManager.startPermission(TEST_PERMISSION, 101);
-  renameManager.startWaiting("session-1", "D:/repo", "Old title");
   interactionManager.start({
-    kind: "rename",
-    expectedInput: "text",
-    metadata: { sessionId: "session-1" },
+    kind: "permission",
+    expectedInput: "callback",
+    metadata: { permissionId: "perm-1" },
   });
 }
 
@@ -118,7 +116,6 @@ describe("bot/commands/abort", () => {
     expect(replyMock).toHaveBeenCalledWith(t("stop.no_active_session"));
     expect(questionManager.isActive()).toBe(false);
     expect(permissionManager.isActive()).toBe(false);
-    expect(renameManager.isWaitingForName()).toBe(false);
     expect(interactionManager.getSnapshot()).toBeNull();
     expect(mocked.abortMock).not.toHaveBeenCalled();
   });
@@ -160,7 +157,6 @@ describe("bot/commands/abort", () => {
 
     expect(questionManager.isActive()).toBe(false);
     expect(permissionManager.isActive()).toBe(false);
-    expect(renameManager.isWaitingForName()).toBe(false);
     expect(interactionManager.getSnapshot()).toBeNull();
     expectAbortStateReleased("abort_confirmed");
     expect(shouldSuppressUserAbortSessionError("session-1", "Aborted")).toBe(true);
@@ -234,7 +230,6 @@ describe("bot/commands/abort", () => {
 
     expect(questionManager.isActive()).toBe(false);
     expect(permissionManager.isActive()).toBe(false);
-    expect(renameManager.isWaitingForName()).toBe(false);
     expect(interactionManager.getSnapshot()).toBeNull();
     expectAbortStateReleased("abort_confirmed");
   });
