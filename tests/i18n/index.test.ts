@@ -23,6 +23,8 @@ describe("i18n/index locale helpers", () => {
     expect(resolveSupportedLocale("de")).toBe("de");
     expect(resolveSupportedLocale("fr")).toBe("fr");
     expect(resolveSupportedLocale("fr-FR")).toBe("fr");
+    expect(resolveSupportedLocale("ko")).toBe("ko");
+    expect(resolveSupportedLocale("ko-KR")).toBe("ko");
   });
 
   it("normalizes unsupported locale values with fallback", () => {
@@ -35,11 +37,16 @@ describe("i18n/index locale helpers", () => {
     expect(getDateLocale("en")).toBe("en-US");
     expect(getDateLocale("de")).toBe("de-DE");
     expect(getDateLocale("fr")).toBe("fr-FR");
+    expect(getDateLocale("ko")).toBe("ko-KR");
   });
 
   it("returns locale options from a single registry", () => {
     const optionCodes = getLocaleOptions().map((option) => option.code);
     expect(optionCodes).toEqual(SUPPORTED_LOCALES);
+
+    const koOption = getLocaleOptions().find((option) => option.code === "ko");
+    expect(koOption).toBeDefined();
+    expect(koOption?.label).toBe("한국어");
   });
 
   it("prefers runtime locale override over env locale", () => {
