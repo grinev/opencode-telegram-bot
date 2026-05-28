@@ -2,12 +2,12 @@ import http from "node:http";
 import https from "node:https";
 import { URL } from "node:url";
 import type { Context } from "grammy";
-import type { FilePartInput } from "@opencode-ai/sdk/v2";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import { config } from "../../config.js";
 import { isSttConfigured, transcribeAudio, type SttResult } from "../../stt/client.js";
-import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
+import type { ProcessPromptDeps } from "./prompt.js";
+import { showSttConfirmation } from "./stt-confirm.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { buildTelegramFileUrl } from "../utils/telegram-file-url.js";
@@ -102,13 +102,6 @@ export interface VoiceMessageDeps extends ProcessPromptDeps {
     fileId: string,
   ) => Promise<{ buffer: Buffer; filename: string } | null>;
   transcribeAudio?: (audioBuffer: Buffer, filename: string) => Promise<SttResult>;
-  processPrompt?: (
-    ctx: Context,
-    text: string,
-    deps: ProcessPromptDeps,
-    fileParts?: FilePartInput[],
-    options?: { responseMode?: "text_only" | "text_and_tts" },
-  ) => Promise<boolean>;
 }
 
 /**
@@ -174,7 +167,6 @@ export async function handleVoiceMessage(ctx: Context, deps: VoiceMessageDeps): 
   const sttConfigured = deps.isSttConfigured ?? isSttConfigured;
   const downloadFile = deps.downloadTelegramFile ?? downloadTelegramFile;
   const transcribe = deps.transcribeAudio ?? transcribeAudio;
-  const processPrompt = deps.processPrompt ?? processUserPrompt;
 
   // Determine file_id from voice or audio message
   const voice = ctx.message?.voice;
@@ -216,32 +208,9 @@ export async function handleVoiceMessage(ctx: Context, deps: VoiceMessageDeps): 
       return;
     }
 
-    // Show the recognized text by editing the status message.
-    // IMPORTANT: even if this edit fails (e.g. Telegram message length limits),
-    // we still send the recognized text to OpenCode as a prompt.
-    try {
-      await ctx.api.editMessageText(
-        ctx.chat!.id,
-        statusMessage.message_id,
-        t("stt.recognized", { text: recognizedText }),
-      );
-    } catch (editError) {
-      logger.warn("[Voice] Failed to edit status message with recognized text:", editError);
-    }
-
     logger.info(`[Voice] Transcribed audio: ${recognizedText.length} chars`);
 
-    let textForLLM = recognizedText;
-    const notePrompt = config.stt.notePrompt.trim();
-
-    if (notePrompt && notePrompt.toLowerCase() !== "false" && notePrompt !== "0") {
-      const llmNote = `[Note: ${notePrompt}]`;
-      logger.debug(`[Voice] Added STT note to LLM prompt: ${llmNote}`);
-      textForLLM = `${llmNote}\n${recognizedText}`;
-    }
-
-    // Process the recognized text as a prompt
-    await processPrompt(ctx, textForLLM, deps);
+    await showSttConfirmation(ctx, statusMessage.message_id, recognizedText);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "unknown error";
     logger.error("[Voice] Error processing voice message:", err);
