@@ -102,6 +102,7 @@ Current command set:
 - `/abort` - stop the current task
 - `/detach` - detach the bot from the current session without stopping it
 - `/sessions` - show and switch recent sessions
+- `/messages` - browse user messages in the current session
 - `/projects` - show and switch projects
 - `/worktree` - show and switch existing git worktrees for the current repository
 - `/tts` - toggle global audio replies
@@ -121,7 +122,7 @@ Text messages (non-commands) are treated as prompts for OpenCode only when no bl
 
 Interaction routing rules:
 
-- Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills)
+- Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills, messages)
 - While an interaction is active, unrelated input is blocked with a contextual hint
 - Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`
 - Unknown slash commands return an explicit fallback message
@@ -166,12 +167,12 @@ Model picker behavior:
 - [x] `/mcps` command: browse available MCP servers
 - [x] Optional local OpenCode server monitoring with automatic restart
 - [x] Interactive project file browsing and file download from Telegram (`/ls`)
+- [x] `/messages` command: browse session messages with revert and fork functionality
 
 ## Current Task List
 
 Open tasks for upcoming iterations:
 
-- [ ] `/messages` command: browse session messages with fork/revert actions
 - [ ] Model search in model switcher
 - [ ] Docker runtime support and deployment guide
 - [ ] Add a bot settings command with in-chat UI

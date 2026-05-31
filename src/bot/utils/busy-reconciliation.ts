@@ -9,6 +9,7 @@ import { markAttachedSessionBusy, markAttachedSessionIdle } from "../../attach/s
 import { assistantRunState } from "../assistant-run-state.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
 import { logger } from "../../utils/logger.js";
+import type { ResponseStreamer } from "../streaming/response-streamer.js";
 
 const RECONCILE_MIN_INTERVAL_MS = 10_000;
 const FOREGROUND_BUSY_RECONCILE_GRACE_MS = 2_000;
@@ -19,6 +20,12 @@ type SessionStatus = {
 
 const inFlightDirectories = new Set<string>();
 const lastReconcileAtByDirectory = new Map<string, number>();
+
+let responseStreamerInstance: ResponseStreamer | null = null;
+
+export function setResponseStreamerForReconciliation(streamer: ResponseStreamer): void {
+  responseStreamerInstance = streamer;
+}
 
 function getReconciliationTargets(directory: string): {
   foregroundBusySessions: ForegroundBusySession[];
@@ -107,6 +114,13 @@ export async function reconcileBusyStateNow(directory: string, now: number = Dat
     if (freshForegroundSessionIds.has(session.sessionId)) {
       logger.debug(
         `[BusyReconciliation] Skipping fresh foreground busy state: session=${session.sessionId}, directory=${session.directory}, status=${status?.type ?? "not-found"}`,
+      );
+      continue;
+    }
+
+    if (responseStreamerInstance?.hasActiveStream(session.sessionId)) {
+      logger.debug(
+        `[BusyReconciliation] Skipping clear, responseStreamer still active: session=${session.sessionId}`,
       );
       continue;
     }

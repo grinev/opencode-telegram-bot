@@ -244,6 +244,15 @@ export class ResponseStreamer {
     }
   }
 
+  hasActiveStream(sessionId: string): boolean {
+    for (const state of this.states.values()) {
+      if (state.sessionId === sessionId && !state.cancelled) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private getOrCreateState(sessionId: string, messageId: string): StreamState {
     const key = buildStateKey(sessionId, messageId);
     const existing = this.states.get(key);

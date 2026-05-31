@@ -44,6 +44,7 @@ import {
   __resetBusyReconciliationForTests,
   reconcileBusyState,
   reconcileBusyStateNow,
+  setResponseStreamerForReconciliation,
 } from "../../../src/bot/utils/busy-reconciliation.js";
 
 function markForegroundBusyAt(
@@ -221,5 +222,49 @@ describe("busy reconciliation", () => {
 
     expect(mocked.sessionStatusMock).toHaveBeenCalledTimes(1);
     expect(foregroundSessionState.isBusy()).toBe(false);
+  });
+
+  it("skips clear when responseStreamer has active stream for the session", async () => {
+    markForegroundBusyAt("session-1", "D:/repo");
+    mocked.sessionStatusMock.mockResolvedValue({
+      data: { "session-1": { type: "idle" } },
+      error: null,
+    });
+
+    const mockStreamer = {
+      hasActiveStream: vi.fn().mockReturnValue(true),
+    };
+    setResponseStreamerForReconciliation(mockStreamer as any);
+
+    await reconcileBusyStateNow("D:/repo", 13_000);
+
+    expect(mockStreamer.hasActiveStream).toHaveBeenCalledWith("session-1");
+    expect(foregroundSessionState.isBusy()).toBe(true);
+    expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
+    expect(mocked.clearRunMock).not.toHaveBeenCalled();
+    expect(mocked.clearPromptResponseModeMock).not.toHaveBeenCalled();
+    expect(mocked.flushDeferredDeliveriesMock).not.toHaveBeenCalled();
+  });
+
+  it("clears busy state when responseStreamer has no active stream", async () => {
+    markForegroundBusyAt("session-1", "D:/repo");
+    mocked.sessionStatusMock.mockResolvedValue({
+      data: { "session-1": { type: "idle" } },
+      error: null,
+    });
+
+    const mockStreamer = {
+      hasActiveStream: vi.fn().mockReturnValue(false),
+    };
+    setResponseStreamerForReconciliation(mockStreamer as any);
+
+    await reconcileBusyStateNow("D:/repo", 13_000);
+
+    expect(mockStreamer.hasActiveStream).toHaveBeenCalledWith("session-1");
+    expect(foregroundSessionState.isBusy()).toBe(false);
+    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.clearRunMock).toHaveBeenCalledWith("session-1", "status_reconcile_idle");
+    expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.flushDeferredDeliveriesMock).toHaveBeenCalledTimes(1);
   });
 });

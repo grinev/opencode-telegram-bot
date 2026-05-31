@@ -6,6 +6,7 @@ export const fr: I18nDictionary = {
   "cmd.description.stop": "Arrêter l'action en cours",
   "cmd.description.detach": "Se détacher de la session actuelle",
   "cmd.description.sessions": "Lister les sessions",
+  "cmd.description.messages": "Parcourir les messages de session",
   "cmd.description.tts": "Basculer les réponses audio",
   "cmd.description.projects": "Lister les projets",
   "cmd.description.worktree": "Changer de worktree git",
@@ -172,6 +173,31 @@ export const fr: I18nDictionary = {
   "sessions.preview.title": "Messages récents :",
   "sessions.preview.you": "Vous :",
   "sessions.preview.agent": "Agent :",
+
+  "messages.project_not_selected":
+    "🏗 Aucun projet sélectionné.\n\nSélectionnez d'abord un projet avec /projects.",
+  "messages.session_not_selected":
+    "💬 Aucune session sélectionnée.\n\nChoisissez d'abord une session avec /sessions ou créez-en une avec /new.",
+  "messages.session_project_mismatch":
+    "⚠️ La session sélectionnée ne correspond pas au projet actuel. Choisissez à nouveau la session via /sessions.",
+  "messages.empty": "📭 Aucun message utilisateur dans la session actuelle.",
+  "messages.select": "Choisissez un message :",
+  "messages.select_page": "Choisissez un message (page {page}) :",
+  "messages.fetch_error":
+    "🔴 OpenCode Server est indisponible ou une erreur est survenue pendant le chargement des messages.",
+  "messages.inactive_callback": "Ce menu de messages est inactif",
+  "messages.cancelled_callback": "Annulé",
+  "messages.page_empty_callback": "Aucun message sur cette page",
+  "messages.button.prev_page": "⬅️ Précédent",
+  "messages.button.next_page": "Suivant ➡️",
+  "messages.button.revert": "↩️ Revert",
+  "messages.button.fork": "🔀 Fork",
+  "messages.button.back": "⬅️ Retour",
+  "messages.button.cancel": "❌ Annuler",
+  "messages.revert_success": "✅ Retour au message :\n\n{text}",
+  "messages.revert_error": "❌ Impossible de revenir au message. Veuillez réessayer.",
+  "messages.fork_success": "🔀 Fork créé à partir du message :\n\n{text}",
+  "messages.fork_error": "❌ Échec de la création du fork. Veuillez réessayer.",
 
   "attach.project_not_selected":
     "🏗 Aucun projet sélectionné.\n\nSélectionnez d'abord un projet avec /projects.",

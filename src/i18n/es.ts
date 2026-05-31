@@ -6,6 +6,7 @@ export const es: I18nDictionary = {
   "cmd.description.stop": "Detener la acción actual",
   "cmd.description.detach": "Desconectar de la sesión actual",
   "cmd.description.sessions": "Listar sesiones",
+  "cmd.description.messages": "Ver mensajes de la sesión",
   "cmd.description.tts": "Alternar respuestas de audio",
   "cmd.description.projects": "Listar proyectos",
   "cmd.description.worktree": "Cambiar worktrees de git",
@@ -170,6 +171,31 @@ export const es: I18nDictionary = {
   "sessions.preview.title": "Mensajes recientes:",
   "sessions.preview.you": "Tú:",
   "sessions.preview.agent": "Agente:",
+
+  "messages.project_not_selected":
+    "🏗 No hay ningún proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
+  "messages.session_not_selected":
+    "💬 No hay ninguna sesión seleccionada.\n\nPrimero elige una sesión con /sessions o crea una con /new.",
+  "messages.session_project_mismatch":
+    "⚠️ La sesión seleccionada no coincide con el proyecto actual. Vuelve a elegir la sesión con /sessions.",
+  "messages.empty": "📭 No hay mensajes de usuario en la sesión actual.",
+  "messages.select": "Elige un mensaje:",
+  "messages.select_page": "Elige un mensaje (página {page}):",
+  "messages.fetch_error":
+    "🔴 OpenCode Server no está disponible o se produjo un error al cargar los mensajes.",
+  "messages.inactive_callback": "Este menú de mensajes ya no está activo",
+  "messages.cancelled_callback": "Cancelado",
+  "messages.page_empty_callback": "No hay mensajes en esta página",
+  "messages.button.prev_page": "⬅️ Anterior",
+  "messages.button.next_page": "Siguiente ➡️",
+  "messages.button.revert": "↩️ Revert",
+  "messages.button.fork": "🔀 Fork",
+  "messages.button.back": "⬅️ Volver",
+  "messages.button.cancel": "❌ Cancelar",
+  "messages.revert_success": "✅ Revertido al mensaje:\n\n{text}",
+  "messages.revert_error": "❌ No se pudo revertir el mensaje. Inténtalo de nuevo.",
+  "messages.fork_success": "🔀 Fork creado desde el mensaje:\n\n{text}",
+  "messages.fork_error": "❌ No se pudo crear el fork. Inténtalo de nuevo.",
 
   "attach.project_not_selected":
     "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",

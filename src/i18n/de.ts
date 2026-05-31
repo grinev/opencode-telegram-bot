@@ -6,6 +6,7 @@ export const de: I18nDictionary = {
   "cmd.description.stop": "Aktuelle Aktion stoppen",
   "cmd.description.detach": "Von aktueller Sitzung trennen",
   "cmd.description.sessions": "Sitzungen auflisten",
+  "cmd.description.messages": "Sitzungsnachrichten durchsuchen",
   "cmd.description.tts": "Audioantworten umschalten",
   "cmd.description.projects": "Projekte auflisten",
   "cmd.description.worktree": "Git-Worktrees wechseln",
@@ -171,6 +172,31 @@ export const de: I18nDictionary = {
   "sessions.preview.title": "Letzte Nachrichten:",
   "sessions.preview.you": "Du:",
   "sessions.preview.agent": "Agent:",
+
+  "messages.project_not_selected":
+    "🏗 Kein Projekt ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
+  "messages.session_not_selected":
+    "💬 Keine Sitzung ausgewählt.\n\nWähle zuerst eine Sitzung mit /sessions oder erstelle eine mit /new.",
+  "messages.session_project_mismatch":
+    "⚠️ Die ausgewählte Sitzung passt nicht zum aktuellen Projekt. Wähle die Sitzung erneut über /sessions.",
+  "messages.empty": "📭 Keine Benutzernachrichten in der aktuellen Sitzung.",
+  "messages.select": "Wähle eine Nachricht:",
+  "messages.select_page": "Wähle eine Nachricht (Seite {page}):",
+  "messages.fetch_error":
+    "🔴 OpenCode Server ist nicht erreichbar oder beim Laden der Nachrichten ist ein Fehler aufgetreten.",
+  "messages.inactive_callback": "Dieses Nachrichtenmenü ist nicht mehr aktiv",
+  "messages.cancelled_callback": "Abgebrochen",
+  "messages.page_empty_callback": "Keine Nachrichten auf dieser Seite",
+  "messages.button.prev_page": "⬅️ Zurück",
+  "messages.button.next_page": "Weiter ➡️",
+  "messages.button.revert": "↩️ Revert",
+  "messages.button.fork": "🔀 Fork",
+  "messages.button.back": "⬅️ Zurück",
+  "messages.button.cancel": "❌ Abbrechen",
+  "messages.revert_success": "✅ Zurück zur Nachricht:\n\n{text}",
+  "messages.revert_error": "❌ Nachricht konnte nicht zurückgesetzt werden. Bitte versuche es erneut.",
+  "messages.fork_success": "🔀 Fork erstellt von Nachricht:\n\n{text}",
+  "messages.fork_error": "❌ Fork konnte nicht erstellt werden. Bitte versuche es erneut.",
 
   "attach.project_not_selected":
     "🏗 Projekt ist nicht ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",

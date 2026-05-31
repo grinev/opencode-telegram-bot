@@ -165,7 +165,7 @@ describe("config boolean env parsing", () => {
 
     const config = await loadConfig();
 
-    expect(config.bot.responseStreamThrottleMs).toBe(500);
+    expect(config.bot.responseStreamThrottleMs).toBe(1000);
   });
 
   it("parses RESPONSE_STREAM_THROTTLE_MS as a positive integer", async () => {
@@ -181,7 +181,7 @@ describe("config boolean env parsing", () => {
 
     const config = await loadConfig();
 
-    expect(config.bot.responseStreamThrottleMs).toBe(500);
+    expect(config.bot.responseStreamThrottleMs).toBe(1000);
   });
 
   it("uses default bash tool display length when env is missing", async () => {

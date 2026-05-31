@@ -4,6 +4,7 @@ export const en = {
   "cmd.description.stop": "Stop current action",
   "cmd.description.detach": "Detach from current session",
   "cmd.description.sessions": "List sessions",
+  "cmd.description.messages": "Browse session messages",
   "cmd.description.tts": "Toggle audio replies",
   "cmd.description.projects": "List projects",
   "cmd.description.worktree": "Switch git worktrees",
@@ -163,6 +164,31 @@ export const en = {
   "sessions.preview.title": "Recent messages:",
   "sessions.preview.you": "You:",
   "sessions.preview.agent": "Agent:",
+
+  "messages.project_not_selected":
+    "🏗 Project is not selected.\n\nFirst select a project with /projects.",
+  "messages.session_not_selected":
+    "💬 Session is not selected.\n\nFirst choose a session with /sessions or create one with /new.",
+  "messages.session_project_mismatch":
+    "⚠️ The selected session does not match the current project. Choose the session again via /sessions.",
+  "messages.empty": "📭 No user messages in the current session.",
+  "messages.select": "Choose a message:",
+  "messages.select_page": "Choose a message (page {page}):",
+  "messages.fetch_error":
+    "🔴 OpenCode Server is unavailable or an error occurred while loading messages.",
+  "messages.inactive_callback": "This messages menu is inactive",
+  "messages.cancelled_callback": "Cancelled",
+  "messages.page_empty_callback": "No messages on this page",
+  "messages.button.prev_page": "⬅️ Prev",
+  "messages.button.next_page": "Next ➡️",
+  "messages.button.revert": "↩️ Revert",
+  "messages.button.fork": "🔀 Fork",
+  "messages.button.back": "⬅️ Back",
+  "messages.button.cancel": "❌ Cancel",
+  "messages.revert_success": "✅ Reverted to message:\n\n{text}",
+  "messages.revert_error": "❌ Failed to revert message. Please try again.",
+  "messages.fork_success": "🔀 Fork created from message:\n\n{text}",
+  "messages.fork_error": "❌ Failed to create fork. Please try again.",
 
   "attach.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
