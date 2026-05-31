@@ -37,7 +37,7 @@ export async function showSttConfirmation(
     ctx.chat!.id,
     statusMessageId,
     t("stt.confirm_message", { text: recognizedText }),
-    { reply_markup: keyboard },
+    { reply_markup: keyboard, parse_mode: "HTML" },
   );
 }
 
@@ -96,11 +96,14 @@ export async function handleSttConfirmCallback(
         allowedCommands: [],
       });
 
+      const editKeyboard = new InlineKeyboard().text(t("stt.confirm_cancel"), "stt:cancel");
+
       try {
         await ctx.api.editMessageText(
           chatId,
           statusMessageId,
-          t("stt.confirm_edit_prompt"),
+          t("stt.confirm_edit_prompt", { text: transcript }),
+          { parse_mode: "HTML", reply_markup: editKeyboard },
         );
       } catch (err) {
         logger.warn("[STT] Failed to edit message on edit:", err);
