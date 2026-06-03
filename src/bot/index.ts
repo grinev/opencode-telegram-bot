@@ -93,9 +93,11 @@ import { sendTtsResponseForSession } from "./utils/send-tts-response.js";
 import { deliverThinkingMessage } from "./utils/thinking-message.js";
 import { shouldSuppressUserAbortSessionError } from "./utils/abort-error-suppression.js";
 import {
+  completeDraftPart,
   editRenderedBotPart,
   getTelegramRenderedPartSignature,
   sendBotText,
+  sendDraftBotPart,
   sendRenderedBotPart,
 } from "./utils/telegram-text.js";
 import { formatAssistantRunFooter } from "./utils/assistant-run-footer.js";
@@ -134,6 +136,7 @@ let unsubscribeReadyRestore: (() => void) | null = null;
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
 const RESPONSE_STREAM_THROTTLE_MS = config.bot.responseStreamThrottleMs;
+const RESPONSE_STREAMING_MODE = config.bot.responseStreamingMode;
 const RESPONSE_STREAM_TEXT_LIMIT = 3800;
 const SESSION_RETRY_PREFIX = "🔁";
 const SUBAGENT_STREAM_PREFIX = "🧩";
@@ -237,64 +240,116 @@ const toolMessageBatcher = new ToolMessageBatcher({
   },
 });
 
-const responseStreamer = new ResponseStreamer({
-  throttleMs: RESPONSE_STREAM_THROTTLE_MS,
-  sendPart: async (part, options) => {
-    if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
-      throw new Error("Bot context missing for streamed send");
-    }
+let nextDraftId = 1;
+function getNextDraftId(): number {
+  const id = nextDraftId;
+  nextDraftId += 1;
+  return id;
+}
 
-    return sendRenderedBotPart({
-      api: botInstance.api,
-      chatId: chatIdInstance,
-      part,
-      options,
+const responseStreamer = RESPONSE_STREAMING_MODE === "draft"
+  ? new ResponseStreamer({
+      throttleMs: RESPONSE_STREAM_THROTTLE_MS,
+      sendPart: async (part) => {
+        if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+          throw new Error("Bot context missing for draft send");
+        }
+
+        const draftId = getNextDraftId();
+        const result = await sendDraftBotPart({
+          api: botInstance.api,
+          chatId: chatIdInstance,
+          draftId,
+          part,
+        });
+        return { messageId: draftId, deliveredSignature: result.deliveredSignature };
+      },
+      editPart: async (messageId, part) => {
+        if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+          throw new Error("Bot context missing for draft edit");
+        }
+
+        return sendDraftBotPart({
+          api: botInstance.api,
+          chatId: chatIdInstance,
+          draftId: messageId,
+          part,
+        });
+      },
+      deleteText: async () => {
+        // Drafts are ephemeral — no need to delete
+      },
+      completePart: async (part, options) => {
+        if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+          throw new Error("Bot context missing for draft complete");
+        }
+
+        return completeDraftPart({
+          api: botInstance.api,
+          chatId: chatIdInstance,
+          part,
+          options,
+        });
+      },
+    })
+  : new ResponseStreamer({
+      throttleMs: RESPONSE_STREAM_THROTTLE_MS,
+      sendPart: async (part, options) => {
+        if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+          throw new Error("Bot context missing for streamed send");
+        }
+
+        return sendRenderedBotPart({
+          api: botInstance.api,
+          chatId: chatIdInstance,
+          part,
+          options,
+        });
+      },
+      editPart: async (messageId, part, options) => {
+        if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+          throw new Error("Bot context missing for streamed edit");
+        }
+
+        try {
+          return await editRenderedBotPart({
+            api: botInstance.api,
+            chatId: chatIdInstance,
+            messageId,
+            part,
+            options,
+          });
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+          if (errorMessage.includes("message is not modified")) {
+            return {
+              deliveredSignature: getTelegramRenderedPartSignature(part),
+            };
+          }
+
+          throw error;
+        }
+      },
+      deleteText: async (messageId) => {
+        if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
+          throw new Error("Bot context missing for streamed delete");
+        }
+
+        await botInstance.api.deleteMessage(chatIdInstance, messageId).catch((error) => {
+          const errorMessage =
+            error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+          if (
+            errorMessage.includes("message to delete not found") ||
+            errorMessage.includes("message identifier is not specified")
+          ) {
+            return;
+          }
+
+          throw error;
+        });
+      },
     });
-  },
-  editPart: async (messageId, part, options) => {
-    if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
-      throw new Error("Bot context missing for streamed edit");
-    }
-
-    try {
-      return await editRenderedBotPart({
-        api: botInstance.api,
-        chatId: chatIdInstance,
-        messageId,
-        part,
-        options,
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-      if (errorMessage.includes("message is not modified")) {
-        return {
-          deliveredSignature: getTelegramRenderedPartSignature(part),
-        };
-      }
-
-      throw error;
-    }
-  },
-  deleteText: async (messageId) => {
-    if (!botInstance || !chatIdInstance || chatIdInstance <= 0) {
-      throw new Error("Bot context missing for streamed delete");
-    }
-
-    await botInstance.api.deleteMessage(chatIdInstance, messageId).catch((error) => {
-      const errorMessage =
-        error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-      if (
-        errorMessage.includes("message to delete not found") ||
-        errorMessage.includes("message identifier is not specified")
-      ) {
-        return;
-      }
-
-      throw error;
-    });
-  },
-});
 
 setResponseStreamerForReconciliation(responseStreamer);
 

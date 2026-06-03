@@ -6,6 +6,7 @@ const runtimePaths = getRuntimePaths();
 dotenv.config({ path: runtimePaths.envFilePath, quiet: true });
 
 export type MessageFormatMode = "raw" | "markdown";
+export type StreamingMode = "edit" | "draft";
 export type TtsProvider = "openai" | "google";
 
 function getEnvVar(key: string, required: boolean = true): string {
@@ -53,6 +54,24 @@ function getOptionalBooleanEnvVar(key: string, defaultValue: boolean): boolean {
 
   if (["0", "false", "no", "off"].includes(normalized)) {
     return false;
+  }
+
+  return defaultValue;
+}
+
+function getOptionalStreamingModeEnvVar(
+  key: string,
+  defaultValue: StreamingMode,
+): StreamingMode {
+  const value = getEnvVar(key, false);
+
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "edit" || normalized === "draft") {
+    return normalized;
   }
 
   return defaultValue;
@@ -159,6 +178,7 @@ export const config = {
       120,
     ),
     responseStreamThrottleMs: getOptionalPositiveIntEnvVar("RESPONSE_STREAM_THROTTLE_MS", 1000),
+    responseStreamingMode: getOptionalStreamingModeEnvVar("RESPONSE_STREAMING_MODE", "edit"),
     bashToolDisplayMaxLength: getOptionalPositiveIntEnvVar("BASH_TOOL_DISPLAY_MAX_LENGTH", 128),
     locale: getOptionalLocaleEnvVar("BOT_LOCALE", "en"),
     hideThinkingMessages: getOptionalBooleanEnvVar("HIDE_THINKING_MESSAGES", false),

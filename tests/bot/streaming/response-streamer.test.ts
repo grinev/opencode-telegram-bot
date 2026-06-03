@@ -433,4 +433,146 @@ describe("bot/streaming/response-streamer", () => {
     expect(editPart).toHaveBeenCalledWith(300, boldHello, undefined);
     expect(deleteText).not.toHaveBeenCalled();
   });
+
+  describe("draft mode (completePart)", () => {
+    it("persists draft parts via completePart on complete", async () => {
+      vi.useFakeTimers();
+
+      const sendPart = vi.fn(async () => ({
+        messageId: 1,
+        deliveredSignature: signature(plainPart("partial")),
+      }));
+      const editPart = vi.fn(async () => ({
+        deliveredSignature: signature(plainPart("partial")),
+      }));
+      const deleteText = vi.fn().mockResolvedValue(undefined);
+      const completePart = vi.fn(async (part) => ({
+        messageId: 100,
+        deliveredSignature: signature(part),
+      }));
+      const streamer = new ResponseStreamer({
+        throttleMs: 0,
+        sendPart,
+        editPart,
+        deleteText,
+        completePart,
+      });
+
+      streamer.enqueue("s1", "m1", { parts: [plainPart("partial")] });
+      await vi.waitFor(() => {
+        expect(sendPart).toHaveBeenCalledTimes(1);
+      });
+
+      const result = await streamer.complete("s1", "m1", { parts: [plainPart("final")] });
+
+      expect(result.streamed).toBe(true);
+      expect(result.telegramMessageIds).toEqual([100]);
+      expect(completePart).toHaveBeenCalledTimes(1);
+      expect(completePart).toHaveBeenCalledWith(plainPart("final"), undefined);
+    });
+
+    it("persists multi-part drafts via completePart", async () => {
+      vi.useFakeTimers();
+
+      let draftId = 10;
+      const sendPart = vi.fn(async (part) => {
+        const id = draftId++;
+        return { messageId: id, deliveredSignature: signature(part) };
+      });
+      const editPart = vi.fn(async () => ({
+        deliveredSignature: "sig",
+      }));
+      const deleteText = vi.fn().mockResolvedValue(undefined);
+      let realMessageId = 200;
+      const completePart = vi.fn(async (part) => {
+        const id = realMessageId++;
+        return { messageId: id, deliveredSignature: signature(part) };
+      });
+      const streamer = new ResponseStreamer({
+        throttleMs: 0,
+        sendPart,
+        editPart,
+        deleteText,
+        completePart,
+      });
+
+      streamer.enqueue("s1", "m1", { parts: [plainPart("part-1"), plainPart("part-2")] });
+      await vi.waitFor(() => {
+        expect(sendPart).toHaveBeenCalledTimes(2);
+      });
+
+      const result = await streamer.complete("s1", "m1", {
+        parts: [plainPart("part-1-final"), plainPart("part-2-final")],
+      });
+
+      expect(result.streamed).toBe(true);
+      expect(result.telegramMessageIds).toEqual([200, 201]);
+      expect(completePart).toHaveBeenCalledTimes(2);
+      expect(completePart).toHaveBeenNthCalledWith(1, plainPart("part-1-final"), undefined);
+      expect(completePart).toHaveBeenNthCalledWith(2, plainPart("part-2-final"), undefined);
+    });
+
+    it("returns streamed=false when completePart fails", async () => {
+      vi.useFakeTimers();
+
+      const sendPart = vi.fn(async () => ({
+        messageId: 1,
+        deliveredSignature: signature(plainPart("partial")),
+      }));
+      const editPart = vi.fn(async () => ({
+        deliveredSignature: signature(plainPart("partial")),
+      }));
+      const deleteText = vi.fn().mockResolvedValue(undefined);
+      const completePart = vi.fn().mockRejectedValue(new Error("API error"));
+      const streamer = new ResponseStreamer({
+        throttleMs: 0,
+        sendPart,
+        editPart,
+        deleteText,
+        completePart,
+      });
+
+      streamer.enqueue("s1", "m1", { parts: [plainPart("partial")] });
+      await vi.waitFor(() => {
+        expect(sendPart).toHaveBeenCalledTimes(1);
+      });
+
+      const result = await streamer.complete("s1", "m1", { parts: [plainPart("final")] });
+
+      expect(result.streamed).toBe(false);
+      expect(completePart).toHaveBeenCalledTimes(1);
+    });
+
+    it("calls completePart only for parts with text", async () => {
+      vi.useFakeTimers();
+
+      const sendPart = vi.fn(async (part) => ({
+        messageId: 1,
+        deliveredSignature: signature(part),
+      }));
+      const editPart = vi.fn(async () => ({ deliveredSignature: "sig" }));
+      const deleteText = vi.fn().mockResolvedValue(undefined);
+      const completePart = vi.fn(async (part) => ({
+        messageId: 50,
+        deliveredSignature: signature(part),
+      }));
+      const streamer = new ResponseStreamer({
+        throttleMs: 0,
+        sendPart,
+        editPart,
+        deleteText,
+        completePart,
+      });
+
+      streamer.enqueue("s1", "m1", { parts: [plainPart("text-only")] });
+      await vi.waitFor(() => {
+        expect(sendPart).toHaveBeenCalledTimes(1);
+      });
+
+      const result = await streamer.complete("s1", "m1", { parts: [plainPart("text-only")] });
+
+      expect(result.streamed).toBe(true);
+      expect(completePart).toHaveBeenCalledTimes(1);
+    });
+  });
 });
