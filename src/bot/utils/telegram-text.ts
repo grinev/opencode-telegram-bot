@@ -8,6 +8,7 @@ import type { TelegramRenderedPart } from "../../telegram/render/types.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
 type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
+type SendDraftApi = Pick<Api<RawApi>, "sendMessageDraft">;
 
 type TelegramSendMessageOptions = Parameters<SendMessageApi["sendMessage"]>[2];
 type TelegramEditMessageOptions = Parameters<EditMessageApi["editMessageText"]>[3];
@@ -198,6 +199,95 @@ export async function editRenderedBotPart({
       fallbackTextLength: part.fallbackText.length,
     });
     return {
+      deliveredSignature: getTelegramRenderedPartSignature({ text: part.fallbackText }),
+    };
+  }
+}
+
+interface SendDraftBotPartParams {
+  api: SendDraftApi;
+  chatId: Parameters<SendDraftApi["sendMessageDraft"]>[0];
+  draftId: number;
+  part: TelegramRenderedPart;
+}
+
+interface CompleteDraftPartParams {
+  api: SendMessageApi;
+  chatId: Parameters<SendMessageApi["sendMessage"]>[0];
+  part: TelegramRenderedPart;
+  options?: TelegramSendMessageOptions;
+}
+
+export async function sendDraftBotPart({
+  api,
+  chatId,
+  draftId,
+  part,
+}: SendDraftBotPartParams): Promise<RenderedPartDeliveryResult> {
+  logger.debug("[Bot] Sending draft part", {
+    draftId,
+    textLength: part.text.length,
+    entityCount: part.entities?.length ?? 0,
+  });
+
+  if (!part.entities?.length) {
+    await api.sendMessageDraft(chatId, draftId, part.text);
+    return {
+      deliveredSignature: getTelegramRenderedPartSignature({ text: part.text }),
+    };
+  }
+
+  try {
+    await api.sendMessageDraft(chatId, draftId, part.text, {
+      entities: part.entities,
+    });
+    return {
+      deliveredSignature: getTelegramRenderedPartSignature(part),
+    };
+  } catch (error) {
+    logger.warn("[Bot] Entity draft failed, retrying with raw fallback", error);
+    await api.sendMessageDraft(chatId, draftId, part.fallbackText);
+    return {
+      deliveredSignature: getTelegramRenderedPartSignature({ text: part.fallbackText }),
+    };
+  }
+}
+
+export async function completeDraftPart({
+  api,
+  chatId,
+  part,
+  options,
+}: CompleteDraftPartParams): Promise<RenderedPartSendResult> {
+  const rawOptions = stripRichFormattingOptions(options);
+
+  logger.debug("[Bot] Completing draft with real message", {
+    textLength: part.text.length,
+    entityCount: part.entities?.length ?? 0,
+  });
+
+  if (!part.entities?.length) {
+    const sentMessage = await api.sendMessage(chatId, part.text, rawOptions);
+    return {
+      messageId: sentMessage.message_id,
+      deliveredSignature: getTelegramRenderedPartSignature({ text: part.text }),
+    };
+  }
+
+  try {
+    const sentMessage = await api.sendMessage(chatId, part.text, {
+      ...(rawOptions || {}),
+      entities: part.entities,
+    });
+    return {
+      messageId: sentMessage.message_id,
+      deliveredSignature: getTelegramRenderedPartSignature(part),
+    };
+  } catch (error) {
+    logger.warn("[Bot] Entity complete failed, retrying with raw fallback", error);
+    const sentMessage = await api.sendMessage(chatId, part.fallbackText, rawOptions);
+    return {
+      messageId: sentMessage.message_id,
       deliveredSignature: getTelegramRenderedPartSignature({ text: part.fallbackText }),
     };
   }
