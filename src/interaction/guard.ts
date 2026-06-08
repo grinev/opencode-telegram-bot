@@ -192,6 +192,10 @@ export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
       return createAllowDecision(inputType, state, command);
     }
 
+    if (state.kind === "custom" && state.metadata?.sttTranscript && inputType === "other") {
+      return createAllowDecision(inputType, state, command);
+    }
+
     return createBlockDecision(inputType, state, "expected_text", command);
   }
 

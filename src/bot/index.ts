@@ -84,6 +84,10 @@ import { getCurrentProject } from "../settings/manager.js";
 import { createTelegramBotOptions } from "./telegram-client-options.js";
 import { clearPromptResponseMode, processUserPrompt } from "./handlers/prompt.js";
 import { handleVoiceMessage } from "./handlers/voice.js";
+import {
+  handleSttConfirmCallback,
+  handleSttEditText,
+} from "./handlers/stt-confirm.js";
 import { handleDocumentMessage } from "./handlers/document.js";
 import { createMediaGroupAttachmentMiddleware } from "./handlers/media-group.js";
 import { downloadTelegramFile, toDataUri } from "./utils/file-download.js";
@@ -1286,9 +1290,10 @@ export function createBot(): Bot<Context> {
       const handledMessages = await handleMessagesCallback(ctx, { bot, ensureEventSubscription });
       const handledSkills = await handleSkillsCallback(ctx, { bot, ensureEventSubscription });
       const handledMcps = await handleMcpsCallback(ctx);
+      const handledStt = await handleSttConfirmCallback(ctx, { bot, ensureEventSubscription });
 
       logger.debug(
-        `[Bot] Callback handled: backgroundSession=${handledBackgroundSession}, inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, modelSearch=${handledModelSearch}, modelSearchResults=${handledModelSearchResults}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, messages=${handledMessages}, skills=${handledSkills}, mcps=${handledMcps}`,
+        `[Bot] Callback handled: backgroundSession=${handledBackgroundSession}, inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, modelSearch=${handledModelSearch}, modelSearchResults=${handledModelSearchResults}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, messages=${handledMessages}, skills=${handledSkills}, mcps=${handledMcps}, stt=${handledStt}`,
       );
 
       if (
@@ -1313,7 +1318,8 @@ export function createBot(): Bot<Context> {
         !handledCommands &&
         !handledMessages &&
         !handledSkills &&
-        !handledMcps
+        !handledMcps &&
+        !handledStt
       ) {
         logger.debug("Unknown callback query:", ctx.callbackQuery?.data);
         await ctx.answerCallbackQuery({ text: t("callback.unknown_command") });
@@ -1559,6 +1565,11 @@ export function createBot(): Bot<Context> {
 
     const handledSkillArgs = await handleSkillTextArguments(ctx, promptDeps);
     if (handledSkillArgs) {
+      return;
+    }
+
+    const handledSttEdit = await handleSttEditText(ctx, promptDeps);
+    if (handledSttEdit) {
       return;
     }
 

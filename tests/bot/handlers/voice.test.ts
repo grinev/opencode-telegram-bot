@@ -3,16 +3,6 @@ import { EventEmitter } from "node:events";
 import type { Context } from "grammy";
 import type { VoiceMessageDeps } from "../../../src/bot/handlers/voice.js";
 import { t } from "../../../src/i18n/index.js";
-
-vi.mock("../../../src/utils/logger.js", () => ({
-  logger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
 async function loadVoiceModule() {
   vi.resetModules();
   return import("../../../src/bot/handlers/voice.js");
@@ -44,11 +34,9 @@ function createVoiceContext(): {
 
 function createVoiceDeps(overrides: Record<string, unknown> = {}): {
   deps: VoiceMessageDeps;
-  processPromptMock: ReturnType<typeof vi.fn>;
   downloadMock: ReturnType<typeof vi.fn>;
   transcribeMock: ReturnType<typeof vi.fn>;
 } {
-  const processPromptMock = vi.fn().mockResolvedValue(true);
   const downloadMock = vi.fn().mockResolvedValue({
     buffer: Buffer.from("audio"),
     filename: "file_1.oga",
@@ -61,11 +49,10 @@ function createVoiceDeps(overrides: Record<string, unknown> = {}): {
     isSttConfigured: vi.fn(() => true),
     downloadTelegramFile: downloadMock,
     transcribeAudio: transcribeMock,
-    processPrompt: processPromptMock,
     ...overrides,
-  };
+  } as VoiceMessageDeps;
 
-  return { deps, processPromptMock, downloadMock, transcribeMock };
+  return { deps, downloadMock, transcribeMock };
 }
 
 function mockHttpsDownload(): ReturnType<typeof vi.fn> {
@@ -130,23 +117,10 @@ describe("bot/handlers/voice", () => {
     vi.stubEnv("STT_NOTE_PROMPT", "");
   });
 
-  it("continues with prompt processing when recognized text message edit fails", async () => {
-    const { handleVoiceMessage } = await loadVoiceModule();
-    const { ctx, replyMock, editMessageTextMock } = createVoiceContext();
-    const { deps, processPromptMock } = createVoiceDeps();
-
-    editMessageTextMock.mockRejectedValueOnce(new Error("message is too long"));
-
-    await handleVoiceMessage(ctx, deps);
-
-    expect(replyMock).toHaveBeenCalledWith(t("stt.recognizing"));
-    expect(processPromptMock).toHaveBeenCalledWith(ctx, "run tests", deps);
-  });
-
-  it("returns not-configured message and does not process prompt", async () => {
+  it("returns not-configured message and does not start confirmation flow", async () => {
     const { handleVoiceMessage } = await loadVoiceModule();
     const { ctx, replyMock } = createVoiceContext();
-    const { deps, processPromptMock, downloadMock } = createVoiceDeps({
+    const { deps, downloadMock } = createVoiceDeps({
       isSttConfigured: () => false,
     });
 
@@ -154,59 +128,23 @@ describe("bot/handlers/voice", () => {
 
     expect(replyMock).toHaveBeenCalledWith(t("stt.not_configured"));
     expect(downloadMock).not.toHaveBeenCalled();
-    expect(processPromptMock).not.toHaveBeenCalled();
+    const { interactionManager } = await import("../../../src/interaction/manager.js");
+    expect(interactionManager.getSnapshot()).toBeNull();
   });
 
-  it("shows empty-result message and skips prompt processing", async () => {
+  it("shows empty-result message and skips confirmation flow", async () => {
     const { handleVoiceMessage } = await loadVoiceModule();
     const { ctx, editMessageTextMock } = createVoiceContext();
-    const { deps, processPromptMock } = createVoiceDeps({
+    const { deps } = createVoiceDeps({
       transcribeAudio: vi.fn().mockResolvedValue({ text: "   " }),
     });
 
     await handleVoiceMessage(ctx, deps);
 
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 101, t("stt.empty_result"));
-    expect(processPromptMock).not.toHaveBeenCalled();
+    const { interactionManager } = await import("../../../src/interaction/manager.js");
+    expect(interactionManager.getSnapshot()).toBeNull();
   });
-
-  it("adds STT note to the LLM prompt when STT_NOTE_PROMPT is set", async () => {
-    vi.stubEnv(
-      "STT_NOTE_PROMPT",
-      "The following text is transcribed from voice. It may contain phonetic errors. Infer the intended meaning from context.",
-    );
-
-    const { handleVoiceMessage } = await loadVoiceModule();
-    const { logger } = await import("../../../src/utils/logger.js");
-    const { ctx } = createVoiceContext();
-    const { deps, processPromptMock } = createVoiceDeps();
-    const note =
-      "The following text is transcribed from voice. It may contain phonetic errors. Infer the intended meaning from context.";
-
-    await handleVoiceMessage(ctx, deps);
-
-    expect(processPromptMock).toHaveBeenCalledWith(ctx, `[Note: ${note}]\nrun tests`, deps);
-    expect(logger.debug).toHaveBeenCalledWith(
-      `[Voice] Added STT note to LLM prompt: [Note: ${note}]`,
-    );
-  });
-
-  it.each(["", "false", "0", "   "])(
-    "does not add STT note when STT_NOTE_PROMPT is %j",
-    async (notePrompt) => {
-      vi.stubEnv("STT_NOTE_PROMPT", notePrompt);
-
-      const { handleVoiceMessage } = await loadVoiceModule();
-      const { logger } = await import("../../../src/utils/logger.js");
-      const { ctx } = createVoiceContext();
-      const { deps, processPromptMock } = createVoiceDeps();
-
-      await handleVoiceMessage(ctx, deps);
-
-      expect(processPromptMock).toHaveBeenCalledWith(ctx, "run tests", deps);
-      expect(logger.debug).not.toHaveBeenCalled();
-    },
-  );
 
   it("downloads voice files from the default Telegram file URL when TELEGRAM_API_ROOT is unset", async () => {
     const httpsGetMock = mockHttpsDownload();
@@ -217,7 +155,7 @@ describe("bot/handlers/voice", () => {
       file_size: 5,
     });
     (ctx.api as unknown as { getFile: typeof getFileMock }).getFile = getFileMock;
-    const { deps, processPromptMock } = createVoiceDeps({
+    const { deps } = createVoiceDeps({
       downloadTelegramFile: undefined,
       transcribeAudio: vi.fn().mockResolvedValue({ text: "hello" }),
     });
@@ -228,7 +166,11 @@ describe("bot/handlers/voice", () => {
     expect(String(url)).toBe(
       "https://api.telegram.org/file/bottest-telegram-token/voice/file_123.oga",
     );
-    expect(processPromptMock).toHaveBeenCalledWith(ctx, "hello", deps);
+
+    const { interactionManager } = await import("../../../src/interaction/manager.js");
+    const interaction = interactionManager.getSnapshot();
+    expect(interaction).not.toBeNull();
+    expect(interaction!.metadata.sttTranscript).toBe("hello");
   });
 
   it("downloads voice files from TELEGRAM_API_ROOT without a double slash", async () => {
