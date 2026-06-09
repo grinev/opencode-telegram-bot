@@ -161,7 +161,7 @@ function formatTaskDetails(task: ScheduledTask): string {
     task.kind === "cron" ? `${t("tasklist.details.cron", { cron: task.cron })}\n` : "";
 
   return t("tasklist.details", {
-    prompt: task.prompt,
+    prompt: truncateText(task.prompt, 3800),
     project: `${task.projectWorktree}\n${t("status.line.model", { model })}`,
     schedule: task.scheduleSummary,
     cronLine,
