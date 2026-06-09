@@ -189,6 +189,34 @@ describe("bot/commands/tasklist", () => {
     });
   });
 
+  it("truncates oversized prompt to fit Telegram 4096-byte message limit", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 300,
+      },
+    });
+
+    const longPrompt = "A".repeat(5000);
+
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-1", {
+        prompt: longPrompt,
+      }),
+    );
+
+    const ctx = createCallbackContext("tasklist:open:task-1", 300);
+    await handleTaskListCallback(ctx);
+
+    const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(text).not.toContain(longPrompt);
+    expect(text).toContain("AAA...");
+    expect(text.length).toBeLessThanOrEqual(4096);
+  });
+
   it("cancels task details interaction and removes message", async () => {
     interactionManager.start({
       kind: "custom",
