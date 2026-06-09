@@ -149,7 +149,8 @@ function truncateToByteLength(text: string, maxBytes: number): string {
     return text;
   }
 
-  // Binary-search for the longest prefix that fits within (maxBytes - 3) bytes
+  // Binary-search for the longest prefix that fits within (maxBytes - 3) bytes.
+  // We search over UTF-16 code unit indices (JS string positions).
   let low = 0;
   let high = text.length;
   while (low < high) {
@@ -159,6 +160,13 @@ function truncateToByteLength(text: string, maxBytes: number): string {
     } else {
       high = mid - 1;
     }
+  }
+
+  // Snap back if `low` cuts in the middle of a surrogate pair.
+  // If the last code unit in the slice is a high surrogate (0xD800–0xDBFF),
+  // the slice ends with an unpaired surrogate — step back one code unit.
+  if (low > 0 && text.charCodeAt(low - 1) >= 0xd800 && text.charCodeAt(low - 1) <= 0xdbff) {
+    low -= 1;
   }
 
   return `${text.slice(0, low).trimEnd()}...`;
