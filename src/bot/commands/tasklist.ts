@@ -96,6 +96,32 @@ function truncateText(text: string, maxLength: number): string {
   return `${text.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
+/**
+ * Truncates text so its UTF-8 byte length does not exceed maxBytes.
+ * Appends "..." when truncation occurs.
+ * Uses TextEncoder to count bytes accurately (handles emoji, CJK, etc.).
+ */
+function truncateToByteLength(text: string, maxBytes: number): string {
+  const encoder = new TextEncoder();
+  if (encoder.encode(text).length <= maxBytes) {
+    return text;
+  }
+
+  // Binary-search for the longest prefix that fits within (maxBytes - 3) bytes
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (encoder.encode(text.slice(0, mid)).length <= maxBytes - 3) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return `${text.slice(0, low).trimEnd()}...`;
+}
+
 function formatDateTime(dateIso: string | null, timezone: string): string {
   if (!dateIso) {
     return "-";
@@ -159,7 +185,10 @@ function formatTaskDetails(task: ScheduledTask): string {
     task.kind === "cron" ? `${t("tasklist.details.cron", { cron: task.cron })}\n` : "";
 
   return t("tasklist.details", {
-    prompt: truncateText(task.prompt, 3800),
+    // Telegram editMessageText hard limit is 4096 bytes (UTF-8).
+    // Template chrome (title, labels, schedule, etc.) consumes ~230 bytes.
+    // A 3800-byte budget for the prompt keeps the total safely under the limit.
+    prompt: truncateToByteLength(task.prompt, 3800),
     project: `${task.projectWorktree}\n${t("status.line.model", { model })}`,
     schedule: task.scheduleSummary,
     cronLine,
