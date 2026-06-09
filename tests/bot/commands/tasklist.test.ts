@@ -188,6 +188,93 @@ describe("bot/commands/tasklist", () => {
     });
   });
 
+  it("truncates oversized ASCII prompt to fit Telegram 4096-byte message limit", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 300,
+      },
+    });
+
+    const longPrompt = "A".repeat(5000);
+
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-1", {
+        prompt: longPrompt,
+      }),
+    );
+
+    const ctx = createCallbackContext("tasklist:open:task-1", 300);
+    await handleTaskListCallback(ctx);
+
+    const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(text).not.toContain(longPrompt);
+    expect(text).toContain("AAA");
+    expect(text).toMatch(/\.\.\.(\s|$)/m);
+    // Byte length must not exceed Telegram limit
+    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(4096);
+  });
+
+  it("truncates oversized multi-byte prompt to fit Telegram 4096-byte message limit", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 301,
+      },
+    });
+
+    // Each 🚀 emoji is 4 UTF-8 bytes. 1200 emojis = 4800 bytes (well over 3800).
+    const longPrompt = "🚀".repeat(1200);
+
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-1", {
+        prompt: longPrompt,
+      }),
+    );
+
+    const ctx = createCallbackContext("tasklist:open:task-1", 301);
+    await handleTaskListCallback(ctx);
+
+    const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(text).not.toContain(longPrompt);
+    expect(text).toMatch(/\.\.\.(\s|$)/m);
+    // Byte length must not exceed Telegram limit
+    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(4096);
+  });
+
+  it("does not truncate prompt that fits within the byte limit", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 302,
+      },
+    });
+
+    const shortPrompt = "Check the weather forecast";
+
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-1", {
+        prompt: shortPrompt,
+      }),
+    );
+
+    const ctx = createCallbackContext("tasklist:open:task-1", 302);
+    await handleTaskListCallback(ctx);
+
+    const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(text).toContain(shortPrompt);
+    expect(text).not.toMatch(/Check the weather forecast\.\.\./);
+  });
+
   it("cancels task details interaction and removes message", async () => {
     interactionManager.start({
       kind: "custom",
