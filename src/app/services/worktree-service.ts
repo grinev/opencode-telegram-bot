@@ -1,24 +1,11 @@
 import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import type { GitWorktreeContext, GitWorktreeEntry } from "../types/worktree.js";
+
 const GIT_HEADS_PREFIX = "refs/heads/";
 const GIT_WORKTREES_MARKER = `${path.sep}.git${path.sep}worktrees${path.sep}`;
 const GIT_WORKTREE_LIST_MAX_BUFFER = 1024 * 1024;
-
-export interface GitWorktreeEntry {
-  path: string;
-  branch: string | null;
-  isCurrent: boolean;
-  isMain: boolean;
-}
-
-export interface GitWorktreeContext {
-  mainProjectPath: string;
-  activeWorktreePath: string;
-  branch: string | null;
-  isLinkedWorktree: boolean;
-  worktrees: GitWorktreeEntry[];
-}
 
 interface ParsedGitWorktreeEntry {
   path: string;

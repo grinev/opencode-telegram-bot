@@ -46,7 +46,7 @@ vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   fetchCurrentModel: mocked.fetchCurrentModelMock,
 }));
 
-vi.mock("../../../src/git/worktree.js", () => ({
+vi.mock("../../../src/app/services/worktree-service.js", () => ({
   getGitWorktreeContext: mocked.getGitWorktreeContextMock,
 }));
 

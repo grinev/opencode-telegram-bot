@@ -23,7 +23,7 @@ vi.mock("../../../src/settings/manager.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));
 
-vi.mock("../../../src/git/worktree.js", () => ({
+vi.mock("../../../src/app/services/worktree-service.js", () => ({
   getGitWorktreeContext: mocked.getGitWorktreeContextMock,
 }));
 
@@ -63,7 +63,8 @@ vi.mock("../../../src/utils/logger.js", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { handleWorktreeCallback, worktreeCommand } from "../../../src/bot/commands/worktree.js";
+import { worktreeCommand } from "../../../src/bot/commands/worktree-command.js";
+import { handleWorktreeCallback } from "../../../src/bot/callbacks/worktree-callback-handler.js";
 
 function createCommandContext(): Context {
   return {

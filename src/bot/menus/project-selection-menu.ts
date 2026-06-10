@@ -1,5 +1,5 @@
 import { InlineKeyboard } from "grammy";
-import { getGitWorktreeContext } from "../../git/worktree.js";
+import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { t } from "../../i18n/index.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { logger } from "../../utils/logger.js";

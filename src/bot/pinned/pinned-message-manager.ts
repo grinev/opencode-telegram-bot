@@ -1,7 +1,7 @@
 import type { Api } from "grammy";
 import { logger } from "../../utils/logger.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { getGitWorktreeContext } from "../../git/worktree.js";
+import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { getCurrentSession } from "../../session/manager.js";
 import {
   getCurrentProject,

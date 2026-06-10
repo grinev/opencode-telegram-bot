@@ -16,7 +16,7 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../../src/opencode/client.js", () => ({ opencodeClient: mocked.opencodeClient }));
-vi.mock("../../../../src/git/worktree.js", () => ({
+vi.mock("../../../../src/app/services/worktree-service.js", () => ({
   getGitWorktreeContext: mocked.getGitWorktreeContext,
 }));
 vi.mock("../../../../src/session/manager.js", () => ({ getCurrentSession: mocked.getCurrentSession }));

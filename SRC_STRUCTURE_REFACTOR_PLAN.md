@@ -419,7 +419,7 @@ src/bot/
   5. Обновить зависимости с sessions/worktree/status/pinned/background tracking.
   6. Запустить project/projects/switch-project тесты, затем build.
 
-- [ ] **Этап 13. Worktree**
+- [x] **Этап 13. Worktree**
 
   1. Перенести `src/git/worktree.ts` -> `app/services/worktree-service.ts` и `app/types/worktree.ts`.
   2. Перенести `bot/commands/worktree.ts` -> `bot/commands/worktree-command.ts`.

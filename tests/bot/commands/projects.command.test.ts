@@ -21,7 +21,7 @@ vi.mock("../../../src/app/services/project-service.js", () => ({
   getProjects: mocked.getProjectsMock,
 }));
 
-vi.mock("../../../src/git/worktree.js", () => ({
+vi.mock("../../../src/app/services/worktree-service.js", () => ({
   getGitWorktreeContext: mocked.getGitWorktreeContextMock,
 }));
 

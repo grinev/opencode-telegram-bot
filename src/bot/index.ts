@@ -24,7 +24,8 @@ import {
 import { newCommand } from "./commands/new.js";
 import { projectsCommand } from "./commands/projects-command.js";
 import { handleProjectSelect } from "./callbacks/project-callback-handler.js";
-import { worktreeCommand, handleWorktreeCallback } from "./commands/worktree.js";
+import { worktreeCommand } from "./commands/worktree-command.js";
+import { handleWorktreeCallback } from "./callbacks/worktree-callback-handler.js";
 import { openCommand } from "./commands/open-command.js";
 import { lsCommand } from "./commands/ls-command.js";
 import { abortCommand } from "./commands/abort.js";
