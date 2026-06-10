@@ -8,7 +8,7 @@ import {
   notifyOpencodeReadyIfHealthy,
   registerOpenCodeReadyRefreshHandler,
 } from "../../opencode/ready-refresh.js";
-import { loadSettings } from "../../settings/manager.js";
+import { loadSettings } from "../stores/settings-store.js";
 import { scheduledTaskRuntime } from "../services/scheduled-task-runtime-service.js";
 import { reconcileStoredModelSelection } from "../services/model-selection-service.js";
 import { getRuntimeMode } from "../../runtime/mode.js";

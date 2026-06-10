@@ -60,7 +60,7 @@ vi.mock("../../src/opencode/client.js", () => ({
   },
 }));
 
-vi.mock("../../src/settings/manager.js", () => ({
+vi.mock("../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: mocked.getCurrentProjectMock,
   getCurrentAgent: mocked.getCurrentAgentMock,
   setCurrentAgent: mocked.setCurrentAgentMock,

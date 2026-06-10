@@ -3,7 +3,7 @@ import path from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { setRuntimeMode } from "../../src/runtime/mode.js";
-import { loadSettings } from "../../src/settings/manager.js";
+import { loadSettings } from "../../src/app/stores/settings-store.js";
 import {
   __resetSessionDirectoryCacheForTests,
   getCachedSessionDirectories,

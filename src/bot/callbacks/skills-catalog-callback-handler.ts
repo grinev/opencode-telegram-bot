@@ -1,7 +1,7 @@
 import type { Context } from "grammy";
 import { config } from "../../config.js";
 import type { SkillCatalogItem } from "../../app/services/skills-catalog-service.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import type { InteractionState } from "../../app/types/interaction.js";
 import { logger } from "../../utils/logger.js";

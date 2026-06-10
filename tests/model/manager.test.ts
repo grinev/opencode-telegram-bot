@@ -69,7 +69,7 @@ vi.mock("../../src/opencode/client.js", () => ({
   },
 }));
 
-vi.mock("../../src/settings/manager.js", () => ({
+vi.mock("../../src/app/stores/settings-store.js", () => ({
   getCurrentModel: getCurrentModelMock,
   setCurrentModel: setCurrentModelMock,
 }));

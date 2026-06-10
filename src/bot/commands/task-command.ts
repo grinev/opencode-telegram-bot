@@ -5,7 +5,7 @@ import { getDateLocale, t } from "../../i18n/index.js";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import type { InteractionState } from "../../app/types/interaction.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { taskCreationManager } from "../../app/managers/scheduled-task-creation-manager.js";
 import { parseTaskSchedule } from "../../app/services/scheduled-task-schedule-parser-service.js";
 import { addScheduledTask, listScheduledTasks } from "../../app/stores/scheduled-task-store.js";

@@ -4,7 +4,7 @@ import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { loadUserMessages } from "../../app/services/message-history-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { replyBusyBlocked } from "../render/busy-blocked-renderer.js";

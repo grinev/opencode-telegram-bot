@@ -51,7 +51,7 @@ vi.mock("../../src/opencode/ready-refresh.js", () => ({
   registerOpenCodeReadyRefreshHandler: mocked.registerOpenCodeReadyRefreshHandlerMock,
 }));
 
-vi.mock("../../src/settings/manager.js", () => ({
+vi.mock("../../src/app/stores/settings-store.js", () => ({
   loadSettings: mocked.loadSettingsMock,
 }));
 

@@ -1,8 +1,8 @@
 import {
   getScheduledTaskSessionIgnores,
   setScheduledTaskSessionIgnores,
-  type ScheduledTaskSessionIgnoreInfo,
-} from "../../settings/manager.js";
+} from "../stores/settings-store.js";
+import type { ScheduledTaskSessionIgnoreInfo } from "../types/settings.js";
 
 const SCHEDULED_TASK_SESSION_IGNORE_TTL_MS = 24 * 60 * 60 * 1000;
 

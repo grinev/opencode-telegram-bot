@@ -2,7 +2,7 @@ import type { CommandContext, Context } from "grammy";
 import { config } from "../../config.js";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { loadSkillsCatalog } from "../../app/services/skills-catalog-service.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { buildSkillsListKeyboard, formatSkillsSelectText } from "../menus/skills-catalog-menu.js";

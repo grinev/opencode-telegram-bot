@@ -23,7 +23,7 @@ const mocked = vi.hoisted(() => ({
   createMainKeyboardMock: vi.fn(() => ({ keyboard: [[{ text: "mock" }]] })),
 }));
 
-vi.mock("../../../src/settings/manager.js", () => ({
+vi.mock("../../../src/app/stores/settings-store.js", () => ({
   setCurrentProject: mocked.setCurrentProjectMock,
 }));
 vi.mock("../../../src/app/services/session-service.js", () => ({

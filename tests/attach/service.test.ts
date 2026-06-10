@@ -41,7 +41,7 @@ const mocked = vi.hoisted(() => ({
   stopEventListeningMock: vi.fn(),
 }));
 
-vi.mock("../../src/settings/manager.js", () => ({
+vi.mock("../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));
 

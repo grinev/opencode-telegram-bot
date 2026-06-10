@@ -4,7 +4,7 @@ import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession } from "../../app/services/session-service.js";
 import type { SessionInfo } from "../../app/types/session.js";
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";

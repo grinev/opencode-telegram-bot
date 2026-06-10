@@ -6,9 +6,9 @@ const mocked = vi.hoisted(() => ({
   getCurrentProjectMock: vi.fn(),
 }));
 
-vi.mock("../../src/settings/manager.js", async () => {
-  const actual = await vi.importActual<typeof import("../../src/settings/manager.js")>(
-    "../../src/settings/manager.js",
+vi.mock("../../src/app/stores/settings-store.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/app/stores/settings-store.js")>(
+    "../../src/app/stores/settings-store.js",
   );
 
   return {

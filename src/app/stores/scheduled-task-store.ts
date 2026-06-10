@@ -1,4 +1,4 @@
-import { getScheduledTasks, setScheduledTasks } from "../../settings/manager.js";
+import { getScheduledTasks, setScheduledTasks } from "./settings-store.js";
 import { logger } from "../../utils/logger.js";
 import type { ScheduledTask } from "../types/scheduled-task.js";
 import { cloneScheduledTask } from "../types/scheduled-task.js";

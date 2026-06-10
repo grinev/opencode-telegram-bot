@@ -22,7 +22,7 @@ vi.mock("../../../../src/app/services/worktree-service.js", () => ({
 vi.mock("../../../../src/app/services/session-service.js", () => ({
   getCurrentSession: mocked.getCurrentSession,
 }));
-vi.mock("../../../../src/settings/manager.js", () => ({
+vi.mock("../../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: mocked.getCurrentProject,
   getPinnedMessageId: mocked.getPinnedMessageId,
   setPinnedMessageId: mocked.setPinnedMessageId,

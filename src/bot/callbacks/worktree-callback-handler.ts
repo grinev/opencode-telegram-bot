@@ -5,7 +5,7 @@ import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { switchToProject } from "../../app/services/project-switch-service.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { upsertSessionDirectory } from "../../app/services/session-cache-service.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/inline-menu.js";

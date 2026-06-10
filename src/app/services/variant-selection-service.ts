@@ -2,7 +2,7 @@
  * Variant Manager - manages model variants (reasoning modes)
  */
 import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentModel, setCurrentModel } from "../../settings/manager.js";
+import { getCurrentModel, setCurrentModel } from "../stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 import type { VariantInfo } from "../types/variant.js";
 

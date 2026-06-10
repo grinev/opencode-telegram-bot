@@ -2,7 +2,7 @@ import {
   getCurrentSession as getSettingsSession,
   setCurrentSession as setSettingsSession,
   clearSession as clearSettingsSession,
-} from "../../settings/manager.js";
+} from "../stores/settings-store.js";
 import type { SessionInfo } from "../types/session.js";
 
 export type { SessionInfo };

@@ -85,7 +85,7 @@ import { safeBackgroundTask } from "../utils/safe-background-task.js";
 import { withTelegramRateLimitRetry } from "../utils/telegram-rate-limit-retry.js";
 import { pinnedMessageManager } from "./pinned/pinned-message-manager.js";
 import { t } from "../i18n/index.js";
-import { getCurrentProject } from "../settings/manager.js";
+import { getCurrentProject } from "../app/stores/settings-store.js";
 import { createTelegramBotOptions } from "./telegram-client-options.js";
 import { clearPromptResponseMode, processUserPrompt } from "./handlers/prompt.js";
 import { handleVoiceMessage } from "./handlers/voice-handler.js";

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { opencodeClient } from "../../opencode/client.js";
-import { getSessionDirectoryCache, setSessionDirectoryCache } from "../../settings/manager.js";
+import { getSessionDirectoryCache, setSessionDirectoryCache } from "../stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 import type { CachedSessionDirectory, SessionDirectoryProject } from "../types/session.js";
 

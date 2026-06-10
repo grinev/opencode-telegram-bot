@@ -6,7 +6,7 @@ import type { Question } from "../app/types/question.js";
 import type { PermissionRequest } from "../app/types/permission.js";
 import type { FileChange } from "../bot/pinned/pinned-message-types.js";
 import { logger } from "../utils/logger.js";
-import { getCurrentProject } from "../settings/manager.js";
+import { getCurrentProject } from "../app/stores/settings-store.js";
 
 export interface SummaryInfo {
   sessionId: string;

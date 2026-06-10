@@ -33,7 +33,7 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: mocked.getCurrentSessionMock,
 }));
 
-vi.mock("../../../src/settings/manager.js", () => ({
+vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: mocked.getCurrentProjectMock,
   isTtsEnabled: mocked.isTtsEnabledMock,
 }));

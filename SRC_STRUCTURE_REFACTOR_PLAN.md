@@ -495,7 +495,7 @@ src/bot/
   6. Не путать `command-catalog-command.ts` с `bot/commands/definitions.ts`.
   7. Запустить commands/skills/mcps тесты, затем build.
 
-- [ ] **Этап 21. Settings store и будущая settings команда**
+- [x] **Этап 21. Settings store и будущая settings команда**
 
   1. Перенести `src/settings/manager.ts` -> `app/stores/settings-store.ts` и `app/types/settings.ts`.
   2. Обновить все imports на settings store.

@@ -3,7 +3,7 @@ import { realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { t } from "../../i18n/index.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 
 export interface DirectoryEntry {

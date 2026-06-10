@@ -1,5 +1,5 @@
 import { CommandContext, Context } from "grammy";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { clearSession, getCurrentSession } from "../../app/services/session-service.js";
 import { detachAttachedSession } from "../../app/services/attach-service.js";
 import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";

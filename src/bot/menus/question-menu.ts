@@ -1,7 +1,7 @@
 import { Context, InlineKeyboard } from "grammy";
 import { questionManager } from "../../app/managers/question-manager.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { interactionManager } from "../../app/managers/interaction-manager.js";

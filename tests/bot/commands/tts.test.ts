@@ -9,7 +9,7 @@ const mocked = vi.hoisted(() => ({
   isTtsConfiguredMock: vi.fn(),
 }));
 
-vi.mock("../../../src/settings/manager.js", () => ({
+vi.mock("../../../src/app/stores/settings-store.js", () => ({
   isTtsEnabled: mocked.isTtsEnabledMock,
   setTtsEnabled: mocked.setTtsEnabledMock,
 }));

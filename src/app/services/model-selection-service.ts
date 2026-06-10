@@ -1,4 +1,4 @@
-import { getCurrentModel, setCurrentModel } from "../../settings/manager.js";
+import { getCurrentModel, setCurrentModel } from "../stores/settings-store.js";
 import { config } from "../../config.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { logger } from "../../utils/logger.js";

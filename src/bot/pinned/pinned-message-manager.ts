@@ -8,7 +8,7 @@ import {
   getPinnedMessageId,
   setPinnedMessageId,
   clearPinnedMessageId,
-} from "../../settings/manager.js";
+} from "../../app/stores/settings-store.js";
 import { getModelContextLimit } from "../../app/services/model-context-limit-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";

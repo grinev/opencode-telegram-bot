@@ -10,7 +10,7 @@ import { showCurrentQuestion } from "../../bot/menus/question-menu.js";
 import { showPermissionRequest } from "../../bot/menus/permission-menu.js";
 import type { SessionInfo } from "../types/session.js";
 import { getCurrentSession } from "./session-service.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../stores/settings-store.js";
 import { attachManager } from "../managers/attach-manager.js";
 import { logger } from "../../utils/logger.js";
 import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";

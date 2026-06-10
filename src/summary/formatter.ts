@@ -4,7 +4,7 @@ import { config } from "../config.js";
 import type { MessageFormatMode } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { t } from "../i18n/index.js";
-import { getCurrentProject } from "../settings/manager.js";
+import { getCurrentProject } from "../app/stores/settings-store.js";
 import { convertToTelegramMarkdownV2 } from "./markdown-to-telegram-v2.js";
 import { normalizeMarkdownForTelegramRendering } from "../bot/render/markdown-normalizer.js";
 

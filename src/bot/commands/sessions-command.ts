@@ -1,5 +1,5 @@
 import { CommandContext, Context } from "grammy";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { replyWithInlineMenu } from "../menus/inline-menu.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { replyBusyBlocked } from "../render/busy-blocked-renderer.js";

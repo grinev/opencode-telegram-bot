@@ -2,7 +2,7 @@ import type { Context } from "grammy";
 import { permissionManager } from "../../app/managers/permission-manager.js";
 import type { PermissionReply } from "../../app/types/permission.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { clearPermissionInteraction, syncPermissionInteractionState } from "../menus/permission-menu.js";

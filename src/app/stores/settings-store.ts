@@ -1,27 +1,11 @@
-import type { ModelInfo } from "../app/types/model.js";
-import type { ProjectInfo } from "../app/types/project.js";
-import type { SessionDirectoryCacheInfo, SessionInfo } from "../app/types/session.js";
-import { cloneScheduledTask, type ScheduledTask } from "../app/types/scheduled-task.js";
 import path from "node:path";
-import { getRuntimePaths } from "../runtime/paths.js";
-import { logger } from "../utils/logger.js";
-
-export interface ScheduledTaskSessionIgnoreInfo {
-  sessionId: string;
-  createdAt: string;
-}
-
-export interface Settings {
-  currentProject?: ProjectInfo;
-  currentSession?: SessionInfo;
-  currentAgent?: string;
-  currentModel?: ModelInfo;
-  pinnedMessageId?: number;
-  ttsEnabled?: boolean;
-  sessionDirectoryCache?: SessionDirectoryCacheInfo;
-  scheduledTasks?: ScheduledTask[];
-  scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[];
-}
+import type { ModelInfo } from "../types/model.js";
+import type { ProjectInfo } from "../types/project.js";
+import type { SessionDirectoryCacheInfo, SessionInfo } from "../types/session.js";
+import { cloneScheduledTask, type ScheduledTask } from "../types/scheduled-task.js";
+import type { ScheduledTaskSessionIgnoreInfo, Settings } from "../types/settings.js";
+import { getRuntimePaths } from "../../runtime/paths.js";
+import { logger } from "../../utils/logger.js";
 
 function cloneScheduledTasks(tasks: ScheduledTask[] | undefined): ScheduledTask[] | undefined {
   return tasks?.map((task) => cloneScheduledTask(task));

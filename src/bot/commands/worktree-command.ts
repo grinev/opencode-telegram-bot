@@ -1,7 +1,7 @@
 import type { CommandContext, Context } from "grammy";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { replyWithInlineMenu } from "../menus/inline-menu.js";
