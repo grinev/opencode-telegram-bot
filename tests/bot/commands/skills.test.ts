@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
+import { skillsCommand } from "../../../src/bot/commands/skills-catalog-command.js";
+import { handleSkillsCallback } from "../../../src/bot/callbacks/skills-catalog-callback-handler.js";
+import { handleSkillTextArguments } from "../../../src/bot/handlers/text-message-handler.js";
 import {
   calculateSkillsPaginationRange,
   formatSkillsSelectText,
-  handleSkillTextArguments,
-  handleSkillsCallback,
   parseSkillPageCallback,
-  skillsCommand,
-} from "../../../src/bot/commands/skills.js";
-import { interactionManager } from "../../../src/interaction/manager.js";
+} from "../../../src/bot/menus/skills-catalog-menu.js";
+import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import type { ProcessPromptDeps } from "../../../src/bot/handlers/prompt.js";
 
@@ -21,7 +21,7 @@ const mocked = vi.hoisted(() => ({
   processUserPromptMock: vi.fn(),
 }));
 
-vi.mock("../../../src/settings/manager.js", () => ({
+vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));
 

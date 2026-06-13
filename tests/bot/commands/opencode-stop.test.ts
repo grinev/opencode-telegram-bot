@@ -35,7 +35,7 @@ vi.mock("../../../src/opencode/process.js", () => ({
   killServerProcess: mocked.killServerProcessMock,
 }));
 
-vi.mock("../../../src/bot/utils/telegram-text.js", () => ({
+vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
   editBotText: mocked.editBotTextMock,
 }));
 
@@ -46,7 +46,7 @@ vi.mock("../../../src/utils/logger.js", () => ({
   },
 }));
 
-import { opencodeStopCommand } from "../../../src/bot/commands/opencode-stop.js";
+import { opencodeStopCommand } from "../../../src/bot/commands/opencode-stop-command.js";
 
 function createContext(): Context {
   return {
@@ -56,7 +56,7 @@ function createContext(): Context {
   } as unknown as Context;
 }
 
-describe("bot/commands/opencode-stop", () => {
+describe("bot/commands/opencode-stop-command", () => {
   beforeEach(() => {
     mocked.healthMock.mockReset();
     mocked.resolveLocalOpencodeTargetMock.mockReset();

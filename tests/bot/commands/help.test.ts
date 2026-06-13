@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
-import { helpCommand } from "../../../src/bot/commands/help.js";
+import { helpCommand } from "../../../src/bot/commands/help-command.js";
 import { getLocalizedBotCommands } from "../../../src/bot/commands/definitions.js";
 
-describe("bot/commands/help", () => {
+describe("bot/commands/help-command", () => {
   it("returns full commands list from centralized definitions", async () => {
     const replyMock = vi.fn().mockResolvedValue(undefined);
     const ctx = {

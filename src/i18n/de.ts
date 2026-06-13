@@ -4,7 +4,9 @@ export const de: I18nDictionary = {
   "cmd.description.status": "Server- und Sitzungsstatus",
   "cmd.description.new": "Neue Sitzung erstellen",
   "cmd.description.stop": "Aktuelle Aktion stoppen",
+  "cmd.description.detach": "Von aktueller Sitzung trennen",
   "cmd.description.sessions": "Sitzungen auflisten",
+  "cmd.description.messages": "Sitzungsnachrichten durchsuchen",
   "cmd.description.tts": "Audioantworten umschalten",
   "cmd.description.projects": "Projekte auflisten",
   "cmd.description.worktree": "Git-Worktrees wechseln",
@@ -15,6 +17,7 @@ export const de: I18nDictionary = {
   "cmd.description.mcps": "MCP servers",
   "cmd.description.opencode_start": "OpenCode-Server starten",
   "cmd.description.opencode_stop": "OpenCode-Server stoppen",
+  "cmd.description.ls": "Verzeichnisinhalt auflisten",
   "cmd.description.help": "Hilfe",
 
   "callback.unknown_command": "Unbekannter Befehl",
@@ -76,6 +79,12 @@ export const de: I18nDictionary = {
   "bot.session_retry":
     "🔁 {message}\n\nDer Provider liefert bei wiederholten Versuchen immer wieder denselben Fehler. Mit /abort abbrechen.",
   "bot.external_user_input": "Externe Benutzereingabe",
+  "background.session_fallback": "Sitzung {id}",
+  "background.assistant_response":
+    "🔔 Assistent hat in einer Hintergrundsitzung geantwortet: {session}",
+  "background.question_asked": "❓ Hintergrundsitzung benötigt eine Antwort: {session}",
+  "background.permission_asked": "🔐 Hintergrundsitzung hat Berechtigungen angefordert: {session}",
+  "background.open_session_button": "Sitzung öffnen",
   "bot.unknown_command":
     "⚠️ Unbekannter Befehl: {command}. Nutze /help, um verfügbare Befehle zu sehen.",
   "bot.photo_downloading": "⏳ Lade Foto herunter...",
@@ -86,8 +95,15 @@ export const de: I18nDictionary = {
   "bot.photo_no_caption":
     "💡 Tipp: Füge eine Bildunterschrift hinzu, um zu beschreiben, was du mit diesem Foto tun möchtest.",
   "bot.file_downloading": "⏳ Lade Datei herunter...",
+  "bot.files_downloading": "⏳ Lade Dateien herunter...",
   "bot.file_too_large": "⚠️ Datei ist zu groß (max. {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 Datei konnte nicht heruntergeladen werden",
+  "bot.file_type_unsupported":
+    "⚠️ Dieser Dateityp wird nicht unterstützt. Sende ein Bild, PDF oder eine Text-/Code-Datei.",
+  "bot.media_group_not_processed":
+    "⚠️ Eine oder mehrere Dateien in diesem Album können nicht verarbeitet werden. Es wurde nichts an OpenCode gesendet.",
+  "bot.media_group_download_error":
+    "🔴 Eine der Dateien konnte nicht heruntergeladen werden. Es wurde nichts an OpenCode gesendet.",
   "bot.model_no_pdf": "⚠️ Das aktuelle Modell unterstützt keine PDF-Eingabe. Sende nur Text.",
   "bot.text_file_too_large": "⚠️ Textdatei ist zu groß (max. {maxSizeKb}KB)",
 
@@ -157,6 +173,31 @@ export const de: I18nDictionary = {
   "sessions.preview.you": "Du:",
   "sessions.preview.agent": "Agent:",
 
+  "messages.project_not_selected":
+    "🏗 Kein Projekt ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
+  "messages.session_not_selected":
+    "💬 Keine Sitzung ausgewählt.\n\nWähle zuerst eine Sitzung mit /sessions oder erstelle eine mit /new.",
+  "messages.session_project_mismatch":
+    "⚠️ Die ausgewählte Sitzung passt nicht zum aktuellen Projekt. Wähle die Sitzung erneut über /sessions.",
+  "messages.empty": "📭 Keine Benutzernachrichten in der aktuellen Sitzung.",
+  "messages.select": "Wähle eine Nachricht:",
+  "messages.select_page": "Wähle eine Nachricht (Seite {page}):",
+  "messages.fetch_error":
+    "🔴 OpenCode Server ist nicht erreichbar oder beim Laden der Nachrichten ist ein Fehler aufgetreten.",
+  "messages.inactive_callback": "Dieses Nachrichtenmenü ist nicht mehr aktiv",
+  "messages.cancelled_callback": "Abgebrochen",
+  "messages.page_empty_callback": "Keine Nachrichten auf dieser Seite",
+  "messages.button.prev_page": "⬅️ Zurück",
+  "messages.button.next_page": "Weiter ➡️",
+  "messages.button.revert": "↩️ Revert",
+  "messages.button.fork": "🔀 Fork",
+  "messages.button.back": "⬅️ Zurück",
+  "messages.button.cancel": "❌ Abbrechen",
+  "messages.revert_success": "✅ Zurück zur Nachricht:\n\n{text}",
+  "messages.revert_error": "❌ Nachricht konnte nicht zurückgesetzt werden. Bitte versuche es erneut.",
+  "messages.fork_success": "🔀 Fork erstellt von Nachricht:\n\n{text}",
+  "messages.fork_error": "❌ Fork konnte nicht erstellt werden. Bitte versuche es erneut.",
+
   "attach.project_not_selected":
     "🏗 Projekt ist nicht ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
   "attach.session_not_selected":
@@ -172,6 +213,13 @@ export const de: I18nDictionary = {
   "attach.disconnect_hint":
     "Zum Trennen einfach zu einer anderen Sitzung oder einem anderen Projekt wechseln.",
   "attach.error": "🔴 Verbindung mit der aktuellen Sitzung fehlgeschlagen.",
+
+  "detach.project_not_selected":
+    "🏗 Projekt ist nicht ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
+  "detach.no_active_session": "ℹ️ Der Bot ist bereits von allen Sitzungen getrennt.",
+  "detach.success":
+    "✅ Von Sitzung getrennt: {title}\n\nDie OpenCode-Sitzung wurde nicht gestoppt. Falls sie noch läuft, läuft sie separat weiter. Um sie später zu prüfen, wähle sie erneut über /sessions aus.",
+  "detach.error": "🔴 Trennen von der aktuellen Sitzung fehlgeschlagen.",
 
   "new.project_not_selected":
     "🏗 Projekt ist nicht ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",
@@ -250,6 +298,12 @@ export const de: I18nDictionary = {
   "model.menu.favorites_hint":
     "ℹ️ Füge Modelle in OpenCode CLI zu den Favoriten hinzu, damit sie oben angezeigt werden.",
   "model.menu.error": "🔴 Modellliste konnte nicht geladen werden",
+  "model.search.button": "🔍 Suche",
+  "model.search.prompt": "🔍 Modellnamen zum Suchen eingeben:",
+  "model.search.results_title": "Suchergebnisse für \"{query}\":",
+  "model.search.no_results": "Keine Modelle gefunden für \"{query}\"",
+  "model.search.search_again": "↩ Erneut suchen",
+  "model.search.error": "Suche fehlgeschlagen",
 
   "variant.model_not_selected_callback": "Fehler: Modell ist nicht ausgewählt",
   "variant.changed_callback": "Variante geändert: {name}",
@@ -431,6 +485,10 @@ export const de: I18nDictionary = {
   "task.kind.once": "einmalig",
   "task.run.success": "⏰ Geplante Aufgabe abgeschlossen: {description}",
   "task.run.error": "🔴 Geplante Aufgabe fehlgeschlagen: {description}\n\nFehler: {error}",
+  "task.run.error.interactive_question":
+    "Die geplante Aufgabe hat eine interaktive Frage gestellt und kann unbeaufsichtigt nicht fortfahren.",
+  "task.run.error.interactive_permission":
+    "Die geplante Aufgabe hat eine interaktive Berechtigung angefordert und kann unbeaufsichtigt nicht fortfahren.",
 
   "tasklist.empty": "📭 Noch keine geplanten Aufgaben.",
   "tasklist.select": "Wähle eine geplante Aufgabe:",
@@ -465,6 +523,14 @@ export const de: I18nDictionary = {
   "commands.page_empty_callback": "Keine Befehle auf dieser Seite",
   "commands.page_load_error_callback":
     "Diese Seite konnte nicht geladen werden. Bitte versuche es erneut.",
+  "commands.download.no_roots": "Es sind keine erlaubten Browser-Wurzeln konfiguriert.",
+  "commands.download.downloading": "Datei wird heruntergeladen...",
+  "commands.download.not_found": "Datei nicht gefunden",
+  "commands.download.not_file": "Pfad ist keine Datei",
+  "commands.download.file_too_large": "Datei ist zu groß",
+  "commands.download.size": "Größe",
+  "commands.download.modified": "Geändert",
+  "commands.download.error": "Datei konnte nicht heruntergeladen werden.",
 
   "skills.select": "Wähle einen OpenCode-Skill:",
   "skills.empty": "📭 Für dieses Projekt sind keine OpenCode-Skills verfügbar.",
@@ -577,4 +643,11 @@ export const de: I18nDictionary = {
   "session_delete.delete_error": "🔴 Sitzung konnte nicht gelöscht werden.",
   "session_delete.page_empty_callback": "Keine Sitzungen auf dieser Seite",
   "session_delete.page_load_error_callback": "Diese Seite kann nicht geladen werden. Bitte versuche es erneut.",
+  "ls.access_denied": "⛔ Zugriff verweigert: Pfad liegt außerhalb des aktuellen Projekts",
+  "ls.scan_error": "🔴 Verzeichnis kann nicht aufgelistet werden",
+  "ls.header": "Verzeichnisinhalt",
+  "ls.total": "Gesamt: {count} Einträge",
+  "ls.file.header": "Dateidetails",
+  "ls.file.download": "📥 Herunterladen",
+  "ls.file.back": "⬅️ Zurück",
 };

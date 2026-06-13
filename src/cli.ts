@@ -107,7 +107,7 @@ async function runStartCommand(mode: RuntimeMode | undefined, daemon: boolean): 
   await ensureRuntimeConfigForStart();
 
   if (daemon) {
-    const { startBotDaemon } = await import("./service/manager.js");
+    const { startBotDaemon } = await import("./runtime/service/manager.js");
     const result = await startBotDaemon(modeResult.mode);
     const cleanupMessage = formatServiceCleanupMessage(result.cleanupReason);
     const runtimePaths = getRuntimePaths();
@@ -152,7 +152,7 @@ async function runStartCommand(mode: RuntimeMode | undefined, daemon: boolean): 
   const { initializeLogger } = await import("./utils/logger.js");
   await initializeLogger();
 
-  const { startBotApp } = await import("./app/start-bot-app.js");
+  const { startBotApp } = await import("./app/bootstrap/start-bot-app.js");
   await startBotApp();
   return EXIT_SUCCESS;
 }
@@ -171,7 +171,7 @@ async function runConfigCommand(): Promise<number> {
 async function runStatusCommand(): Promise<number> {
   setRuntimeMode("installed");
 
-  const { getBotServiceStatus } = await import("./service/manager.js");
+  const { getBotServiceStatus } = await import("./runtime/service/manager.js");
   const runtimePaths = getRuntimePaths();
   const status = await getBotServiceStatus();
 
@@ -199,7 +199,7 @@ async function runStatusCommand(): Promise<number> {
 async function runStopCommand(): Promise<number> {
   setRuntimeMode("installed");
 
-  const { stopBotDaemon } = await import("./service/manager.js");
+  const { stopBotDaemon } = await import("./runtime/service/manager.js");
   const result = await stopBotDaemon();
 
   writeOptionalLine(formatServiceCleanupMessage(result.cleanupReason));

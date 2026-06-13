@@ -21,6 +21,7 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 let logStream: fs.WriteStream | null = null;
 let logFilePath: string | null = null;
 let initializePromise: Promise<void> | null = null;
+let cleanupPromise: Promise<void> | null = null;
 let streamErrorReported = false;
 
 function normalizeLogLevel(value: string): LogLevel {
@@ -127,6 +128,10 @@ function getLogFileName(mode: RuntimeMode): string {
   return mode === "installed" ? getInstalledLogFileName() : getSourcesLogFileName();
 }
 
+function getLogFilePathForMode(logsDirPath: string, mode: RuntimeMode): string {
+  return path.join(logsDirPath, getLogFileName(mode));
+}
+
 function getLogFilePattern(mode: RuntimeMode): RegExp {
   if (mode === "installed") {
     return /^bot-\d{4}-\d{2}-\d{2}\.log$/;
@@ -208,12 +213,58 @@ async function cleanupOldLogs(logsDirPath: string, mode: RuntimeMode): Promise<v
   );
 }
 
+function cleanupOldLogsInBackground(logsDirPath: string, mode: RuntimeMode): void {
+  if (cleanupPromise) {
+    return;
+  }
+
+  cleanupPromise = cleanupOldLogs(logsDirPath, mode)
+    .catch((error) => {
+      reportLoggerInternalError(`Failed to clean up old logs in ${logsDirPath}.`, error);
+    })
+    .finally(() => {
+      cleanupPromise = null;
+    });
+}
+
+function rotateInstalledLogIfNeeded(): void {
+  const mode = getRuntimeMode();
+  if (mode !== "installed" || !logFilePath) {
+    return;
+  }
+
+  const runtimePaths = getRuntimePaths();
+  const nextLogFilePath = getLogFilePathForMode(runtimePaths.logsDirPath, mode);
+  if (logFilePath === nextLogFilePath) {
+    return;
+  }
+
+  try {
+    fs.mkdirSync(runtimePaths.logsDirPath, { recursive: true });
+    fs.appendFileSync(nextLogFilePath, "");
+    ensureLogStream(nextLogFilePath);
+    cleanupOldLogsInBackground(runtimePaths.logsDirPath, mode);
+  } catch (error) {
+    reportLoggerInternalError(
+      `Failed to rotate file logging to ${nextLogFilePath}.`,
+      error,
+    );
+    closeLogStream();
+    logFilePath = null;
+  }
+}
+
 function writeToFile(line: string): void {
   if (!logStream) {
     return;
   }
 
   try {
+    rotateInstalledLogIfNeeded();
+    if (!logStream) {
+      return;
+    }
+
     logStream.write(`${line}\n`);
   } catch (error) {
     handleLogStreamError(error);
@@ -230,7 +281,7 @@ async function initializeLoggerInternal(): Promise<void> {
 
   try {
     await fsPromises.mkdir(runtimePaths.logsDirPath, { recursive: true });
-    const nextLogFilePath = path.join(runtimePaths.logsDirPath, getLogFileName(mode));
+    const nextLogFilePath = getLogFilePathForMode(runtimePaths.logsDirPath, mode);
     await fsPromises.appendFile(nextLogFilePath, "");
     ensureLogStream(nextLogFilePath);
     await cleanupOldLogs(runtimePaths.logsDirPath, mode);
@@ -264,6 +315,10 @@ export function getLogFilePath(): string | null {
 }
 
 export async function __flushLoggerForTests(): Promise<void> {
+  if (cleanupPromise) {
+    await cleanupPromise;
+  }
+
   if (!logStream) {
     return;
   }
@@ -282,6 +337,7 @@ export async function __flushLoggerForTests(): Promise<void> {
 
 export function __resetLoggerForTests(): void {
   initializePromise = null;
+  cleanupPromise = null;
   logFilePath = null;
   streamErrorReported = false;
   closeLogStream();

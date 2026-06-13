@@ -2,7 +2,9 @@ export const en = {
   "cmd.description.status": "Server and session status",
   "cmd.description.new": "Create a new session",
   "cmd.description.stop": "Stop current action",
+  "cmd.description.detach": "Detach from current session",
   "cmd.description.sessions": "List sessions",
+  "cmd.description.messages": "Browse session messages",
   "cmd.description.tts": "Toggle audio replies",
   "cmd.description.projects": "List projects",
   "cmd.description.worktree": "Switch git worktrees",
@@ -13,6 +15,7 @@ export const en = {
   "cmd.description.mcps": "MCP servers",
   "cmd.description.opencode_start": "Start OpenCode server",
   "cmd.description.opencode_stop": "Stop OpenCode server",
+  "cmd.description.ls": "List directory contents",
   "cmd.description.help": "Help",
 
   "callback.unknown_command": "Unknown command",
@@ -73,6 +76,11 @@ export const en = {
   "bot.session_retry":
     "🔁 {message}\n\nProvider keeps returning the same error on repeated retries. Use /abort to abort.",
   "bot.external_user_input": "External user input",
+  "background.session_fallback": "session {id}",
+  "background.assistant_response": "🔔 Assistant replied in background session: {session}",
+  "background.question_asked": "❓ Background session needs an answer: {session}",
+  "background.permission_asked": "🔐 Background session requested permissions: {session}",
+  "background.open_session_button": "Open session",
   "bot.unknown_command": "⚠️ Unknown command: {command}. Use /help to see available commands.",
   "bot.photo_downloading": "⏳ Downloading photo...",
   "bot.photo_too_large": "⚠️ Photo is too large (max {maxSizeMb}MB)",
@@ -80,8 +88,15 @@ export const en = {
   "bot.photo_download_error": "🔴 Failed to download photo",
   "bot.photo_no_caption": "💡 Tip: Add a caption to describe what you want to do with this photo.",
   "bot.file_downloading": "⏳ Downloading file...",
+  "bot.files_downloading": "⏳ Downloading files...",
   "bot.file_too_large": "⚠️ File is too large (max {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 Failed to download file",
+  "bot.file_type_unsupported":
+    "⚠️ This file type is not supported. Send an image, PDF, or text/code file.",
+  "bot.media_group_not_processed":
+    "⚠️ One or more files in this album cannot be processed. Nothing was sent to OpenCode.",
+  "bot.media_group_download_error":
+    "🔴 Failed to download one of the files. Nothing was sent to OpenCode.",
   "bot.model_no_pdf": "⚠️ Current model doesn't support PDF input. Sending text only.",
   "bot.text_file_too_large": "⚠️ Text file is too large (max {maxSizeKb}KB)",
 
@@ -150,6 +165,31 @@ export const en = {
   "sessions.preview.you": "You:",
   "sessions.preview.agent": "Agent:",
 
+  "messages.project_not_selected":
+    "🏗 Project is not selected.\n\nFirst select a project with /projects.",
+  "messages.session_not_selected":
+    "💬 Session is not selected.\n\nFirst choose a session with /sessions or create one with /new.",
+  "messages.session_project_mismatch":
+    "⚠️ The selected session does not match the current project. Choose the session again via /sessions.",
+  "messages.empty": "📭 No user messages in the current session.",
+  "messages.select": "Choose a message:",
+  "messages.select_page": "Choose a message (page {page}):",
+  "messages.fetch_error":
+    "🔴 OpenCode Server is unavailable or an error occurred while loading messages.",
+  "messages.inactive_callback": "This messages menu is inactive",
+  "messages.cancelled_callback": "Cancelled",
+  "messages.page_empty_callback": "No messages on this page",
+  "messages.button.prev_page": "⬅️ Prev",
+  "messages.button.next_page": "Next ➡️",
+  "messages.button.revert": "↩️ Revert",
+  "messages.button.fork": "🔀 Fork",
+  "messages.button.back": "⬅️ Back",
+  "messages.button.cancel": "❌ Cancel",
+  "messages.revert_success": "✅ Reverted to message:\n\n{text}",
+  "messages.revert_error": "❌ Failed to revert message. Please try again.",
+  "messages.fork_success": "🔀 Fork created from message:\n\n{text}",
+  "messages.fork_error": "❌ Failed to create fork. Please try again.",
+
   "attach.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
   "attach.session_not_selected":
@@ -162,9 +202,15 @@ export const en = {
   "attach.status.busy_message": "Status: busy. New prompts are temporarily blocked.",
   "attach.restored_question": "Recovered a pending question for this session.",
   "attach.restored_permissions": "Recovered pending permission requests: {count}.",
-  "attach.disconnect_hint":
-    "To disconnect, switch to another session or project.",
+  "attach.disconnect_hint": "To disconnect, switch to another session or project.",
   "attach.error": "🔴 Failed to attach to the current session.",
+
+  "detach.project_not_selected":
+    "🏗 Project is not selected.\n\nFirst select a project with /projects.",
+  "detach.no_active_session": "ℹ️ Bot is already detached from any session.",
+  "detach.success":
+    "✅ Detached from session: {title}\n\nThe OpenCode session was not stopped. If it is still running, it will continue separately. To check it later, select it again via /sessions.",
+  "detach.error": "🔴 Failed to detach from the current session.",
 
   "new.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
@@ -236,6 +282,12 @@ export const en = {
   "model.menu.favorites_hint":
     "ℹ️ Add models to favorites in OpenCode CLI to keep them at the top.",
   "model.menu.error": "🔴 Failed to get models list",
+  "model.search.button": "🔍 Search",
+  "model.search.prompt": "🔍 Enter model name to search:",
+  "model.search.results_title": "Search results for \"{query}\":",
+  "model.search.no_results": "No models found for \"{query}\"",
+  "model.search.search_again": "↩ Search again",
+  "model.search.error": "Search failed",
 
   "variant.model_not_selected_callback": "Error: model is not selected",
   "variant.changed_callback": "Variant changed: {name}",
@@ -415,6 +467,10 @@ export const en = {
   "task.kind.once": "one-time",
   "task.run.success": "⏰ Scheduled task completed: {description}",
   "task.run.error": "🔴 Scheduled task failed: {description}\n\nError: {error}",
+  "task.run.error.interactive_question":
+    "Scheduled task requested an interactive question and cannot continue unattended.",
+  "task.run.error.interactive_permission":
+    "Scheduled task requested interactive permission and cannot continue unattended.",
 
   "tasklist.empty": "📭 No scheduled tasks yet.",
   "tasklist.select": "Select a scheduled task:",
@@ -447,6 +503,14 @@ export const en = {
   "commands.button.next_page": "Next ➡️",
   "commands.page_empty_callback": "No commands on this page",
   "commands.page_load_error_callback": "Cannot load this page. Please try again.",
+  "commands.download.no_roots": "No allowed browser roots are configured.",
+  "commands.download.downloading": "Downloading file...",
+  "commands.download.not_found": "File not found",
+  "commands.download.not_file": "Path is not a file",
+  "commands.download.file_too_large": "File is too large",
+  "commands.download.size": "Size",
+  "commands.download.modified": "Modified",
+  "commands.download.error": "Failed to download file.",
 
   "skills.select": "Choose an OpenCode skill:",
   "skills.empty": "📭 No OpenCode skills are available for this project.",
@@ -555,6 +619,13 @@ export const en = {
   "session_delete.delete_error": "🔴 Failed to delete session.",
   "session_delete.page_empty_callback": "No sessions on this page",
   "session_delete.page_load_error_callback": "Cannot load this page. Please try again.",
+  "ls.access_denied": "⛔ Access denied: path is outside the current project",
+  "ls.scan_error": "🔴 Cannot list directory",
+  "ls.header": "Directory Listing",
+  "ls.total": "Total: {count} items",
+  "ls.file.header": "File Details",
+  "ls.file.download": "📥 Download",
+  "ls.file.back": "⬅️ Back",
 } as const;
 
 export type I18nKey = keyof typeof en;

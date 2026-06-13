@@ -3,7 +3,7 @@ import type { Context } from "grammy";
 import {
   handleDocumentMessage,
   type DocumentHandlerDeps,
-} from "../../../src/bot/handlers/document.js";
+} from "../../../src/bot/handlers/document-handler.js";
 import { t } from "../../../src/i18n/index.js";
 
 function createDocumentContext(overrides: Partial<Context["message"]> = {}): {
@@ -250,8 +250,88 @@ describe("bot/handlers/document", () => {
     });
   });
 
+  describe("image files", () => {
+    it("downloads and sends image documents when model supports images", async () => {
+      const { ctx, replyMock } = createDocumentContext({
+        document: {
+          file_id: "image-file-id",
+          file_unique_id: "image-unique-id",
+          file_name: "photo.png",
+          mime_type: "image/png",
+          file_size: 5000,
+        },
+        caption: "Describe this image",
+      });
+      const { deps, processPromptMock, downloadMock } = createDocumentDeps();
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_downloading"));
+      expect(downloadMock).toHaveBeenCalled();
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        "Describe this image",
+        deps,
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "file",
+            mime: "image/png",
+            filename: "photo.png",
+            url: expect.stringMatching(/^data:image\/png;base64,/),
+          }),
+        ]),
+      );
+    });
+
+    it("shows error when model does not support images", async () => {
+      const { ctx, replyMock } = createDocumentContext({
+        document: {
+          file_id: "image-file-id",
+          file_unique_id: "image-unique-id",
+          file_name: "photo.png",
+          mime_type: "image/png",
+          file_size: 5000,
+        },
+      });
+      const { deps, processPromptMock, downloadMock } = createDocumentDeps({
+        getModelCapabilities: vi.fn().mockResolvedValue({
+          input: { image: false },
+        }),
+      });
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(replyMock).toHaveBeenCalledWith(t("bot.photo_model_no_image"));
+      expect(downloadMock).not.toHaveBeenCalled();
+      expect(processPromptMock).not.toHaveBeenCalled();
+    });
+
+    it("sends caption-only when model does not support images but caption exists", async () => {
+      const { ctx } = createDocumentContext({
+        document: {
+          file_id: "image-file-id",
+          file_unique_id: "image-unique-id",
+          file_name: "photo.png",
+          mime_type: "image/png",
+          file_size: 5000,
+        },
+        caption: "Describe this image",
+      });
+      const { deps, processPromptMock, downloadMock } = createDocumentDeps({
+        getModelCapabilities: vi.fn().mockResolvedValue({
+          input: { image: false },
+        }),
+      });
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(downloadMock).not.toHaveBeenCalled();
+      expect(processPromptMock).toHaveBeenCalledWith(ctx, "Describe this image", deps);
+    });
+  });
+
   describe("unsupported file types", () => {
-    it("ignores unsupported MIME types silently", async () => {
+    it("shows error for unsupported MIME types", async () => {
       const { ctx, replyMock } = createDocumentContext({
         document: {
           file_id: "zip-file-id",
@@ -265,26 +345,8 @@ describe("bot/handlers/document", () => {
 
       await handleDocumentMessage(ctx, deps);
 
-      expect(replyMock).not.toHaveBeenCalled();
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_type_unsupported"));
       expect(downloadMock).not.toHaveBeenCalled();
-      expect(processPromptMock).not.toHaveBeenCalled();
-    });
-
-    it("ignores image files", async () => {
-      const { ctx, replyMock } = createDocumentContext({
-        document: {
-          file_id: "image-file-id",
-          file_unique_id: "image-unique-id",
-          file_name: "photo.png",
-          mime_type: "image/png",
-          file_size: 5000,
-        },
-      });
-      const { deps, processPromptMock } = createDocumentDeps();
-
-      await handleDocumentMessage(ctx, deps);
-
-      expect(replyMock).not.toHaveBeenCalled();
       expect(processPromptMock).not.toHaveBeenCalled();
     });
   });

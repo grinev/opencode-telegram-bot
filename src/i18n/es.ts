@@ -4,7 +4,9 @@ export const es: I18nDictionary = {
   "cmd.description.status": "Estado del servidor y de la sesión",
   "cmd.description.new": "Crear una sesión nueva",
   "cmd.description.stop": "Detener la acción actual",
+  "cmd.description.detach": "Desconectar de la sesión actual",
   "cmd.description.sessions": "Listar sesiones",
+  "cmd.description.messages": "Ver mensajes de la sesión",
   "cmd.description.tts": "Alternar respuestas de audio",
   "cmd.description.projects": "Listar proyectos",
   "cmd.description.worktree": "Cambiar worktrees de git",
@@ -15,6 +17,7 @@ export const es: I18nDictionary = {
   "cmd.description.mcps": "MCP servers",
   "cmd.description.opencode_start": "Iniciar servidor OpenCode",
   "cmd.description.opencode_stop": "Detener servidor OpenCode",
+  "cmd.description.ls": "Listar contenidos del directorio",
   "cmd.description.help": "Ayuda",
 
   "callback.unknown_command": "Comando desconocido",
@@ -76,6 +79,12 @@ export const es: I18nDictionary = {
   "bot.session_retry":
     "🔁 {message}\n\nEl proveedor devuelve el mismo error en intentos repetidos. Usa /abort para detenerlo.",
   "bot.external_user_input": "Entrada externa del usuario",
+  "background.session_fallback": "sesión {id}",
+  "background.assistant_response":
+    "🔔 El asistente respondió en una sesión en segundo plano: {session}",
+  "background.question_asked": "❓ Una sesión en segundo plano necesita una respuesta: {session}",
+  "background.permission_asked": "🔐 Una sesión en segundo plano solicitó permisos: {session}",
+  "background.open_session_button": "Abrir sesión",
   "bot.unknown_command":
     "⚠️ Comando desconocido: {command}. Usa /help para ver los comandos disponibles.",
   "bot.photo_downloading": "⏳ Descargando foto...",
@@ -86,8 +95,15 @@ export const es: I18nDictionary = {
   "bot.photo_no_caption":
     "💡 Consejo: agrega un pie de foto para describir que quieres hacer con esta foto.",
   "bot.file_downloading": "⏳ Descargando archivo...",
+  "bot.files_downloading": "⏳ Descargando archivos...",
   "bot.file_too_large": "⚠️ El archivo es demasiado grande (max {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 No se pudo descargar el archivo",
+  "bot.file_type_unsupported":
+    "⚠️ Este tipo de archivo no es compatible. Envía una imagen, PDF o archivo de texto/código.",
+  "bot.media_group_not_processed":
+    "⚠️ Uno o más archivos de este álbum no se pueden procesar. No se envió nada a OpenCode.",
+  "bot.media_group_download_error":
+    "🔴 No se pudo descargar uno de los archivos. No se envió nada a OpenCode.",
   "bot.model_no_pdf": "⚠️ El modelo actual no admite entrada PDF. Enviaré solo texto.",
   "bot.text_file_too_large": "⚠️ El archivo de texto es demasiado grande (max {maxSizeKb}KB)",
 
@@ -156,6 +172,31 @@ export const es: I18nDictionary = {
   "sessions.preview.you": "Tú:",
   "sessions.preview.agent": "Agente:",
 
+  "messages.project_not_selected":
+    "🏗 No hay ningún proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
+  "messages.session_not_selected":
+    "💬 No hay ninguna sesión seleccionada.\n\nPrimero elige una sesión con /sessions o crea una con /new.",
+  "messages.session_project_mismatch":
+    "⚠️ La sesión seleccionada no coincide con el proyecto actual. Vuelve a elegir la sesión con /sessions.",
+  "messages.empty": "📭 No hay mensajes de usuario en la sesión actual.",
+  "messages.select": "Elige un mensaje:",
+  "messages.select_page": "Elige un mensaje (página {page}):",
+  "messages.fetch_error":
+    "🔴 OpenCode Server no está disponible o se produjo un error al cargar los mensajes.",
+  "messages.inactive_callback": "Este menú de mensajes ya no está activo",
+  "messages.cancelled_callback": "Cancelado",
+  "messages.page_empty_callback": "No hay mensajes en esta página",
+  "messages.button.prev_page": "⬅️ Anterior",
+  "messages.button.next_page": "Siguiente ➡️",
+  "messages.button.revert": "↩️ Revert",
+  "messages.button.fork": "🔀 Fork",
+  "messages.button.back": "⬅️ Volver",
+  "messages.button.cancel": "❌ Cancelar",
+  "messages.revert_success": "✅ Revertido al mensaje:\n\n{text}",
+  "messages.revert_error": "❌ No se pudo revertir el mensaje. Inténtalo de nuevo.",
+  "messages.fork_success": "🔀 Fork creado desde el mensaje:\n\n{text}",
+  "messages.fork_error": "❌ No se pudo crear el fork. Inténtalo de nuevo.",
+
   "attach.project_not_selected":
     "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
   "attach.session_not_selected":
@@ -168,9 +209,15 @@ export const es: I18nDictionary = {
   "attach.status.busy_message": "Estado: busy. Los nuevos prompts están bloqueados temporalmente.",
   "attach.restored_question": "Se restauró una pregunta pendiente para esta sesión.",
   "attach.restored_permissions": "Se restauraron solicitudes de permiso pendientes: {count}.",
-  "attach.disconnect_hint":
-    "Para desconectarte, cambia a otra sesión o proyecto.",
+  "attach.disconnect_hint": "Para desconectarte, cambia a otra sesión o proyecto.",
   "attach.error": "🔴 No se pudo conectar a la sesión actual.",
+
+  "detach.project_not_selected":
+    "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
+  "detach.no_active_session": "ℹ️ El bot ya no está conectado a ninguna sesión.",
+  "detach.success":
+    "✅ Desconectado de la sesión: {title}\n\nLa sesión de OpenCode no se detuvo. Si todavía está en ejecución, continuará por separado. Para revisarla más tarde, selecciónala de nuevo con /sessions.",
+  "detach.error": "🔴 No se pudo desconectar de la sesión actual.",
 
   "new.project_not_selected":
     "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
@@ -249,6 +296,12 @@ export const es: I18nDictionary = {
   "model.menu.favorites_hint":
     "ℹ️ Agrega modelos a favoritos en OpenCode CLI para mantenerlos arriba de la lista.",
   "model.menu.error": "🔴 No se pudo obtener la lista de modelos",
+  "model.search.button": "🔍 Buscar",
+  "model.search.prompt": "🔍 Ingrese el nombre del modelo para buscar:",
+  "model.search.results_title": "Resultados de búsqueda para \"{query}\":",
+  "model.search.no_results": "No se encontraron modelos para \"{query}\"",
+  "model.search.search_again": "↩ Buscar de nuevo",
+  "model.search.error": "Búsqueda fallida",
 
   "variant.model_not_selected_callback": "Error: no hay un modelo seleccionado",
   "variant.changed_callback": "Variante cambiada: {name}",
@@ -431,6 +484,10 @@ export const es: I18nDictionary = {
   "task.kind.once": "única",
   "task.run.success": "⏰ Tarea programada completada: {description}",
   "task.run.error": "🔴 La tarea programada falló: {description}\n\nError: {error}",
+  "task.run.error.interactive_question":
+    "La tarea programada solicitó una pregunta interactiva y no puede continuar sin supervisión.",
+  "task.run.error.interactive_permission":
+    "La tarea programada solicitó un permiso interactivo y no puede continuar sin supervisión.",
 
   "tasklist.empty": "📭 Aún no hay tareas programadas.",
   "tasklist.select": "Elige una tarea programada:",
@@ -465,6 +522,14 @@ export const es: I18nDictionary = {
   "commands.page_empty_callback": "No hay comandos en esta página",
   "commands.page_load_error_callback":
     "No se pudo cargar esta página. Por favor, inténtalo de nuevo.",
+  "commands.download.no_roots": "No hay raíces de navegación permitidas configuradas.",
+  "commands.download.downloading": "Descargando archivo...",
+  "commands.download.not_found": "Archivo no encontrado",
+  "commands.download.not_file": "La ruta no es un archivo",
+  "commands.download.file_too_large": "El archivo es demasiado grande",
+  "commands.download.size": "Tamaño",
+  "commands.download.modified": "Modificado",
+  "commands.download.error": "No se pudo descargar el archivo.",
 
   "skills.select": "Elige un skill de OpenCode:",
   "skills.empty": "📭 No hay skills de OpenCode disponibles para este proyecto.",
@@ -577,4 +642,11 @@ export const es: I18nDictionary = {
   "session_delete.delete_error": "🔴 No se pudo eliminar la sesión.",
   "session_delete.page_empty_callback": "No hay sesiones en esta página",
   "session_delete.page_load_error_callback": "No se puede cargar esta página. Inténtalo de nuevo.",
+  "ls.access_denied": "⛔ Acceso denegado: la ruta está fuera del proyecto actual",
+  "ls.scan_error": "🔴 No se puede listar el directorio",
+  "ls.header": "Listado del directorio",
+  "ls.total": "Total: {count} elementos",
+  "ls.file.header": "Detalles del archivo",
+  "ls.file.download": "📥 Descargar",
+  "ls.file.back": "⬅️ Volver",
 };

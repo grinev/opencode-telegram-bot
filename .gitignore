@@ -33,3 +33,5 @@ settings.json
 
 # Packaging artifacts
 *.tgz
+
+.boardown

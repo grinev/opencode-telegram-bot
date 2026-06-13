@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context, NextFunction } from "grammy";
 import { interactionGuardMiddleware } from "../../../src/bot/middleware/interaction-guard.js";
-import { interactionManager } from "../../../src/interaction/manager.js";
-import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
+import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
+import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { t } from "../../../src/i18n/index.js";
+
+const mocked = vi.hoisted(() => ({
+  reconcileForegroundBusyStateMock: vi.fn(),
+}));
+
+vi.mock("../../../src/app/services/run-control-service.js", () => ({
+  reconcileForegroundBusyState: mocked.reconcileForegroundBusyStateMock,
+}));
 
 function createTextContext(text: string): Context {
   return {
@@ -35,6 +43,8 @@ describe("interactionGuardMiddleware", () => {
   beforeEach(() => {
     interactionManager.clear("test_setup");
     foregroundSessionState.__resetForTests();
+    mocked.reconcileForegroundBusyStateMock.mockReset();
+    mocked.reconcileForegroundBusyStateMock.mockResolvedValue(undefined);
   });
 
   it("passes through when there is no active interaction", async () => {
@@ -253,7 +263,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks disallowed command while busy with generic blocked message", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("/new");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -265,7 +275,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks plain text while busy with generic blocked message", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -276,8 +286,37 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
   });
 
+  it("passes through after on-demand reconciliation clears stale busy state", async () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    mocked.reconcileForegroundBusyStateMock.mockImplementationOnce(async () => {
+      foregroundSessionState.markIdle("session-1");
+    });
+
+    const ctx = createTextContext("hello");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(mocked.reconcileForegroundBusyStateMock).toHaveBeenCalledTimes(1);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
+
+  it("keeps blocking after on-demand reconciliation leaves state busy", async () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+
+    const ctx = createTextContext("hello");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(mocked.reconcileForegroundBusyStateMock).toHaveBeenCalledTimes(1);
+    expect(next).not.toHaveBeenCalled();
+    expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
+  });
+
   it("blocks callback while busy without active question or permission", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("project:123");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -290,10 +329,10 @@ describe("interactionGuardMiddleware", () => {
     });
   });
 
-  it("allows abort, status, and help while busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+  it("allows abort, detach, status, and help while busy", async () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
-    for (const command of ["/abort", "/status", "/help"]) {
+    for (const command of ["/abort", "/detach", "/status", "/help"]) {
       const ctx = createTextContext(command);
       const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
@@ -305,7 +344,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows active question callback while busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     interactionManager.start({
       kind: "question",
       expectedInput: "mixed",
@@ -321,7 +360,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows active permission callback while busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     interactionManager.start({
       kind: "permission",
       expectedInput: "callback",

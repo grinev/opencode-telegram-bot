@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
+import { commandsCommand } from "../../../src/bot/commands/command-catalog-command.js";
 import {
-  commandsCommand,
-  handleCommandTextArguments,
   handleCommandsCallback,
   type ExecuteCommandDeps,
-  parseCommandPageCallback,
-  formatCommandsSelectText,
+} from "../../../src/bot/callbacks/command-catalog-callback-handler.js";
+import { handleCommandTextArguments } from "../../../src/bot/handlers/text-message-handler.js";
+import {
   calculateCommandsPaginationRange,
-} from "../../../src/bot/commands/commands.js";
-import { interactionManager } from "../../../src/interaction/manager.js";
+  formatCommandsSelectText,
+  parseCommandPageCallback,
+} from "../../../src/bot/menus/command-catalog-menu.js";
+import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
-import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
+import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -39,11 +41,11 @@ const mocked = vi.hoisted(() => ({
   attachToSessionMock: vi.fn(),
 }));
 
-vi.mock("../../../src/settings/manager.js", () => ({
+vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
   setCurrentSession: vi.fn((session) => {
     mocked.currentSession = session;
@@ -55,7 +57,7 @@ vi.mock("../../../src/session/manager.js", () => ({
   }),
 }));
 
-vi.mock("../../../src/session/cache-manager.js", () => ({
+vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   ingestSessionInfoForCache: mocked.ingestSessionInfoForCacheMock,
   __resetSessionDirectoryCacheForTests: vi.fn(),
 }));
@@ -73,7 +75,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
   },
 }));
 
-vi.mock("../../../src/summary/aggregator.js", () => ({
+vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
   summaryAggregator: {
     setSession: mocked.setSessionSummaryMock,
     setBotAndChatId: mocked.setBotAndChatIdMock,
@@ -81,12 +83,12 @@ vi.mock("../../../src/summary/aggregator.js", () => ({
   },
 }));
 
-vi.mock("../../../src/agent/manager.js", () => ({
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   getStoredAgent: vi.fn(() => "build"),
   resolveProjectAgent: vi.fn(async (agentName?: string) => agentName ?? "build"),
 }));
 
-vi.mock("../../../src/model/manager.js", () => ({
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: vi.fn(() => ({
     providerID: "openai",
     modelID: "gpt-5",
@@ -118,13 +120,13 @@ vi.mock("../../../src/utils/safe-background-task.js", () => ({
   }),
 }));
 
-vi.mock("../../../src/external-input/suppression.js", () => ({
+vi.mock("../../../src/app/managers/external-input-suppression-manager.js", () => ({
   externalUserInputSuppressionManager: {
     register: mocked.suppressionRegisterMock,
   },
 }));
 
-vi.mock("../../../src/attach/service.js", () => ({
+vi.mock("../../../src/app/services/attach-service.js", () => ({
   attachToSession: mocked.attachToSessionMock,
   detachAttachedSession: vi.fn(),
   markAttachedSessionBusy: vi.fn().mockResolvedValue(undefined),

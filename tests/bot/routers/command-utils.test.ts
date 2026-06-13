@@ -1,0 +1,23 @@
+import { describe, expect, it } from "vitest";
+import { extractCommandName, isKnownCommand } from "../../../src/bot/routers/command-utils.js";
+
+describe("bot/routers/command-utils", () => {
+  it("extracts command name from slash command", () => {
+    expect(extractCommandName("/status")).toBe("status");
+    expect(extractCommandName("/help@MyBot")).toBe("help");
+    expect(extractCommandName("/model openai")).toBe("model");
+  });
+
+  it("returns null for non-command text", () => {
+    expect(extractCommandName("hello")).toBeNull();
+    expect(extractCommandName(" /")).toBeNull();
+  });
+
+  it("checks known commands set", () => {
+    expect(isKnownCommand("status")).toBe(true);
+    expect(isKnownCommand("start")).toBe(true);
+    expect(isKnownCommand("detach")).toBe(true);
+    expect(isKnownCommand("skills")).toBe(true);
+    expect(isKnownCommand("foobar")).toBe(false);
+  });
+});

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
-import { handleTaskListCallback, taskListCommand } from "../../../src/bot/commands/tasklist.js";
-import { interactionManager } from "../../../src/interaction/manager.js";
+import { taskListCommand } from "../../../src/bot/commands/tasklist-command.js";
+import { handleTaskListCallback } from "../../../src/bot/callbacks/scheduled-task-callback-handler.js";
+import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 
 const mocked = vi.hoisted(() => ({
@@ -11,13 +12,13 @@ const mocked = vi.hoisted(() => ({
   runtimeRemoveTaskMock: vi.fn(),
 }));
 
-vi.mock("../../../src/scheduled-task/store.js", () => ({
+vi.mock("../../../src/app/stores/scheduled-task-store.js", () => ({
   listScheduledTasks: mocked.listScheduledTasksMock,
   getScheduledTask: mocked.getScheduledTaskMock,
   removeScheduledTask: mocked.removeScheduledTaskMock,
 }));
 
-vi.mock("../../../src/scheduled-task/runtime.js", () => ({
+vi.mock("../../../src/app/services/scheduled-task-runtime-service.js", () => ({
   scheduledTaskRuntime: {
     removeTask: mocked.runtimeRemoveTaskMock,
   },
@@ -167,9 +168,16 @@ describe("bot/commands/tasklist", () => {
     const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
     expect(text).toContain("Check weather forecast");
     expect(text).toContain("D:\\Projects\\RepoA");
+    expect(text).toContain("Model: openai/gpt-5 (default)");
     expect(text).toContain("Every hour");
     expect(text).toContain("Cron: 0 * * * *");
     expect(text).not.toContain("every hour please");
+    expect(text.indexOf("D:\\Projects\\RepoA")).toBeLessThan(
+      text.indexOf("Model: openai/gpt-5 (default)"),
+    );
+    expect(text.indexOf("Model: openai/gpt-5 (default)")).toBeLessThan(
+      text.indexOf("Every hour"),
+    );
 
     expect(interactionManager.getSnapshot()).toMatchObject({
       kind: "custom",

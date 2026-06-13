@@ -191,6 +191,12 @@ Important:
 
 The project uses `src/utils/logger.ts` with level-based logging.
 
+Log files:
+
+- In source mode logs are stored `<project root>/logs` by default.
+- Each source-mode bot run writes to a separate file named `bot-YYYY-MM-DD_HH-MM-SS_<pid>.log`.
+- Installed mode writes under the installed app home `logs` directory and uses daily files named `bot-YYYY-MM-DD.log`.
+
 Levels:
 
 - **DEBUG** - detailed diagnostics (callbacks, keyboard build, SSE internals, polling flow)

@@ -19,39 +19,43 @@ const mocked = vi.hoisted(() => ({
   clearAllInteractionStateMock: vi.fn(),
 }));
 
-vi.mock("../../../src/settings/manager.js", () => ({
+vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));
 
-vi.mock("../../../src/git/worktree.js", () => ({
+vi.mock("../../../src/app/services/worktree-service.js", () => ({
   getGitWorktreeContext: mocked.getGitWorktreeContextMock,
 }));
 
-vi.mock("../../../src/bot/handlers/inline-menu.js", () => ({
+vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
   appendInlineMenuCancelButton: vi.fn((keyboard: unknown) => keyboard),
   ensureActiveInlineMenu: mocked.ensureActiveInlineMenuMock,
   replyWithInlineMenu: mocked.replyWithInlineMenuMock,
 }));
 
-vi.mock("../../../src/bot/utils/busy-guard.js", () => ({
+vi.mock("../../../src/app/services/run-control-service.js", () => ({
   isForegroundBusy: mocked.isForegroundBusyMock,
+}));
+
+vi.mock("../../../src/bot/messages/busy-blocked-renderer.js", () => ({
   replyBusyBlocked: mocked.replyBusyBlockedMock,
 }));
 
-vi.mock("../../../src/session/cache-manager.js", () => ({
+vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   upsertSessionDirectory: mocked.upsertSessionDirectoryMock,
   __resetSessionDirectoryCacheForTests: vi.fn(),
 }));
 
-vi.mock("../../../src/project/manager.js", () => ({
+vi.mock("../../../src/app/services/project-service.js", () => ({
   getProjectByWorktree: mocked.getProjectByWorktreeMock,
 }));
 
-vi.mock("../../../src/bot/utils/switch-project.js", () => ({
+vi.mock("../../../src/app/services/project-switch-service.js", () => ({
   switchToProject: mocked.switchToProjectMock,
 }));
 
-vi.mock("../../../src/interaction/cleanup.js", () => ({
+vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
+  interactionManager: { clear: vi.fn() },
   clearAllInteractionState: mocked.clearAllInteractionStateMock,
 }));
 
@@ -59,7 +63,8 @@ vi.mock("../../../src/utils/logger.js", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { handleWorktreeCallback, worktreeCommand } from "../../../src/bot/commands/worktree.js";
+import { worktreeCommand } from "../../../src/bot/commands/worktree-command.js";
+import { handleWorktreeCallback } from "../../../src/bot/callbacks/worktree-callback-handler.js";
 
 function createCommandContext(): Context {
   return {
@@ -166,6 +171,7 @@ describe("bot/commands/worktree", () => {
       ctx,
       expect.objectContaining({ worktree: "/repo-feature" }),
       "worktree_switched",
+      expect.objectContaining({ presentation: expect.any(Object) }),
     );
     expect(ctx.reply).toHaveBeenCalledWith(t("worktree.selected", { worktree: "/repo-feature" }), {
       reply_markup: { inline_keyboard: [] },

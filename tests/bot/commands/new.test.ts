@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
-import { newCommand } from "../../../src/bot/commands/new.js";
-import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
+import { newCommand } from "../../../src/bot/commands/new-command.js";
+import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { t } from "../../../src/i18n/index.js";
 
 const mocked = vi.hoisted(() => ({
@@ -19,28 +19,29 @@ vi.mock("../../../src/opencode/client.js", () => ({
   },
 }));
 
-vi.mock("../../../src/settings/manager.js", () => ({
+vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: mocked.getCurrentProjectMock,
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   setCurrentSession: vi.fn(),
 }));
 
-vi.mock("../../../src/session/cache-manager.js", () => ({
+vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   ingestSessionInfoForCache: vi.fn().mockResolvedValue(undefined),
   __resetSessionDirectoryCacheForTests: vi.fn(),
 }));
 
-vi.mock("../../../src/interaction/cleanup.js", () => ({
+vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
+  interactionManager: { clear: vi.fn() },
   clearAllInteractionState: vi.fn(),
 }));
 
-vi.mock("../../../src/summary/aggregator.js", () => ({
+vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
   summaryAggregator: { clear: vi.fn() },
 }));
 
-vi.mock("../../../src/pinned/manager.js", () => ({
+vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
   pinnedMessageManager: {
     isInitialized: vi.fn(() => false),
     initialize: vi.fn(),
@@ -48,7 +49,7 @@ vi.mock("../../../src/pinned/manager.js", () => ({
   },
 }));
 
-vi.mock("../../../src/keyboard/manager.js", () => ({
+vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
   keyboardManager: {
     initialize: vi.fn(),
     updateAgent: vi.fn(),
@@ -56,24 +57,24 @@ vi.mock("../../../src/keyboard/manager.js", () => ({
   },
 }));
 
-vi.mock("../../../src/agent/manager.js", () => ({
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   getStoredAgent: vi.fn(() => "build"),
   resolveProjectAgent: vi.fn(async (agentName?: string) => agentName ?? "build"),
 }));
 
-vi.mock("../../../src/model/manager.js", () => ({
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: vi.fn(() => ({ providerID: "openai", modelID: "gpt-5", variant: "default" })),
 }));
 
-vi.mock("../../../src/variant/manager.js", () => ({
+vi.mock("../../../src/app/services/variant-selection-service.js", () => ({
   formatVariantForButton: vi.fn(() => "Default"),
 }));
 
-vi.mock("../../../src/bot/utils/keyboard.js", () => ({
+vi.mock("../../../src/bot/keyboards/main-reply-keyboard.js", () => ({
   createMainKeyboard: vi.fn(() => ({ keyboard: true })),
 }));
 
-vi.mock("../../../src/attach/service.js", () => ({
+vi.mock("../../../src/app/services/attach-service.js", () => ({
   attachToSession: mocked.attachToSessionMock,
 }));
 
@@ -109,7 +110,7 @@ describe("bot/commands/new", () => {
   });
 
   it("blocks new session creation while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1");
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createContext();
     await newCommand(ctx as never, createDeps());

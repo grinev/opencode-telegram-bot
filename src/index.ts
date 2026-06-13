@@ -20,7 +20,7 @@ async function main(): Promise<void> {
   const { initializeLogger } = await import("./utils/logger.js");
   await initializeLogger();
 
-  const { startBotApp } = await import("./app/start-bot-app.js");
+  const { startBotApp } = await import("./app/bootstrap/start-bot-app.js");
   await startBotApp();
 }
 

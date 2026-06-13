@@ -4,15 +4,15 @@ const mocked = vi.hoisted(() => ({
   getAvailableAgentsMock: vi.fn(),
 }));
 
-vi.mock("../../../src/agent/manager.js", () => ({
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   fetchCurrentAgent: vi.fn(),
   getAvailableAgents: mocked.getAvailableAgentsMock,
   selectAgent: vi.fn(),
 }));
 
-import { buildAgentSelectionMenu } from "../../../src/bot/handlers/agent.js";
+import { buildAgentSelectionMenu } from "../../../src/bot/menus/agent-selection-menu.js";
 
-describe("bot/handlers/agent", () => {
+describe("bot agent selection", () => {
   beforeEach(() => {
     mocked.getAvailableAgentsMock.mockReset();
   });

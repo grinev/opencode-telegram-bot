@@ -88,7 +88,8 @@ No public inbound ports are required for normal usage.
 - Configurable visibility for service messages (thinking/tool calls)
 - Configurable max code file size in KB (default: 100)
 - Optional STT settings for voice transcription (`STT_API_URL`, `STT_API_KEY`, `STT_MODEL`, `STT_LANGUAGE`)
-- Optional TTS settings for global audio replies (`TTS_API_URL`, `TTS_API_KEY`, `TTS_MODEL`, `TTS_VOICE`)
+- Optional TTS settings for global audio replies (`TTS_PROVIDER`, `TTS_API_URL`, `TTS_API_KEY`, `TTS_MODEL`, `TTS_VOICE`)
+- Optional IPv4-only mode for Telegram connectivity (`TELEGRAM_FORCE_IPV4`)
 
 ## Current Product Scope
 
@@ -99,7 +100,9 @@ Current command set:
 - `/status` - server, project, and session status
 - `/new` - create a new session
 - `/abort` - stop the current task
+- `/detach` - detach the bot from the current session without stopping it
 - `/sessions` - show and switch recent sessions
+- `/messages` - browse user messages in the current session
 - `/projects` - show and switch projects
 - `/worktree` - show and switch existing git worktrees for the current repository
 - `/tts` - toggle global audio replies
@@ -111,6 +114,7 @@ Current command set:
 - `/opencode_start` - start local OpenCode server
 - `/opencode_stop` - stop local OpenCode server
 - `/help` - show command help
+- `/ls` - interactive file browser for the current project directory
 
 Model, agent, variant, and context actions are available from the persistent bottom keyboard.
 
@@ -118,11 +122,11 @@ Text messages (non-commands) are treated as prompts for OpenCode only when no bl
 
 Interaction routing rules:
 
-- Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills)
+- Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills, messages)
 - While an interaction is active, unrelated input is blocked with a contextual hint
-- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`
+- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`
 - Unknown slash commands return an explicit fallback message
-- Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/abort`, reset/cleanup)
+- Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/abort`, `/detach`, reset/cleanup)
 
 Model picker behavior:
 
@@ -137,7 +141,8 @@ Model picker behavior:
 - [x] OpenCode server control from Telegram (`/status`, `/opencode_start`, `/opencode_stop`)
 - [x] Project and session management from Telegram (`/projects`, `/worktree`, `/sessions`, `/new`)
 - [x] Automatic tracking of the current OpenCode CLI session, including continuing it from Telegram, live updates, and external text input notifications
-- [x] Remote task execution and interruption support (`/abort`)
+- [x] Remote task execution, interruption, and local detachment support (`/abort`, `/detach`)
+- [x] Background notifications for detached/non-current sessions in the currently selected project/worktree
 - [x] Telegram-friendly result delivery, including sending generated code/files when needed
 - [x] Interactive question and permission handling directly in chat (buttons + custom answers)
 - [x] Live pinned session status in chat (project, model, context usage, changed files)
@@ -151,7 +156,7 @@ Model picker behavior:
 - [x] UI localization support via i18n files
 - [x] Service message visibility controls (thinking/tool updates)
 - [x] Sending code blocks as text files when needed
-- [x] Image attachments support (send photos/screenshots from Telegram to OpenCode)
+- [x] Image attachments support (send photos/screenshots from Telegram to OpenCode, including multiple files in one Telegram album)
 - [x] PDF attachments support (send documents from Telegram to OpenCode)
 - [x] Text file attachments support (send code/config/log files from Telegram to OpenCode)
 - [x] Voice/audio transcription via Whisper-compatible APIs (OpenAI/Groq/Together and compatible providers)
@@ -161,13 +166,13 @@ Model picker behavior:
 - [x] Create new OpenCode projects directly from Telegram
 - [x] `/mcps` command: browse available MCP servers
 - [x] Optional local OpenCode server monitoring with automatic restart
+- [x] Interactive project file browsing and file download from Telegram (`/ls`)
+- [x] `/messages` command: browse session messages with revert and fork functionality
 
 ## Current Task List
 
 Open tasks for upcoming iterations:
 
-- [ ] `/messages` command: browse session messages with fork/revert actions
 - [ ] Model search in model switcher
 - [ ] Docker runtime support and deployment guide
 - [ ] Add a bot settings command with in-chat UI
-- [ ] Add project file browsing helpers (for example, `ls`-like flows with ability to send file to Telegram)

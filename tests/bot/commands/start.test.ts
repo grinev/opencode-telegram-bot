@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
-import { startCommand } from "../../../src/bot/commands/start.js";
+import { startCommand } from "../../../src/bot/commands/start-command.js";
 import { t } from "../../../src/i18n/index.js";
 
 const mocked = vi.hoisted(() => ({
@@ -28,35 +28,35 @@ const mocked = vi.hoisted(() => ({
   keyboardClearContextMock: vi.fn(),
 }));
 
-vi.mock("../../../src/bot/commands/abort.js", () => ({
+vi.mock("../../../src/bot/commands/abort-command.js", () => ({
   abortCurrentOperation: mocked.abortCurrentOperationMock,
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   clearSession: mocked.clearSessionMock,
 }));
 
-vi.mock("../../../src/settings/manager.js", () => ({
+vi.mock("../../../src/app/stores/settings-store.js", () => ({
   clearProject: mocked.clearProjectMock,
 }));
 
-vi.mock("../../../src/bot/utils/keyboard.js", () => ({
+vi.mock("../../../src/bot/keyboards/main-reply-keyboard.js", () => ({
   createMainKeyboard: mocked.createMainKeyboardMock,
 }));
 
-vi.mock("../../../src/agent/manager.js", () => ({
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   getStoredAgent: mocked.getStoredAgentMock,
 }));
 
-vi.mock("../../../src/model/manager.js", () => ({
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: mocked.getStoredModelMock,
 }));
 
-vi.mock("../../../src/variant/manager.js", () => ({
+vi.mock("../../../src/app/services/variant-selection-service.js", () => ({
   formatVariantForButton: mocked.formatVariantForButtonMock,
 }));
 
-vi.mock("../../../src/pinned/manager.js", () => ({
+vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
   pinnedMessageManager: {
     isInitialized: mocked.pinnedIsInitializedMock,
     initialize: mocked.pinnedInitializeMock,
@@ -67,7 +67,7 @@ vi.mock("../../../src/pinned/manager.js", () => ({
   },
 }));
 
-vi.mock("../../../src/keyboard/manager.js", () => ({
+vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
   keyboardManager: {
     initialize: mocked.keyboardInitializeMock,
     updateAgent: mocked.keyboardUpdateAgentMock,
@@ -85,7 +85,7 @@ function createStartContext(): Context {
   } as unknown as Context;
 }
 
-describe("bot/commands/start", () => {
+describe("bot/commands/start-command", () => {
   beforeEach(() => {
     mocked.abortCurrentOperationMock.mockReset();
     mocked.abortCurrentOperationMock.mockResolvedValue(undefined);

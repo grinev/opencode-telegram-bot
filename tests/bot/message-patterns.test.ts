@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMainKeyboard } from "../../src/bot/utils/keyboard.js";
+import { createMainKeyboard } from "../../src/bot/keyboards/main-reply-keyboard.js";
 import {
   AGENT_MODE_BUTTON_TEXT_PATTERN,
   MODEL_BUTTON_TEXT_PATTERN,

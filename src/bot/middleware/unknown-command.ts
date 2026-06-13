@@ -1,5 +1,5 @@
 import type { Context, NextFunction } from "grammy";
-import { extractCommandName, isKnownCommand } from "../utils/commands.js";
+import { extractCommandName, isKnownCommand } from "../routers/command-utils.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 

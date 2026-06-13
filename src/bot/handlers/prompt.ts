@@ -1,32 +1,32 @@
 import { Bot, Context } from "grammy";
 import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2";
 import { opencodeClient } from "../../opencode/client.js";
-import { clearSession, getCurrentSession, setCurrentSession } from "../../session/manager.js";
-import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
-import { getCurrentProject, isTtsEnabled } from "../../settings/manager.js";
-import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
-import { getStoredModel } from "../../model/manager.js";
-import { formatVariantForButton } from "../../variant/manager.js";
-import { createMainKeyboard } from "../utils/keyboard.js";
-import { keyboardManager } from "../../keyboard/manager.js";
-import { pinnedMessageManager } from "../../pinned/manager.js";
-import { summaryAggregator } from "../../summary/aggregator.js";
+import { clearSession, getCurrentSession, setCurrentSession } from "../../app/services/session-service.js";
+import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
+import { getCurrentProject, isTtsEnabled } from "../../app/stores/settings-store.js";
+import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
+import { getStoredModel } from "../../app/services/model-selection-service.js";
+import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
+import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
+import { keyboardManager } from "../keyboards/keyboard-manager.js";
+import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
+import { summaryAggregator } from "../../app/managers/summary-aggregation-manager.js";
 import { stopEventListening } from "../../opencode/events.js";
-import { interactionManager } from "../../interaction/manager.js";
-import { clearAllInteractionState } from "../../interaction/cleanup.js";
+import { interactionManager } from "../../app/managers/interaction-manager.js";
+import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { formatErrorDetails } from "../../utils/error-format.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
-import { assistantRunState } from "../assistant-run-state.js";
+import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
+import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
 import {
   attachToSession,
   detachAttachedSession,
   markAttachedSessionBusy,
   markAttachedSessionIdle,
-} from "../../attach/service.js";
-import { externalUserInputSuppressionManager } from "../../external-input/suppression.js";
+} from "../../app/services/attach-service.js";
+import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
@@ -232,7 +232,8 @@ export async function processUserPrompt(
     if (parts.length === 0 || (parts.length > 0 && parts.every((p) => p.type === "file"))) {
       if (fileParts.length > 0) {
         // Files without text - add a minimal system prompt
-        parts.unshift({ type: "text", text: "See attached file" });
+        const attachmentText = fileParts.length === 1 ? "See attached file" : "See attached files";
+        parts.unshift({ type: "text", text: attachmentText });
       }
     }
 
@@ -275,10 +276,10 @@ export async function processUserPrompt(
     };
 
     logger.info(
-      `[Bot] Calling session.prompt (fire-and-forget) with agent=${currentAgent}, fileCount=${fileParts.length}...`,
+      `[Bot] Calling session.promptAsync (start-only) with agent=${currentAgent}, fileCount=${fileParts.length}...`,
     );
 
-    foregroundSessionState.markBusy(currentSession.id);
+    foregroundSessionState.markBusy(currentSession.id, currentSession.directory);
     await markAttachedSessionBusy(currentSession.id);
     assistantRunState.startRun(currentSession.id, {
       startedAt: Date.now(),
@@ -292,13 +293,14 @@ export async function processUserPrompt(
       externalUserInputSuppressionManager.register(currentSession.id, text);
     }
 
-    // CRITICAL: DO NOT wait for session.prompt to complete.
-    // If we wait, the handler will not finish and grammY will not call getUpdates,
-    // which blocks receiving button callback_query updates.
-    // The processing result will arrive via SSE events.
+    // CRITICAL: Use the async prompt start endpoint here.
+    // session.prompt streams the full assistant response and can outlive the original
+    // Telegram message handler, which turns late transport failures into misleading
+    // "failed to send" messages even after the run has already started.
+    // The actual assistant result still arrives via the SSE event subscription.
     safeBackgroundTask({
-      taskName: "session.prompt",
-      task: () => opencodeClient.session.prompt(promptOptions),
+      taskName: "session.promptAsync",
+      task: () => opencodeClient.session.promptAsync(promptOptions),
       onSuccess: ({ error }) => {
         if (error) {
           foregroundSessionState.markIdle(currentSession.id);
@@ -307,18 +309,18 @@ export async function processUserPrompt(
           clearPromptResponseMode(currentSession.id);
           const details = formatErrorDetails(error, 6000);
           logger.error(
-            "[Bot] OpenCode API returned an error for session.prompt",
+            "[Bot] OpenCode API returned an error for session.promptAsync",
             promptErrorLogContext,
           );
-          logger.error("[Bot] session.prompt error details:", details);
-          logger.error("[Bot] session.prompt raw API error object:", error);
+          logger.error("[Bot] session.promptAsync error details:", details);
+          logger.error("[Bot] session.promptAsync raw API error object:", error);
 
           // Send user-friendly error via API directly because ctx is no longer available
           void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
           return;
         }
 
-        logger.info("[Bot] session.prompt completed");
+        logger.info("[Bot] session.promptAsync accepted");
       },
       onError: (error) => {
         foregroundSessionState.markIdle(currentSession.id);
@@ -326,9 +328,9 @@ export async function processUserPrompt(
         assistantRunState.clearRun(currentSession.id, "session_prompt_background_error");
         clearPromptResponseMode(currentSession.id);
         const details = formatErrorDetails(error, 6000);
-        logger.error("[Bot] session.prompt background task failed", promptErrorLogContext);
-        logger.error("[Bot] session.prompt background failure details:", details);
-        logger.error("[Bot] session.prompt raw background error object:", error);
+        logger.error("[Bot] session.promptAsync background task failed", promptErrorLogContext);
+        logger.error("[Bot] session.promptAsync background failure details:", details);
+        logger.error("[Bot] session.promptAsync raw background error object:", error);
         void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
       },
     });

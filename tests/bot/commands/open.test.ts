@@ -32,27 +32,24 @@ const mocked = vi.hoisted(() => ({
   interactionStartMock: vi.fn(),
 }));
 
-vi.mock("../../../src/bot/utils/file-tree.js", () => ({
+vi.mock("../../../src/app/services/file-browser-service.js", () => ({
   pathToDisplayPath: mocked.pathToDisplayPathMock,
   scanDirectory: mocked.scanDirectoryMock,
   buildEntryLabel: mocked.buildEntryLabelMock,
   buildTreeHeader: mocked.buildTreeHeaderMock,
   isScanError: mocked.isScanErrorMock,
   MAX_ENTRIES_PER_PAGE: 8,
-}));
-
-vi.mock("../../../src/bot/utils/browser-roots.js", () => ({
   getBrowserRoots: mocked.getBrowserRootsMock,
   isWithinAllowedRoot: mocked.isWithinAllowedRootMock,
   isAllowedRoot: mocked.isAllowedRootMock,
 }));
 
-vi.mock("../../../src/bot/handlers/inline-menu.js", () => ({
+vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
   appendInlineMenuCancelButton: vi.fn((kb: unknown) => kb),
   ensureActiveInlineMenu: mocked.ensureActiveInlineMenuMock,
 }));
 
-vi.mock("../../../src/interaction/manager.js", () => ({
+vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
   interactionManager: {
     start: mocked.interactionStartMock,
     getSnapshot: vi.fn(() => null),
@@ -60,22 +57,25 @@ vi.mock("../../../src/interaction/manager.js", () => ({
   },
 }));
 
-vi.mock("../../../src/bot/utils/busy-guard.js", () => ({
+vi.mock("../../../src/app/services/run-control-service.js", () => ({
   isForegroundBusy: mocked.isForegroundBusyMock,
+}));
+
+vi.mock("../../../src/bot/messages/busy-blocked-renderer.js", () => ({
   replyBusyBlocked: mocked.replyBusyBlockedMock,
 }));
 
-vi.mock("../../../src/session/cache-manager.js", () => ({
+vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   upsertSessionDirectory: mocked.upsertSessionDirectoryMock,
   __resetSessionDirectoryCacheForTests: vi.fn(),
   syncSessionDirectoryCache: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../../src/project/manager.js", () => ({
+vi.mock("../../../src/app/services/project-service.js", () => ({
   getProjectByWorktree: mocked.getProjectByWorktreeMock,
 }));
 
-vi.mock("../../../src/bot/utils/switch-project.js", () => ({
+vi.mock("../../../src/app/services/project-switch-service.js", () => ({
   switchToProject: mocked.switchToProjectMock,
 }));
 
@@ -83,11 +83,9 @@ vi.mock("../../../src/utils/logger.js", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import {
-  openCommand,
-  handleOpenCallback,
-  clearOpenPathIndex,
-} from "../../../src/bot/commands/open.js";
+import { openCommand } from "../../../src/bot/commands/open-command.js";
+import { handleOpenCallback } from "../../../src/bot/callbacks/file-browser-callback-handler.js";
+import { clearOpenPathIndex } from "../../../src/bot/menus/file-browser-menu.js";
 
 // --- Context factories ---
 
@@ -319,6 +317,7 @@ describe("open command", () => {
         ctx,
         expect.objectContaining({ id: "proj-1", worktree: "/home/user/my-project" }),
         "open_project_selected",
+        expect.objectContaining({ presentation: expect.any(Object) }),
       );
       const upsertOrder = mocked.upsertSessionDirectoryMock.mock.invocationCallOrder[0];
       const getProjectOrder = mocked.getProjectByWorktreeMock.mock.invocationCallOrder[0];

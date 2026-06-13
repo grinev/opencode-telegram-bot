@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { EventEmitter } from "node:events";
 import type { Context } from "grammy";
-import type { VoiceMessageDeps } from "../../../src/bot/handlers/voice.js";
+import type { VoiceMessageDeps } from "../../../src/bot/handlers/voice-handler.js";
 import { t } from "../../../src/i18n/index.js";
 
 vi.mock("../../../src/utils/logger.js", () => ({
@@ -14,7 +15,7 @@ vi.mock("../../../src/utils/logger.js", () => ({
 
 async function loadVoiceModule() {
   vi.resetModules();
-  return import("../../../src/bot/handlers/voice.js");
+  return import("../../../src/bot/handlers/voice-handler.js");
 }
 
 function createVoiceContext(): {
@@ -67,13 +68,65 @@ function createVoiceDeps(overrides: Record<string, unknown> = {}): {
   return { deps, processPromptMock, downloadMock, transcribeMock };
 }
 
-describe("bot/handlers/voice", () => {
+function mockHttpsDownload(): ReturnType<typeof vi.fn> {
+  const httpsGetMock = vi.fn(
+    (
+      _url: unknown,
+      _options: unknown,
+      callback: (
+        response: EventEmitter & {
+          statusCode: number;
+          headers: Record<string, string>;
+          resume: () => void;
+        },
+      ) => void,
+    ) => {
+      const response = new EventEmitter() as EventEmitter & {
+        statusCode: number;
+        headers: Record<string, string>;
+        resume: () => void;
+      };
+      response.statusCode = 200;
+      response.headers = {};
+      response.resume = vi.fn();
+
+      const request = new EventEmitter() as EventEmitter & {
+        setTimeout: (timeout: number, callback: () => void) => void;
+        destroy: (error?: Error) => void;
+      };
+      request.setTimeout = vi.fn();
+      request.destroy = vi.fn((error?: Error) => {
+        if (error) {
+          request.emit("error", error);
+        }
+      });
+
+      setTimeout(() => {
+        callback(response);
+        response.emit("data", Buffer.from("audio"));
+        response.emit("end");
+      }, 0);
+
+      return request;
+    },
+  );
+
+  vi.doMock("node:https", () => ({
+    default: { get: httpsGetMock },
+  }));
+
+  return httpsGetMock;
+}
+
+describe("bot/handlers/voice-handler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.doUnmock("node:https");
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-telegram-token");
     vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
     vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
     vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
+    vi.stubEnv("TELEGRAM_API_ROOT", "");
     vi.stubEnv("STT_NOTE_PROMPT", "");
   });
 
@@ -154,4 +207,49 @@ describe("bot/handlers/voice", () => {
       expect(logger.debug).not.toHaveBeenCalled();
     },
   );
+
+  it("downloads voice files from the default Telegram file URL when TELEGRAM_API_ROOT is unset", async () => {
+    const httpsGetMock = mockHttpsDownload();
+    const { handleVoiceMessage } = await loadVoiceModule();
+    const { ctx } = createVoiceContext();
+    const getFileMock = vi.fn().mockResolvedValue({
+      file_path: "voice/file_123.oga",
+      file_size: 5,
+    });
+    (ctx.api as unknown as { getFile: typeof getFileMock }).getFile = getFileMock;
+    const { deps, processPromptMock } = createVoiceDeps({
+      downloadTelegramFile: undefined,
+      transcribeAudio: vi.fn().mockResolvedValue({ text: "hello" }),
+    });
+
+    await handleVoiceMessage(ctx, deps);
+
+    const [url] = httpsGetMock.mock.calls[0];
+    expect(String(url)).toBe(
+      "https://api.telegram.org/file/bottest-telegram-token/voice/file_123.oga",
+    );
+    expect(processPromptMock).toHaveBeenCalledWith(ctx, "hello", deps);
+  });
+
+  it("downloads voice files from TELEGRAM_API_ROOT without a double slash", async () => {
+    vi.stubEnv("TELEGRAM_API_ROOT", "https://tg-proxy.example.com/");
+    const httpsGetMock = mockHttpsDownload();
+    const { handleVoiceMessage } = await loadVoiceModule();
+    const { ctx } = createVoiceContext();
+    const getFileMock = vi.fn().mockResolvedValue({
+      file_path: "voice/file_123.oga",
+      file_size: 5,
+    });
+    (ctx.api as unknown as { getFile: typeof getFileMock }).getFile = getFileMock;
+    const { deps } = createVoiceDeps({
+      downloadTelegramFile: undefined,
+    });
+
+    await handleVoiceMessage(ctx, deps);
+
+    const [url] = httpsGetMock.mock.calls[0];
+    expect(String(url)).toBe(
+      "https://tg-proxy.example.com/file/bottest-telegram-token/voice/file_123.oga",
+    );
+  });
 });

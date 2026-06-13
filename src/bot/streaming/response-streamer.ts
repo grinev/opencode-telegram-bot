@@ -1,6 +1,6 @@
 import type { Api, RawApi } from "grammy";
 import { logger } from "../../utils/logger.js";
-import type { TelegramRenderedPart } from "../../telegram/render/types.js";
+import type { TelegramRenderedPart } from "../render/types.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
 type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
@@ -35,6 +35,10 @@ interface ResponseStreamerOptions {
     options?: TelegramEditMessageOptions,
   ) => Promise<{ deliveredSignature: string }>;
   deleteText: (messageId: number) => Promise<void>;
+  completePart?: (
+    part: TelegramRenderedPart,
+    options?: TelegramSendMessageOptions,
+  ) => Promise<{ messageId: number; deliveredSignature: string }>;
 }
 
 interface StreamState {
@@ -121,6 +125,7 @@ export class ResponseStreamer {
   private readonly sendPart: ResponseStreamerOptions["sendPart"];
   private readonly editPart: ResponseStreamerOptions["editPart"];
   private readonly deleteText: ResponseStreamerOptions["deleteText"];
+  private readonly completePart: ResponseStreamerOptions["completePart"];
   private readonly states: Map<string, StreamState> = new Map();
 
   constructor(options: ResponseStreamerOptions) {
@@ -128,6 +133,7 @@ export class ResponseStreamer {
     this.sendPart = options.sendPart;
     this.editPart = options.editPart;
     this.deleteText = options.deleteText;
+    this.completePart = options.completePart;
   }
 
   enqueue(sessionId: string, messageId: string, payload: StreamingMessagePayload): void {
@@ -191,8 +197,25 @@ export class ResponseStreamer {
     let synced = true;
     if (options?.flushFinal !== false) {
       synced = await this.enqueueTask(state, () => this.flushState(state, "complete"));
-      if (!synced && state.isBroken) {
-        await this.cleanupBrokenStream(state, "final_sync_failed_cleanup");
+    }
+
+    if (synced && this.completePart && state.latestPayload) {
+      try {
+        const realMessageIds: number[] = [];
+        for (const part of state.latestPayload.parts) {
+          if (!part.text) {
+            continue;
+          }
+          const result = await this.completePart(part, state.latestPayload.sendOptions);
+          realMessageIds.push(result.messageId);
+        }
+        state.telegramMessageIds = realMessageIds;
+      } catch (error) {
+        logger.error(
+          `[ResponseStreamer] Failed to persist draft message: session=${sessionId}, message=${messageId}`,
+          error,
+        );
+        synced = false;
       }
     }
 
@@ -242,6 +265,15 @@ export class ResponseStreamer {
     if (count > 0) {
       logger.debug(`[ResponseStreamer] Cleared all streams: count=${count}, reason=${reason}`);
     }
+  }
+
+  hasActiveStream(sessionId: string): boolean {
+    for (const state of this.states.values()) {
+      if (state.sessionId === sessionId && !state.cancelled) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private getOrCreateState(sessionId: string, messageId: string): StreamState {
