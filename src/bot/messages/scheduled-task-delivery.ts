@@ -18,6 +18,12 @@ function getScheduledTaskDeliveryFormat(): "raw" | "markdown_v2" {
   return config.bot.messageFormatMode === "markdown" ? "markdown_v2" : "raw";
 }
 
+function getSilentDeliveryOptions(): { options: { disable_notification: true } } | Record<string, never> {
+  return config.bot.scheduledTaskNotificationsSilent
+    ? { options: { disable_notification: true } }
+    : {};
+}
+
 function buildScheduledTaskSuccessMessageParts(delivery: QueuedScheduledTaskDelivery): string[] {
   if (!delivery.resultText) {
     return [delivery.notificationText];
@@ -56,6 +62,10 @@ export function createScheduledTaskDeliverySender(
           : [delivery.notificationText];
       const format = delivery.status === "success" ? getScheduledTaskDeliveryFormat() : "raw";
       const suppressResultNotification = delivery.status === "success" && Boolean(delivery.footerText);
+      const resultDeliveryOptions =
+        suppressResultNotification && !config.bot.scheduledTaskNotificationsSilent
+          ? { options: { disable_notification: true } }
+          : getSilentDeliveryOptions();
 
       for (const part of messageParts) {
         await sendBotText({
@@ -63,7 +73,7 @@ export function createScheduledTaskDeliverySender(
           chatId,
           text: part,
           format,
-          ...(suppressResultNotification ? { options: { disable_notification: true } } : {}),
+          ...resultDeliveryOptions,
         });
       }
 
@@ -73,6 +83,7 @@ export function createScheduledTaskDeliverySender(
           chatId,
           text: delivery.footerText,
           format: "raw",
+          ...getSilentDeliveryOptions(),
         });
       }
 
