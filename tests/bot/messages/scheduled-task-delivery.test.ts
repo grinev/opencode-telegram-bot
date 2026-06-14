@@ -1,28 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueuedScheduledTaskDelivery } from "../../../src/app/types/scheduled-task.js";
 
-const mocked = vi.hoisted(() => ({
-  messageFormatMode: "markdown" as "markdown" | "raw",
-  scheduledTaskNotificationsSilent: false,
-  sendBotTextMock: vi.fn(),
-}));
-
-vi.mock("../../../src/config.js", () => ({
-  config: {
-    bot: {
-      get messageFormatMode() {
-        return mocked.messageFormatMode;
-      },
-      get scheduledTaskNotificationsSilent() {
-        return mocked.scheduledTaskNotificationsSilent;
-      },
-    },
-  },
-}));
-
-vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
-  sendBotText: mocked.sendBotTextMock,
-}));
+const sendBotTextMock = vi.fn();
 
 function createDelivery(
   overrides: Partial<QueuedScheduledTaskDelivery> = {},
@@ -40,7 +19,20 @@ function createDelivery(
   };
 }
 
-async function createSender() {
+async function createSender(scheduledTaskNotificationsSilent: boolean) {
+  vi.resetModules();
+  vi.doMock("../../../src/config.js", () => ({
+    config: {
+      bot: {
+        messageFormatMode: "markdown",
+        scheduledTaskNotificationsSilent,
+      },
+    },
+  }));
+  vi.doMock("../../../src/bot/messages/telegram-text.js", () => ({
+    sendBotText: sendBotTextMock,
+  }));
+
   const { createScheduledTaskDeliverySender } = await import(
     "../../../src/bot/messages/scheduled-task-delivery.js"
   );
@@ -50,18 +42,16 @@ async function createSender() {
 
 describe("bot/messages/scheduled-task-delivery", () => {
   beforeEach(() => {
-    mocked.messageFormatMode = "markdown";
-    mocked.scheduledTaskNotificationsSilent = false;
-    mocked.sendBotTextMock.mockReset();
+    sendBotTextMock.mockReset();
   });
 
   it("keeps existing success result suppression when a footer is sent", async () => {
-    const sender = await createSender();
+    const sender = await createSender(false);
 
     await sender.send(createDelivery());
 
-    expect(mocked.sendBotTextMock).toHaveBeenCalledTimes(2);
-    expect(mocked.sendBotTextMock).toHaveBeenNthCalledWith(
+    expect(sendBotTextMock).toHaveBeenCalledTimes(2);
+    expect(sendBotTextMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         chatId: 777,
@@ -69,7 +59,7 @@ describe("bot/messages/scheduled-task-delivery", () => {
         options: { disable_notification: true },
       }),
     );
-    expect(mocked.sendBotTextMock).toHaveBeenNthCalledWith(
+    expect(sendBotTextMock).toHaveBeenNthCalledWith(
       2,
       expect.not.objectContaining({
         options: { disable_notification: true },
@@ -78,13 +68,12 @@ describe("bot/messages/scheduled-task-delivery", () => {
   });
 
   it("marks success body and footer messages silent when scheduled task notifications are disabled", async () => {
-    mocked.scheduledTaskNotificationsSilent = true;
-    const sender = await createSender();
+    const sender = await createSender(true);
 
     await sender.send(createDelivery());
 
-    expect(mocked.sendBotTextMock).toHaveBeenCalledTimes(2);
-    expect(mocked.sendBotTextMock).toHaveBeenNthCalledWith(
+    expect(sendBotTextMock).toHaveBeenCalledTimes(2);
+    expect(sendBotTextMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         chatId: 777,
@@ -92,7 +81,7 @@ describe("bot/messages/scheduled-task-delivery", () => {
         options: { disable_notification: true },
       }),
     );
-    expect(mocked.sendBotTextMock).toHaveBeenNthCalledWith(
+    expect(sendBotTextMock).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         chatId: 777,
@@ -103,8 +92,7 @@ describe("bot/messages/scheduled-task-delivery", () => {
   });
 
   it("marks scheduled task error notifications silent when configured", async () => {
-    mocked.scheduledTaskNotificationsSilent = true;
-    const sender = await createSender();
+    const sender = await createSender(true);
 
     await sender.send(
       createDelivery({
@@ -115,7 +103,7 @@ describe("bot/messages/scheduled-task-delivery", () => {
       }),
     );
 
-    expect(mocked.sendBotTextMock).toHaveBeenCalledWith(
+    expect(sendBotTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
         chatId: 777,
         format: "raw",
