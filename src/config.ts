@@ -177,6 +177,10 @@ export const config = {
       "SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES",
       120,
     ),
+    scheduledTaskNotificationsSilent: getOptionalBooleanEnvVar(
+      "SCHEDULED_TASK_DISABLE_NOTIFICATION",
+      false,
+    ),
     responseStreamThrottleMs: getOptionalPositiveIntEnvVar("RESPONSE_STREAM_THROTTLE_MS", 1000),
     responseStreamingMode: getOptionalStreamingModeEnvVar("RESPONSE_STREAMING_MODE", "edit"),
     bashToolDisplayMaxLength: getOptionalPositiveIntEnvVar("BASH_TOOL_DISPLAY_MAX_LENGTH", 128),
