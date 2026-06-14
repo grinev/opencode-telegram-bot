@@ -17,7 +17,7 @@ const mocked = vi.hoisted(() => ({
   handlePermissionCallback: vi.fn(),
   handleProjectSelect: vi.fn(),
   handleQuestionCallback: vi.fn(),
-  handleRenameCancel: vi.fn(),
+  handleRenameCancelCallback: vi.fn(),
   handleBackgroundSessionOpen: vi.fn(),
   handleSessionSelect: vi.fn(),
   handleSkillsCallback: vi.fn(),
@@ -76,11 +76,9 @@ vi.mock("../../../src/bot/callbacks/project-callback-handler.js", () => ({
 vi.mock("../../../src/bot/callbacks/question-callback-handler.js", () => ({
   handleQuestionCallback: mocked.handleQuestionCallback,
 }));
-vi.mock("../../../src/bot/callbacks/rename-callback-handler.js", () => ({
-  handleRenameCancel: mocked.handleRenameCancel,
-}));
 vi.mock("../../../src/bot/callbacks/session-callback-handler.js", () => ({
   handleBackgroundSessionOpen: mocked.handleBackgroundSessionOpen,
+  handleRenameCancelCallback: mocked.handleRenameCancelCallback,
   handleSessionSelect: mocked.handleSessionSelect,
 }));
 vi.mock("../../../src/bot/callbacks/skills-catalog-callback-handler.js", () => ({
@@ -118,7 +116,7 @@ const allHandlers = [
   mocked.handlePermissionCallback,
   mocked.handleProjectSelect,
   mocked.handleQuestionCallback,
-  mocked.handleRenameCancel,
+  mocked.handleRenameCancelCallback,
   mocked.handleBackgroundSessionOpen,
   mocked.handleSessionSelect,
   mocked.handleSkillsCallback,

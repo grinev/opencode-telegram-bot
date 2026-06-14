@@ -37,7 +37,7 @@ describe("interactionManager", () => {
 
   it("transitions active interaction", () => {
     interactionManager.start({
-      kind: "rename",
+      kind: "task",
       expectedInput: "text",
       metadata: { step: 1 },
     });

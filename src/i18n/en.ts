@@ -164,6 +164,24 @@ export const en = {
   "sessions.preview.title": "Recent messages:",
   "sessions.preview.you": "You:",
   "sessions.preview.agent": "Agent:",
+  "sessions.button.select": "✅ Select",
+  "sessions.button.rename": "✏️ Rename",
+  "sessions.button.delete": "🗑 Delete",
+  "sessions.button.close": "✖ Close",
+  "sessions.current_session": "Already selected",
+  "sessions.rename.prompt": "📝 Enter new title:\n\nCurrent: {title}",
+  "sessions.rename.cancel": "❌ Cancel",
+  "sessions.rename.empty": "⚠️ Title cannot be empty.",
+  "sessions.rename.success": "✅ Session renamed to: {title}",
+  "sessions.rename.error": "🔴 Failed to rename session.",
+  "sessions.delete.confirm":
+    '⚠️ Delete Session\n\n"{title}"\nAll messages and history will be permanently removed.',
+  "sessions.delete.yes": "✅ Yes, Delete",
+  "sessions.delete.no": "❌ No",
+  "sessions.delete.success": "✅ Session deleted: {title}",
+  "sessions.delete.not_found": "🔴 Session not found. It may have been deleted already.",
+  "sessions.delete.error": "🔴 Failed to delete session.",
+  "sessions.deleted_external": "🗑 Session was deleted: {title}\nYou have been detached.",
 
   "messages.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
@@ -421,20 +439,6 @@ export const en = {
   "runtime.wizard.tty_required":
     "Interactive wizard requires a TTY terminal. Run `opencode-telegram config` in an interactive shell.",
 
-  "rename.no_session": "⚠️ No active session. Create or select a session first.",
-  "rename.prompt": "📝 Enter new title for session:\n\nCurrent: {title}",
-  "rename.empty_title": "⚠️ Title cannot be empty.",
-  "rename.success": "✅ Session renamed to: {title}",
-  "rename.error": "🔴 Failed to rename session.",
-  "rename.cancelled": "❌ Rename cancelled.",
-  "rename.inactive_callback": "Rename request is inactive",
-  "rename.inactive": "⚠️ Rename request is not active. Run /rename again.",
-  "rename.blocked.expected_name":
-    "⚠️ Enter a new session name as text or tap Cancel in rename message.",
-  "rename.blocked.command_not_allowed":
-    "⚠️ This command is not available while rename is waiting for a new name.",
-  "rename.button.cancel": "❌ Cancel",
-
   "task.prompt.schedule":
     "⏰ Send the task schedule in natural language.\n\nExamples:\n- every 5 minutes\n- every day at 17:00\n- tomorrow at 12:00",
   "task.schedule_empty": "⚠️ Schedule cannot be empty.",
@@ -549,8 +553,6 @@ export const en = {
   "mcps.button.disable": "🔴 Disable",
   "mcps.button.back": "⬅️ Back",
   "mcps.auth_required": "This server requires authorization and cannot be enabled from the bot.",
-
-  "cmd.description.rename": "Rename current session",
 
   "legacy.models.fetch_error": "🔴 Failed to get models list. Check server status with /status.",
   "legacy.models.empty": "📋 No available models. Configure providers in OpenCode.",

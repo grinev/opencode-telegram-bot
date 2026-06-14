@@ -8,7 +8,7 @@ import {
   handleModelSearchTextInput,
 } from "../callbacks/model-selection-callback-handler.js";
 import { handleQuestionTextAnswer } from "../callbacks/question-callback-handler.js";
-import { handleRenameTextAnswer } from "../callbacks/rename-callback-handler.js";
+import { handleRenameTextAnswer } from "../callbacks/session-callback-handler.js";
 import { handleContextButtonPress } from "../menus/context-control-menu.js";
 import { showAgentSelectionMenu } from "../menus/agent-selection-menu.js";
 import { showModelSelectionMenu } from "../menus/model-selection-menu.js";

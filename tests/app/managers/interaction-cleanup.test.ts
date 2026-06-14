@@ -3,7 +3,6 @@ import { clearAllInteractionState } from "../../../src/app/managers/interaction-
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { questionManager } from "../../../src/app/managers/question-manager.js";
 import { permissionManager } from "../../../src/app/managers/permission-manager.js";
-import { renameManager } from "../../../src/app/managers/rename-manager.js";
 import type { Question } from "../../../src/app/types/question.js";
 import type { PermissionRequest } from "../../../src/app/types/permission.js";
 
@@ -33,9 +32,8 @@ describe("app/managers/interaction-cleanup", () => {
   it("clears all interaction-related managers", () => {
     questionManager.startQuestions([TEST_QUESTION], "req-1");
     permissionManager.startPermission(TEST_PERMISSION, 101);
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
     interactionManager.start({
-      kind: "rename",
+      kind: "custom",
       expectedInput: "text",
       metadata: { sessionId: "session-1" },
     });
@@ -44,7 +42,6 @@ describe("app/managers/interaction-cleanup", () => {
 
     expect(questionManager.isActive()).toBe(false);
     expect(permissionManager.isActive()).toBe(false);
-    expect(renameManager.isWaitingForName()).toBe(false);
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 
