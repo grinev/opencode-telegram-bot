@@ -227,6 +227,7 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `COMMANDS_LIST_LIMIT`                      | Items per page in `/commands` and `/skills`                                                                           |    No    | `10`                     |
 | `TASK_LIMIT`                               | Maximum number of scheduled tasks that can exist at once                                                              |    No    | `10`                     |
 | `SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES` | Maximum time the bot waits for one scheduled task run before marking it failed                                        |    No    | `120`                    |
+| `SCHEDULED_TASK_DISABLE_NOTIFICATION`      | Send scheduled task result/error messages without Telegram push notifications                                         |    No    | `false`                  |
 | `BASH_TOOL_DISPLAY_MAX_LENGTH`             | Maximum displayed length for `bash` tool commands in Telegram summaries; longer commands are truncated                |    No    | `128`                    |
 | `SERVICE_MESSAGES_INTERVAL_SEC`            | Service messages interval (thinking + tool calls); keep `>=2` to avoid Telegram rate limits, `0` = immediate          |    No    | `5`                      |
 | `HIDE_THINKING_MESSAGES`                   | Hide `💭 Thinking...` service messages                                                                                |    No    | `false`                  |
