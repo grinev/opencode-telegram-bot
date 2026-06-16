@@ -4,6 +4,8 @@ import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
 import { getModelCapabilities, supportsInput } from "../../app/services/model-capabilities-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
+import { getStoredVisionModel, describeImage } from "../../app/services/vision-model-service.js";
+import { getCurrentProject, getCurrentSession } from "../../app/stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 import {
   downloadTelegramFile,
@@ -44,6 +46,7 @@ type ValidMediaGroupItem =
       fileId: string;
       mime: string;
       filename: string;
+      needsVisionDescription?: boolean;
     }
   | {
       kind: "text";
@@ -207,7 +210,13 @@ export class MediaGroupAttachmentHandler {
         return;
       }
 
-      await replyCtx.reply(t("bot.files_downloading"));
+      const needsVision = validationResult.items.some(
+        (item) => item.kind === "file" && item.needsVisionDescription,
+      );
+
+      await replyCtx.reply(
+        needsVision ? t("bot.vision_describing") : t("bot.files_downloading"),
+      );
 
       const { promptText, fileParts } = await this.preparePrompt(validationResult.items, items);
       const processPrompt = this.deps.processPrompt ?? processUserPrompt;
@@ -302,7 +311,19 @@ export class MediaGroupAttachmentHandler {
       const capabilities = await getCapabilities(storedModel.providerID, storedModel.modelID);
 
       if (needsImageSupport && !supportsInput(capabilities, "image")) {
-        return { reason: `model_no_image:${storedModel.providerID}/${storedModel.modelID}` };
+        const visionModel = getStoredVisionModel();
+        const project = getCurrentProject();
+
+        if (visionModel && project?.worktree) {
+          // Mark all image file items for vision description
+          for (const item of validItems) {
+            if (item.kind === "file" && item.mime.startsWith("image/")) {
+              item.needsVisionDescription = true;
+            }
+          }
+        } else {
+          return { reason: `model_no_image:${storedModel.providerID}/${storedModel.modelID}` };
+        }
       }
 
       if (needsPdfSupport && !supportsInput(capabilities, "pdf")) {
@@ -320,6 +341,8 @@ export class MediaGroupAttachmentHandler {
     const downloadFile = this.deps.downloadFile ?? downloadTelegramFile;
     const textSections: string[] = [];
     const fileParts: FilePartInput[] = [];
+    const project = getCurrentProject();
+    const visionModel = getStoredVisionModel();
 
     for (const item of validItems) {
       const downloadedFile = await downloadFile(item.ctx.api, item.fileId);
@@ -329,6 +352,26 @@ export class MediaGroupAttachmentHandler {
         textSections.push(
           `--- Content of ${item.filename} ---\n${textContent}\n--- End of file ---`,
         );
+        continue;
+      }
+
+      if (item.needsVisionDescription && visionModel && project?.worktree) {
+        const filePart: FilePartInput = {
+          type: "file",
+          mime: item.mime,
+          filename: item.filename,
+          url: toDataUri(downloadedFile.buffer, item.mime),
+        };
+
+        try {
+          const description = await describeImage(filePart, "", project.worktree, getCurrentSession()?.id);
+          textSections.push(
+            `[Image description for ${item.filename}: ${description}]`,
+          );
+        } catch (err) {
+          logger.error("[MediaGroup] Vision description failed for item:", err);
+          textSections.push(`[Image: ${item.filename} (description unavailable)]`);
+        }
         continue;
       }
 

@@ -8,6 +8,7 @@ export const ru: I18nDictionary = {
   "cmd.description.sessions": "Список сессий",
   "cmd.description.messages": "Сообщения текущей сессии",
   "cmd.description.tts": "Переключить аудиоответы",
+  "cmd.description.setvision": "Set vision model for image description",
   "cmd.description.projects": "Список проектов",
   "cmd.description.worktree": "Переключить git worktree",
   "cmd.description.task": "Создать задачу по расписанию",
@@ -98,6 +99,20 @@ export const ru: I18nDictionary = {
   "bot.media_group_download_error":
     "🔴 Не удалось скачать один из файлов. В OpenCode ничего не отправлено.",
   "bot.model_no_pdf": "⚠️ Текущая модель не поддерживает PDF. Отправляю только текст.",
+
+  "bot.vision_describing": "🔍 Analyzing image with vision model...",
+  "bot.vision_describe_error": "⚠️ Failed to describe image. Sending text only.",
+
+  "vision.select_prompt": "Select a model for image description:",
+  "vision.current": "Current vision model: {name}",
+  "vision.model_set": "Vision model set",
+  "vision.model_set_message": "✅ Vision model: {name}",
+  "vision.model_cleared": "Vision model cleared",
+  "vision.cleared": "Cleared",
+  "vision.change": "🔄 Change",
+  "vision.clear": "❌ Clear",
+  "vision.no_models": "No models available. Configure models in OpenCode first.",
+  "vision.error": "Failed to update vision model.",
   "bot.text_file_too_large": "⚠️ Текстовый файл слишком большой (макс. {maxSizeKb}КБ)",
 
   "status.header_running": "🟢 OpenCode Server запущен",

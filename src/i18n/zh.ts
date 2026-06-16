@@ -8,6 +8,7 @@ export const zh: I18nDictionary = {
   "cmd.description.sessions": "列出会话",
   "cmd.description.messages": "浏览会话消息",
   "cmd.description.tts": "切换语音回复",
+  "cmd.description.setvision": "Set vision model for image description",
   "cmd.description.projects": "列出项目",
   "cmd.description.worktree": "切换 git worktree",
   "cmd.description.task": "创建定时任务",
@@ -86,6 +87,20 @@ export const zh: I18nDictionary = {
   "bot.media_group_not_processed": "⚠️ 此相册中有一个或多个文件无法处理。未向 OpenCode 发送任何内容。",
   "bot.media_group_download_error": "🔴 无法下载其中一个文件。未向 OpenCode 发送任何内容。",
   "bot.model_no_pdf": "⚠️ 当前模型不支持PDF输入。将仅发送文本。",
+
+  "bot.vision_describing": "🔍 Analyzing image with vision model...",
+  "bot.vision_describe_error": "⚠️ Failed to describe image. Sending text only.",
+
+  "vision.select_prompt": "Select a model for image description:",
+  "vision.current": "Current vision model: {name}",
+  "vision.model_set": "Vision model set",
+  "vision.model_set_message": "✅ Vision model: {name}",
+  "vision.model_cleared": "Vision model cleared",
+  "vision.cleared": "Cleared",
+  "vision.change": "🔄 Change",
+  "vision.clear": "❌ Clear",
+  "vision.no_models": "No models available. Configure models in OpenCode first.",
+  "vision.error": "Failed to update vision model.",
   "bot.text_file_too_large": "⚠️ 文本文件过大（最大 {maxSizeKb}KB）",
 
   "status.header_running": "🟢 OpenCode 服务器正在运行",

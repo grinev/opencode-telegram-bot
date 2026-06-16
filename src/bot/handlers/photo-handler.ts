@@ -3,6 +3,8 @@ import type { FilePartInput, Model } from "@opencode-ai/sdk/v2";
 import { downloadTelegramFile, toDataUri } from "../../app/services/file-download-service.js";
 import { getModelCapabilities, supportsInput } from "../../app/services/model-capabilities-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
+import { getStoredVisionModel, describeImage } from "../../app/services/vision-model-service.js";
+import { getCurrentProject, getCurrentSession } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
@@ -46,6 +48,36 @@ export async function handlePhotoMessage(ctx: Context, deps: PhotoHandlerDeps): 
       logger.warn(
         `[Bot] Model ${storedModel.providerID}/${storedModel.modelID} doesn't support image input`,
       );
+
+      const visionModel = getStoredVisionModel();
+      const project = getCurrentProject();
+
+      if (visionModel && project?.worktree) {
+        await ctx.reply(t("bot.vision_describing"));
+        const downloadedFile = await downloadFile(ctx.api, largestPhoto.file_id);
+        const filePart: FilePartInput = {
+          type: "file",
+          mime: "image/jpeg",
+          filename: "photo.jpg",
+          url: toDataUri(downloadedFile.buffer, "image/jpeg"),
+        };
+
+        try {
+          const description = await describeImage(filePart, caption, project.worktree, getCurrentSession()?.id);
+          const enriched = caption.trim().length > 0
+            ? `${caption}\n\n[Image description: ${description}]`
+            : `[Image description: ${description}]`;
+          await processPrompt(ctx, enriched, deps);
+        } catch (err) {
+          logger.error("[Bot] Vision description failed:", err);
+          await ctx.reply(t("bot.vision_describe_error"));
+          if (caption.trim().length > 0) {
+            await processPrompt(ctx, caption, deps);
+          }
+        }
+        return;
+      }
+
       await ctx.reply(t("bot.photo_model_no_image"));
 
       if (caption.trim().length > 0) {

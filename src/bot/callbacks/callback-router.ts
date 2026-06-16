@@ -27,6 +27,7 @@ import {
   handleTaskCallback,
   handleTaskListCallback,
 } from "./scheduled-task-callback-handler.js";
+import { handleVisionModelSelect } from "./vision-model-callback-handler.js";
 import { handleVariantSelect } from "./variant-selection-callback-handler.js";
 import { handleWorktreeCallback } from "./worktree-callback-handler.js";
 import { clearLsPathIndex, clearOpenPathIndex } from "../menus/file-browser-menu.js";
@@ -75,6 +76,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
       const handledModelSearch = await handleModelSearchCallback(ctx);
       const handledModelSearchResults = await handleModelSearchResults(ctx);
       const handledModel = await handleModelSelect(ctx);
+      const handledVisionModel = await handleVisionModelSelect(ctx);
       const handledVariant = await handleVariantSelect(ctx);
       const handledCompactConfirm = await handleCompactConfirm(ctx);
       const handledTask = await handleTaskCallback(ctx);
@@ -95,7 +97,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
       const handledMcps = await handleMcpsCallback(ctx);
 
       logger.debug(
-        `[Bot] Callback handled: backgroundSession=${handledBackgroundSession}, inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, modelSearch=${handledModelSearch}, modelSearchResults=${handledModelSearchResults}, model=${handledModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, messages=${handledMessages}, skills=${handledSkills}, mcps=${handledMcps}`,
+        `[Bot] Callback handled: backgroundSession=${handledBackgroundSession}, inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, modelSearch=${handledModelSearch}, modelSearchResults=${handledModelSearchResults}, model=${handledModel}, visionModel=${handledVisionModel}, variant=${handledVariant}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, messages=${handledMessages}, skills=${handledSkills}, mcps=${handledMcps}`,
       );
 
       if (
@@ -112,6 +114,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
         !handledModelSearch &&
         !handledModelSearchResults &&
         !handledModel &&
+        !handledVisionModel &&
         !handledVariant &&
         !handledCompactConfirm &&
         !handledTask &&

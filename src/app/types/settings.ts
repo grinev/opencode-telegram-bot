@@ -13,6 +13,7 @@ export interface Settings {
   currentSession?: SessionInfo;
   currentAgent?: string;
   currentModel?: ModelInfo;
+  currentVisionModel?: ModelInfo;
   pinnedMessageId?: number;
   ttsEnabled?: boolean;
   sessionDirectoryCache?: SessionDirectoryCacheInfo;

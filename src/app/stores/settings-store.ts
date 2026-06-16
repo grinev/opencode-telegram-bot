@@ -122,6 +122,20 @@ export function clearCurrentModel(): void {
   void writeSettingsFile(currentSettings);
 }
 
+export function getCurrentVisionModel(): ModelInfo | undefined {
+  return currentSettings.currentVisionModel;
+}
+
+export function setCurrentVisionModel(modelInfo: ModelInfo): void {
+  currentSettings.currentVisionModel = modelInfo;
+  void writeSettingsFile(currentSettings);
+}
+
+export function clearCurrentVisionModel(): void {
+  currentSettings.currentVisionModel = undefined;
+  void writeSettingsFile(currentSettings);
+}
+
 export function getPinnedMessageId(): number | undefined {
   return currentSettings.pinnedMessageId;
 }

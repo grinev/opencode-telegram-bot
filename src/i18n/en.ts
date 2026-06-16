@@ -6,6 +6,7 @@ export const en = {
   "cmd.description.sessions": "List sessions",
   "cmd.description.messages": "Browse session messages",
   "cmd.description.tts": "Toggle audio replies",
+  "cmd.description.setvision": "Set vision model for image description",
   "cmd.description.projects": "List projects",
   "cmd.description.worktree": "Switch git worktrees",
   "cmd.description.task": "Create a scheduled task",
@@ -98,6 +99,20 @@ export const en = {
   "bot.media_group_download_error":
     "🔴 Failed to download one of the files. Nothing was sent to OpenCode.",
   "bot.model_no_pdf": "⚠️ Current model doesn't support PDF input. Sending text only.",
+
+  "bot.vision_describing": "🔍 Analyzing image with vision model...",
+  "bot.vision_describe_error": "⚠️ Failed to describe image. Sending text only.",
+
+  "vision.select_prompt": "Select a model for image description:",
+  "vision.current": "Current vision model: {name}",
+  "vision.model_set": "Vision model set",
+  "vision.model_set_message": "✅ Vision model: {name}",
+  "vision.model_cleared": "Vision model cleared",
+  "vision.cleared": "Cleared",
+  "vision.change": "🔄 Change",
+  "vision.clear": "❌ Clear",
+  "vision.no_models": "No models available. Configure models in OpenCode first.",
+  "vision.error": "Failed to update vision model.",
   "bot.text_file_too_large": "⚠️ Text file is too large (max {maxSizeKb}KB)",
 
   "status.header_running": "🟢 OpenCode Server is running",

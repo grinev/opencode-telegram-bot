@@ -15,6 +15,7 @@ export const ar: I18nDictionary = {
   "cmd.description.sessions": "عرض الجلسات السابقة",
   "cmd.description.messages": "استعراض رسائل الجلسة",
   "cmd.description.tts": "تشغيل أو إيقاف الردود الصوتية",
+  "cmd.description.setvision": "Set vision model for image description",
   "cmd.description.projects": "عرض المشاريع",
   "cmd.description.worktree": "التبديل بين نسخ العمل في Git",
   "cmd.description.task": "إنشاء مهمة مجدولة",
@@ -88,6 +89,20 @@ export const ar: I18nDictionary = {
   "bot.media_group_not_processed": "⚠️ تعذر معالجة ملف أو أكثر في هذه المجموعة. لم يتم إرسال أي ملف إلى OpenCode.",
   "bot.media_group_download_error": "🔴 تعذر تنزيل أحد الملفات. لم يتم إرسال أي ملف إلى OpenCode.",
   "bot.model_no_pdf": "⚠️ النموذج الحالي لا يدعم ملفات PDF. سيتم إرسال النص فقط.",
+
+  "bot.vision_describing": "🔍 Analyzing image with vision model...",
+  "bot.vision_describe_error": "⚠️ Failed to describe image. Sending text only.",
+
+  "vision.select_prompt": "Select a model for image description:",
+  "vision.current": "Current vision model: {name}",
+  "vision.model_set": "Vision model set",
+  "vision.model_set_message": "✅ Vision model: {name}",
+  "vision.model_cleared": "Vision model cleared",
+  "vision.cleared": "Cleared",
+  "vision.change": "🔄 Change",
+  "vision.clear": "❌ Clear",
+  "vision.no_models": "No models available. Configure models in OpenCode first.",
+  "vision.error": "Failed to update vision model.",
   "bot.text_file_too_large": "⚠️ حجم الملف النصي أكبر من الحد المسموح ({maxSizeKb}KB)",
 
   "status.header_running": "🟢 خادم OpenCode يعمل",
