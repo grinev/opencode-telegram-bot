@@ -196,8 +196,12 @@ function formatTaskDetails(task: ScheduledTask): string {
 
   return t("tasklist.details", {
     // Telegram editMessageText hard limit is 4096 bytes (UTF-8).
-    // Template chrome (title, labels, schedule, etc.) consumes ~230 bytes.
-    // A 3800-byte budget for the prompt keeps the total safely under the limit.
+    // The prompt budget (3800 bytes) is derived from the English locale:
+    // 4096 − ~230 (template chrome: title, labels, schedule, etc.) − 66 (safety margin) = 3800.
+    // NOTE: Non-English locales may have longer template chrome. If a locale's
+    // chrome exceeds ~296 bytes (230 + 66), the total could exceed 4096.
+    // This budget is safe for all current locales; re-calculate if new locales
+    // with significantly longer translations are added.
     prompt: truncateToByteLength(task.prompt, 3800),
     project: `${task.projectWorktree}\n${t("status.line.model", { model })}`,
     schedule: task.scheduleSummary,

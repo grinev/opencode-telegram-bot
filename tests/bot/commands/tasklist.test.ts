@@ -245,6 +245,7 @@ describe("bot/commands/tasklist", () => {
     const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
     expect(text).not.toContain(longPrompt);
     expect(text).toMatch(/\.\.\.(\s|$)/m);
+    expect(text).toContain("🚀");
     // Byte length must not exceed Telegram limit
     expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(4096);
   });
@@ -274,6 +275,7 @@ describe("bot/commands/tasklist", () => {
     const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
     expect(text).toContain(shortPrompt);
     expect(text).not.toMatch(/Check the weather forecast\.\.\./);
+    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(4096);
   });
 
   it("cancels task details interaction and removes message", async () => {
