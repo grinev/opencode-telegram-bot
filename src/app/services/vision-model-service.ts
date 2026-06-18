@@ -8,6 +8,8 @@ import {
 } from "../stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 
+const sessionImageCounter = new Map<string, number>();
+
 export function getStoredVisionModel(): ModelInfo | null {
   const model = getCurrentVisionModel();
   return model && model.providerID && model.modelID ? model : null;
@@ -25,6 +27,10 @@ export function clearVisionModel(): void {
   clearCurrentVisionModel();
 }
 
+export function clearImageCounter(sessionKey: string): void {
+  sessionImageCounter.delete(sessionKey);
+}
+
 export async function describeImage(
   imageFilePart: FilePartInput,
   userPrompt: string,
@@ -36,9 +42,13 @@ export async function describeImage(
     throw new Error("Vision model is not configured");
   }
 
+  const counterKey = parentSessionId ?? directory;
+  const count = (sessionImageCounter.get(counterKey) ?? 0) + 1;
+  sessionImageCounter.set(counterKey, count);
+
   const createResult = await opencodeClient.session.create({
     directory,
-    title: "vision-image-description",
+    title: `vision-image-description-${count}`,
     ...(parentSessionId ? { parentID: parentSessionId } : {}),
   });
 

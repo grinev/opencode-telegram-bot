@@ -3,6 +3,7 @@ import {
   setCurrentSession as setSettingsSession,
   clearSession as clearSettingsSession,
 } from "../stores/settings-store.js";
+import { clearImageCounter } from "./vision-model-service.js";
 import type { SessionInfo } from "../types/session.js";
 
 export type { SessionInfo };
@@ -16,5 +17,9 @@ export function getCurrentSession(): SessionInfo | null {
 }
 
 export function clearSession(): void {
+  const currentSession = getCurrentSession();
+  if (currentSession) {
+    clearImageCounter(currentSession.id);
+  }
   clearSettingsSession();
 }
