@@ -1,4 +1,11 @@
-export type InteractionKind = "inline" | "permission" | "question" | "rename" | "task" | "custom";
+export type InteractionKind =
+  | "inline"
+  | "permission"
+  | "question"
+  | "rename"
+  | "task"
+  | "custom"
+  | "worktree-add";
 
 export type ExpectedInput = "callback" | "text" | "command" | "mixed";
 

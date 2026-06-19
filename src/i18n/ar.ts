@@ -17,6 +17,7 @@ export const ar: I18nDictionary = {
   "cmd.description.tts": "اختيار وضع الردود الصوتية",
   "cmd.description.projects": "عرض المشاريع",
   "cmd.description.worktree": "التبديل بين نسخ العمل في Git",
+  "cmd.description.worktree_add": "Create a new git worktree",
   "cmd.description.task": "إنشاء مهمة مجدولة",
   "cmd.description.tasklist": "عرض المهام المجدولة",
   "cmd.description.commands": "الأوامر المخصصة",
@@ -39,14 +40,17 @@ export const ar: I18nDictionary = {
   "error.generic": "🔴 حدث خطأ غير متوقع.",
 
   "interaction.blocked.expired": "⚠️ انتهت صلاحية هذا الإجراء. ابدأه من جديد.",
-  "interaction.blocked.expected_callback": "⚠️ استخدم الأزرار الظاهرة في الرسالة لهذه الخطوة، أو اضغط إلغاء.",
+  "interaction.blocked.expected_callback":
+    "⚠️ استخدم الأزرار الظاهرة في الرسالة لهذه الخطوة، أو اضغط إلغاء.",
   "interaction.blocked.expected_text": "⚠️ أرسل رسالة نصية لإكمال هذه الخطوة.",
   "interaction.blocked.expected_command": "⚠️ أرسل أمرًا لإكمال هذه الخطوة.",
   "interaction.blocked.command_not_allowed": "⚠️ لا يمكن استخدام هذا الأمر في الخطوة الحالية.",
   "interaction.blocked.finish_current": "⚠️ أكمل الإجراء الحالي أولًا، ثم افتح قائمة أخرى.",
-  "inline.blocked.expected_choice": "⚠️ اختر أحد الخيارات من الأزرار الظاهرة في الرسالة، أو اضغط إلغاء.",
+  "inline.blocked.expected_choice":
+    "⚠️ اختر أحد الخيارات من الأزرار الظاهرة في الرسالة، أو اضغط إلغاء.",
   "inline.blocked.command_not_allowed": "⚠️ لا يمكن استخدام هذا الأمر أثناء فتح القائمة الحالية.",
-  "question.blocked.expected_answer": "⚠️ أجب عن السؤال الحالي باستخدام الأزرار، أو اختر إجابة مخصصة، أو اضغط إلغاء.",
+  "question.blocked.expected_answer":
+    "⚠️ أجب عن السؤال الحالي باستخدام الأزرار، أو اختر إجابة مخصصة، أو اضغط إلغاء.",
   "question.blocked.command_not_allowed": "⚠️ لا يمكن استخدام هذا الأمر قبل إنهاء السؤال الحالي.",
   "inline.button.cancel": "❌ إلغاء",
   "inline.inactive_callback": "انتهت صلاحية هذه القائمة",
@@ -54,20 +58,27 @@ export const ar: I18nDictionary = {
   "common.unknown": "غير معروف",
   "common.unknown_error": "خطأ غير معروف",
 
-  "start.welcome": "👋 أهلًا بك في OpenCode Telegram Bot!\n\nالأوامر الأساسية:\n/projects — اختيار مشروع\n/sessions — عرض الجلسات\n/new — بدء جلسة جديدة\n/commands — الأوامر المخصصة\n/skills — قائمة المهارات\n/task — إنشاء مهمة مجدولة\n/tasklist — عرض المهام المجدولة\n/status — حالة الخادم والجلسة\n/help — المساعدة\n\nاستخدم الأزرار السفلية للتبديل بين الوكيل والنموذج وخيارات التشغيل.",
-  "help.keyboard_hint": "💡 استخدم الأزرار السفلية للتبديل بين الوكيل والنموذج وخيارات التشغيل وإدارة السياق.",
-  "help.text": "📖 **المساعدة**\n\n/status - عرض حالة الخادم والجلسة\n/sessions - عرض الجلسات\n/new - بدء جلسة جديدة\n/help - المساعدة",
+  "start.welcome":
+    "👋 أهلًا بك في OpenCode Telegram Bot!\n\nالأوامر الأساسية:\n/projects — اختيار مشروع\n/sessions — عرض الجلسات\n/new — بدء جلسة جديدة\n/commands — الأوامر المخصصة\n/skills — قائمة المهارات\n/task — إنشاء مهمة مجدولة\n/tasklist — عرض المهام المجدولة\n/status — حالة الخادم والجلسة\n/help — المساعدة\n\nاستخدم الأزرار السفلية للتبديل بين الوكيل والنموذج وخيارات التشغيل.",
+  "help.keyboard_hint":
+    "💡 استخدم الأزرار السفلية للتبديل بين الوكيل والنموذج وخيارات التشغيل وإدارة السياق.",
+  "help.text":
+    "📖 **المساعدة**\n\n/status - عرض حالة الخادم والجلسة\n/sessions - عرض الجلسات\n/new - بدء جلسة جديدة\n/help - المساعدة",
 
   "bot.thinking": "💭 جارٍ التفكير...",
   "bot.project_not_selected": "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
   "bot.creating_session": "🔄 جارٍ بدء جلسة جديدة...",
-  "bot.create_session_error": "🔴 تعذر بدء جلسة جديدة. جرّب /new أو افحص حالة الخادم باستخدام /status.",
+  "bot.create_session_error":
+    "🔴 تعذر بدء جلسة جديدة. جرّب /new أو افحص حالة الخادم باستخدام /status.",
   "bot.session_created": "✅ تم إنشاء الجلسة: {title}",
-  "bot.session_busy": "⏳ الوكيل مشغول بتنفيذ مهمة الآن. انتظر حتى ينتهي، أو استخدم /abort لإيقاف المهمة الحالية.",
-  "bot.session_reset_project_mismatch": "⚠️ الجلسة النشطة مرتبطة بمشروع مختلف، لذلك تمت إعادة ضبطها. استخدم /sessions لاختيار جلسة أو /new لبدء جلسة جديدة.",
+  "bot.session_busy":
+    "⏳ الوكيل مشغول بتنفيذ مهمة الآن. انتظر حتى ينتهي، أو استخدم /abort لإيقاف المهمة الحالية.",
+  "bot.session_reset_project_mismatch":
+    "⚠️ الجلسة النشطة مرتبطة بمشروع مختلف، لذلك تمت إعادة ضبطها. استخدم /sessions لاختيار جلسة أو /new لبدء جلسة جديدة.",
   "bot.prompt_send_error": "تعذر إرسال الطلب إلى OpenCode.",
   "bot.session_error": "🔴 أعاد OpenCode الخطأ التالي: {message}",
-  "bot.session_retry": "🔁 {message}\n\nاستمر مزوّد الخدمة في إرجاع الخطأ نفسه بعد عدة محاولات. استخدم /abort لإيقاف المهمة.",
+  "bot.session_retry":
+    "🔁 {message}\n\nاستمر مزوّد الخدمة في إرجاع الخطأ نفسه بعد عدة محاولات. استخدم /abort لإيقاف المهمة.",
   "bot.external_user_input": "رسالة واردة من واجهة أخرى",
   "background.session_fallback": "الجلسة {id}",
   "background.assistant_response": "🔔 وصل رد جديد من جلسة تعمل في الخلفية: {session}",
@@ -84,8 +95,10 @@ export const ar: I18nDictionary = {
   "bot.files_downloading": "⏳ جارٍ تنزيل الملفات...",
   "bot.file_too_large": "⚠️ حجم الملف أكبر من الحد المسموح ({maxSizeMb}MB)",
   "bot.file_download_error": "🔴 تعذر تنزيل الملف",
-  "bot.file_type_unsupported": "⚠️ نوع الملف غير مدعوم. أرسل صورة أو ملف PDF أو ملفًا نصيًا أو برمجيًا.",
-  "bot.media_group_not_processed": "⚠️ تعذر معالجة ملف أو أكثر في هذه المجموعة. لم يتم إرسال أي ملف إلى OpenCode.",
+  "bot.file_type_unsupported":
+    "⚠️ نوع الملف غير مدعوم. أرسل صورة أو ملف PDF أو ملفًا نصيًا أو برمجيًا.",
+  "bot.media_group_not_processed":
+    "⚠️ تعذر معالجة ملف أو أكثر في هذه المجموعة. لم يتم إرسال أي ملف إلى OpenCode.",
   "bot.media_group_download_error": "🔴 تعذر تنزيل أحد الملفات. لم يتم إرسال أي ملف إلى OpenCode.",
   "bot.model_no_pdf": "⚠️ النموذج الحالي لا يدعم ملفات PDF. سيتم إرسال النص فقط.",
   "bot.text_file_too_large": "⚠️ حجم الملف النصي أكبر من الحد المسموح ({maxSizeKb}KB)",
@@ -122,7 +135,8 @@ export const ar: I18nDictionary = {
   "tts.not_configured": "⚠️ الردود الصوتية غير متاحة حاليًا. اضبط `TTS_API_URL` و`TTS_API_KEY` أولًا.",
   "tts.failed": "⚠️ تعذر إنشاء الرد الصوتي.",
 
-  "projects.empty": "📭 لم يتم العثور على مشاريع.\n\nافتح مجلدًا في OpenCode وأنشئ جلسة واحدة على الأقل، ثم سيظهر المشروع هنا.",
+  "projects.empty":
+    "📭 لم يتم العثور على مشاريع.\n\nافتح مجلدًا في OpenCode وأنشئ جلسة واحدة على الأقل، ثم سيظهر المشروع هنا.",
   "projects.select": "اختر مشروعًا:",
   "projects.select_with_current": "اختر مشروعًا:\n\nالمشروع الحالي: 🏗 {project}",
   "projects.page_indicator": "الصفحة {current}/{total}",
@@ -130,10 +144,12 @@ export const ar: I18nDictionary = {
   "projects.next_page": "التالي ➡️",
   "projects.fetch_error": "🔴 تعذر تحميل المشاريع. تأكد من أن خادم OpenCode يعمل ثم حاول مرة أخرى.",
   "projects.page_load_error": "تعذر تحميل هذه الصفحة. حاول مرة أخرى.",
-  "projects.selected": "✅ تم اختيار المشروع: {project}\n\n📋 تمت إعادة ضبط الجلسة الحالية. استخدم /sessions لاختيار جلسة أو /new لبدء جلسة جديدة.",
+  "projects.selected":
+    "✅ تم اختيار المشروع: {project}\n\n📋 تمت إعادة ضبط الجلسة الحالية. استخدم /sessions لاختيار جلسة أو /new لبدء جلسة جديدة.",
   "projects.select_error": "🔴 تعذر اختيار المشروع.",
 
-  "sessions.project_not_selected": "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
+  "sessions.project_not_selected":
+    "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
   "sessions.empty": "📭 لا توجد جلسات لهذا المشروع.\n\nابدأ جلسة جديدة باستخدام /new.",
   "sessions.select": "اختر جلسة:",
   "sessions.select_page": "اختر جلسة (الصفحة {page}):",
@@ -151,9 +167,12 @@ export const ar: I18nDictionary = {
   "sessions.preview.you": "أنت:",
   "sessions.preview.agent": "الوكيل:",
 
-  "messages.project_not_selected": "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
-  "messages.session_not_selected": "💬 لم تحدد جلسة بعد.\n\nاختر جلسة باستخدام /sessions أو ابدأ جلسة جديدة باستخدام /new.",
-  "messages.session_project_mismatch": "⚠️ الجلسة المحددة مرتبطة بمشروع مختلف. اختر الجلسة مجددًا باستخدام /sessions.",
+  "messages.project_not_selected":
+    "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
+  "messages.session_not_selected":
+    "💬 لم تحدد جلسة بعد.\n\nاختر جلسة باستخدام /sessions أو ابدأ جلسة جديدة باستخدام /new.",
+  "messages.session_project_mismatch":
+    "⚠️ الجلسة المحددة مرتبطة بمشروع مختلف. اختر الجلسة مجددًا باستخدام /sessions.",
   "messages.empty": "📭 لا توجد رسائل منك في الجلسة الحالية.",
   "messages.select": "اختر رسالة:",
   "messages.select_page": "اختر رسالة (الصفحة {page}):",
@@ -172,7 +191,8 @@ export const ar: I18nDictionary = {
   "messages.fork_success": "🔀 تم إنشاء جلسة متفرعة بدءًا من الرسالة التالية:\n\n{text}",
   "messages.fork_error": "❌ تعذر إنشاء جلسة متفرعة. حاول مرة أخرى.",
 
-  "attach.project_not_selected": "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
+  "attach.project_not_selected":
+    "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
   "attach.session_not_selected": "💬 لم تحدد جلسة بعد.\n\nاختر جلسة أولًا باستخدام /sessions.",
   "attach.session_project_mismatch":
     "⚠️ الجلسة المحددة لا تطابق المشروع الحالي. اختر الجلسة مجددًا باستخدام /sessions.",
@@ -185,7 +205,8 @@ export const ar: I18nDictionary = {
   "attach.disconnect_hint": "لقطع الاتصال، انتقل إلى جلسة أو مشروع آخر.",
   "attach.error": "🔴 تعذر الاتصال بالجلسة الحالية.",
 
-  "detach.project_not_selected": "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
+  "detach.project_not_selected":
+    "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
   "detach.no_active_session": "ℹ️ البوت غير متصل بأي جلسة بالفعل.",
   "detach.success":
     "✅ تم قطع الاتصال بالجلسة: {title}\n\nلم يتم إيقاف جلسة OpenCode. إذا كانت لا تزال تعمل، فستستمر بشكل منفصل. للتحقق منها لاحقًا، اخترها مجددًا باستخدام /sessions.",
@@ -256,10 +277,28 @@ export const ar: I18nDictionary = {
   "model.menu.error": "🔴 تعذر تحميل قائمة النماذج",
   "model.search.button": "🔍 بحث",
   "model.search.prompt": "🔍 اكتب اسم النموذج للبحث عنه:",
-  "model.search.results_title": "نتائج البحث عن \"{query}\":",
-  "model.search.no_results": "لم يتم العثور على نماذج مطابقة لـ \"{query}\"",
+  "model.search.results_title": 'نتائج البحث عن "{query}":',
+  "model.search.no_results": 'لم يتم العثور على نماذج مطابقة لـ "{query}"',
   "model.search.search_again": "↩ البحث مرة أخرى",
   "model.search.error": "تعذر البحث عن النماذج",
+  "model.picker.button.prev_page": "⬅️ السابق",
+  "model.picker.button.next_page": "التالي ➡️",
+  "model.picker.page_indicator": "Page {current}/{total}",
+
+  "models.select_mode": "📋 Select listing mode:",
+  "models.mode.all": "All configured",
+  "models.mode.favorites_recent": "⭐ Favorites + Recent",
+  "models.mode.all_header": "All configured models:",
+  "models.mode.favorites_recent_header": "Favorites + Recent:",
+  "models.unknown_mode": "Unknown listing mode.",
+  "models.empty": "📭 No models available.",
+  "models.fetch_error": "🔴 Failed to load models.",
+  "models.search.button": "🔍 بحث",
+  "models.search.clear_filter": "✕ مسح الفلتر",
+  "models.search.error": "🔴 فشل البحث",
+  "models.search.no_results": 'لم يتم العثور على نماذج تطابق "{query}"',
+  "models.search.prompt": "🔍 أدخل اسم النموذج أو المزوّد للتصفية:",
+  "models.search.results_header": 'نتائج البحث عن "{query}":',
 
   "variant.model_not_selected_callback": "خطأ: لم يتم تحديد النموذج",
   "variant.changed_callback": "تم تغيير الخيار إلى: {name}",
@@ -288,7 +327,8 @@ export const ar: I18nDictionary = {
   "permission.reply.reject": "تم الرفض",
   "permission.send_reply_error": "❌ تعذر إرسال رد الصلاحية",
   "permission.blocked.expected_reply": "⚠️ أجب عن طلب الصلاحية أولًا باستخدام الأزرار أعلاه.",
-  "permission.blocked.command_not_allowed": "⚠️ لا يمكن استخدام هذا الأمر قبل الرد على طلب الصلاحية.",
+  "permission.blocked.command_not_allowed":
+    "⚠️ لا يمكن استخدام هذا الأمر قبل الرد على طلب الصلاحية.",
   "permission.header": "{emoji} طلب صلاحية: {name}\n\n",
   "permission.button.allow": "✅ سماح لمرة واحدة",
   "permission.button.always": "🔓 سماح دائم",
@@ -366,22 +406,28 @@ export const ar: I18nDictionary = {
     "تعديل ملف/مسار: {path}\n============================================================\n\n",
 
   "runtime.wizard.ask_token": "أدخل رمز بوت Telegram الذي حصلت عليه من @BotFather.\n> ",
-  "runtime.wizard.ask_language": "اختر لغة الواجهة.\nأدخل رقم اللغة من القائمة أو رمز اللغة.\nاضغط Enter لاستخدام اللغة الافتراضية: {defaultLocale}\n{options}\n> ",
+  "runtime.wizard.ask_language":
+    "اختر لغة الواجهة.\nأدخل رقم اللغة من القائمة أو رمز اللغة.\nاضغط Enter لاستخدام اللغة الافتراضية: {defaultLocale}\n{options}\n> ",
   "runtime.wizard.language_invalid": "أدخل رقمًا من القائمة أو رمز لغة مدعومًا.\n",
   "runtime.wizard.language_selected": "تم اختيار اللغة: {language}\n",
   "runtime.wizard.token_required": "رمز البوت مطلوب. حاول مرة أخرى.\n",
-  "runtime.wizard.token_invalid": "صيغة رمز البوت غير صحيحة. الصيغة المتوقعة: <id>:<secret>. حاول مرة أخرى.\n",
-  "runtime.wizard.ask_user_id": "أدخل معرّف حسابك في Telegram. يمكنك الحصول عليه من @userinfobot.\n> ",
+  "runtime.wizard.token_invalid":
+    "صيغة رمز البوت غير صحيحة. الصيغة المتوقعة: <id>:<secret>. حاول مرة أخرى.\n",
+  "runtime.wizard.ask_user_id":
+    "أدخل معرّف حسابك في Telegram. يمكنك الحصول عليه من @userinfobot.\n> ",
   "runtime.wizard.user_id_invalid": "أدخل رقمًا صحيحًا موجبًا أكبر من صفر.\n",
-  "runtime.wizard.ask_api_url": "أدخل رابط OpenCode API، أو اضغط Enter لاستخدام الرابط الافتراضي: {defaultUrl}\n> ",
+  "runtime.wizard.ask_api_url":
+    "أدخل رابط OpenCode API، أو اضغط Enter لاستخدام الرابط الافتراضي: {defaultUrl}\n> ",
   "runtime.wizard.ask_server_username":
     "أدخل اسم مستخدم خادم OpenCode (اختياري).\nاضغط Enter لاستخدام القيمة الافتراضية: {defaultUsername}\n> ",
   "runtime.wizard.ask_server_password":
     "أدخل كلمة مرور خادم OpenCode (اختياري).\nاضغط Enter لتركها فارغة.\n> ",
-  "runtime.wizard.api_url_invalid": "أدخل رابطًا صالحًا (http/https) أو اضغط Enter لاستخدام الافتراضي.\n",
+  "runtime.wizard.api_url_invalid":
+    "أدخل رابطًا صالحًا (http/https) أو اضغط Enter لاستخدام الافتراضي.\n",
   "runtime.wizard.start": "إعداد OpenCode Telegram Bot.\n",
   "runtime.wizard.saved": "تم حفظ الإعدادات في:\n- {envPath}\n- {settingsPath}\n",
-  "runtime.wizard.not_configured_starting": "لم يتم إعداد التطبيق بعد. جارٍ تشغيل معالج الإعداد...\n",
+  "runtime.wizard.not_configured_starting":
+    "لم يتم إعداد التطبيق بعد. جارٍ تشغيل معالج الإعداد...\n",
   "runtime.wizard.tty_required":
     "يتطلب معالج الإعداد التفاعلي طرفية TTY. شغّل `opencode-telegram config` في shell تفاعلية.",
 
@@ -421,8 +467,7 @@ export const ar: I18nDictionary = {
   "task.inactive": "⚠️ إنشاء المهمة المجدولة غير نشط. شغّل /task مرة أخرى.",
   "task.blocked.expected_input":
     "⚠️ أكمل إعداد المهمة المجدولة الحالية أولًا بإرسال نص أو استخدام الزر في رسالة الموعد.",
-  "task.blocked.command_not_allowed":
-    "⚠️ لا يمكن استخدام هذا الأمر أثناء إنشاء مهمة مجدولة.",
+  "task.blocked.command_not_allowed": "⚠️ لا يمكن استخدام هذا الأمر أثناء إنشاء مهمة مجدولة.",
   "task.limit_reached": "⚠️ وصلت إلى الحد الأقصى للمهام ({limit}). احذف مهمة مجدولة أولًا.",
   "task.schedule_too_frequent":
     "الموعد المتكرر متقارب جدًا. أقل فترة مسموحة هي مرة واحدة كل 5 دقائق.",
@@ -452,8 +497,7 @@ export const ar: I18nDictionary = {
   "commands.no_description": "لا يوجد وصف",
   "commands.button.execute": "✅ تنفيذ",
   "commands.button.cancel": "❌ إلغاء",
-  "commands.confirm":
-    "أكد تنفيذ الأمر {command}. لتنفيذه مع وسيطات، أرسل الوسيطات كرسالة.",
+  "commands.confirm": "أكد تنفيذ الأمر {command}. لتنفيذه مع وسيطات، أرسل الوسيطات كرسالة.",
   "commands.inactive_callback": "انتهت صلاحية قائمة الأوامر",
   "commands.cancelled_callback": "تم الإلغاء",
   "commands.execute_callback": "جارٍ تنفيذ الأمر...",
@@ -480,8 +524,7 @@ export const ar: I18nDictionary = {
   "skills.no_description": "لا يوجد وصف",
   "skills.button.execute": "✅ تشغيل",
   "skills.button.cancel": "❌ إلغاء",
-  "skills.confirm":
-    "أكد تشغيل المهارة {skill}. لتشغيلها مع وسيطات، أرسل الوسيطات كرسالة.",
+  "skills.confirm": "أكد تشغيل المهارة {skill}. لتشغيلها مع وسيطات، أرسل الوسيطات كرسالة.",
   "skills.inactive_callback": "انتهت صلاحية قائمة المهارات",
   "skills.cancelled_callback": "تم الإلغاء",
   "skills.execute_callback": "جارٍ تشغيل المهارة...",
@@ -521,22 +564,67 @@ export const ar: I18nDictionary = {
 
   "stt.recognizing": "🎤 جارٍ تحويل الصوت إلى نص...",
   "stt.recognized": "🎤 النص المستخرج من الرسالة الصوتية:\n{text}",
-  "stt.not_configured": "🎤 ميزة تحويل الصوت إلى نص غير مهيأة بعد.\n\nاضبط STT_API_URL وSTT_API_KEY داخل ملف .env لتفعيلها.",
+  "stt.not_configured":
+    "🎤 ميزة تحويل الصوت إلى نص غير مهيأة بعد.\n\nاضبط STT_API_URL وSTT_API_KEY داخل ملف .env لتفعيلها.",
   "stt.error": "🔴 تعذر تحويل الصوت إلى نص: {error}",
   "stt.empty_result": "🎤 لم يتم التقاط كلام واضح في الرسالة الصوتية.",
 
   "worktree.branch_detached": "HEAD مفصول",
   "worktree.select_with_current": "اختر نسخة عمل (Git worktree):",
-  "worktree.project_not_selected": "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
-  "worktree.not_git_repo": "🌿 لا يمكن استخدام Git worktrees مع المشروع الحالي لأنه ليس مستودع Git.",
+  "worktree.project_not_selected":
+    "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
+  "worktree.not_git_repo":
+    "🌿 لا يمكن استخدام Git worktrees مع المشروع الحالي لأنه ليس مستودع Git.",
   "worktree.empty": "📭 لا توجد نسخ عمل (Git worktrees) لهذا المستودع.",
   "worktree.fetch_error": "🔴 تعذر تحميل نسخ العمل من Git.",
   "worktree.not_git_repo_callback": "المشروع الحالي ليس مستودع Git",
   "worktree.page_empty_callback": "لا توجد نسخ عمل في هذه الصفحة",
   "worktree.selection_missing_callback": "نسخة العمل المحددة لم تعد متاحة",
   "worktree.already_selected_callback": "نسخة العمل هذه محددة بالفعل",
-  "worktree.selected": "✅ تم اختيار نسخة العمل: {worktree}\n\n📋 تمت إعادة ضبط الجلسة الحالية. استخدم /sessions لاختيار جلسة أو /new للمتابعة.",
+  "worktree.selected":
+    "✅ تم اختيار نسخة العمل: {worktree}\n\n📋 تمت إعادة ضبط الجلسة الحالية. استخدم /sessions لاختيار جلسة أو /new للمتابعة.",
   "worktree.select_error": "🔴 تعذر اختيار نسخة العمل.",
+
+  "worktree_add.no_project":
+    "🏗 Project is not selected.\n\nFirst select a project with /projects.",
+  "worktree_add.not_git_repo": "🌿 Current project is not a git repository.",
+  "worktree_add.name_required":
+    "⚠️ Worktree name is required.\n\nUsage: /worktree_add <name>\nOr send the name as a message.",
+  "worktree_add.name_prompt": "🌿 Enter a name for the new worktree:",
+  "worktree_add.confirm": "🌿 Create a new worktree?\n\nName: {name}\nPath: {path}",
+  "worktree_add.confirm_no_path":
+    "🌿 Create a new worktree?\n\nName: {name}\nPath: auto (default)",
+  "worktree_add.button.create": "✅ Create",
+  "worktree_add.button.cancel": "❌ Cancel",
+  "worktree_add.button.switch": "🔄 Switch to it",
+  "worktree_add.creating": '⏳ Creating worktree "{name}"...',
+  "worktree_add.success": "✅ Worktree created successfully!\n\nName: {name}\nBranch: {api_branch}\nPath: {path}",
+  "worktree_add.error": "🔴 Failed to create worktree:\n{error}",
+  "worktree_add.error_generic": "🔴 An error occurred while creating the worktree.",
+  "worktree_add.cancelled": "❌ Worktree creation cancelled.",
+  "worktree_add.switched": "✅ Switched to new worktree: {path}",
+  "worktree_add.inactive": "⚠️ Worktree creation is not active. Run /worktree_add again.",
+  "worktree_add.inactive_callback": "This worktree creation flow is inactive",
+  "worktree_add.blocked.expected_input": "⚠️ Send the worktree name as a text message or tap Cancel.",
+  "worktree_add.blocked.command_not_allowed":
+    "⚠️ This command is not available while worktree creation is active.",
+  "worktree_add.fetch_error": "🔴 Failed to load worktrees after creation.",
+
+  "worktree.delete.confirmation":
+    "🗑️ Delete worktree?\n\nPath: {path}\nName: {name}\n\nThis action cannot be undone.",
+  "worktree.delete.button.yes": "✅ Yes, Delete",
+  "worktree.delete.button.no": "❌ Cancel",
+  "worktree.delete.success": "✅ Worktree deleted successfully: {path}",
+  "worktree.delete.error": "🔴 Failed to delete worktree: {error}",
+  "worktree.delete.error_generic": "🔴 An error occurred while deleting the worktree.",
+  "worktree.delete.cancelled": "❌ Worktree deletion cancelled.",
+  "worktree.delete.inactive": "⚠️ Worktree deletion is not active. Run /worktree delete again.",
+  "worktree.delete.inactive_callback": "This worktree deletion flow is inactive",
+  "worktree.delete.blocked.expected_input":
+    "⚠️ This worktree deletion has been cancelled. Use /worktree delete <name> to try again.",
+  "worktree.delete.blocked.command_not_allowed":
+    "⚠️ This command is not available while worktree deletion is active.",
+
   "open.back": "⬆️ مجلد سابق",
   "open.roots": "📋 العودة إلى المسارات الرئيسية",
   "open.prev_page": "⬅️ السابق",
@@ -546,7 +634,8 @@ export const ar: I18nDictionary = {
   "open.access_denied": "⛔ لا يمكن الوصول إلى هذا المسار لأنه خارج المجلدات المسموح بها",
   "open.scan_error": "🔴 تعذر استعراض المجلد: {error}",
   "open.open_error": "🔴 تعذر فتح مستعرض المجلدات.",
-  "open.selected": "✅ تمت إضافة المشروع: {project}\n\n📋 استخدم /sessions لاختيار جلسة أو /new لبدء العمل.",
+  "open.selected":
+    "✅ تمت إضافة المشروع: {project}\n\n📋 استخدم /sessions لاختيار جلسة أو /new لبدء العمل.",
   "open.select_error": "🔴 تعذر إضافة المشروع.",
   "open.no_subfolders": "📭 لا توجد مجلدات فرعية",
   "open.subfolder_count": "{count} مجلد فرعي",

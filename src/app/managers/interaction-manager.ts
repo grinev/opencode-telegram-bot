@@ -10,7 +10,12 @@ import { renameManager } from "./rename-manager.js";
 import { taskCreationManager } from "./scheduled-task-creation-manager.js";
 import { logger } from "../../utils/logger.js";
 
-export const DEFAULT_ALLOWED_INTERACTION_COMMANDS = ["/help", "/status", "/abort", "/detach"] as const;
+export const DEFAULT_ALLOWED_INTERACTION_COMMANDS = [
+  "/help",
+  "/status",
+  "/abort",
+  "/detach",
+] as const;
 
 function normalizeCommand(command: string): string | null {
   const trimmed = command.trim().toLowerCase();
