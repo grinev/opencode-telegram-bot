@@ -49,6 +49,7 @@ import {
   prepareAssistantStreamingPayload,
   renderAssistantFinalPartsSafe,
 } from "../messages/assistant-rendering.js";
+import { prepareThinkingStreamingPayload } from "../messages/thinking-rendering.js";
 import { deliverExternalUserInputNotification } from "../messages/external-user-input-notification.js";
 import {
   backgroundSessionTracker,
@@ -91,6 +92,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   private botInstance: Bot<Context> | null = null;
   private chatIdInstance: number | null = null;
   private nextDraftId = 1;
+  private readonly thinkingStreamingPayloads = new Map<string, StreamingMessagePayload>();
   private readonly sessionCompletionTasks = new Map<string, Promise<void>>();
   private readonly responseStreamer: ResponseStreamer;
   private readonly toolCallStreamer: ToolCallStreamer;
@@ -233,6 +235,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     this.responseStreamer.clearAll(reason);
     this.toolCallStreamer.clearAll(reason);
     this.toolMessageBatcher.clearAll(reason);
+    this.thinkingStreamingPayloads.clear();
     this.sessionCompletionTasks.clear();
     assistantRunState.clearAll(reason);
   }
@@ -262,6 +265,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       this.toolMessageBatcher.clearAll("summary_aggregator_clear");
       this.toolCallStreamer.clearAll("summary_aggregator_clear");
       this.responseStreamer.clearAll("summary_aggregator_clear");
+      this.thinkingStreamingPayloads.clear();
     });
 
     summaryAggregator.setOnPartial((sessionId, messageId, messageText) => {
@@ -291,6 +295,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           logger.error("Bot or chat ID not available for sending message");
           clearPromptResponseMode(sessionId);
           this.responseStreamer.clearMessage(sessionId, messageId, "bot_context_missing");
+          this.clearThinkingStream(sessionId, messageId, "bot_context_missing");
           this.toolCallStreamer.clearSession(sessionId, "bot_context_missing");
           assistantRunState.clearRun(sessionId, "bot_context_missing");
           foregroundSessionState.markIdle(sessionId);
@@ -301,6 +306,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         if (currentSession?.id !== sessionId) {
           clearPromptResponseMode(sessionId);
           this.responseStreamer.clearMessage(sessionId, messageId, "session_mismatch");
+          this.clearThinkingStream(sessionId, messageId, "session_mismatch");
           this.toolCallStreamer.clearSession(sessionId, "session_mismatch");
           assistantRunState.clearRun(sessionId, "session_mismatch");
           foregroundSessionState.markIdle(sessionId);
@@ -317,6 +323,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             providerID: completionInfo.providerID,
             modelID: completionInfo.modelID,
           });
+
+          await this.completeThinkingStream(sessionId, messageId);
 
           await finalizeAssistantResponse({
             sessionId,
@@ -349,6 +357,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           });
         } catch (err) {
           clearPromptResponseMode(sessionId);
+          this.clearThinkingStream(sessionId, messageId, "assistant_finalize_failed");
           assistantRunState.clearRun(sessionId, "assistant_finalize_failed");
           logger.error("Failed to send message to Telegram:", err);
           logger.error("[Bot] CRITICAL: Stopping event processing due to error");
@@ -551,25 +560,50 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       await showPermissionRequest(this.botInstance.api, this.chatIdInstance, request);
     });
 
-    summaryAggregator.setOnThinking(async (sessionId) => {
+    summaryAggregator.setOnThinking(async (update) => {
       if (!this.botInstance || !this.chatIdInstance) {
         return;
       }
 
       const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
+      if (!currentSession || currentSession.id !== update.sessionId) {
         return;
       }
 
-      logger.debug("[Bot] Agent started thinking");
-
-      await this.toolCallStreamer.breakSession(sessionId, "thinking_started");
-
-      deliverThinkingMessage(sessionId, this.toolMessageBatcher, {
-        hideThinkingMessages: config.bot.hideThinkingMessages,
+      logger.debug("[Bot] Agent thinking update", {
+        sessionId: update.sessionId,
+        messageId: update.messageId,
+        sectionCount: update.sections.length,
+        isFirstUpdate: update.isFirstUpdate,
       });
 
-      if (pinnedMessageManager.isInitialized()) {
+      if (update.isFirstUpdate) {
+        await this.toolCallStreamer.breakSession(update.sessionId, "thinking_started");
+      }
+
+      if (!config.bot.hideThinkingMessages && config.bot.showThinkingContent) {
+        const payload = prepareThinkingStreamingPayload(update.sections, RESPONSE_STREAM_TEXT_LIMIT);
+        if (payload) {
+          payload.sendOptions = { disable_notification: true };
+          payload.editOptions = undefined;
+
+          this.thinkingStreamingPayloads.set(
+            this.getThinkingPayloadKey(update.sessionId, update.messageId),
+            payload,
+          );
+          this.responseStreamer.enqueue(
+            update.sessionId,
+            this.getThinkingStreamId(update.messageId),
+            payload,
+          );
+        }
+      } else if (update.isFirstUpdate) {
+        deliverThinkingMessage(update.sessionId, this.toolMessageBatcher, {
+          hideThinkingMessages: config.bot.hideThinkingMessages,
+        });
+      }
+
+      if (update.isFirstUpdate && pinnedMessageManager.isInitialized()) {
         await pinnedMessageManager.refresh();
       }
     });
@@ -956,6 +990,47 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
   private prepareFinalStreamingPayload(messageText: string): StreamingMessagePayload | null {
     return prepareAssistantFinalStreamingPayload(messageText, RESPONSE_STREAM_TEXT_LIMIT);
+  }
+
+  private getThinkingStreamId(messageId: string): string {
+    return `thinking:${messageId}`;
+  }
+
+  private getThinkingPayloadKey(sessionId: string, messageId: string): string {
+    return `${sessionId}:${messageId}`;
+  }
+
+  private clearThinkingStream(sessionId: string, messageId: string, reason: string): void {
+    this.responseStreamer.clearMessage(sessionId, this.getThinkingStreamId(messageId), reason);
+    this.thinkingStreamingPayloads.delete(this.getThinkingPayloadKey(sessionId, messageId));
+  }
+
+  private async completeThinkingStream(sessionId: string, messageId: string): Promise<void> {
+    const key = this.getThinkingPayloadKey(sessionId, messageId);
+    const payload = this.thinkingStreamingPayloads.get(key);
+    const result = await this.responseStreamer.complete(
+      sessionId,
+      this.getThinkingStreamId(messageId),
+      payload,
+    );
+    this.thinkingStreamingPayloads.delete(key);
+
+    if (result.streamed || !payload) {
+      return;
+    }
+
+    if (!this.botInstance || !this.chatIdInstance) {
+      return;
+    }
+
+    for (const part of payload.parts) {
+      await sendRenderedBotPart({
+        api: this.botInstance.api,
+        chatId: this.chatIdInstance,
+        part,
+        options: payload.sendOptions as Parameters<typeof sendBotText>[0]["options"],
+      });
+    }
   }
 
   private enqueueSessionCompletionTask(sessionId: string, task: () => Promise<void>): Promise<void> {

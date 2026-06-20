@@ -18,12 +18,14 @@ describe("config boolean env parsing", () => {
 
   it("uses false defaults for hide service message flags", async () => {
     vi.stubEnv("HIDE_THINKING_MESSAGES", "");
+    vi.stubEnv("SHOW_THINKING_CONTENT", "");
     vi.stubEnv("HIDE_TOOL_CALL_MESSAGES", "");
     vi.stubEnv("HIDE_TOOL_FILE_MESSAGES", "");
 
     const config = await loadConfig();
 
     expect(config.bot.hideThinkingMessages).toBe(false);
+    expect(config.bot.showThinkingContent).toBe(false);
     expect(config.bot.hideToolCallMessages).toBe(false);
     expect(config.bot.hideToolFileMessages).toBe(false);
   });
@@ -54,36 +56,42 @@ describe("config boolean env parsing", () => {
 
   it("parses truthy values for hide service message flags", async () => {
     vi.stubEnv("HIDE_THINKING_MESSAGES", "YES");
+    vi.stubEnv("SHOW_THINKING_CONTENT", "1");
     vi.stubEnv("HIDE_TOOL_CALL_MESSAGES", "1");
     vi.stubEnv("HIDE_TOOL_FILE_MESSAGES", "true");
 
     const config = await loadConfig();
 
     expect(config.bot.hideThinkingMessages).toBe(true);
+    expect(config.bot.showThinkingContent).toBe(true);
     expect(config.bot.hideToolCallMessages).toBe(true);
     expect(config.bot.hideToolFileMessages).toBe(true);
   });
 
   it("parses falsy values for hide service message flags", async () => {
     vi.stubEnv("HIDE_THINKING_MESSAGES", "off");
+    vi.stubEnv("SHOW_THINKING_CONTENT", "false");
     vi.stubEnv("HIDE_TOOL_CALL_MESSAGES", "0");
     vi.stubEnv("HIDE_TOOL_FILE_MESSAGES", "false");
 
     const config = await loadConfig();
 
     expect(config.bot.hideThinkingMessages).toBe(false);
+    expect(config.bot.showThinkingContent).toBe(false);
     expect(config.bot.hideToolCallMessages).toBe(false);
     expect(config.bot.hideToolFileMessages).toBe(false);
   });
 
   it("falls back to defaults on invalid values", async () => {
     vi.stubEnv("HIDE_THINKING_MESSAGES", "banana");
+    vi.stubEnv("SHOW_THINKING_CONTENT", "maybe");
     vi.stubEnv("HIDE_TOOL_CALL_MESSAGES", "nope");
     vi.stubEnv("HIDE_TOOL_FILE_MESSAGES", "invalid");
 
     const config = await loadConfig();
 
     expect(config.bot.hideThinkingMessages).toBe(false);
+    expect(config.bot.showThinkingContent).toBe(false);
     expect(config.bot.hideToolCallMessages).toBe(false);
     expect(config.bot.hideToolFileMessages).toBe(false);
   });

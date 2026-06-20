@@ -32,6 +32,19 @@ type MessageCompleteCallback = (
 
 type MessagePartialCallback = (sessionId: string, messageId: string, messageText: string) => void;
 
+export interface ThinkingSection {
+  id: string;
+  title?: string;
+  text: string;
+}
+
+export interface ThinkingUpdate {
+  sessionId: string;
+  messageId: string;
+  sections: ThinkingSection[];
+  isFirstUpdate: boolean;
+}
+
 type ExternalUserInputCallback = (
   sessionId: string,
   messageId: string,
@@ -81,7 +94,7 @@ type QuestionCallback = (questions: Question[], requestID: string, sessionId: st
 
 type QuestionErrorCallback = () => void;
 
-type ThinkingCallback = (sessionId: string) => void;
+type ThinkingCallback = (update: ThinkingUpdate) => void;
 
 export interface TokensInfo {
   input: number;
@@ -153,6 +166,11 @@ interface TextMessageState {
   optimisticUpdateCount: number;
 }
 
+interface ThinkingMessageState {
+  orderedPartIds: string[];
+  sections: Map<string, ThinkingSection>;
+}
+
 interface SubagentState extends SubagentInfo {
   hasSubtaskMetadata: boolean;
   hasTaskToolMetadata: boolean;
@@ -207,6 +225,7 @@ function normalizeSnapshotValue(value: unknown): unknown {
 class SummaryAggregator {
   private currentSessionId: string | null = null;
   private textMessageStates: Map<string, TextMessageState> = new Map();
+  private thinkingMessageStates: Map<string, ThinkingMessageState> = new Map();
   private messages: Map<string, { role: string }> = new Map();
   private messageCount = 0;
   private lastUpdated = 0;
@@ -452,6 +471,7 @@ class SummaryAggregator {
     this.stopTypingIndicator();
     this.currentSessionId = null;
     this.textMessageStates.clear();
+    this.thinkingMessageStates.clear();
     this.messages.clear();
     this.partHashes.clear();
     this.knownTextPartIds.clear();
@@ -1187,6 +1207,14 @@ class SummaryAggregator {
       this.registerTextPart(messageID, part.id);
     }
 
+    if (part.type === "reasoning") {
+      this.registerThinkingPart(
+        messageID,
+        part.id,
+        this.extractReasoningTitle(part as unknown as Record<string, unknown>),
+      );
+    }
+
     const deltaFromUpdated = (event.properties as { delta?: unknown }).delta;
     if (
       part.type === "text" &&
@@ -1198,18 +1226,42 @@ class SummaryAggregator {
       return;
     }
 
+    if (
+      part.type === "reasoning" &&
+      typeof deltaFromUpdated === "string" &&
+      deltaFromUpdated.length > 0
+    ) {
+      const partText = "text" in part && typeof part.text === "string" ? part.text : undefined;
+      this.applyThinkingDelta(
+        part.sessionID,
+        messageID,
+        part.id,
+        deltaFromUpdated,
+        partText,
+        this.extractReasoningTitle(part as unknown as Record<string, unknown>),
+      );
+      this.lastUpdated = Date.now();
+      return;
+    }
+
     if (part.type === "reasoning") {
-      // Fire the thinking callback once per message on the first reasoning part.
-      // This is the signal that the model is actually doing extended thinking.
-      if (!this.thinkingFiredForMessages.has(messageID) && this.onThinkingCallback) {
+      // Fire the thinking callback on every reasoning update. The first update
+      // preserves the old lightweight indicator behavior for callers that do
+      // not display full reasoning content.
+      const isFirstUpdate = !this.thinkingFiredForMessages.has(messageID);
+      if (isFirstUpdate) {
         this.thinkingFiredForMessages.add(messageID);
-        const callback = this.onThinkingCallback;
-        const sessionID = part.sessionID;
-        setImmediate(() => {
-          if (typeof callback === "function") {
-            callback(sessionID);
-          }
-        });
+      }
+
+      const partText = "text" in part && typeof part.text === "string" ? part.text : "";
+      const wasUpdated = this.setThinkingPartSnapshot(
+        messageID,
+        part.id,
+        partText,
+        this.extractReasoningTitle(part as unknown as Record<string, unknown>),
+      );
+      if (isFirstUpdate || wasUpdated) {
+        this.emitThinkingUpdate(part.sessionID, messageID, isFirstUpdate);
       }
     } else if (part.type === "text" && "text" in part && part.text) {
       const wasUpdated =
@@ -1340,6 +1392,14 @@ class SummaryAggregator {
       return;
     }
 
+    if (partType === "reasoning" || (!partType && this.isKnownThinkingPart(messageID, partID))) {
+      const title = part
+        ? this.extractReasoningTitle(part as unknown as Record<string, unknown>)
+        : undefined;
+      this.applyThinkingDelta(sessionID, messageID, partID, delta, part?.text, title);
+      return;
+    }
+
     if (partType && partType !== "text") {
       return;
     }
@@ -1403,6 +1463,147 @@ class SummaryAggregator {
     this.emitPartialText(sessionID, messageID, combined);
   }
 
+  private extractReasoningTitle(part: Record<string, unknown>): string | undefined {
+    for (const key of ["title", "heading", "summary", "name"]) {
+      const value = part[key];
+      if (typeof value === "string" && value.trim()) {
+        return value;
+      }
+    }
+
+    const metadata = part.metadata;
+    if (metadata && typeof metadata === "object") {
+      for (const key of ["title", "heading", "summary", "name"]) {
+        const value = (metadata as Record<string, unknown>)[key];
+        if (typeof value === "string" && value.trim()) {
+          return value;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private getOrCreateThinkingMessageState(messageID: string): ThinkingMessageState {
+    let state = this.thinkingMessageStates.get(messageID);
+    if (!state) {
+      state = {
+        orderedPartIds: [],
+        sections: new Map(),
+      };
+      this.thinkingMessageStates.set(messageID, state);
+    }
+    return state;
+  }
+
+  private isKnownThinkingPart(messageID: string, partID: string): boolean {
+    return this.thinkingMessageStates.get(messageID)?.sections.has(partID) ?? false;
+  }
+
+  private registerThinkingPart(messageID: string, partID: string, title?: string): void {
+    const state = this.getOrCreateThinkingMessageState(messageID);
+    if (!state.orderedPartIds.includes(partID)) {
+      state.orderedPartIds.push(partID);
+    }
+
+    const existing = state.sections.get(partID);
+    if (!existing) {
+      const section: ThinkingSection = { id: partID, text: "" };
+      if (title) {
+        section.title = title;
+      }
+      state.sections.set(partID, section);
+      return;
+    }
+
+    if (title && existing.title !== title) {
+      existing.title = title;
+    }
+  }
+
+  private setThinkingPartSnapshot(
+    messageID: string,
+    partID: string,
+    text: string,
+    title?: string,
+  ): boolean {
+    this.registerThinkingPart(messageID, partID, title);
+
+    const state = this.getOrCreateThinkingMessageState(messageID);
+    const existing = state.sections.get(partID);
+    const nextTitle = title ?? existing?.title;
+
+    if (existing && existing.text === text && existing.title === nextTitle) {
+      return false;
+    }
+
+    const next: ThinkingSection = { id: partID, text };
+    if (nextTitle) {
+      next.title = nextTitle;
+    }
+    state.sections.set(partID, next);
+    return true;
+  }
+
+  private applyThinkingDelta(
+    sessionID: string,
+    messageID: string,
+    partID: string,
+    delta: string,
+    fullTextHint?: string,
+    title?: string,
+  ): void {
+    if (sessionID !== this.currentSessionId) {
+      return;
+    }
+
+    this.registerThinkingPart(messageID, partID, title);
+
+    const state = this.getOrCreateThinkingMessageState(messageID);
+    const existing = state.sections.get(partID);
+    const previous = existing?.text ?? "";
+    let accumulated = `${previous}${delta}`;
+
+    if (typeof fullTextHint === "string" && fullTextHint.length > accumulated.length) {
+      accumulated = fullTextHint;
+    }
+
+    this.setThinkingPartSnapshot(messageID, partID, accumulated, title ?? existing?.title);
+    this.emitThinkingUpdate(sessionID, messageID, false);
+  }
+
+  private getThinkingSections(messageID: string): ThinkingSection[] {
+    const state = this.thinkingMessageStates.get(messageID);
+    if (!state) {
+      return [];
+    }
+
+    return state.orderedPartIds
+      .map((partID) => state.sections.get(partID))
+      .filter((section): section is ThinkingSection => Boolean(section))
+      .map((section) => ({ ...section }));
+  }
+
+  private emitThinkingUpdate(
+    sessionId: string,
+    messageId: string,
+    isFirstUpdate: boolean,
+  ): void {
+    if (!this.onThinkingCallback) {
+      return;
+    }
+
+    const sections = this.getThinkingSections(messageId);
+    if (sections.length === 0) {
+      return;
+    }
+
+    const callback = this.onThinkingCallback;
+    setImmediate(() => {
+      callback({ sessionId, messageId, sections, isFirstUpdate });
+    });
+  }
+
   private emitExternalUserInputIfReady(sessionId: string, messageId: string): void {
     if (sessionId !== this.currentSessionId || this.deliveredExternalUserMessageIds.has(messageId)) {
       return;
@@ -1435,6 +1636,7 @@ class SummaryAggregator {
 
   private cleanupCompletedMessage(messageId: string): void {
     this.textMessageStates.delete(messageId);
+    this.thinkingMessageStates.delete(messageId);
     this.messages.delete(messageId);
     this.partHashes.delete(messageId);
     this.knownTextPartIds.delete(messageId);

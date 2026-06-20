@@ -59,7 +59,7 @@ No public inbound ports are required for normal usage.
 ### Result delivery
 
 - Send each completed assistant response after completion signal from SSE
-- Do not expose raw chain-of-thought; send a lightweight thinking indicator instead
+- Hide full model reasoning by default; optionally stream it in the thinking message when explicitly enabled
 - Split long responses into multiple Telegram messages
 - Send code updates as files (size-limited)
 
@@ -86,6 +86,7 @@ No public inbound ports are required for normal usage.
 - Configurable scheduled task limit (default: 10)
 - Configurable bot locale
 - Configurable visibility for service messages (thinking/tool calls)
+- Configurable opt-in display of full thinking/reasoning content
 - Configurable max code file size in KB (default: 100)
 - Optional STT settings for voice transcription (`STT_API_URL`, `STT_API_KEY`, `STT_MODEL`, `STT_LANGUAGE`)
 - Optional TTS settings for global audio replies (`TTS_PROVIDER`, `TTS_API_URL`, `TTS_API_KEY`, `TTS_MODEL`, `TTS_VOICE`)
