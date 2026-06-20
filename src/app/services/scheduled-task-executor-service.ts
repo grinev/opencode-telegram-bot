@@ -12,6 +12,8 @@ export const SCHEDULED_TASK_AGENT = "build";
 const SCHEDULED_TASK_SESSION_TITLE = "Scheduled task run";
 const EXECUTION_POLL_INTERVAL_MS = 2000;
 const MAX_IDLE_POLLS_WITHOUT_RESULT = 3;
+// Grace period for the server to start the session before any activity is seen.
+const MAX_STARTUP_POLLS_WITHOUT_ACTIVITY = 45;
 const COMPLETED_EMPTY_RESULT_RECHECK_INTERVAL_MS = 500;
 const MAX_COMPLETED_EMPTY_RESULT_RECHECKS = 3;
 const MODELS_DOCS_URL = "https://opencode.ai/docs/config/#models";
@@ -426,6 +428,8 @@ async function waitForScheduledTaskResult(
   const startedAtMs = Date.now();
   const executionTimeoutMs = getExecutionTimeoutMs();
   let idlePollsWithoutResult = 0;
+  let startupPollsWithoutActivity = 0;
+  let hasObservedActivity = false;
   let completedEmptyResultReadCount = 0;
 
   while (true) {
@@ -472,7 +476,13 @@ async function waitForScheduledTaskResult(
     }
 
     const sessionStatus = statuses[sessionId];
-    if (!sessionStatus || sessionStatus.type === "idle") {
+    const sessionIsActive = sessionStatus !== undefined && sessionStatus.type !== "idle";
+
+    if (sessionIsActive) {
+      hasObservedActivity = true;
+      idlePollsWithoutResult = 0;
+      startupPollsWithoutActivity = 0;
+    } else {
       const confirmedAssistantResult = await loadAssistantResult(sessionId, directory);
 
       if (confirmedAssistantResult.errorMessage) {
@@ -500,12 +510,17 @@ async function waitForScheduledTaskResult(
         continue;
       }
 
-      idlePollsWithoutResult += 1;
-      if (idlePollsWithoutResult >= MAX_IDLE_POLLS_WITHOUT_RESULT) {
-        throw new Error("Scheduled task finished without a completed assistant response");
+      if (hasObservedActivity) {
+        idlePollsWithoutResult += 1;
+        if (idlePollsWithoutResult >= MAX_IDLE_POLLS_WITHOUT_RESULT) {
+          throw new Error("Scheduled task finished without a completed assistant response");
+        }
+      } else {
+        startupPollsWithoutActivity += 1;
+        if (startupPollsWithoutActivity >= MAX_STARTUP_POLLS_WITHOUT_ACTIVITY) {
+          throw new Error("Scheduled task did not start producing a response in time");
+        }
       }
-    } else {
-      idlePollsWithoutResult = 0;
     }
 
     await sleep(EXECUTION_POLL_INTERVAL_MS);

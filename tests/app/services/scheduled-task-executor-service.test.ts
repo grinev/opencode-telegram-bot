@@ -331,6 +331,51 @@ describe("app/services/scheduled-task-executor-service", () => {
     expect(mocked.deleteMock).toHaveBeenCalledWith({ sessionID: "session-1" });
   });
 
+  it("waits through startup before the server registers the session as active", async () => {
+    const { executeScheduledTask } = await import("../../../src/app/services/scheduled-task-executor-service.js");
+
+    mocked.createMock.mockResolvedValueOnce({
+      data: { id: "session-1", directory: "D:\\Projects\\Repo", title: "Scheduled task run" },
+      error: null,
+    });
+    mocked.promptAsyncMock.mockResolvedValueOnce({ data: undefined, error: null });
+
+    mocked.messagesMock.mockResolvedValue({
+      data: [createAssistantMessage("Started late but finished", { completed: true })],
+      error: null,
+    });
+    for (let index = 0; index < 7; index += 1) {
+      mocked.messagesMock.mockResolvedValueOnce({ data: [], error: null });
+    }
+
+    mocked.statusMock.mockResolvedValue({
+      data: { "session-1": { type: "busy" } },
+      error: null,
+    });
+    mocked.statusMock
+      .mockResolvedValueOnce({ data: {}, error: null })
+      .mockResolvedValueOnce({ data: {}, error: null })
+      .mockResolvedValueOnce({ data: {}, error: null });
+
+    vi.useFakeTimers();
+
+    const resultPromise = executeScheduledTask(createTask());
+
+    await vi.advanceTimersByTimeAsync(12000);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      taskId: "task-1",
+      status: "success",
+      resultText: "Started late but finished",
+      errorMessage: null,
+    });
+    expect(mocked.statusMock.mock.calls.length).toBeGreaterThan(3);
+    expect(mocked.loggerWarnMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("Scheduled task finished without a completed assistant response"),
+    );
+    expect(mocked.deleteMock).toHaveBeenCalledWith({ sessionID: "session-1" });
+  });
+
   it("treats an empty completed assistant reply as an execution error", async () => {
     const { executeScheduledTask } = await import("../../../src/app/services/scheduled-task-executor-service.js");
 
