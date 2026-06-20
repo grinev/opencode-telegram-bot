@@ -26,7 +26,6 @@ export const ar: I18nDictionary = {
   "cmd.description.opencode_stop": "إيقاف خادم OpenCode",
   "cmd.description.ls": "استعراض ملفات المجلد",
   "cmd.description.help": "المساعدة",
-  "cmd.description.rename": "تغيير اسم الجلسة الحالية",
   "cmd.description.open": "إضافة مشروع عبر استعراض المجلدات",
 
   "callback.unknown_command": "الأمر غير معروف",
@@ -150,6 +149,24 @@ export const ar: I18nDictionary = {
   "sessions.preview.title": "أحدث الرسائل:",
   "sessions.preview.you": "أنت:",
   "sessions.preview.agent": "الوكيل:",
+  "sessions.button.select": "✅ اختيار",
+  "sessions.button.rename": "✏️ إعادة تسمية",
+  "sessions.button.delete": "🗑 حذف",
+  "sessions.button.close": "✖ إغلاق",
+  "sessions.current_session": "محددة بالفعل",
+  "sessions.rename.prompt": "📝 أدخل عنوانًا جديدًا:\n\nالحالي: {title}",
+  "sessions.rename.cancel": "❌ إلغاء",
+  "sessions.rename.empty": "⚠️ لا يمكن أن يكون العنوان فارغًا.",
+  "sessions.rename.success": "✅ تمت إعادة تسمية الجلسة إلى: {title}",
+  "sessions.rename.error": "🔴 تعذر إعادة تسمية الجلسة.",
+  "sessions.delete.confirm":
+    "⚠️ حذف الجلسة\n\n\"{title}\"\nستتم إزالة كل الرسائل والسجل نهائيًا.",
+  "sessions.delete.yes": "✅ نعم، احذف",
+  "sessions.delete.no": "❌ لا",
+  "sessions.delete.success": "✅ تم حذف الجلسة: {title}",
+  "sessions.delete.not_found": "🔴 لم يتم العثور على الجلسة. ربما حُذفت بالفعل.",
+  "sessions.delete.error": "🔴 تعذر حذف الجلسة.",
+  "sessions.deleted_external": "🗑 تم حذف الجلسة: {title}\nتم قطع اتصالك بها.",
 
   "messages.project_not_selected": "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
   "messages.session_not_selected": "💬 لم تحدد جلسة بعد.\n\nاختر جلسة باستخدام /sessions أو ابدأ جلسة جديدة باستخدام /new.",
@@ -384,20 +401,6 @@ export const ar: I18nDictionary = {
   "runtime.wizard.not_configured_starting": "لم يتم إعداد التطبيق بعد. جارٍ تشغيل معالج الإعداد...\n",
   "runtime.wizard.tty_required":
     "يتطلب معالج الإعداد التفاعلي طرفية TTY. شغّل `opencode-telegram config` في shell تفاعلية.",
-
-  "rename.no_session": "⚠️ لا توجد جلسة نشطة. أنشئ جلسة أو اختر واحدة أولًا.",
-  "rename.prompt": "📝 أدخل عنوانًا جديدًا للجلسة:\n\nالحالي: {title}",
-  "rename.empty_title": "⚠️ لا يمكن أن يكون العنوان فارغًا.",
-  "rename.success": "✅ تمت إعادة تسمية الجلسة إلى: {title}",
-  "rename.error": "🔴 تعذر تغيير اسم الجلسة.",
-  "rename.cancelled": "❌ تم إلغاء تغيير الاسم.",
-  "rename.inactive_callback": "انتهت صلاحية طلب تغيير الاسم",
-  "rename.inactive": "⚠️ طلب تغيير الاسم غير نشط. شغّل /rename مرة أخرى.",
-  "rename.blocked.expected_name":
-    "⚠️ أدخل اسم الجلسة الجديد كنص أو اضغط إلغاء في رسالة تغيير الاسم.",
-  "rename.blocked.command_not_allowed":
-    "⚠️ لا يمكن استخدام هذا الأمر أثناء انتظار اسم جديد للجلسة.",
-  "rename.button.cancel": "❌ إلغاء",
 
   "task.prompt.schedule":
     "⏰ أرسل موعد المهمة بلغة طبيعية.\n\nأمثلة:\n- كل 5 دقائق\n- كل يوم الساعة 17:00\n- غدًا الساعة 12:00",

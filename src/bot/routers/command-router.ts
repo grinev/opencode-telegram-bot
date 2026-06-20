@@ -14,7 +14,6 @@ import { abortCommand } from "../commands/abort-command.js";
 import { detachCommand } from "../commands/detach-command.js";
 import { taskCommand } from "../commands/task-command.js";
 import { taskListCommand } from "../commands/tasklist-command.js";
-import { renameCommand } from "../commands/rename-command.js";
 import { commandsCommand } from "../commands/command-catalog-command.js";
 import { skillsCommand } from "../commands/skills-catalog-command.js";
 import { mcpsCommand } from "../commands/mcp-catalog-command.js";
@@ -77,7 +76,6 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
   bot.command("detach", detachCommand);
   bot.command("task", taskCommand);
   bot.command("tasklist", taskListCommand);
-  bot.command("rename", renameCommand);
   bot.command("commands", commandsCommand);
   bot.command("skills", skillsCommand);
   bot.command("mcps", mcpsCommand);

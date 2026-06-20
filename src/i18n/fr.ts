@@ -176,6 +176,26 @@ export const fr: I18nDictionary = {
   "sessions.preview.title": "Messages récents :",
   "sessions.preview.you": "Vous :",
   "sessions.preview.agent": "Agent :",
+  "sessions.button.select": "✅ Sélectionner",
+  "sessions.button.rename": "✏️ Renommer",
+  "sessions.button.delete": "🗑 Supprimer",
+  "sessions.button.close": "✖ Fermer",
+  "sessions.current_session": "Déjà sélectionnée",
+  "sessions.rename.prompt": "📝 Entrez le nouveau titre :\n\nActuel : {title}",
+  "sessions.rename.cancel": "❌ Annuler",
+  "sessions.rename.empty": "⚠️ Le titre ne peut pas être vide.",
+  "sessions.rename.success": "✅ Session renommée en : {title}",
+  "sessions.rename.error": "🔴 Échec du renommage de la session.",
+  "sessions.delete.confirm":
+    '⚠️ Supprimer la session\n\n"{title}"\nTous les messages et l\'historique seront définitivement supprimés.',
+  "sessions.delete.yes": "✅ Oui, supprimer",
+  "sessions.delete.no": "❌ Non",
+  "sessions.delete.success": "✅ Session supprimée : {title}",
+  "sessions.delete.not_found":
+    "🔴 Session introuvable. Elle a peut-être déjà été supprimée.",
+  "sessions.delete.error": "🔴 Échec de la suppression de la session.",
+  "sessions.deleted_external":
+    "🗑 La session a été supprimée : {title}\nVous avez été détaché.",
 
   "messages.project_not_selected":
     "🏗 Aucun projet sélectionné.\n\nSélectionnez d'abord un projet avec /projects.",
@@ -444,20 +464,6 @@ export const fr: I18nDictionary = {
   "runtime.wizard.tty_required":
     "L'assistant interactif nécessite un terminal TTY. Exécutez `opencode-telegram config` dans un shell interactif.",
 
-  "rename.no_session": "⚠️ Aucune session active. Créez ou sélectionnez d'abord une session.",
-  "rename.prompt": "📝 Entrez le nouveau titre de la session :\n\nActuel : {title}",
-  "rename.empty_title": "⚠️ Le titre ne peut pas être vide.",
-  "rename.success": "✅ Session renommée en : {title}",
-  "rename.error": "🔴 Impossible de renommer la session.",
-  "rename.cancelled": "❌ Renommage annulé.",
-  "rename.inactive_callback": "La demande de renommage est inactive",
-  "rename.inactive": "⚠️ La demande de renommage n'est pas active. Exécutez /rename à nouveau.",
-  "rename.blocked.expected_name":
-    "⚠️ Entrez le nouveau nom de la session sous forme de texte ou appuyez sur Annuler dans le message de renommage.",
-  "rename.blocked.command_not_allowed":
-    "⚠️ Cette commande n'est pas disponible tant que le renommage attend un nouveau nom.",
-  "rename.button.cancel": "❌ Annuler",
-
   "task.prompt.schedule":
     "⏰ Envoyez le planning de la tâche en langage naturel.\n\nExemples :\n- toutes les 5 minutes\n- chaque jour à 17:00\n- demain à 12:00",
   "task.schedule_empty": "⚠️ Le planning ne peut pas être vide.",
@@ -575,8 +581,6 @@ export const fr: I18nDictionary = {
   "mcps.button.disable": "🔴 Disable",
   "mcps.button.back": "⬅️ Back",
   "mcps.auth_required": "This server requires authorization and cannot be enabled from the bot.",
-
-  "cmd.description.rename": "Renommer la session actuelle",
 
   "legacy.models.fetch_error":
     "🔴 Impossible de récupérer la liste des modèles. Vérifiez l'état du serveur avec /status.",

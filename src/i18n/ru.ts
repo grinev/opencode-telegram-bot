@@ -167,6 +167,25 @@ export const ru: I18nDictionary = {
   "sessions.preview.title": "Последние сообщения:",
   "sessions.preview.you": "Вы:",
   "sessions.preview.agent": "Агент:",
+  "sessions.button.select": "✅ Выбрать",
+  "sessions.button.rename": "✏️ Переименовать",
+  "sessions.button.delete": "🗑 Удалить",
+  "sessions.button.close": "✖ Закрыть",
+  "sessions.current_session": "Уже выбрана",
+  "sessions.rename.prompt": "📝 Введите новый заголовок:\n\nТекущий: {title}",
+  "sessions.rename.cancel": "❌ Отмена",
+  "sessions.rename.empty": "⚠️ Заголовок не может быть пустым.",
+  "sessions.rename.success": "✅ Сессия переименована в: {title}",
+  "sessions.rename.error": "🔴 Не удалось переименовать сессию.",
+  "sessions.delete.confirm":
+    '⚠️ Удалить сессию\n\n"{title}"\nВсе сообщения и история будут удалены безвозвратно.',
+  "sessions.delete.yes": "✅ Да, удалить",
+  "sessions.delete.no": "❌ Нет",
+  "sessions.delete.success": "✅ Сессия удалена: {title}",
+  "sessions.delete.not_found":
+    "🔴 Сессия не найдена. Возможно, она уже была удалена.",
+  "sessions.delete.error": "🔴 Не удалось удалить сессию.",
+  "sessions.deleted_external": "🗑 Сессия была удалена: {title}\nВы были отсоединены.",
 
   "messages.project_not_selected":
     "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
@@ -426,20 +445,6 @@ export const ru: I18nDictionary = {
   "runtime.wizard.tty_required":
     "Интерактивный wizard требует TTY-терминал. Запустите `opencode-telegram config` в интерактивной оболочке.",
 
-  "rename.no_session": "⚠️ Нет активной сессии. Сначала создайте или выберите сессию.",
-  "rename.prompt": "📝 Введите новое название сессии:\n\nТекущее: {title}",
-  "rename.empty_title": "⚠️ Название не может быть пустым.",
-  "rename.success": "✅ Сессия переименована в: {title}",
-  "rename.error": "🔴 Не удалось переименовать сессию.",
-  "rename.cancelled": "❌ Переименование отменено.",
-  "rename.inactive_callback": "Запрос переименования неактивен",
-  "rename.inactive": "⚠️ Запрос переименования неактивен. Выполните /rename снова.",
-  "rename.blocked.expected_name":
-    "⚠️ Введите новое название текстом или нажмите Отмена в сообщении переименования.",
-  "rename.blocked.command_not_allowed":
-    "⚠️ Эта команда недоступна, пока ожидается новое название сессии.",
-  "rename.button.cancel": "❌ Отмена",
-
   "task.prompt.schedule":
     "⏰ Отправьте расписание задачи обычным языком.\n\nПримеры:\n- каждые 5 минут\n- каждый день в 17:00\n- завтра в 12:00",
   "task.schedule_empty": "⚠️ Расписание не может быть пустым.",
@@ -559,8 +564,6 @@ export const ru: I18nDictionary = {
   "mcps.button.disable": "🔴 Выключить",
   "mcps.button.back": "⬅️ Назад",
   "mcps.auth_required": "Этот сервер требует авторизации и не может быть включен из бота.",
-
-  "cmd.description.rename": "Переименовать текущую сессию",
 
   "legacy.models.fetch_error":
     "🔴 Не удалось получить список моделей. Проверьте статус сервера /status.",

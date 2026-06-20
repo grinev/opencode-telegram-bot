@@ -1,6 +1,6 @@
 import { Context } from "grammy";
-import { selectAgent } from "../../app/services/agent-selection-service.js";
-import { getStoredModel } from "../../app/services/model-selection-service.js";
+import { selectAgent, getModelForAgent } from "../../app/services/agent-selection-service.js";
+import { getStoredModel, selectModel } from "../../app/services/model-selection-service.js";
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { getAgentDisplayName } from "../../app/types/agent.js";
 import { logger } from "../../utils/logger.js";
@@ -43,7 +43,16 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
     // Select agent and persist
     selectAgent(agentName);
 
-    // Update keyboard manager state
+    const agentModel = await getModelForAgent(agentName);
+    if (agentModel) {
+      selectModel({
+        providerID: agentModel.providerID,
+        modelID: agentModel.modelID,
+        variant: "default",
+      });
+      await pinnedMessageManager.refreshContextLimit();
+    }
+
     keyboardManager.updateAgent(agentName);
 
     // Update Reply Keyboard with new agent, current model, and context

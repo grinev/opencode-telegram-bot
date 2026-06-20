@@ -1,4 +1,9 @@
-import { getCurrentModel, setCurrentModel } from "../stores/settings-store.js";
+import {
+  getCurrentModel,
+  getCurrentProject,
+  getCurrentSession,
+  setCurrentModel,
+} from "../stores/settings-store.js";
 import { config } from "../../config.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { logger } from "../../utils/logger.js";
@@ -441,6 +446,61 @@ export async function searchModels(query: string): Promise<FavoriteModel[]> {
  */
 export function fetchCurrentModel(): ModelInfo {
   return getStoredModel();
+}
+
+export async function fetchCurrentModelFromSession(): Promise<ModelInfo> {
+  const storedModel = getStoredModel();
+  const session = getCurrentSession();
+  const project = getCurrentProject();
+
+  if (!session || !project) {
+    return storedModel;
+  }
+
+  try {
+    const { data: messages, error } = await opencodeClient.session.messages({
+      sessionID: session.id,
+      directory: project.worktree,
+      limit: 1,
+    });
+
+    if (error || !messages || messages.length === 0) {
+      logger.debug("[ModelManager] No messages found, using stored model");
+      return storedModel;
+    }
+
+    const messageInfo = messages[0].info;
+    const providerID =
+      messageInfo.role === "user" ? messageInfo.model.providerID : messageInfo.providerID;
+    const modelID = messageInfo.role === "user" ? messageInfo.model.modelID : messageInfo.modelID;
+
+    if (!providerID || !modelID) {
+      logger.debug("[ModelManager] Session message has no model info, using stored model");
+      return storedModel;
+    }
+
+    const sessionModel: ModelInfo = {
+      providerID,
+      modelID,
+      variant: storedModel.variant || "default",
+    };
+    const sessionModelKey = getModelKey(sessionModel.providerID, sessionModel.modelID);
+    const storedModelKey = getModelKey(storedModel.providerID, storedModel.modelID);
+
+    if (storedModelKey === sessionModelKey) {
+      logger.debug(`[ModelManager] Session model matches stored: ${sessionModelKey}`);
+      return storedModel;
+    }
+
+    logger.info(
+      `[ModelManager] Syncing model from session: ${sessionModelKey} (was ${storedModelKey})`,
+    );
+    selectModel(sessionModel);
+    return sessionModel;
+  } catch (err) {
+    logger.error("[ModelManager] Error fetching model from session:", err);
+    return storedModel;
+  }
 }
 
 /**

@@ -6,7 +6,6 @@ import type {
 } from "../types/interaction.js";
 import { permissionManager } from "./permission-manager.js";
 import { questionManager } from "./question-manager.js";
-import { renameManager } from "./rename-manager.js";
 import { taskCreationManager } from "./scheduled-task-creation-manager.js";
 import { logger } from "../../utils/logger.js";
 
@@ -159,27 +158,24 @@ export const interactionManager = new InteractionManager();
 export function clearAllInteractionState(reason: string): void {
   const questionActive = questionManager.isActive();
   const permissionActive = permissionManager.isActive();
-  const renameActive = renameManager.isWaitingForName();
   const taskCreationActive = taskCreationManager.isActive();
   const interactionSnapshot = interactionManager.getSnapshot();
 
   questionManager.clear();
   permissionManager.clear();
-  renameManager.clear();
   taskCreationManager.clear();
   interactionManager.clear(reason);
 
   const hasAnyActiveState =
     questionActive ||
     permissionActive ||
-    renameActive ||
     taskCreationActive ||
     interactionSnapshot !== null;
 
   const message =
     `[InteractionCleanup] Cleared state: reason=${reason}, ` +
     `questionActive=${questionActive}, permissionActive=${permissionActive}, ` +
-    `renameActive=${renameActive}, taskCreationActive=${taskCreationActive}, ` +
+    `taskCreationActive=${taskCreationActive}, ` +
     `interactionKind=${interactionSnapshot?.kind || "none"}`;
 
   if (hasAnyActiveState) {
