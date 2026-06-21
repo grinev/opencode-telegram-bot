@@ -1,6 +1,7 @@
 import { config } from "../../config.js";
 import { logger } from "../../utils/logger.js";
 import textToSpeech from "@google-cloud/text-to-speech";
+import { synthesizeWithEdgeTts } from "./edge-tts.js";
 
 const TTS_REQUEST_TIMEOUT_MS = 60_000;
 const MAX_TTS_INPUT_CHARS = 4_000;
@@ -28,6 +29,9 @@ export type PreparedTtsResponse =
 export function isTtsConfigured(): boolean {
   if (config.tts.provider === "google") {
     return Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+  }
+  if (config.tts.provider === "edge") {
+    return true;
   }
   return Boolean(config.tts.apiUrl && config.tts.apiKey);
 }
@@ -203,6 +207,22 @@ async function synthesizeWithElevenLabs(text: string): Promise<TtsResult> {
   }
 }
 
+async function synthesizeWithEdge(text: string): Promise<TtsResult> {
+  const voice = config.tts.voice || "en-US-EmmaMultilingualNeural";
+
+  logger.debug(
+    `[TTS] Edge: voice=${voice}, chars=${text.length}`,
+  );
+
+  const buffer = await synthesizeWithEdgeTts(text, { voice });
+  if (buffer.length === 0) {
+    throw new Error("Edge TTS returned an empty audio response");
+  }
+
+  logger.debug(`[TTS] Generated Edge speech audio: ${buffer.length} bytes`);
+  return { buffer, filename: "assistant-reply.mp3", mimeType: "audio/mpeg" };
+}
+
 // --- Public API ---
 
 function getNotConfiguredMessage(): string {
@@ -211,6 +231,9 @@ function getNotConfiguredMessage(): string {
   }
   if (config.tts.provider === "elevenlabs") {
     return "TTS is not configured: set TTS_API_URL and TTS_API_KEY for ElevenLabs";
+  }
+  if (config.tts.provider === "edge") {
+    return "Edge TTS is unavailable: requires network access to speech.platform.bing.com";
   }
   return "TTS is not configured: set TTS_API_URL and TTS_API_KEY";
 }
@@ -233,6 +256,9 @@ export async function synthesizeSpeech(text: string): Promise<TtsResult> {
     }
     if (config.tts.provider === "elevenlabs") {
       return await synthesizeWithElevenLabs(input);
+    }
+    if (config.tts.provider === "edge") {
+      return await synthesizeWithEdge(input);
     }
     return await synthesizeWithOpenAi(input);
   } catch (err) {

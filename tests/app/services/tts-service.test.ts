@@ -26,6 +26,11 @@ vi.mock("@google-cloud/text-to-speech", () => {
   };
 });
 
+const mockEdgeSynth = vi.hoisted(() => vi.fn());
+vi.mock("../../../src/app/services/edge-tts.js", () => ({
+  synthesizeWithEdgeTts: mockEdgeSynth,
+}));
+
 const mockTts = vi.hoisted(() => ({
   apiUrl: "",
   apiKey: "",
@@ -108,6 +113,13 @@ describe("isTtsConfigured", () => {
     mockTts.provider = "elevenlabs";
     mockTts.apiUrl = "https://api.elevenlabs.io/v1";
     mockTts.apiKey = "xi-test-key";
+    expect(isTtsConfigured()).toBe(true);
+  });
+
+  it("returns true for edge provider (no credentials required)", () => {
+    mockTts.provider = "edge";
+    mockTts.apiUrl = "";
+    mockTts.apiKey = "";
     expect(isTtsConfigured()).toBe(true);
   });
 });
@@ -434,5 +446,44 @@ describe("synthesizeSpeech (ElevenLabs)", () => {
     await expect(synthesizeSpeech("Hello world")).rejects.toThrow(
       "TTS API returned HTTP 404: Voice not found",
     );
+  });
+});
+
+describe("synthesizeSpeech (Edge)", () => {
+  beforeEach(() => {
+    mockTts.provider = "edge";
+    mockTts.voice = "en-US-EmmaMultilingualNeural";
+    mockTts.apiUrl = "";
+    mockTts.apiKey = "";
+    mockEdgeSynth.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it("delegates to synthesizeWithEdgeTts and returns mp3 bytes", async () => {
+    mockEdgeSynth.mockResolvedValue(Buffer.from([1, 2, 3, 4]));
+
+    const result = await synthesizeSpeech("Hello **bold** world");
+
+    expect(mockEdgeSynth).toHaveBeenCalledOnce();
+    const [text, options] = mockEdgeSynth.mock.calls[0];
+    // Markdown is stripped before being passed to the provider.
+    expect(text).toBe("Hello bold world");
+    expect(options.voice).toBe("en-US-EmmaMultilingualNeural");
+
+    expect(result.filename).toBe("assistant-reply.mp3");
+    expect(result.mimeType).toBe("audio/mpeg");
+    expect(result.buffer).toEqual(Buffer.from([1, 2, 3, 4]));
+  });
+
+  it("throws when Edge returns an empty audio buffer", async () => {
+    mockEdgeSynth.mockResolvedValue(Buffer.alloc(0));
+
+    await expect(synthesizeSpeech("Hello")).rejects.toThrow("empty audio response");
+  });
+
+  it("propagates upstream Edge errors", async () => {
+    mockEdgeSynth.mockRejectedValue(new Error("Edge TTS: no audio received"));
+
+    await expect(synthesizeSpeech("Hello")).rejects.toThrow("no audio received");
   });
 });
