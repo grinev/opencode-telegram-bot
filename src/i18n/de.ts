@@ -318,6 +318,24 @@ export const de: I18nDictionary = {
   "model.search.no_results": 'Keine Modelle gefunden für "{query}"',
   "model.search.search_again": "↩ Erneut suchen",
   "model.search.error": "Suche fehlgeschlagen",
+  "model.picker.button.prev_page": "⬅️ Zurück",
+  "model.picker.button.next_page": "Weiter ➡️",
+  "model.picker.page_indicator": "Page {current}/{total}",
+
+  "models.select_mode": "📋 Select listing mode:",
+  "models.mode.all": "All configured",
+  "models.mode.favorites_recent": "⭐ Favorites + Recent",
+  "models.mode.all_header": "All configured models:",
+  "models.mode.favorites_recent_header": "Favorites + Recent:",
+  "models.unknown_mode": "Unknown listing mode.",
+  "models.empty": "📭 No models available.",
+  "models.fetch_error": "🔴 Failed to load models.",
+  "models.search.button": "🔍 Suche",
+  "models.search.clear_filter": "✕ Filter löschen",
+  "models.search.error": "🔴 Suche fehlgeschlagen",
+  "models.search.no_results": 'Keine Modelle gefunden für "{query}"',
+  "models.search.prompt": "🔍 Modellnamen oder Anbieter zum Filtern eingeben:",
+  "models.search.results_header": 'Suchergebnisse für "{query}":',
 
   "variant.model_not_selected_callback": "Fehler: Modell ist nicht ausgewählt",
   "variant.changed_callback": "Variante geändert: {name}",
@@ -587,6 +605,7 @@ export const de: I18nDictionary = {
   "mcps.auth_required": "This server requires authorization and cannot be enabled from the bot.",
 
   "cmd.description.rename": "Aktuelle Sitzung umbenennen",
+  "cmd.description.worktree_add": "Create a new git worktree",
 
   "legacy.models.fetch_error":
     "🔴 Modellliste konnte nicht geladen werden. Prüfe den Serverstatus mit /status.",
@@ -619,6 +638,47 @@ export const de: I18nDictionary = {
   "worktree.selected":
     "✅ Worktree ausgewählt: {worktree}\n\n📋 Die Sitzung wurde zurückgesetzt. Nutze /sessions oder /new, um fortzufahren.",
   "worktree.select_error": "🔴 Worktree konnte nicht ausgewählt werden.",
+
+  "worktree_add.no_project":
+    "🏗 Project is not selected.\n\nFirst select a project with /projects.",
+  "worktree_add.not_git_repo": "🌿 Current project is not a git repository.",
+  "worktree_add.name_required":
+    "⚠️ Worktree name is required.\n\nUsage: /worktree_add <name>\nOr send the name as a message.",
+  "worktree_add.name_prompt": "🌿 Enter a name for the new worktree:",
+  "worktree_add.confirm": "🌿 Create a new worktree?\n\nName: {name}\nPath: {path}",
+  "worktree_add.confirm_no_path":
+    "🌿 Create a new worktree?\n\nName: {name}\nPath: auto (default)",
+  "worktree_add.button.create": "✅ Create",
+  "worktree_add.button.cancel": "❌ Cancel",
+  "worktree_add.button.switch": "🔄 Switch to it",
+  "worktree_add.creating": '⏳ Creating worktree "{name}"...',
+  "worktree_add.success": "✅ Worktree created successfully!\n\nName: {name}\nBranch: {api_branch}\nPath: {path}",
+  "worktree_add.error": "🔴 Failed to create worktree:\n{error}",
+  "worktree_add.error_generic": "🔴 An error occurred while creating the worktree.",
+  "worktree_add.cancelled": "❌ Worktree creation cancelled.",
+  "worktree_add.switched": "✅ Switched to new worktree: {path}",
+  "worktree_add.inactive": "⚠️ Worktree creation is not active. Run /worktree_add again.",
+  "worktree_add.inactive_callback": "This worktree creation flow is inactive",
+  "worktree_add.blocked.expected_input": "⚠️ Send the worktree name as a text message or tap Cancel.",
+  "worktree_add.blocked.command_not_allowed":
+    "⚠️ This command is not available while worktree creation is active.",
+  "worktree_add.fetch_error": "🔴 Failed to load worktrees after creation.",
+
+  "worktree.delete.confirmation":
+    "🗑️ Delete worktree?\n\nPath: {path}\nName: {name}\n\nThis action cannot be undone.",
+  "worktree.delete.button.yes": "✅ Yes, Delete",
+  "worktree.delete.button.no": "❌ Cancel",
+  "worktree.delete.success": "✅ Worktree deleted successfully: {path}",
+  "worktree.delete.error": "🔴 Failed to delete worktree: {error}",
+  "worktree.delete.error_generic": "🔴 An error occurred while deleting the worktree.",
+  "worktree.delete.cancelled": "❌ Worktree deletion cancelled.",
+  "worktree.delete.inactive": "⚠️ Worktree deletion is not active. Run /worktree delete again.",
+  "worktree.delete.inactive_callback": "This worktree deletion flow is inactive",
+  "worktree.delete.blocked.expected_input":
+    "⚠️ This worktree deletion has been cancelled. Use /worktree delete <name> to try again.",
+  "worktree.delete.blocked.command_not_allowed":
+    "⚠️ This command is not available while worktree deletion is active.",
+
   "open.back": "⬆️ Hoch",
   "open.roots": "📋 Zurück zur Auswahl",
   "open.prev_page": "⬅️ Zurück",

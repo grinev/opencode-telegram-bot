@@ -5,6 +5,15 @@ const mocked = vi.hoisted(() => ({
   execFileMock: vi.fn(),
   statMock: vi.fn(),
   readFileMock: vi.fn(),
+  fetchMock: vi.fn(),
+  opencodeConfig: {
+    apiUrl: "http://localhost:4096",
+    username: "opencode",
+    password: "",
+    autoRestartEnabled: false,
+    monitorIntervalSec: 300,
+    model: { provider: "test", modelId: "test" },
+  },
 }));
 
 vi.mock("node:child_process", () => ({
@@ -16,13 +25,37 @@ vi.mock("node:fs/promises", () => ({
   readFile: mocked.readFileMock,
 }));
 
-import { getGitWorktreeContext, resolveGitDir } from "../../../src/app/services/worktree-service.js";
+vi.mock("../../../src/config.js", () => ({
+  config: {
+    opencode: mocked.opencodeConfig,
+    telegram: { token: "test", allowedUserId: 0, proxyUrl: "" },
+    server: { logLevel: "error" },
+    bot: {
+      sessionsListLimit: 10,
+      projectsListLimit: 10,
+      locale: "en",
+      hideThinkingMessages: false,
+      hideToolCallMessages: false,
+    },
+    files: { maxFileSizeKb: 100 },
+  },
+}));
+
+import {
+  createGitWorktree,
+  getGitWorktreeContext,
+  resolveGitDir,
+} from "../../../src/app/services/worktree-service.js";
 
 describe("app/services/worktree-service", () => {
   beforeEach(() => {
     mocked.execFileMock.mockReset();
     mocked.statMock.mockReset();
     mocked.readFileMock.mockReset();
+    mocked.fetchMock.mockReset();
+    vi.stubGlobal("fetch", mocked.fetchMock);
+    mocked.opencodeConfig.apiUrl = "http://localhost:4096";
+    mocked.opencodeConfig.password = "";
   });
 
   it("returns null when .git metadata is missing", async () => {
@@ -114,6 +147,159 @@ describe("app/services/worktree-service", () => {
           isMain: false,
         },
       ],
+    });
+  });
+
+  describe("createGitWorktree", () => {
+    it("on success returns the path and apiBranch", async () => {
+      mocked.fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          name: "my-feature",
+          branch: "opencode/my-feature",
+          directory: "/repo/my-feature",
+        }),
+        text: async () => "",
+      });
+
+      const result = await createGitWorktree("my-feature");
+      expect(result).toEqual({
+        path: "/repo/my-feature",
+        apiBranch: "opencode/my-feature",
+      });
+    });
+
+    it("on success returns the path when called without a name", async () => {
+      mocked.fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          name: "auto-slug",
+          branch: "opencode/auto-slug",
+          directory: "/repo/auto-slug",
+        }),
+        text: async () => "",
+      });
+
+      const result = await createGitWorktree();
+      expect(result).toEqual({
+        path: "/repo/auto-slug",
+        apiBranch: "opencode/auto-slug",
+      });
+    });
+
+    it("uses correct URL without query string", async () => {
+      mocked.fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          name: "my-feature",
+          branch: "opencode/my-feature",
+          directory: "/repo/my-feature",
+        }),
+        text: async () => "",
+      });
+
+      await createGitWorktree("my-feature");
+      const callArgs = mocked.fetchMock.mock.calls[0];
+      expect(callArgs[0]).toBe(`${mocked.opencodeConfig.apiUrl}/experimental/worktree`);
+    });
+
+    it("sends name in request body when provided", async () => {
+      mocked.fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          name: "my-feature",
+          branch: "opencode/my-feature",
+          directory: "/repo/my-feature",
+        }),
+        text: async () => "",
+      });
+
+      await createGitWorktree("my-feature");
+      const callArgs = mocked.fetchMock.mock.calls[0];
+      const body = JSON.parse(callArgs[1].body);
+      expect(body).toEqual({ name: "my-feature" });
+    });
+
+    it("sends empty body when called without a name", async () => {
+      mocked.fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          name: "auto-slug",
+          branch: "opencode/auto-slug",
+          directory: "/repo/auto-slug",
+        }),
+        text: async () => "",
+      });
+
+      await createGitWorktree();
+      const callArgs = mocked.fetchMock.mock.calls[0];
+      const body = JSON.parse(callArgs[1].body);
+      expect(body).toEqual({});
+    });
+
+    it("sends Basic auth header when password is set", async () => {
+      mocked.opencodeConfig.password = "secret";
+      mocked.fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          name: "my-feature",
+          branch: "opencode/my-feature",
+          directory: "/repo/my-feature",
+        }),
+        text: async () => "",
+      });
+
+      await createGitWorktree("my-feature");
+      const callArgs = mocked.fetchMock.mock.calls[0];
+      const expectedAuth = `Basic ${Buffer.from("opencode:secret").toString("base64")}`;
+      expect(callArgs[1].headers["Authorization"]).toBe(expectedAuth);
+    });
+
+    it("omits Authorization header when password is empty", async () => {
+      mocked.opencodeConfig.password = "";
+      mocked.fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          name: "my-feature",
+          branch: "opencode/my-feature",
+          directory: "/repo/my-feature",
+        }),
+        text: async () => "",
+      });
+
+      await createGitWorktree("my-feature");
+      const callArgs = mocked.fetchMock.mock.calls[0];
+      expect(callArgs[1].headers["Authorization"]).toBeUndefined();
+    });
+
+    it("returns error when HTTP response is not ok", async () => {
+      mocked.fetchMock.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        text: async () => "",
+      });
+
+      const result = await createGitWorktree("my-feature");
+      expect(result.error).toContain("500");
+    });
+
+    it("returns error when API returns empty directory", async () => {
+      mocked.fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+        text: async () => "",
+      });
+
+      const result = await createGitWorktree("my-feature");
+      expect(result.error).toBe("API returned an empty worktree path");
+    });
+
+    it("returns error on network failure", async () => {
+      mocked.fetchMock.mockRejectedValue(new Error("fetch failed"));
+
+      const result = await createGitWorktree("my-feature");
+      expect(result.error).toBe("fetch failed");
     });
   });
 });

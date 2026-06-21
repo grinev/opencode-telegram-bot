@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { config } from "../../config.js";
+import { logger } from "../../utils/logger.js";
 import type { GitWorktreeContext, GitWorktreeEntry } from "../types/worktree.js";
 
 const GIT_HEADS_PREFIX = "refs/heads/";
@@ -200,4 +202,72 @@ export async function getGitWorktreeContext(worktree: string): Promise<GitWorktr
     isLinkedWorktree: activeWorktreeKey !== mainProjectKey,
     worktrees,
   };
+}
+
+export interface CreateWorktreeResult {
+  path: string;
+  apiBranch?: string;
+  error?: string;
+}
+
+interface OpenCodeWorktreeResponse {
+  name: string;
+  branch?: string;
+  directory: string;
+}
+
+/**
+ * Create a new git worktree using the OpenCode API.
+ * Calls POST /experimental/worktree with { name } in the body.
+ * The server creates the worktree directory and branch (opencode/<name>).
+ */
+export async function createGitWorktree(name?: string): Promise<CreateWorktreeResult> {
+  const url = `${config.opencode.apiUrl}/experimental/worktree`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (config.opencode.password) {
+    const credentials = `${config.opencode.username}:${config.opencode.password}`;
+    headers["Authorization"] = `Basic ${Buffer.from(credentials).toString("base64")}`;
+  }
+
+  const body: Record<string, string> = {};
+  if (name !== undefined) {
+    body.name = name;
+  }
+
+  logger.debug(`[WorktreeService] Creating worktree via API: ${url}`, { name });
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      const errorMessage = errorBody || `HTTP ${response.status} ${response.statusText}`;
+      logger.error(`[WorktreeService] API error creating worktree: ${errorMessage}`);
+      return { path: "", error: errorMessage };
+    }
+
+    const raw = (await response.json()) as OpenCodeWorktreeResponse;
+
+    const worktreePath = raw.directory || "";
+
+    if (!worktreePath) {
+      logger.error(`[WorktreeService] API returned empty directory (response keys: ${Object.keys(raw).join(", ")})`);
+      return { path: "", error: "API returned an empty worktree path" };
+    }
+
+    logger.info(`[WorktreeService] Worktree created successfully: ${worktreePath} (branch: ${raw.branch ?? "none"})`);
+    return { path: worktreePath, apiBranch: raw.branch };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error(`[WorktreeService] Failed to create worktree: ${errorMessage}`);
+    return { path: "", error: errorMessage };
+  }
 }
