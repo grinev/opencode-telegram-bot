@@ -86,7 +86,7 @@ No public inbound ports are required for normal usage.
 - Configurable scheduled task limit (default: 10)
 - Configurable bot locale
 - Configurable visibility for service messages (thinking/tool calls)
-- Configurable compact output mode with a single edited progress message (`/settings`)
+- Configurable compact output and TTS modes (`/settings`)
 - Configurable opt-in display of full thinking/reasoning content
 - Configurable max code file size in KB (default: 100)
 - Optional STT settings for voice transcription (`STT_API_URL`, `STT_API_KEY`, `STT_MODEL`, `STT_LANGUAGE`)
@@ -107,7 +107,6 @@ Current command set:
 - `/messages` - browse user messages in the current session
 - `/projects` - show and switch projects
 - `/worktree` - show and switch existing git worktrees for the current repository
-- `/tts` - choose audio reply mode (`off`, `all`, or `auto`)
 - `/settings` - change bot settings
 - `/task` - create a scheduled task
 - `/tasklist` - browse and delete scheduled tasks
@@ -121,7 +120,7 @@ Current command set:
 
 Model, agent, variant, and context actions are available from the persistent bottom keyboard.
 
-Text messages (non-commands) are treated as prompts for OpenCode only when no blocking interaction is active. Voice/audio messages are transcribed and then sent as prompts when STT is configured. When `/tts` is set to `all`, completed assistant replies include a generated audio file if TTS is configured. When it is set to `auto`, audio replies are sent only after voice/audio prompts.
+Text messages (non-commands) are treated as prompts for OpenCode only when no blocking interaction is active. Voice/audio messages are transcribed and then sent as prompts when STT is configured. When TTS mode in `/settings` is set to `all`, completed assistant replies include a generated audio file if TTS is configured. When it is set to `auto`, audio replies are sent only after voice/audio prompts.
 
 Interaction routing rules:
 
@@ -163,7 +162,7 @@ Model picker behavior:
 - [x] PDF attachments support (send documents from Telegram to OpenCode)
 - [x] Text file attachments support (send code/config/log files from Telegram to OpenCode)
 - [x] Voice/audio transcription via Whisper-compatible APIs (OpenAI/Groq/Together and compatible providers)
-- [x] Optional audio replies with `/tts` modes via OpenAI-compatible APIs
+- [x] Optional audio replies with `/settings` modes via OpenAI-compatible APIs
 - [x] Dynamic subagent activity display during task execution
 - [x] Git worktree switching and main-project status display for git repositories (`/worktree`)
 - [x] Create new OpenCode projects directly from Telegram
@@ -178,4 +177,4 @@ Open tasks for upcoming iterations:
 
 - [ ] Model search in model switcher
 - [ ] Docker runtime support and deployment guide
-- [ ] Add a bot settings command with in-chat UI
+- [x] Add a bot settings command with in-chat UI

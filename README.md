@@ -38,7 +38,7 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
 - **Custom Commands** — run OpenCode custom commands (and built-ins like `init`/`review`) from an inline menu with confirmation
 - **Skills Catalog** — browse OpenCode skills from an inline menu and run them immediately or with arguments in the next message
 - **Interactive Q&A** — answer agent questions and approve permissions via inline buttons
-- **Voice prompts** — send voice/audio messages, transcribe them via a Whisper-compatible API, and optionally enable spoken replies with `/tts`
+- **Voice prompts** — send voice/audio messages, transcribe them via a Whisper-compatible API, and optionally enable spoken replies in `/settings`
 - **File attachments** — send images, PDF documents, and text-based files to OpenCode, including multiple files in one Telegram album
 - **Scheduled tasks** — schedule prompts to run later or on a recurring interval; see [Scheduled Tasks](#scheduled-tasks)
 - **Context control** — compact context when it gets too large, right from the chat
@@ -141,7 +141,6 @@ opencode-telegram config
 | `/worktree`       | Switch between existing git worktrees                   |
 | `/open`           | Add a project by browsing directories                   |
 | `/ls`             | List directory contents, then tap to open or download   |
-| `/tts`            | Choose audio reply mode (`off`, `all`, or `auto`)       |
 | `/settings`       | Change bot settings                                     |
 | `/rename`         | Rename the current session                              |
 | `/commands`       | Browse and run custom commands                          |
@@ -316,7 +315,7 @@ If `STT_API_URL` and `STT_API_KEY` are set, the bot will:
 
 If `STT_NOTE_PROMPT` is set to a non-empty value other than `false` or `0`, the bot prepends `[Note: ...]` to the transcription before sending it to the LLM. The recognized text shown in Telegram stays unchanged.
 
-If TTS credentials are configured, you can choose spoken reply behavior with `/tts`: `off` disables audio replies, `all` sends audio for every assistant reply, and `auto` sends audio only after voice/audio prompts. The preference is stored in `settings.json` and persists across restarts.
+If TTS credentials are configured, you can choose spoken reply behavior in `/settings`: `off` disables audio replies, `all` sends audio for every assistant reply, and `auto` sends audio only after voice/audio prompts. The preference is stored in `settings.json` and persists across restarts.
 
 OpenAI-compatible TTS configuration example:
 

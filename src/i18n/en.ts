@@ -5,7 +5,6 @@ export const en = {
   "cmd.description.detach": "Detach from current session",
   "cmd.description.sessions": "List sessions",
   "cmd.description.messages": "Browse session messages",
-  "cmd.description.tts": "Choose audio reply mode",
   "cmd.description.settings": "Change bot settings",
   "cmd.description.projects": "List projects",
   "cmd.description.worktree": "Switch git worktrees",
@@ -137,7 +136,6 @@ export const en = {
   "status.server_unavailable":
     "🔴 OpenCode Server is unavailable\n\nUse /opencode_start to start the server.",
 
-  "tts.prompt": "Select audio reply mode:",
   "tts.off": "🔇 Audio replies disabled.",
   "tts.all": "🔊 Audio replies enabled for all messages.",
   "tts.auto": "🎤 Audio replies enabled for voice/audio messages only.",
@@ -147,6 +145,8 @@ export const en = {
 
   "settings.menu.title": "⚙️ Settings",
   "settings.compact_output.label": "Compact output mode",
+  "settings.tts.label": "Audio replies",
+  "settings.tts.title": "Audio reply mode",
   "settings.value.on": "On",
   "settings.value.off": "Off",
   "settings.button.back": "⬅️ Back",

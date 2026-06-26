@@ -14,7 +14,6 @@ export const ar: I18nDictionary = {
   "cmd.description.detach": "الخروج من الجلسة دون إيقافها",
   "cmd.description.sessions": "عرض الجلسات السابقة",
   "cmd.description.messages": "استعراض رسائل الجلسة",
-  "cmd.description.tts": "اختيار وضع الردود الصوتية",
   "cmd.description.settings": "تغيير إعدادات البوت",
   "cmd.description.projects": "عرض المشاريع",
   "cmd.description.worktree": "التبديل بين نسخ العمل في Git",
@@ -126,7 +125,6 @@ export const ar: I18nDictionary = {
   "status.session_hint": "استخدم /sessions لاختيار جلسة أو /new لبدء جلسة جديدة",
   "status.server_unavailable": "🔴 خادم OpenCode غير متاح\n\nاستخدم /opencode_start لتشغيل الخادم.",
 
-  "tts.prompt": "اختر وضع الردود الصوتية:",
   "tts.off": "🔇 تم تعطيل الردود الصوتية.",
   "tts.all": "🔊 تم تفعيل الردود الصوتية لجميع الرسائل.",
   "tts.auto": "🎤 تم تفعيل الردود الصوتية للرسائل الصوتية فقط.",
@@ -135,6 +133,8 @@ export const ar: I18nDictionary = {
 
   "settings.menu.title": "⚙️ الإعدادات",
   "settings.compact_output.label": "وضع الإخراج المختصر",
+  "settings.tts.label": "الردود الصوتية",
+  "settings.tts.title": "وضع الردود الصوتية",
   "settings.value.on": "مفعّل",
   "settings.value.off": "معطّل",
   "settings.button.back": "⬅️ رجوع",

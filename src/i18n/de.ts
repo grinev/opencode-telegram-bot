@@ -7,7 +7,6 @@ export const de: I18nDictionary = {
   "cmd.description.detach": "Von aktueller Sitzung trennen",
   "cmd.description.sessions": "Sitzungen auflisten",
   "cmd.description.messages": "Sitzungsnachrichten durchsuchen",
-  "cmd.description.tts": "Audioantwort-Modus wählen",
   "cmd.description.settings": "Bot-Einstellungen ändern",
   "cmd.description.projects": "Projekte auflisten",
   "cmd.description.worktree": "Git-Worktrees wechseln",
@@ -144,7 +143,6 @@ export const de: I18nDictionary = {
   "status.server_unavailable":
     "🔴 OpenCode-Server ist nicht verfügbar\n\nNutze /opencode_start, um den Server zu starten.",
 
-  "tts.prompt": "Audioantwort-Modus auswählen:",
   "tts.off": "🔇 Audioantworten deaktiviert.",
   "tts.all": "🔊 Audioantworten für alle Nachrichten aktiviert.",
   "tts.auto": "🎤 Audioantworten nur für Sprachnachrichten aktiviert.",
@@ -154,6 +152,8 @@ export const de: I18nDictionary = {
 
   "settings.menu.title": "⚙️ Einstellungen",
   "settings.compact_output.label": "Kompakte Ausgabe",
+  "settings.tts.label": "Audioantworten",
+  "settings.tts.title": "Audioantwort-Modus",
   "settings.value.on": "Ein",
   "settings.value.off": "Aus",
   "settings.button.back": "⬅️ Zurück",

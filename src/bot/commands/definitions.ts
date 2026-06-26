@@ -27,7 +27,6 @@ const COMMAND_DEFINITIONS: BotCommandI18nDefinition[] = [
   { command: "detach", descriptionKey: "cmd.description.detach" },
   { command: "sessions", descriptionKey: "cmd.description.sessions" },
   { command: "messages", descriptionKey: "cmd.description.messages" },
-  { command: "tts", descriptionKey: "cmd.description.tts" },
   { command: "settings", descriptionKey: "cmd.description.settings" },
   { command: "projects", descriptionKey: "cmd.description.projects" },
   { command: "worktree", descriptionKey: "cmd.description.worktree" },

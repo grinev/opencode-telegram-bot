@@ -7,7 +7,6 @@ export const es: I18nDictionary = {
   "cmd.description.detach": "Desconectar de la sesión actual",
   "cmd.description.sessions": "Listar sesiones",
   "cmd.description.messages": "Ver mensajes de la sesión",
-  "cmd.description.tts": "Elegir modo de respuestas de audio",
   "cmd.description.settings": "Cambiar ajustes del bot",
   "cmd.description.projects": "Listar proyectos",
   "cmd.description.worktree": "Cambiar worktrees de git",
@@ -144,7 +143,6 @@ export const es: I18nDictionary = {
   "status.server_unavailable":
     "🔴 OpenCode Server no está disponible\n\nUsa /opencode_start para iniciar el servidor.",
 
-  "tts.prompt": "Selecciona el modo de respuestas de audio:",
   "tts.off": "🔇 Respuestas de audio desactivadas.",
   "tts.all": "🔊 Respuestas de audio activadas para todos los mensajes.",
   "tts.auto": "🎤 Respuestas de audio activadas solo para mensajes de voz.",
@@ -154,6 +152,8 @@ export const es: I18nDictionary = {
 
   "settings.menu.title": "⚙️ Ajustes",
   "settings.compact_output.label": "Salida compacta",
+  "settings.tts.label": "Respuestas de audio",
+  "settings.tts.title": "Modo de respuestas de audio",
   "settings.value.on": "Activado",
   "settings.value.off": "Desactivado",
   "settings.button.back": "⬅️ Atrás",

@@ -7,7 +7,6 @@ export const ru: I18nDictionary = {
   "cmd.description.detach": "Отсоединиться от текущей сессии",
   "cmd.description.sessions": "Список сессий",
   "cmd.description.messages": "Сообщения текущей сессии",
-  "cmd.description.tts": "Выбрать режим аудиоответов",
   "cmd.description.settings": "Изменить настройки бота",
   "cmd.description.projects": "Список проектов",
   "cmd.description.worktree": "Переключить git worktree",
@@ -137,7 +136,6 @@ export const ru: I18nDictionary = {
   "status.server_unavailable":
     "🔴 OpenCode Server недоступен\n\nИспользуйте /opencode_start для запуска сервера.",
 
-  "tts.prompt": "Выберите режим аудиоответов:",
   "tts.off": "🔇 Аудиоответы выключены.",
   "tts.all": "🔊 Аудиоответы включены для всех сообщений.",
   "tts.auto": "🎤 Аудиоответы включены только для голосовых сообщений.",
@@ -146,6 +144,8 @@ export const ru: I18nDictionary = {
 
   "settings.menu.title": "⚙️ Настройки",
   "settings.compact_output.label": "Компактный вывод",
+  "settings.tts.label": "Аудиоответы",
+  "settings.tts.title": "Режим аудиоответов",
   "settings.value.on": "Вкл",
   "settings.value.off": "Выкл",
   "settings.button.back": "⬅️ Назад",

@@ -18,6 +18,7 @@ describe("bot/routers/command-utils", () => {
     expect(isKnownCommand("start")).toBe(true);
     expect(isKnownCommand("detach")).toBe(true);
     expect(isKnownCommand("skills")).toBe(true);
+    expect(isKnownCommand("tts")).toBe(false);
     expect(isKnownCommand("foobar")).toBe(false);
   });
 });
