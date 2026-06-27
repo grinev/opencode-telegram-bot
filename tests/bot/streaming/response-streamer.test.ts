@@ -512,6 +512,94 @@ describe("bot/streaming/response-streamer", () => {
       expect(completePart).toHaveBeenNthCalledWith(2, plainPart("part-2-final"), undefined);
     });
 
+    it("can notify only the first final draft part", async () => {
+      vi.useFakeTimers();
+
+      let draftId = 10;
+      const sendPart = vi.fn(async (part) => {
+        const id = draftId++;
+        return { messageId: id, deliveredSignature: signature(part) };
+      });
+      const editPart = vi.fn(async () => ({ deliveredSignature: "sig" }));
+      const deleteText = vi.fn().mockResolvedValue(undefined);
+      let realMessageId = 200;
+      const completePart = vi.fn(async (part) => {
+        const id = realMessageId++;
+        return { messageId: id, deliveredSignature: signature(part) };
+      });
+      const streamer = new ResponseStreamer({
+        throttleMs: 0,
+        sendPart,
+        editPart,
+        deleteText,
+        completePart,
+      });
+
+      streamer.enqueue("s1", "m1", {
+        parts: [plainPart("part-1"), plainPart("part-2")],
+        sendOptions: { disable_notification: true },
+      });
+      await vi.waitFor(() => {
+        expect(sendPart).toHaveBeenCalledTimes(2);
+      });
+
+      const result = await streamer.complete(
+        "s1",
+        "m1",
+        {
+          parts: [plainPart("part-1-final"), plainPart("part-2-final")],
+          sendOptions: { disable_notification: true },
+        },
+        { notifyFirstCompletePart: true },
+      );
+
+      expect(result.streamed).toBe(true);
+      expect(completePart).toHaveBeenNthCalledWith(1, plainPart("part-1-final"), {});
+      expect(completePart).toHaveBeenNthCalledWith(2, plainPart("part-2-final"), {
+        disable_notification: true,
+      });
+    });
+
+    it("keeps final draft parts silent by default", async () => {
+      vi.useFakeTimers();
+
+      const sendPart = vi.fn(async (part) => ({
+        messageId: 1,
+        deliveredSignature: signature(part),
+      }));
+      const editPart = vi.fn(async () => ({ deliveredSignature: "sig" }));
+      const deleteText = vi.fn().mockResolvedValue(undefined);
+      const completePart = vi.fn(async (part) => ({
+        messageId: 100,
+        deliveredSignature: signature(part),
+      }));
+      const streamer = new ResponseStreamer({
+        throttleMs: 0,
+        sendPart,
+        editPart,
+        deleteText,
+        completePart,
+      });
+
+      streamer.enqueue("s1", "m1", {
+        parts: [plainPart("partial")],
+        sendOptions: { disable_notification: true },
+      });
+      await vi.waitFor(() => {
+        expect(sendPart).toHaveBeenCalledTimes(1);
+      });
+
+      const result = await streamer.complete("s1", "m1", {
+        parts: [plainPart("final")],
+        sendOptions: { disable_notification: true },
+      });
+
+      expect(result.streamed).toBe(true);
+      expect(completePart).toHaveBeenCalledWith(plainPart("final"), {
+        disable_notification: true,
+      });
+    });
+
     it("returns streamed=false when completePart fails", async () => {
       vi.useFakeTimers();
 

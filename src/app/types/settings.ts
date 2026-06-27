@@ -19,6 +19,7 @@ export interface Settings {
   ttsMode?: "off" | "all" | "auto";
   compactOutputMode?: boolean;
   showThinkingContent?: boolean;
+  showAssistantRunFooter?: boolean;
   responseStreamingMode?: ResponseStreamingMode;
   sendDiffFileAttachments?: boolean;
   sessionDirectoryCache?: SessionDirectoryCacheInfo;

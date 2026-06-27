@@ -5,6 +5,7 @@ import { handleSettingsCallback } from "../../../src/bot/callbacks/settings-call
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import {
+  SETTINGS_ASSISTANT_FOOTER_CALLBACK,
   SETTINGS_CALLBACK_PREFIX,
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
   SETTINGS_DIFF_FILES_CALLBACK,
@@ -22,6 +23,8 @@ const mocked = vi.hoisted(() => ({
   setSendDiffFileAttachmentsMock: vi.fn(),
   getShowThinkingContentMock: vi.fn(),
   setShowThinkingContentMock: vi.fn(),
+  getShowAssistantRunFooterMock: vi.fn(),
+  setShowAssistantRunFooterMock: vi.fn(),
   getTtsModeMock: vi.fn(),
   setTtsModeMock: vi.fn(),
   isTtsConfiguredMock: vi.fn(),
@@ -36,6 +39,8 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
   setSendDiffFileAttachments: mocked.setSendDiffFileAttachmentsMock,
   getShowThinkingContent: mocked.getShowThinkingContentMock,
   setShowThinkingContent: mocked.setShowThinkingContentMock,
+  getShowAssistantRunFooter: mocked.getShowAssistantRunFooterMock,
+  setShowAssistantRunFooter: mocked.setShowAssistantRunFooterMock,
   getTtsMode: mocked.getTtsModeMock,
   setTtsMode: mocked.setTtsModeMock,
 }));
@@ -54,11 +59,14 @@ describe("bot/commands/settings-command", () => {
     mocked.setSendDiffFileAttachmentsMock.mockReset();
     mocked.getShowThinkingContentMock.mockReset();
     mocked.setShowThinkingContentMock.mockReset();
+    mocked.getShowAssistantRunFooterMock.mockReset();
+    mocked.setShowAssistantRunFooterMock.mockReset();
     mocked.getTtsModeMock.mockReset();
     mocked.setTtsModeMock.mockReset();
     mocked.isTtsConfiguredMock.mockReset();
     mocked.getResponseStreamingModeMock.mockReturnValue("edit");
     mocked.getSendDiffFileAttachmentsMock.mockReturnValue(true);
+    mocked.getShowAssistantRunFooterMock.mockReturnValue(true);
     interactionManager.clear("settings_test_reset");
   });
 
@@ -85,9 +93,12 @@ describe("bot/commands/settings-command", () => {
       `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
     );
     expect(opts.reply_markup.inline_keyboard[2][0].text).toBe(
+      `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
+    );
+    expect(opts.reply_markup.inline_keyboard[3][0].text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.auto")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[3][0].text).toBe(t("inline.button.close"));
+    expect(opts.reply_markup.inline_keyboard[4][0].text).toBe(t("inline.button.close"));
   });
 
   it("shows thinking content setting when compact output is disabled", async () => {
@@ -114,6 +125,9 @@ describe("bot/commands/settings-command", () => {
       `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
     );
     expect(opts.reply_markup.inline_keyboard[4][0].text).toBe(
+      `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
+    );
+    expect(opts.reply_markup.inline_keyboard[5][0].text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.off")}`,
     );
   });
@@ -149,11 +163,14 @@ describe("bot/callbacks/settings-callback-handler", () => {
     mocked.setSendDiffFileAttachmentsMock.mockReset();
     mocked.getShowThinkingContentMock.mockReset();
     mocked.setShowThinkingContentMock.mockReset();
+    mocked.getShowAssistantRunFooterMock.mockReset();
+    mocked.setShowAssistantRunFooterMock.mockReset();
     mocked.getTtsModeMock.mockReset();
     mocked.setTtsModeMock.mockReset();
     mocked.isTtsConfiguredMock.mockReset();
     mocked.getResponseStreamingModeMock.mockReturnValue("edit");
     mocked.getSendDiffFileAttachmentsMock.mockReturnValue(true);
+    mocked.getShowAssistantRunFooterMock.mockReturnValue(true);
     interactionManager.clear("settings_test_reset");
   });
 
@@ -197,6 +214,9 @@ describe("bot/callbacks/settings-callback-handler", () => {
       `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
     );
     expect(opts?.reply_markup.inline_keyboard[2][0].text).toBe(
+      `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
+    );
+    expect(opts?.reply_markup.inline_keyboard[3][0].text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.off")}`,
     );
   });
@@ -260,6 +280,26 @@ describe("bot/callbacks/settings-callback-handler", () => {
     );
   });
 
+  it("toggles assistant footer and returns to settings menu", async () => {
+    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getShowThinkingContentMock.mockReturnValue(true);
+    mocked.getShowAssistantRunFooterMock.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    mocked.getTtsModeMock.mockReturnValue("off");
+    activateSettingsMenu();
+    const ctx = createCallbackContext(SETTINGS_ASSISTANT_FOOTER_CALLBACK);
+
+    const result = await handleSettingsCallback(ctx);
+
+    expect(result).toBe(true);
+    expect(mocked.setShowAssistantRunFooterMock).toHaveBeenCalledWith(false);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
+    const [text, opts] = vi.mocked(ctx.editMessageText).mock.calls[0];
+    expect(text).toBe(t("settings.menu.title"));
+    expect(opts?.reply_markup.inline_keyboard[4][0].text).toBe(
+      `${t("settings.assistant_footer.label")}: ${t("settings.value.off")}`,
+    );
+  });
+
   it("cycles TTS mode and returns to settings menu", async () => {
     mocked.isTtsConfiguredMock.mockReturnValue(true);
     mocked.getCompactOutputModeMock.mockReturnValue(false);
@@ -275,7 +315,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("tts.all") });
     const [text, opts] = vi.mocked(ctx.editMessageText).mock.calls[0];
     expect(text).toBe(t("settings.menu.title"));
-    expect(opts?.reply_markup.inline_keyboard[4][0].text).toBe(
+    expect(opts?.reply_markup.inline_keyboard[5][0].text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.all")}`,
     );
   });

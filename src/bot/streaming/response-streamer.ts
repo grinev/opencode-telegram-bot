@@ -21,6 +21,7 @@ export interface StreamCompleteResult {
 
 interface ResponseStreamerCompleteOptions {
   flushFinal?: boolean;
+  notifyFirstCompletePart?: boolean;
 }
 
 interface ResponseStreamerOptions {
@@ -120,6 +121,21 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+function enableNotificationForOptions(
+  options: TelegramSendMessageOptions | undefined,
+): TelegramSendMessageOptions | undefined {
+  if (!options) {
+    return options;
+  }
+
+  const nextOptions = {
+    ...options,
+  } as NonNullable<TelegramSendMessageOptions> & { disable_notification?: unknown };
+  delete nextOptions.disable_notification;
+
+  return nextOptions as TelegramSendMessageOptions;
+}
+
 export class ResponseStreamer {
   private readonly throttleMs: number;
   private readonly sendPart: ResponseStreamerOptions["sendPart"];
@@ -202,11 +218,16 @@ export class ResponseStreamer {
     if (synced && this.completePart && state.latestPayload) {
       try {
         const realMessageIds: number[] = [];
+        let notifyNextCompletePart = options?.notifyFirstCompletePart === true;
         for (const part of state.latestPayload.parts) {
           if (!part.text) {
             continue;
           }
-          const result = await this.completePart(part, state.latestPayload.sendOptions);
+          const completeOptions = notifyNextCompletePart
+            ? enableNotificationForOptions(state.latestPayload.sendOptions)
+            : state.latestPayload.sendOptions;
+          notifyNextCompletePart = false;
+          const result = await this.completePart(part, completeOptions);
           realMessageIds.push(result.messageId);
         }
         state.telegramMessageIds = realMessageIds;

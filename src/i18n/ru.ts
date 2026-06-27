@@ -150,6 +150,7 @@ export const ru: I18nDictionary = {
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draft (experimental)",
   "settings.diff_files.label": "Файлы с diff",
+  "settings.assistant_footer.label": "Футер ответа",
   "settings.tts.label": "Аудиоответы",
   "settings.value.on": "Вкл",
   "settings.value.off": "Выкл",

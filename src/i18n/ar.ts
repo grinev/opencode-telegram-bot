@@ -152,6 +152,7 @@ export const ar: I18nDictionary = {
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draft (experimental)",
   "settings.diff_files.label": "ملفات diff",
+  "settings.assistant_footer.label": "تذييل الرد",
   "settings.tts.label": "الردود الصوتية",
   "settings.value.on": "مفعّل",
   "settings.value.off": "معطّل",

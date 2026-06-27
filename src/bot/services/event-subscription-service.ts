@@ -12,6 +12,7 @@ import {
   getCompactOutputMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
+  getShowAssistantRunFooter,
   getShowThinkingContent,
   type ResponseStreamingMode,
 } from "../../app/stores/settings-store.js";
@@ -425,6 +426,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             await this.finalizeCompactProgress(sessionId);
           }
 
+          const assistantResponseMode = this.getAssistantResponseStreamMode(sessionId, messageId);
+
           await finalizeAssistantResponse({
             sessionId,
             messageId,
@@ -446,6 +449,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             prepareStreamingPayload: this.prepareFinalStreamingPayload,
             renderFinalParts: (text) => renderAssistantFinalPartsSafe(text),
             getReplyKeyboard: this.getCurrentReplyKeyboard,
+            notifyFirstFinalPart:
+              assistantResponseMode === "draft" && !getShowAssistantRunFooter(),
             sendRenderedPart: async (part, options) => {
               await sendRenderedBotPart({
                 api: botApi,
@@ -858,7 +863,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           this.toolCallStreamer.flushSession(sessionId, "session_idle"),
         ]);
 
-        if (completedRun?.hasCompletedResponse) {
+        if (getShowAssistantRunFooter() && completedRun?.hasCompletedResponse) {
           const agent = completedRun.actualAgent || completedRun.configuredAgent;
           const providerID = completedRun.actualProviderID || completedRun.configuredProviderID;
           const modelID = completedRun.actualModelID || completedRun.configuredModelID;
@@ -1056,13 +1061,20 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       : this.assistantEditResponseStreamer;
   }
 
+  private getAssistantResponseStreamMode(sessionId: string, messageId: string): ResponseStreamingMode {
+    return (
+      this.assistantResponseStreamModes.get(this.getAssistantResponseStreamKey(sessionId, messageId)) ??
+      getResponseStreamingMode()
+    );
+  }
+
   private enqueueAssistantResponse(
     sessionId: string,
     messageId: string,
     payload: StreamingMessagePayload,
   ): void {
     const key = this.getAssistantResponseStreamKey(sessionId, messageId);
-    const mode = this.assistantResponseStreamModes.get(key) ?? getResponseStreamingMode();
+    const mode = this.getAssistantResponseStreamMode(sessionId, messageId);
     this.assistantResponseStreamModes.set(key, mode);
     this.getAssistantResponseStreamer(mode).enqueue(sessionId, messageId, payload);
   }
@@ -1074,7 +1086,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     options?: Parameters<ResponseStreamer["complete"]>[3],
   ) {
     const key = this.getAssistantResponseStreamKey(sessionId, messageId);
-    const mode = this.assistantResponseStreamModes.get(key) ?? getResponseStreamingMode();
+    const mode = this.getAssistantResponseStreamMode(sessionId, messageId);
     const result = await this.getAssistantResponseStreamer(mode).complete(
       sessionId,
       messageId,

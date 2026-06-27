@@ -4,11 +4,13 @@ import {
   getCompactOutputMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
+  getShowAssistantRunFooter,
   getShowThinkingContent,
   getTtsMode,
   setCompactOutputMode,
   setResponseStreamingMode,
   setSendDiffFileAttachments,
+  setShowAssistantRunFooter,
   setShowThinkingContent,
   setTtsMode,
   type ResponseStreamingMode,
@@ -19,6 +21,7 @@ import { logger } from "../../utils/logger.js";
 import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 import {
   buildSettingsMenuView,
+  SETTINGS_ASSISTANT_FOOTER_CALLBACK,
   SETTINGS_CALLBACK_PREFIX,
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
   SETTINGS_DIFF_FILES_CALLBACK,
@@ -100,6 +103,16 @@ export async function handleSettingsCallback(ctx: Context): Promise<boolean> {
 
     if (callbackData === SETTINGS_DIFF_FILES_CALLBACK) {
       setSendDiffFileAttachments(!getSendDiffFileAttachments());
+      const { text, keyboard } = buildSettingsMenuView();
+      await ctx.answerCallbackQuery({ text: t("settings.saved") });
+      await ctx.editMessageText(text, {
+        reply_markup: appendInlineMenuCancelButton(keyboard, "settings"),
+      });
+      return true;
+    }
+
+    if (callbackData === SETTINGS_ASSISTANT_FOOTER_CALLBACK) {
+      setShowAssistantRunFooter(!getShowAssistantRunFooter());
       const { text, keyboard } = buildSettingsMenuView();
       await ctx.answerCallbackQuery({ text: t("settings.saved") });
       await ctx.editMessageText(text, {

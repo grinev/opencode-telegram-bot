@@ -11,6 +11,7 @@ interface FinalizeAssistantResponseOptions {
   prepareStreamingPayload: (messageText: string) => StreamingMessagePayload | null;
   renderFinalParts: (messageText: string) => TelegramRenderedPart[];
   getReplyKeyboard: () => unknown;
+  notifyFirstFinalPart?: boolean;
   sendRenderedPart: (
     part: TelegramRenderedPart,
     options:
@@ -31,6 +32,7 @@ export async function finalizeAssistantResponse({
   prepareStreamingPayload,
   renderFinalParts,
   getReplyKeyboard,
+  notifyFirstFinalPart = false,
   sendRenderedPart,
 }: FinalizeAssistantResponseOptions): Promise<boolean> {
   logger.debug(
@@ -54,11 +56,11 @@ export async function finalizeAssistantResponse({
     preparedStreamPayload.editOptions = undefined;
   }
 
-  const result = await responseStreamer.complete(
-    sessionId,
-    messageId,
-    preparedStreamPayload ?? undefined,
-  );
+  const result = notifyFirstFinalPart
+    ? await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined, {
+        notifyFirstCompletePart: true,
+      })
+    : await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined);
 
   await flushPendingServiceMessages();
 
@@ -71,8 +73,10 @@ export async function finalizeAssistantResponse({
 
   const parts = renderFinalParts(messageText);
 
+  let notifyNextPart = notifyFirstFinalPart;
   for (const part of parts) {
-    await sendRenderedPart(part, silentReplyOptions);
+    await sendRenderedPart(part, notifyNextPart ? replyOptions : silentReplyOptions);
+    notifyNextPart = false;
   }
 
   return false;

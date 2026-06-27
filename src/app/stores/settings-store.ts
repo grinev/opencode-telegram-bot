@@ -118,6 +118,15 @@ export function setShowThinkingContent(enabled: boolean): void {
   void writeSettingsFile(currentSettings);
 }
 
+export function getShowAssistantRunFooter(): boolean {
+  return currentSettings.showAssistantRunFooter ?? true;
+}
+
+export function setShowAssistantRunFooter(enabled: boolean): void {
+  currentSettings.showAssistantRunFooter = enabled;
+  void writeSettingsFile(currentSettings);
+}
+
 export type { ResponseStreamingMode };
 
 export function getResponseStreamingMode(): ResponseStreamingMode {

@@ -151,6 +151,7 @@ export const en = {
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draft (experimental)",
   "settings.diff_files.label": "Diff files",
+  "settings.assistant_footer.label": "Assistant footer",
   "settings.tts.label": "Audio replies",
   "settings.value.on": "On",
   "settings.value.off": "Off",

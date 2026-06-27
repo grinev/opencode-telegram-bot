@@ -8,12 +8,14 @@ import {
   getCompactOutputMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
+  getShowAssistantRunFooter,
   getShowThinkingContent,
   getTtsMode,
   loadSettings,
   setCompactOutputMode,
   setResponseStreamingMode,
   setSendDiffFileAttachments,
+  setShowAssistantRunFooter,
   setShowThinkingContent,
 } from "../../../src/app/stores/settings-store.js";
 
@@ -70,6 +72,12 @@ describe("app/stores/settings-store", () => {
     expect(getShowThinkingContent()).toBe(true);
   });
 
+  it("shows assistant run footer by default", async () => {
+    await loadSettings();
+
+    expect(getShowAssistantRunFooter()).toBe(true);
+  });
+
   it("loads thinking content setting from settings.json", async () => {
     await writeFile(path.join(tempHome, "settings.json"), JSON.stringify({ showThinkingContent: false }));
 
@@ -107,6 +115,17 @@ describe("app/stores/settings-store", () => {
     await loadSettings();
 
     expect(getSendDiffFileAttachments()).toBe(false);
+  });
+
+  it("loads assistant run footer setting from settings.json", async () => {
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      JSON.stringify({ showAssistantRunFooter: false }),
+    );
+
+    await loadSettings();
+
+    expect(getShowAssistantRunFooter()).toBe(false);
   });
 
   it("persists compact output mode to settings.json", async () => {
@@ -150,6 +169,18 @@ describe("app/stores/settings-store", () => {
     await vi.waitFor(async () => {
       const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
       expect(settings.sendDiffFileAttachments).toBe(false);
+    });
+  });
+
+  it("persists assistant run footer setting to settings.json", async () => {
+    await loadSettings();
+
+    setShowAssistantRunFooter(false);
+
+    expect(getShowAssistantRunFooter()).toBe(false);
+    await vi.waitFor(async () => {
+      const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
+      expect(settings.showAssistantRunFooter).toBe(false);
     });
   });
 

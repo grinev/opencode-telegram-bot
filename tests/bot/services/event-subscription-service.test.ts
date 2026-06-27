@@ -93,6 +93,41 @@ function emitThinkingPart(
   } as unknown as Event);
 }
 
+function emitAssistantTextPart(
+  summaryAggregator: { processEvent(event: Event): void },
+  text: string,
+): void {
+  summaryAggregator.processEvent({
+    type: "message.part.updated",
+    properties: {
+      part: {
+        id: "text-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "text",
+        text,
+      },
+    },
+  } as unknown as Event);
+}
+
+function emitAssistantCompleted(summaryAggregator: { processEvent(event: Event): void }): void {
+  summaryAggregator.processEvent({
+    type: "message.updated",
+    properties: {
+      info: {
+        id: "message-1",
+        sessionID: "session-1",
+        role: "assistant",
+        agent: "test-agent",
+        providerID: "test-provider",
+        modelID: "test-model",
+        time: { created: Date.now() - 1000, completed: Date.now() },
+      },
+    },
+  } as unknown as Event);
+}
+
 function emitSessionIdle(summaryAggregator: { processEvent(event: Event): void }): void {
   summaryAggregator.processEvent({
     type: "session.idle",
@@ -135,17 +170,28 @@ describe("bot/services/event-subscription-service", () => {
 
   async function setupService(
     sendDiffFileAttachments: boolean,
-    options: { responseStreamingMode?: "edit" | "draft"; showThinkingContent?: boolean } = {},
+    options: {
+      responseStreamingMode?: "edit" | "draft";
+      showThinkingContent?: boolean;
+      showAssistantRunFooter?: boolean;
+      startAssistantRun?: boolean;
+    } = {},
   ): Promise<{
     api: FakeBotApi;
     summaryAggregator: { setSession(sessionId: string): void; processEvent(event: Event): void };
   }> {
-    const [{ createEventSubscriptionService }, { summaryAggregator }, sessionService, settingsStore] =
-      await Promise.all([
+    const [
+      { createEventSubscriptionService },
+      { summaryAggregator },
+      sessionService,
+      settingsStore,
+      { assistantRunState },
+    ] = await Promise.all([
         import("../../../src/bot/services/event-subscription-service.js"),
         import("../../../src/app/managers/summary-aggregation-manager.js"),
         import("../../../src/app/services/session-service.js"),
         import("../../../src/app/stores/settings-store.js"),
+        import("../../../src/app/managers/assistant-run-state-manager.js"),
       ]);
 
     sessionService.setCurrentSession({
@@ -157,11 +203,20 @@ describe("bot/services/event-subscription-service", () => {
     settingsStore.setSendDiffFileAttachments(sendDiffFileAttachments);
     settingsStore.setResponseStreamingMode(options.responseStreamingMode ?? "edit");
     settingsStore.setShowThinkingContent(options.showThinkingContent ?? true);
+    settingsStore.setShowAssistantRunFooter(options.showAssistantRunFooter ?? true);
 
     const { bot, api } = createFakeBot();
     const service = createEventSubscriptionService();
     activeService = service;
     service.clearRuntimeState("test_setup");
+    if (options.startAssistantRun) {
+      assistantRunState.startRun("session-1", {
+        startedAt: Date.now() - 1000,
+        configuredAgent: "test-agent",
+        configuredProviderID: "test-provider",
+        configuredModelID: "test-model",
+      });
+    }
     service.setTelegramContext(bot, 42);
     await service.ensureEventSubscription("D:/repo");
     summaryAggregator.setSession("session-1");
@@ -235,6 +290,71 @@ describe("bot/services/event-subscription-service", () => {
       expect(api.sendMessage).toHaveBeenCalledTimes(1);
     });
     expect(api.editMessageText).not.toHaveBeenCalled();
+    expect(api.sendMessageDraft).not.toHaveBeenCalled();
+  });
+
+  it("does not send assistant run footer when it is disabled", async () => {
+    const { api, summaryAggregator } = await setupService(true, {
+      responseStreamingMode: "edit",
+      showAssistantRunFooter: false,
+      startAssistantRun: true,
+    });
+
+    emitAssistantTextPart(summaryAggregator, "Final answer");
+    emitAssistantCompleted(summaryAggregator);
+    emitSessionIdle(summaryAggregator);
+
+    await vi.waitFor(
+      () => {
+        expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 3000 },
+    );
+    expect(api.sendMessage.mock.calls[0][1]).toBe("Final answer");
+  });
+
+  it("notifies the final draft response when assistant run footer is disabled", async () => {
+    const { api, summaryAggregator } = await setupService(true, {
+      responseStreamingMode: "draft",
+      showAssistantRunFooter: false,
+      startAssistantRun: true,
+    });
+
+    emitAssistantTextPart(summaryAggregator, "Final answer");
+    emitAssistantCompleted(summaryAggregator);
+    emitSessionIdle(summaryAggregator);
+
+    await vi.waitFor(
+      () => {
+        expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 3000 },
+    );
+    expect(api.sendMessage.mock.calls[0][1]).toBe("Final answer");
+    expect(api.sendMessage.mock.calls[0][2]?.disable_notification).toBeUndefined();
+    expect(api.sendMessageDraft).not.toHaveBeenCalled();
+  });
+
+  it("keeps the final draft response silent when assistant run footer is enabled", async () => {
+    const { api, summaryAggregator } = await setupService(true, {
+      responseStreamingMode: "draft",
+      showAssistantRunFooter: true,
+      startAssistantRun: true,
+    });
+
+    emitAssistantTextPart(summaryAggregator, "Final answer");
+    emitAssistantCompleted(summaryAggregator);
+    emitSessionIdle(summaryAggregator);
+
+    await vi.waitFor(
+      () => {
+        expect(api.sendMessage).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 3000 },
+    );
+    expect(api.sendMessage.mock.calls[0][1]).toBe("Final answer");
+    expect(api.sendMessage.mock.calls[0][2]).toEqual({ disable_notification: true });
+    expect(api.sendMessage.mock.calls[1][1]).toContain("test-provider/test-model");
     expect(api.sendMessageDraft).not.toHaveBeenCalled();
   });
 });

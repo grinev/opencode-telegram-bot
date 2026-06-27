@@ -160,6 +160,7 @@ export const fr: I18nDictionary = {
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draft (experimental)",
   "settings.diff_files.label": "Fichiers diff",
+  "settings.assistant_footer.label": "Pied de réponse",
   "settings.tts.label": "Réponses audio",
   "settings.value.on": "Activé",
   "settings.value.off": "Désactivé",
