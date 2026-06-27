@@ -134,6 +134,7 @@ export const ar: I18nDictionary = {
   "settings.menu.title": "⚙️ الإعدادات",
   "settings.compact_output.label": "وضع الإخراج المختصر",
   "settings.thinking_content.label": "محتوى التفكير",
+  "settings.diff_files.label": "ملفات diff",
   "settings.tts.label": "الردود الصوتية",
   "settings.value.on": "مفعّل",
   "settings.value.off": "معطّل",

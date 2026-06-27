@@ -145,6 +145,7 @@ export const ru: I18nDictionary = {
   "settings.menu.title": "⚙️ Настройки",
   "settings.compact_output.label": "Компактный вывод",
   "settings.thinking_content.label": "Содержимое thinking",
+  "settings.diff_files.label": "Файлы с diff",
   "settings.tts.label": "Аудиоответы",
   "settings.value.on": "Вкл",
   "settings.value.off": "Выкл",

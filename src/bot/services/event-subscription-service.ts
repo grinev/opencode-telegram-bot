@@ -8,7 +8,11 @@ import { summaryAggregator, type ToolInfo } from "../../app/managers/summary-agg
 import { formatCompactToolInfo, formatToolInfo } from "../../app/formatters/summary-formatter.js";
 import { renderSubagentCards } from "../../app/formatters/subagent-formatter.js";
 import { ToolMessageBatcher } from "../../app/formatters/tool-message-batcher.js";
-import { getCompactOutputMode, getShowThinkingContent } from "../../app/stores/settings-store.js";
+import {
+  getCompactOutputMode,
+  getSendDiffFileAttachments,
+  getShowThinkingContent,
+} from "../../app/stores/settings-store.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
 import { logger } from "../../utils/logger.js";
@@ -514,15 +518,12 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const shouldIncludeToolInfoInFileCaption =
+      const shouldSendToolFileAttachment =
         toolInfo.hasFileAttachment &&
+        getSendDiffFileAttachments() &&
         (toolInfo.tool === "write" || toolInfo.tool === "edit" || toolInfo.tool === "apply_patch");
 
-      if (
-        config.bot.hideToolCallMessages ||
-        shouldIncludeToolInfoInFileCaption ||
-        toolInfo.tool === "task"
-      ) {
+      if (shouldSendToolFileAttachment || toolInfo.tool === "task") {
         return;
       }
 
@@ -546,10 +547,6 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
 
       if (isCompactProgressMode()) {
-        return;
-      }
-
-      if (config.bot.hideToolCallMessages) {
         return;
       }
 
@@ -590,7 +587,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      if (config.bot.hideToolFileMessages) {
+      if (!getSendDiffFileAttachments()) {
         return;
       }
 

@@ -85,7 +85,7 @@ No public inbound ports are required for normal usage.
 - Configurable commands list size (default: 10)
 - Configurable scheduled task limit (default: 10)
 - Configurable bot locale
-- Configurable visibility for service messages (thinking/tool calls)
+- Configurable visibility for thinking content and diff-file attachments
 - Configurable compact output and TTS modes (`/settings`)
 - Configurable opt-in display of full thinking/reasoning content
 - Configurable max code file size in KB (default: 100)
@@ -156,7 +156,7 @@ Model picker behavior:
 - [x] Scheduled task list and deletion flow (`/tasklist`)
 - [x] Persistent settings between restarts (`settings.json`)
 - [x] UI localization support via i18n files
-- [x] Service message visibility controls (thinking/tool updates)
+- [x] Service message visibility controls (thinking content and diff-file attachments)
 - [x] Sending code blocks as text files when needed
 - [x] Image attachments support (send photos/screenshots from Telegram to OpenCode, including multiple files in one Telegram album)
 - [x] PDF attachments support (send documents from Telegram to OpenCode)

@@ -153,6 +153,7 @@ export const de: I18nDictionary = {
   "settings.menu.title": "⚙️ Einstellungen",
   "settings.compact_output.label": "Kompakte Ausgabe",
   "settings.thinking_content.label": "Thinking-Inhalt",
+  "settings.diff_files.label": "Diff-Dateien",
   "settings.tts.label": "Audioantworten",
   "settings.value.on": "Ein",
   "settings.value.off": "Aus",

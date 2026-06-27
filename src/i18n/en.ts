@@ -146,6 +146,7 @@ export const en = {
   "settings.menu.title": "⚙️ Settings",
   "settings.compact_output.label": "Compact output mode",
   "settings.thinking_content.label": "Thinking content",
+  "settings.diff_files.label": "Diff files",
   "settings.tts.label": "Audio replies",
   "settings.value.on": "On",
   "settings.value.off": "Off",

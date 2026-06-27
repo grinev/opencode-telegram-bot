@@ -49,7 +49,6 @@ vi.mock("../../../src/config.js", () => ({
       locale: "en",
       sessionsListLimit: 10,
       projectsListLimit: 10,
-      hideToolCallMessages: false,
       messageFormatMode: "markdown",
     },
     files: {

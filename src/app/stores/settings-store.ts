@@ -114,6 +114,15 @@ export function setShowThinkingContent(enabled: boolean): void {
   void writeSettingsFile(currentSettings);
 }
 
+export function getSendDiffFileAttachments(): boolean {
+  return currentSettings.sendDiffFileAttachments ?? true;
+}
+
+export function setSendDiffFileAttachments(enabled: boolean): void {
+  currentSettings.sendDiffFileAttachments = enabled;
+  void writeSettingsFile(currentSettings);
+}
+
 export function getCurrentAgent(): string | undefined {
   return currentSettings.currentAgent;
 }

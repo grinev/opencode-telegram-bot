@@ -17,6 +17,7 @@ export interface Settings {
   ttsMode?: "off" | "all" | "auto";
   compactOutputMode?: boolean;
   showThinkingContent?: boolean;
+  sendDiffFileAttachments?: boolean;
   sessionDirectoryCache?: SessionDirectoryCacheInfo;
   scheduledTasks?: ScheduledTask[];
   scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[];

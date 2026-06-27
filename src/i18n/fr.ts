@@ -155,6 +155,7 @@ export const fr: I18nDictionary = {
   "settings.menu.title": "⚙️ Paramètres",
   "settings.compact_output.label": "Sortie compacte",
   "settings.thinking_content.label": "Contenu thinking",
+  "settings.diff_files.label": "Fichiers diff",
   "settings.tts.label": "Réponses audio",
   "settings.value.on": "Activé",
   "settings.value.off": "Désactivé",

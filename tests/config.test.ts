@@ -16,16 +16,6 @@ describe("config boolean env parsing", () => {
     vi.stubEnv("OPENCODE_MONITOR_INTERVAL_SEC", "");
   });
 
-  it("uses false defaults for hide tool message flags", async () => {
-    vi.stubEnv("HIDE_TOOL_CALL_MESSAGES", "");
-    vi.stubEnv("HIDE_TOOL_FILE_MESSAGES", "");
-
-    const config = await loadConfig();
-
-    expect(config.bot.hideToolCallMessages).toBe(false);
-    expect(config.bot.hideToolFileMessages).toBe(false);
-  });
-
   it("tracks background sessions by default", async () => {
     vi.stubEnv("TRACK_BACKGROUND_SESSIONS", "");
 
@@ -48,36 +38,6 @@ describe("config boolean env parsing", () => {
     const config = await loadConfig();
 
     expect(config.bot.trackBackgroundSessions).toBe(true);
-  });
-
-  it("parses truthy values for hide tool message flags", async () => {
-    vi.stubEnv("HIDE_TOOL_CALL_MESSAGES", "1");
-    vi.stubEnv("HIDE_TOOL_FILE_MESSAGES", "true");
-
-    const config = await loadConfig();
-
-    expect(config.bot.hideToolCallMessages).toBe(true);
-    expect(config.bot.hideToolFileMessages).toBe(true);
-  });
-
-  it("parses falsy values for hide tool message flags", async () => {
-    vi.stubEnv("HIDE_TOOL_CALL_MESSAGES", "0");
-    vi.stubEnv("HIDE_TOOL_FILE_MESSAGES", "false");
-
-    const config = await loadConfig();
-
-    expect(config.bot.hideToolCallMessages).toBe(false);
-    expect(config.bot.hideToolFileMessages).toBe(false);
-  });
-
-  it("falls back to defaults on invalid values", async () => {
-    vi.stubEnv("HIDE_TOOL_CALL_MESSAGES", "nope");
-    vi.stubEnv("HIDE_TOOL_FILE_MESSAGES", "invalid");
-
-    const config = await loadConfig();
-
-    expect(config.bot.hideToolCallMessages).toBe(false);
-    expect(config.bot.hideToolFileMessages).toBe(false);
   });
 
   it("uses markdown as default message format mode", async () => {

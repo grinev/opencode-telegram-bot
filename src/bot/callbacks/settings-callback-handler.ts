@@ -2,9 +2,11 @@ import type { Context } from "grammy";
 import { isTtsConfigured } from "../../app/services/tts-service.js";
 import {
   getCompactOutputMode,
+  getSendDiffFileAttachments,
   getShowThinkingContent,
   getTtsMode,
   setCompactOutputMode,
+  setSendDiffFileAttachments,
   setShowThinkingContent,
   setTtsMode,
   type TtsMode,
@@ -16,6 +18,7 @@ import {
   buildSettingsMenuView,
   SETTINGS_CALLBACK_PREFIX,
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
+  SETTINGS_DIFF_FILES_CALLBACK,
   SETTINGS_THINKING_CONTENT_CALLBACK,
   SETTINGS_TTS_CALLBACK,
 } from "../menus/settings-menu.js";
@@ -69,6 +72,16 @@ export async function handleSettingsCallback(ctx: Context): Promise<boolean> {
 
     if (callbackData === SETTINGS_THINKING_CONTENT_CALLBACK) {
       setShowThinkingContent(!getShowThinkingContent());
+      const { text, keyboard } = buildSettingsMenuView();
+      await ctx.answerCallbackQuery({ text: t("settings.saved") });
+      await ctx.editMessageText(text, {
+        reply_markup: appendInlineMenuCancelButton(keyboard, "settings"),
+      });
+      return true;
+    }
+
+    if (callbackData === SETTINGS_DIFF_FILES_CALLBACK) {
+      setSendDiffFileAttachments(!getSendDiffFileAttachments());
       const { text, keyboard } = buildSettingsMenuView();
       await ctx.answerCallbackQuery({ text: t("settings.saved") });
       await ctx.editMessageText(text, {

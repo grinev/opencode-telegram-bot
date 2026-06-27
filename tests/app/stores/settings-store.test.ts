@@ -6,10 +6,12 @@ import { setRuntimeMode } from "../../../src/runtime/mode.js";
 import {
   __resetSettingsForTests,
   getCompactOutputMode,
+  getSendDiffFileAttachments,
   getShowThinkingContent,
   getTtsMode,
   loadSettings,
   setCompactOutputMode,
+  setSendDiffFileAttachments,
   setShowThinkingContent,
 } from "../../../src/app/stores/settings-store.js";
 
@@ -74,6 +76,23 @@ describe("app/stores/settings-store", () => {
     expect(getShowThinkingContent()).toBe(false);
   });
 
+  it("sends diff file attachments by default", async () => {
+    await loadSettings();
+
+    expect(getSendDiffFileAttachments()).toBe(true);
+  });
+
+  it("loads diff file attachment setting from settings.json", async () => {
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      JSON.stringify({ sendDiffFileAttachments: false }),
+    );
+
+    await loadSettings();
+
+    expect(getSendDiffFileAttachments()).toBe(false);
+  });
+
   it("persists compact output mode to settings.json", async () => {
     await loadSettings();
 
@@ -103,6 +122,18 @@ describe("app/stores/settings-store", () => {
     await vi.waitFor(async () => {
       const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
       expect(settings.showThinkingContent).toBe(false);
+    });
+  });
+
+  it("persists diff file attachment setting to settings.json", async () => {
+    await loadSettings();
+
+    setSendDiffFileAttachments(false);
+
+    expect(getSendDiffFileAttachments()).toBe(false);
+    await vi.waitFor(async () => {
+      const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
+      expect(settings.sendDiffFileAttachments).toBe(false);
     });
   });
 });

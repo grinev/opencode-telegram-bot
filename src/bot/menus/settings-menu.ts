@@ -1,6 +1,7 @@
 import { InlineKeyboard } from "grammy";
 import {
   getCompactOutputMode,
+  getSendDiffFileAttachments,
   getShowThinkingContent,
   getTtsMode,
   type TtsMode,
@@ -10,6 +11,7 @@ import { t } from "../../i18n/index.js";
 export const SETTINGS_CALLBACK_PREFIX = "settings:";
 export const SETTINGS_COMPACT_OUTPUT_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}compact_output`;
 export const SETTINGS_THINKING_CONTENT_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}thinking_content`;
+export const SETTINGS_DIFF_FILES_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}diff_files`;
 export const SETTINGS_TTS_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}tts`;
 
 export function formatBooleanSettingValue(enabled: boolean): string {
@@ -31,6 +33,7 @@ export function formatTtsModeValue(mode: TtsMode): string {
 export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboard } {
   const compactOutputMode = getCompactOutputMode();
   const showThinkingContent = getShowThinkingContent();
+  const sendDiffFileAttachments = getSendDiffFileAttachments();
   const ttsMode = getTtsMode();
   const keyboard = new InlineKeyboard()
     .text(
@@ -42,6 +45,11 @@ export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboar
     keyboard.row().text(
       `${t("settings.thinking_content.label")}: ${formatBooleanSettingValue(showThinkingContent)}`,
       SETTINGS_THINKING_CONTENT_CALLBACK,
+    );
+
+    keyboard.row().text(
+      `${t("settings.diff_files.label")}: ${formatBooleanSettingValue(sendDiffFileAttachments)}`,
+      SETTINGS_DIFF_FILES_CALLBACK,
     );
   }
 
