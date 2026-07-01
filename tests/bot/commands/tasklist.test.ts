@@ -257,4 +257,83 @@ describe("bot/commands/tasklist", () => {
       show_alert: true,
     });
   });
+
+  it("truncates long ASCII prompt by byte length to fit Telegram limit", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 700,
+      },
+    });
+
+    const longPrompt = "A".repeat(4000);
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-long", {
+        prompt: longPrompt,
+      }),
+    );
+
+    const ctx = createCallbackContext("tasklist:open:task-long", 700);
+    await handleTaskListCallback(ctx);
+
+    const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(text).toContain("...");
+    expect(Buffer.byteLength(text, "utf-8")).toBeLessThanOrEqual(4096);
+  });
+
+  it("keeps short prompts intact without truncation", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 800,
+      },
+    });
+
+    const shortPrompt = "Check weather";
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-short", {
+        prompt: shortPrompt,
+      }),
+    );
+
+    const ctx = createCallbackContext("tasklist:open:task-short", 800);
+    await handleTaskListCallback(ctx);
+
+    const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(text).toContain(shortPrompt);
+    expect(text).not.toContain("...");
+  });
+
+  it("truncates non-ASCII prompts by byte length (Arabic/Cyrillic)", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 900,
+      },
+    });
+
+    // Arabic chars are ~2 bytes each in UTF-8 — 2500 chars = ~5000 bytes
+    const arabicPrompt = "مرحباً".repeat(500);
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-ar", {
+        prompt: arabicPrompt,
+      }),
+    );
+
+    const ctx = createCallbackContext("tasklist:open:task-ar", 900);
+    await handleTaskListCallback(ctx);
+
+    const [text] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(text).toContain("...");
+    expect(Buffer.byteLength(text, "utf-8")).toBeLessThanOrEqual(4096);
+  });
 });
