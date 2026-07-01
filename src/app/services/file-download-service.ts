@@ -108,7 +108,48 @@ const APPLICATION_TEXT_MIME_TYPES = new Set([
   "application/sql",
 ]);
 
-export function isTextMimeType(mimeType: string | undefined): boolean {
+const TEXT_FILE_EXTENSIONS = new Set([
+  "svelte",
+  "vue",
+  "ts",
+  "tsx",
+  "jsx",
+  "mjs",
+  "cjs",
+  "go",
+  "rs",
+  "rb",
+  "py",
+  "java",
+  "c",
+  "cpp",
+  "h",
+  "hpp",
+  "cs",
+  "swift",
+  "kt",
+  "kts",
+  "sh",
+  "bash",
+  "yaml",
+  "yml",
+  "toml",
+  "ini",
+  "cfg",
+  "md",
+  "mdx",
+  "css",
+  "scss",
+  "less",
+  "html",
+  "htm",
+  "graphql",
+  "gql",
+  "proto",
+  "gradle",
+]);
+
+export function isTextMimeType(mimeType: string | undefined, filename?: string): boolean {
   if (!mimeType) {
     return false;
   }
@@ -117,5 +158,16 @@ export function isTextMimeType(mimeType: string | undefined): boolean {
     return true;
   }
 
-  return APPLICATION_TEXT_MIME_TYPES.has(mimeType);
+  if (APPLICATION_TEXT_MIME_TYPES.has(mimeType)) {
+    return true;
+  }
+
+  if (filename) {
+    const ext = filename.split(".").pop()?.toLowerCase();
+    if (ext && TEXT_FILE_EXTENSIONS.has(ext)) {
+      return true;
+    }
+  }
+
+  return false;
 }

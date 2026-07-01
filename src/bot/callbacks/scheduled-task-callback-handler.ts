@@ -154,6 +154,16 @@ function formatDateTime(dateIso: string | null, timezone: string): string {
   }
 }
 
+const TASK_DETAIL_PROMPT_MAX_LENGTH = 3800;
+
+function truncatePromptForDetails(prompt: string): string {
+  if (prompt.length <= TASK_DETAIL_PROMPT_MAX_LENGTH) {
+    return prompt;
+  }
+
+  return `${prompt.slice(0, TASK_DETAIL_PROMPT_MAX_LENGTH - 3)}...`;
+}
+
 function formatTaskDetails(task: ScheduledTask): string {
   const variant = task.model.variant ? ` (${task.model.variant})` : "";
   const model = `${task.model.providerID}/${task.model.modelID}${variant}`;
@@ -161,7 +171,7 @@ function formatTaskDetails(task: ScheduledTask): string {
     task.kind === "cron" ? `${t("tasklist.details.cron", { cron: task.cron })}\n` : "";
 
   return t("tasklist.details", {
-    prompt: task.prompt,
+    prompt: truncatePromptForDetails(task.prompt),
     project: `${task.projectWorktree}\n${t("status.line.model", { model })}`,
     schedule: task.scheduleSummary,
     cronLine,
