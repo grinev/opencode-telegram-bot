@@ -254,7 +254,7 @@ export class MediaGroupAttachmentHandler {
       const mimeType = document.mime_type || "";
       const filename = document.file_name || "document";
 
-      if (isTextMimeType(mimeType)) {
+      if (isTextMimeType(mimeType, filename)) {
         if (!isFileSizeAllowed(document.file_size, config.files.maxFileSizeKb)) {
           return { reason: "text_file_too_large" };
         }

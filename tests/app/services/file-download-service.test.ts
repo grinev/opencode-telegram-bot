@@ -114,6 +114,36 @@ describe("app/services/file-download-service", () => {
     it("returns false for empty string", () => {
       expect(isTextMimeType("")).toBe(false);
     });
+
+    it("returns true for unknown MIME with known code file extension", () => {
+      expect(isTextMimeType("application/octet-stream", "component.svelte")).toBe(true);
+      expect(isTextMimeType("application/octet-stream", "App.vue")).toBe(true);
+      expect(isTextMimeType("application/octet-stream", "main.tsx")).toBe(true);
+      expect(isTextMimeType("application/octet-stream", "server.go")).toBe(true);
+      expect(isTextMimeType("application/octet-stream", "script.py")).toBe(true);
+    });
+
+    it("returns false for unknown MIME with unknown extension", () => {
+      expect(isTextMimeType("application/octet-stream", "file.xyz")).toBe(false);
+      expect(isTextMimeType("application/octet-stream", "archive.7z")).toBe(false);
+    });
+
+    it("returns false for unknown MIME without filename", () => {
+      expect(isTextMimeType("application/octet-stream")).toBe(false);
+    });
+
+    it("returns false for undefined MIME even with known extension", () => {
+      expect(isTextMimeType(undefined, "file.svelte")).toBe(false);
+    });
+
+    it("handles files with multiple dots correctly", () => {
+      expect(isTextMimeType("application/octet-stream", "Component.test.svelte")).toBe(true);
+      expect(isTextMimeType("application/octet-stream", "some.file.with.dots.py")).toBe(true);
+    });
+
+    it("handles files with no extension", () => {
+      expect(isTextMimeType("application/octet-stream", "Dockerfile")).toBe(false);
+    });
   });
 });
 

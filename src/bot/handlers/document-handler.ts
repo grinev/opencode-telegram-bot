@@ -50,7 +50,7 @@ export async function handleDocumentMessage(
   const filename = doc.file_name || "document";
 
   try {
-    if (isTextMimeType(mimeType)) {
+    if (isTextMimeType(mimeType, filename)) {
       if (!isFileSizeAllowed(doc.file_size, config.files.maxFileSizeKb)) {
         logger.warn(
           `[Document] Text file too large: ${filename} (${doc.file_size} bytes > ${config.files.maxFileSizeKb}KB)`,
