@@ -138,6 +138,40 @@ function clearTaskListInteraction(reason: string): void {
   }
 }
 
+/**
+ * Truncates text so its UTF-8 byte length does not exceed maxBytes.
+ * Appends "..." when truncation occurs.
+ * Uses TextEncoder to count bytes accurately (handles emoji, CJK, etc.).
+ */
+function truncateToByteLength(text: string, maxBytes: number): string {
+  const encoder = new TextEncoder();
+  if (encoder.encode(text).length <= maxBytes) {
+    return text;
+  }
+
+  // Binary-search for the longest prefix that fits within (maxBytes - 3) bytes.
+  // We search over UTF-16 code unit indices (JS string positions).
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (encoder.encode(text.slice(0, mid)).length <= maxBytes - 3) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  // Snap back if `low` cuts in the middle of a surrogate pair.
+  // If the last code unit in the slice is a high surrogate (0xD800–0xDBFF),
+  // the slice ends with an unpaired surrogate — step back one code unit.
+  if (low > 0 && text.charCodeAt(low - 1) >= 0xd800 && text.charCodeAt(low - 1) <= 0xdbff) {
+    low -= 1;
+  }
+
+  return `${text.slice(0, low).trimEnd()}...`;
+}
+
 function formatDateTime(dateIso: string | null, timezone: string): string {
   if (!dateIso) {
     return "-";
@@ -161,7 +195,14 @@ function formatTaskDetails(task: ScheduledTask): string {
     task.kind === "cron" ? `${t("tasklist.details.cron", { cron: task.cron })}\n` : "";
 
   return t("tasklist.details", {
-    prompt: task.prompt,
+    // Telegram editMessageText hard limit is 4096 bytes (UTF-8).
+    // The prompt budget (3800 bytes) is derived from the English locale:
+    // 4096 − ~230 (template chrome: title, labels, schedule, etc.) − 66 (safety margin) = 3800.
+    // NOTE: Non-English locales may have longer template chrome. If a locale's
+    // chrome exceeds ~296 bytes (230 + 66), the total could exceed 4096.
+    // This budget is safe for all current locales; re-calculate if new locales
+    // with significantly longer translations are added.
+    prompt: truncateToByteLength(task.prompt, 3800),
     project: `${task.projectWorktree}\n${t("status.line.model", { model })}`,
     schedule: task.scheduleSummary,
     cronLine,
