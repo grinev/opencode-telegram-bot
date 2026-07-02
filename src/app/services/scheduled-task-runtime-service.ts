@@ -100,7 +100,7 @@ export class ScheduledTaskRuntime {
 
   async initialize(bot: Bot<Context>, deliverySender?: ScheduledTaskDeliverySender): Promise<void> {
     this.botApi = bot.api;
-    this.chatId = config.telegram.allowedUserId;
+    this.chatId = config.telegram.allowedUserId[0];
     this.deliverySender = deliverySender ?? null;
 
     if (this.initialized) {

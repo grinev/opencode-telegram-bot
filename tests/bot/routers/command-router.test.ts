@@ -41,7 +41,7 @@ describe("bot/routers/command-router", () => {
   it("initializes commands for the authorized chat", async () => {
     const next: NextFunction = vi.fn();
     const ctx = {
-      from: { id: config.telegram.allowedUserId },
+      from: { id: config.telegram.allowedUserId[0] },
       chat: { id: 123 },
       api: { setMyCommands: vi.fn() },
     } as unknown as Context;
