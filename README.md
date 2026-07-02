@@ -233,6 +233,7 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `TRACK_BACKGROUND_SESSIONS`                | Track detached/non-current sessions in the current selected project/worktree and send short notifications             |    No    | `true`                   |
 | `RESPONSE_STREAM_THROTTLE_MS`              | Stream update throttle in milliseconds for assistant, thinking, and tool message edits                                |    No    | `1000`                   |
 | `MESSAGE_FORMAT_MODE`                      | Assistant reply formatting mode: `markdown` (Telegram MarkdownV2) or `raw`                                            |    No    | `markdown`               |
+| `HIDE_RUN_FOOTER`                          | Hide the per-reply run footer (agent, provider/model, elapsed) by default; still toggleable via `/settings`           |    No    | `false`                  |
 | `CODE_FILE_MAX_SIZE_KB`                    | Max file size (KB) to send as document                                                                                |    No    | `100`                    |
 | `STT_API_URL`                              | Whisper-compatible API base URL (enables voice/audio transcription)                                                   |    No    | —                        |
 | `STT_API_KEY`                              | API key for your STT provider                                                                                         |    No    | —                        |
@@ -258,6 +259,7 @@ Runtime preferences are changed from `/settings` and stored in `settings.json`:
 
 - Compact output mode
 - Thinking content display
+- Assistant run footer display (its default can be preset with the `HIDE_RUN_FOOTER` environment variable)
 - Diff file attachments
 - Response streaming mode: `edit` or `draft (experimental)`; applies only to final assistant replies, not thinking messages
 - Audio replies: `off`, `all`, or `auto` when TTS is configured
