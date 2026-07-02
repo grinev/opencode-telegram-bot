@@ -78,6 +78,19 @@ describe("app/stores/settings-store", () => {
     expect(getShowAssistantRunFooter()).toBe(true);
   });
 
+  it("hides the assistant run footer by default when HIDE_RUN_FOOTER is enabled", async () => {
+    vi.resetModules();
+    vi.stubEnv("HIDE_RUN_FOOTER", "true");
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getShowAssistantRunFooter()).toBe(false);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
   it("loads thinking content setting from settings.json", async () => {
     await writeFile(path.join(tempHome, "settings.json"), JSON.stringify({ showThinkingContent: false }));
 

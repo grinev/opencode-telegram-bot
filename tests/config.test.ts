@@ -72,6 +72,30 @@ describe("config boolean env parsing", () => {
     expect(config.bot.messageFormatMode).toBe("markdown");
   });
 
+  it("does not hide the run footer by default", async () => {
+    vi.stubEnv("HIDE_RUN_FOOTER", "");
+
+    const config = await loadConfig();
+
+    expect(config.bot.hideRunFooter).toBe(false);
+  });
+
+  it("parses HIDE_RUN_FOOTER as a boolean", async () => {
+    vi.stubEnv("HIDE_RUN_FOOTER", "true");
+
+    const config = await loadConfig();
+
+    expect(config.bot.hideRunFooter).toBe(true);
+  });
+
+  it("falls back to a visible run footer on invalid HIDE_RUN_FOOTER", async () => {
+    vi.stubEnv("HIDE_RUN_FOOTER", "banana");
+
+    const config = await loadConfig();
+
+    expect(config.bot.hideRunFooter).toBe(false);
+  });
+
   it("parses supported locale from BOT_LOCALE", async () => {
     vi.stubEnv("BOT_LOCALE", "fr");
 

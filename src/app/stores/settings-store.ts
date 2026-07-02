@@ -8,6 +8,7 @@ import type {
   ScheduledTaskSessionIgnoreInfo,
   Settings,
 } from "../types/settings.js";
+import { config } from "../../config.js";
 import { getRuntimePaths } from "../../runtime/paths.js";
 import { logger } from "../../utils/logger.js";
 
@@ -119,7 +120,7 @@ export function setShowThinkingContent(enabled: boolean): void {
 }
 
 export function getShowAssistantRunFooter(): boolean {
-  return currentSettings.showAssistantRunFooter ?? true;
+  return currentSettings.showAssistantRunFooter ?? !config.bot.hideRunFooter;
 }
 
 export function setShowAssistantRunFooter(enabled: boolean): void {
