@@ -1,4 +1,6 @@
 import { exec, spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import * as path from "node:path";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
@@ -43,16 +45,59 @@ export function resolveLocalOpencodeTarget(apiUrl: string): LocalOpencodeTarget 
   }
 }
 
+function resolveWindowsOpencodeExe(): string {
+  // npm on Windows usually puts opencode.cmd on PATH (not opencode.exe).
+  // We locate the shim and derive the real exe path from its directory.
+  const pathEnv = process.env.PATH ?? "";
+  const pathEntries = pathEnv.split(path.delimiter).filter(Boolean);
+
+  for (const entry of pathEntries) {
+    const opencodeCmd = path.join(entry, "opencode.cmd");
+    if (!existsSync(opencodeCmd)) {
+      continue;
+    }
+
+    const candidateExe = path.join(entry, "node_modules", "opencode-ai", "bin", "opencode.exe");
+    if (existsSync(candidateExe)) {
+      return candidateExe;
+    }
+
+    // Found the shim but not the exe where it usually lives. Stop searching.
+    break;
+  }
+
+  return "";
+}
+
 export function createOpencodeServeSpawnCommand(
   target: LocalOpencodeTarget,
 ): OpencodeServeSpawnCommand {
   const isWindows = process.platform === "win32";
   const port = target.port.toString();
 
+  if (isWindows) {
+    const resolvedExe = resolveWindowsOpencodeExe();
+
+    if (resolvedExe) {
+      return {
+        command: resolvedExe,
+        args: ["serve", "--port", port],
+        windowsHide: true,
+      };
+    }
+
+    // Safe fallback: works with default npm installs where only opencode.cmd is on PATH.
+    return {
+      command: "cmd.exe",
+      args: ["/c", "opencode", "serve", "--port", port],
+      windowsHide: true,
+    };
+  }
+
   return {
-    command: isWindows ? "cmd.exe" : "opencode",
-    args: isWindows ? ["/c", "opencode", "serve", "--port", port] : ["serve", "--port", port],
-    windowsHide: isWindows,
+    command: "opencode",
+    args: ["serve", "--port", port],
+    windowsHide: false,
   };
 }
 
