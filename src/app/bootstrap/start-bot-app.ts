@@ -47,7 +47,7 @@ export async function startBotApp(): Promise<void> {
   if (logFilePath) {
     logger.info(`Logs are written to ${logFilePath}`);
   }
-  logger.info(`Allowed User ID: ${config.telegram.allowedUserId}`);
+  logger.info(`Allowed User IDs: ${config.telegram.allowedUserId.join(", ")}`);
   logger.debug(`[Runtime] Application start mode: ${mode}`);
 
   await loadSettings();
@@ -56,7 +56,7 @@ export async function startBotApp(): Promise<void> {
   const bot = createBot();
   await scheduledTaskRuntime.initialize(
     bot,
-    createScheduledTaskDeliverySender(bot.api, config.telegram.allowedUserId),
+    createScheduledTaskDeliverySender(bot.api, config.telegram.allowedUserId[0]),
   );
   safeBackgroundTask({
     taskName: "app.opencodeStartup",

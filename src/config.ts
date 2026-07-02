@@ -95,7 +95,7 @@ function getOptionalTtsProviderEnvVar(key: string, defaultValue: TtsProvider): T
 
 export function buildTelegramConfig(): {
   token: string;
-  allowedUserId: number;
+  allowedUserId: number[];
   proxyUrl: string;
   apiRoot: string;
   proxySecret: string;
@@ -124,7 +124,9 @@ export function buildTelegramConfig(): {
 
   return {
     token: getEnvVar("TELEGRAM_BOT_TOKEN"),
-    allowedUserId: parseInt(getEnvVar("TELEGRAM_ALLOWED_USER_ID"), 10),
+    allowedUserId: getEnvVar("TELEGRAM_ALLOWED_USER_ID")
+      .split(",")
+      .map((id) => parseInt(id.trim(), 10)),
     proxyUrl,
     apiRoot,
     proxySecret,

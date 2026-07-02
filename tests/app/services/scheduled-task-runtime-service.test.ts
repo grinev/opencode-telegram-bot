@@ -21,7 +21,7 @@ function cloneTask(task: ScheduledTask): ScheduledTask {
 vi.mock("../../../src/config.js", () => ({
   config: {
     telegram: {
-      allowedUserId: 777,
+      allowedUserId: [777],
     },
     bot: {
       messageFormatMode: "markdown",

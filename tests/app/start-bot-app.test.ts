@@ -25,7 +25,7 @@ const mocked = vi.hoisted(() => ({
       apiUrl: "http://localhost:4096",
     },
     telegram: {
-      allowedUserId: 123,
+      allowedUserId: [123],
     },
   },
 }));

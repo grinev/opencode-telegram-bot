@@ -46,13 +46,13 @@ export function createBot(): Bot<Context> {
 
   configureAttachPresentation(createAttachPresentation());
 
-  eventSubscriptionService.setTelegramContext(bot, config.telegram.allowedUserId);
+  eventSubscriptionService.setTelegramContext(bot, config.telegram.allowedUserId[0]);
 
   unsubscribeReadyRestore?.();
   unsubscribeReadyRestore = opencodeReadyLifecycle.onReady(async (reason) => {
     const restored = await restoreAttachedCurrentSession({
       bot,
-      chatId: config.telegram.allowedUserId,
+      chatId: config.telegram.allowedUserId[0],
       ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
       forceFullRestore: true,
     });

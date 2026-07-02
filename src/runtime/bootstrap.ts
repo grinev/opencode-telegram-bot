@@ -85,7 +85,9 @@ export function validateRuntimeEnvValues(values: Record<string, string>): EnvVal
     return { isValid: false, reason: "Missing TELEGRAM_BOT_TOKEN" };
   }
 
-  if (!isPositiveInteger(values.TELEGRAM_ALLOWED_USER_ID || "")) {
+  if (
+    !values.TELEGRAM_ALLOWED_USER_ID?.split(",").every((id) => isPositiveInteger(id.trim()))
+  ) {
     return { isValid: false, reason: "Invalid TELEGRAM_ALLOWED_USER_ID" };
   }
 
