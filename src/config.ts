@@ -76,6 +76,29 @@ function getOptionalMessageFormatModeEnvVar(
   return defaultValue;
 }
 
+function parseInitialSettingsPreset(): Record<string, unknown> {
+  const raw = getEnvVar("INITIAL_SETTINGS_PRESET", false).trim();
+  if (!raw) {
+    return {};
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.warn(
+      "[config] INITIAL_SETTINGS_PRESET contains invalid JSON — ignoring preset.",
+    );
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    console.warn(
+      "[config] INITIAL_SETTINGS_PRESET must be a JSON object — ignoring preset.",
+    );
+    return {};
+  }
+  return parsed as Record<string, unknown>;
+}
+
 const VALID_TTS_PROVIDERS: TtsProvider[] = ["openai", "google", "elevenlabs", "edge"];
 
 function getOptionalTtsProviderEnvVar(key: string, defaultValue: TtsProvider): TtsProvider {
@@ -167,7 +190,7 @@ export const config = {
     locale: getOptionalLocaleEnvVar("BOT_LOCALE", "en"),
     trackBackgroundSessions: getOptionalBooleanEnvVar("TRACK_BACKGROUND_SESSIONS", true),
     messageFormatMode: getOptionalMessageFormatModeEnvVar("MESSAGE_FORMAT_MODE", "markdown"),
-    hideRunFooter: getOptionalBooleanEnvVar("HIDE_RUN_FOOTER", false),
+    initialSettingsPreset: parseInitialSettingsPreset(),
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),

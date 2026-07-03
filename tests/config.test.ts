@@ -72,28 +72,50 @@ describe("config boolean env parsing", () => {
     expect(config.bot.messageFormatMode).toBe("markdown");
   });
 
-  it("does not hide the run footer by default", async () => {
-    vi.stubEnv("HIDE_RUN_FOOTER", "");
+  it("returns an empty preset when INITIAL_SETTINGS_PRESET is not set", async () => {
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", "");
 
     const config = await loadConfig();
 
-    expect(config.bot.hideRunFooter).toBe(false);
+    expect(config.bot.initialSettingsPreset).toEqual({});
   });
 
-  it("parses HIDE_RUN_FOOTER as a boolean", async () => {
-    vi.stubEnv("HIDE_RUN_FOOTER", "true");
+  it("parses a valid INITIAL_SETTINGS_PRESET JSON object", async () => {
+    vi.stubEnv(
+      "INITIAL_SETTINGS_PRESET",
+      '{"showAssistantRunFooter":false,"compactOutputMode":true}',
+    );
 
     const config = await loadConfig();
 
-    expect(config.bot.hideRunFooter).toBe(true);
+    expect(config.bot.initialSettingsPreset).toEqual({
+      showAssistantRunFooter: false,
+      compactOutputMode: true,
+    });
   });
 
-  it("falls back to a visible run footer on invalid HIDE_RUN_FOOTER", async () => {
-    vi.stubEnv("HIDE_RUN_FOOTER", "banana");
+  it("returns an empty preset when INITIAL_SETTINGS_PRESET contains invalid JSON", async () => {
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", "{not valid json}");
 
     const config = await loadConfig();
 
-    expect(config.bot.hideRunFooter).toBe(false);
+    expect(config.bot.initialSettingsPreset).toEqual({});
+  });
+
+  it("returns an empty preset when INITIAL_SETTINGS_PRESET is a JSON array", async () => {
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '["not","an","object"]');
+
+    const config = await loadConfig();
+
+    expect(config.bot.initialSettingsPreset).toEqual({});
+  });
+
+  it("returns an empty preset when INITIAL_SETTINGS_PRESET is a JSON scalar", async () => {
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", "true");
+
+    const config = await loadConfig();
+
+    expect(config.bot.initialSettingsPreset).toEqual({});
   });
 
   it("parses supported locale from BOT_LOCALE", async () => {

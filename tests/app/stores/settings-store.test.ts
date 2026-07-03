@@ -78,14 +78,66 @@ describe("app/stores/settings-store", () => {
     expect(getShowAssistantRunFooter()).toBe(true);
   });
 
-  it("hides the assistant run footer by default when HIDE_RUN_FOOTER is enabled", async () => {
+  it("applies INITIAL_SETTINGS_PRESET for settings not yet persisted", async () => {
     vi.resetModules();
-    vi.stubEnv("HIDE_RUN_FOOTER", "true");
+    vi.stubEnv(
+      "INITIAL_SETTINGS_PRESET",
+      '{"showAssistantRunFooter":false,"compactOutputMode":true,"ttsMode":"auto","responseStreamingMode":"draft","sendDiffFileAttachments":false,"showThinkingContent":false}',
+    );
 
     const store = await import("../../../src/app/stores/settings-store.js");
     await store.loadSettings();
 
     expect(store.getShowAssistantRunFooter()).toBe(false);
+    expect(store.getCompactOutputMode()).toBe(true);
+    expect(store.getTtsMode()).toBe("auto");
+    expect(store.getResponseStreamingMode()).toBe("draft");
+    expect(store.getSendDiffFileAttachments()).toBe(false);
+    expect(store.getShowThinkingContent()).toBe(false);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("does not overwrite a persisted setting with INITIAL_SETTINGS_PRESET", async () => {
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      JSON.stringify({ showAssistantRunFooter: true }),
+    );
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"showAssistantRunFooter":false}');
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getShowAssistantRunFooter()).toBe(true);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("ignores unknown keys in INITIAL_SETTINGS_PRESET without crashing", async () => {
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"unknownKey":true,"compactOutputMode":true}');
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getCompactOutputMode()).toBe(true);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("ignores a preset key with the wrong type without crashing", async () => {
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"compactOutputMode":"yes"}');
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getCompactOutputMode()).toBe(false);
 
     vi.unstubAllEnvs();
     vi.resetModules();
