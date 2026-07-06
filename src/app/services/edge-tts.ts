@@ -74,19 +74,11 @@ function connectId(): string {
   return randomUUID().replace(/-/g, "");
 }
 
+/** Formats like JS `Date.toString()` in UTC, the X-Timestamp shape Edge sends. */
 function jsDateString(date: Date = new Date()): string {
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-  const pad = (n: number): string => n.toString().padStart(2, "0");
-  return (
-    `${days[date.getUTCDay()]} ${months[date.getUTCMonth()]} ` +
-    `${pad(date.getUTCDate())} ${date.getUTCFullYear()} ` +
-    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())} ` +
-    `GMT+0000 (Coordinated Universal Time)`
-  );
+  // toUTCString gives "Fri, 01 Jan 2024 00:00:00 GMT"; reorder its tokens.
+  const [day, dayNum, month, year, time] = date.toUTCString().replace(",", "").split(" ");
+  return `${day} ${month} ${dayNum} ${year} ${time} GMT+0000 (Coordinated Universal Time)`;
 }
 
 function escapeXml(text: string): string {
@@ -96,31 +88,19 @@ function escapeXml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
+/** Escapes a value for interpolation into a single-quoted XML attribute. */
+function escapeXmlAttribute(value: string): string {
+  return escapeXml(value).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+}
+
 /**
  * Replaces control characters the service rejects (0x00-0x08, 0x0B-0x0C,
  * 0x0E-0x1F) with spaces. Common in OCR'd text; without this the service
  * returns an error.
  */
 function removeIncompatibleCharacters(text: string): string {
-  let result = "";
-  for (const char of text) {
-    const code = char.codePointAt(0)!;
-    if (
-      (code >= 0 && code <= 8) ||
-      (code >= 11 && code <= 12) ||
-      (code >= 14 && code <= 31)
-    ) {
-      result += " ";
-    } else {
-      result += char;
-    }
-  }
-  return result;
-}
-
-function isValidUtf8Prefix(buf: Buffer, length: number): boolean {
-  const prefix = buf.subarray(0, length);
-  return Buffer.from(prefix.toString("utf-8"), "utf-8").equals(prefix);
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ");
 }
 
 /** Moves a split point back so it does not land inside an XML entity (&amp;). */
@@ -151,7 +131,9 @@ export function splitTextByByteLength(text: string, byteLength: number): string[
     if (splitAt < 0) splitAt = rest.lastIndexOf(0x20, byteLength - 1);
     if (splitAt < 0) {
       splitAt = byteLength;
-      while (splitAt > 0 && !isValidUtf8Prefix(rest, splitAt)) {
+      // Back up while the byte at the split is a UTF-8 continuation byte
+      // (10xxxxxx) so the cut never lands inside a multi-byte character.
+      while (splitAt > 0 && (rest[splitAt] & 0xc0) === 0x80) {
         splitAt--;
       }
     }
@@ -175,8 +157,9 @@ function buildSsml(
 ): string {
   return (
     "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>" +
-    `<voice name='${voice}'>` +
-    `<prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>` +
+    `<voice name='${escapeXmlAttribute(voice)}'>` +
+    `<prosody pitch='${escapeXmlAttribute(pitch)}' rate='${escapeXmlAttribute(rate)}' ` +
+    `volume='${escapeXmlAttribute(volume)}'>` +
     text +
     "</prosody></voice></speak>"
   );
@@ -203,6 +186,10 @@ interface SynthesisParams {
   rate: string;
   volume: string;
   pitch: string;
+  /** Absolute wall-clock time (ms epoch) the whole synthesis must finish by. */
+  deadline: number;
+  /** The total budget the deadline was derived from, for error messages. */
+  timeoutMs: number;
 }
 
 /**
@@ -214,30 +201,21 @@ interface SynthesisParams {
  * service does not reliably accept a second SSML turn on the same socket.
  */
 async function synthesizeChunk(chunk: string, params: SynthesisParams): Promise<Buffer> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      return await attemptSynthesis(chunk, params);
-    } catch (err) {
-      if (
-        err instanceof EdgeHttpUpgradeError &&
-        err.statusCode === 403 &&
-        attempt === 0 &&
-        err.serverDate
-      ) {
-        const serverTime = parseRfc2616Date(err.serverDate);
-        if (serverTime !== null) {
-          const clientTime = Date.now() / 1000 + clockSkewSeconds;
-          clockSkewSeconds += serverTime - clientTime;
-          logger.warn(
-            `[EdgeTTS] HTTP 403: adjusted clock skew by ${serverTime - clientTime}s, retrying`,
-          );
-          continue;
-        }
+  try {
+    return await attemptSynthesis(chunk, params);
+  } catch (err) {
+    if (err instanceof EdgeHttpUpgradeError && err.statusCode === 403 && err.serverDate) {
+      const serverTime = parseRfc2616Date(err.serverDate);
+      if (serverTime !== null) {
+        clockSkewSeconds = serverTime - Date.now() / 1000;
+        logger.warn(
+          `[EdgeTTS] HTTP 403: adjusted clock skew to ${clockSkewSeconds.toFixed(1)}s, retrying`,
+        );
+        return await attemptSynthesis(chunk, params);
       }
-      throw err;
     }
+    throw err;
   }
-  throw new Error("Edge TTS synthesis failed after retry");
 }
 
 function attemptSynthesis(chunk: string, params: SynthesisParams): Promise<Buffer> {
@@ -259,6 +237,9 @@ function attemptSynthesis(chunk: string, params: SynthesisParams): Promise<Buffe
       settled = true;
       if (timer) clearTimeout(timer);
       ws.removeAllListeners();
+      // Closing a still-connecting socket makes ws emit 'error' on the next
+      // tick; with no listener that is an uncaught exception, so keep a sink.
+      ws.on("error", () => {});
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close();
       }
@@ -266,9 +247,12 @@ function attemptSynthesis(chunk: string, params: SynthesisParams): Promise<Buffe
       else resolve(result ?? Buffer.alloc(0));
     };
 
-    timer = setTimeout(() => {
-      finish(new Error(`Edge TTS synthesis timed out after ${SYNTHESIS_TIMEOUT_MS}ms`));
-    }, SYNTHESIS_TIMEOUT_MS);
+    timer = setTimeout(
+      () => {
+        finish(new Error(`Edge TTS synthesis timed out after ${params.timeoutMs}ms`));
+      },
+      Math.max(0, params.deadline - Date.now()),
+    );
 
     ws.on("unexpected-response", (_req, res) => {
       const statusCode = res.statusCode ?? 0;
@@ -317,7 +301,7 @@ function attemptSynthesis(chunk: string, params: SynthesisParams): Promise<Buffe
         // The length value includes the trailing \r\n terminator, so audio
         // starts immediately at offset 2 + headerLength.
         const headerLength = buf.readUInt16BE(0);
-        if (headerLength > buf.length) {
+        if (2 + headerLength > buf.length) {
           finish(new Error("Edge TTS: binary header length exceeds message"));
           return;
         }
@@ -359,11 +343,15 @@ export interface EdgeTtsOptions {
   rate?: string;
   volume?: string;
   pitch?: string;
+  /** Total time budget for the whole synthesis, across all chunks. */
+  timeoutMs?: number;
 }
 
 /**
  * Synthesizes `text` to an MP3 Buffer using Microsoft Edge's online TTS.
- * Throws on protocol errors, timeouts, or if no audio is returned.
+ * Throws on protocol errors, timeouts, or if no audio is returned. The
+ * timeout bounds the entire synthesis, however many chunks it spans, so the
+ * caller-visible deadline matches the other TTS providers.
  */
 export async function synthesizeWithEdgeTts(
   text: string,
@@ -373,6 +361,7 @@ export async function synthesizeWithEdgeTts(
   const rate = options.rate ?? "+0%";
   const volume = options.volume ?? "+0%";
   const pitch = options.pitch ?? "+0Hz";
+  const timeoutMs = options.timeoutMs ?? SYNTHESIS_TIMEOUT_MS;
 
   const cleaned = removeIncompatibleCharacters(text);
   const escaped = escapeXml(cleaned);
@@ -382,7 +371,14 @@ export async function synthesizeWithEdgeTts(
     `[EdgeTTS] Synthesizing: voice=${voice}, chunks=${chunks.length}, chars=${text.length}`,
   );
 
-  const params: SynthesisParams = { voice, rate, volume, pitch };
+  const params: SynthesisParams = {
+    voice,
+    rate,
+    volume,
+    pitch,
+    deadline: Date.now() + timeoutMs,
+    timeoutMs,
+  };
   const buffers: Buffer[] = [];
   for (const chunk of chunks) {
     buffers.push(await synthesizeChunk(chunk, params));

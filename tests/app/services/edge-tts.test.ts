@@ -300,6 +300,72 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
     await expect(promise).rejects.toThrow("connection closed");
   });
 
+  it("escapes XML-special characters in the voice attribute", async () => {
+    installMockWs();
+    const { synthesizeWithEdgeTts } = await import(
+      "../../../src/app/services/edge-tts.js"
+    );
+
+    void synthesizeWithEdgeTts("Hello", { voice: "en-US-O'Brien&Co" }).catch(() => {});
+    await Promise.resolve();
+    emit("open");
+
+    const ssml = String(sockets[0].send.mock.calls[1][0]);
+    expect(ssml).toContain("<voice name='en-US-O&apos;Brien&amp;Co'>");
+  });
+
+  it("retries once on a fresh connection after an HTTP 403 upgrade failure", async () => {
+    installMockWs();
+    const { synthesizeWithEdgeTts } = await import(
+      "../../../src/app/services/edge-tts.js"
+    );
+
+    const promise = synthesizeWithEdgeTts("Hello", { voice: "en-US-AriaNeural" });
+    await flush();
+
+    emitOn(sockets[0], "unexpected-response", {}, {
+      statusCode: 403,
+      headers: { date: new Date().toUTCString() },
+    });
+    await flush();
+
+    expect(sockets).toHaveLength(2);
+    emitOn(sockets[1], "open");
+    const audioBytes = Buffer.from([0xff, 0xf3]);
+    emitOn(sockets[1], "message", audioFrame(audioBytes), true);
+    emitOn(sockets[1], "message", "Path:turn.end\r\n\r\n", false);
+
+    await expect(promise).resolves.toEqual(audioBytes);
+  });
+
+  it("bounds the whole synthesis by one shared deadline across chunks", async () => {
+    installMockWs();
+    const { synthesizeWithEdgeTts } = await import(
+      "../../../src/app/services/edge-tts.js"
+    );
+
+    const text = "word ".repeat(1200);
+    const promise = synthesizeWithEdgeTts(text, {
+      voice: "en-US-AriaNeural",
+      timeoutMs: 60_000,
+    });
+    await flush();
+
+    // Burn 50s of the budget on the first chunk, then complete it.
+    await vi.advanceTimersByTimeAsync(50_000);
+    emitOn(sockets[0], "open");
+    emitOn(sockets[0], "message", audioFrame(Buffer.from([0x01])), true);
+    emitOn(sockets[0], "message", "Path:turn.end\r\n\r\n", false);
+    await flush();
+
+    // The second chunk only has 10s left; 10s later the whole call times out.
+    expect(sockets).toHaveLength(2);
+    emitOn(sockets[1], "open");
+    const rejection = expect(promise).rejects.toThrow("timed out after 60000ms");
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejection;
+  });
+
   it("rejects on WebSocket error", async () => {
     installMockWs();
     const { synthesizeWithEdgeTts } = await import(

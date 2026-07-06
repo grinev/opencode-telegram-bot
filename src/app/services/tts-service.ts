@@ -1,7 +1,7 @@
 import { config } from "../../config.js";
 import { logger } from "../../utils/logger.js";
 import textToSpeech from "@google-cloud/text-to-speech";
-import { synthesizeWithEdgeTts } from "./edge-tts.js";
+import { synthesizeWithEdgeTts, EDGE_DEFAULT_VOICE } from "./edge-tts.js";
 
 const TTS_REQUEST_TIMEOUT_MS = 60_000;
 const MAX_TTS_INPUT_CHARS = 4_000;
@@ -208,13 +208,16 @@ async function synthesizeWithElevenLabs(text: string): Promise<TtsResult> {
 }
 
 async function synthesizeWithEdge(text: string): Promise<TtsResult> {
-  const voice = config.tts.voice || "en-US-EmmaMultilingualNeural";
+  const voice = config.tts.voice || EDGE_DEFAULT_VOICE;
 
   logger.debug(
     `[TTS] Edge: voice=${voice}, chars=${text.length}`,
   );
 
-  const buffer = await synthesizeWithEdgeTts(text, { voice });
+  const buffer = await synthesizeWithEdgeTts(text, {
+    voice,
+    timeoutMs: TTS_REQUEST_TIMEOUT_MS,
+  });
   if (buffer.length === 0) {
     throw new Error("Edge TTS returned an empty audio response");
   }
@@ -232,9 +235,8 @@ function getNotConfiguredMessage(): string {
   if (config.tts.provider === "elevenlabs") {
     return "TTS is not configured: set TTS_API_URL and TTS_API_KEY for ElevenLabs";
   }
-  if (config.tts.provider === "edge") {
-    return "Edge TTS is unavailable: requires network access to speech.platform.bing.com";
-  }
+  // No "edge" branch: isTtsConfigured() is always true for edge, so this
+  // function is unreachable for that provider.
   return "TTS is not configured: set TTS_API_URL and TTS_API_KEY";
 }
 
