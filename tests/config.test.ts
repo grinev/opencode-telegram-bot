@@ -231,8 +231,10 @@ describe("config boolean env parsing", () => {
   it("keeps TTS credentials unset when dedicated vars are missing", async () => {
     vi.stubEnv("STT_API_URL", "https://api.openai.com/v1");
     vi.stubEnv("STT_API_KEY", "sk-test-key");
+    vi.stubEnv("TTS_PROVIDER", "");
     vi.stubEnv("TTS_API_URL", "");
     vi.stubEnv("TTS_API_KEY", "");
+    vi.stubEnv("TTS_MODEL", "");
     vi.stubEnv("TTS_VOICE", "");
 
     const config = await loadConfig();

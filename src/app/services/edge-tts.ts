@@ -206,14 +206,17 @@ interface SynthesisParams {
 }
 
 /**
- * Opens one WebSocket, streams SSML chunks sequentially, and resolves with the
- * concatenated MP3 audio bytes. Retries once on HTTP 403 (clock skew) by
+ * Synthesizes one SSML chunk over its own WebSocket connection and resolves
+ * with that chunk's MP3 audio bytes. Retries once on HTTP 403 (clock skew) by
  * re-deriving the token against the server's reported time.
+ *
+ * The upstream edge-tts client also opens a fresh connection per chunk; the
+ * service does not reliably accept a second SSML turn on the same socket.
  */
-async function streamSynthesis(chunks: string[], params: SynthesisParams): Promise<Buffer> {
+async function synthesizeChunk(chunk: string, params: SynthesisParams): Promise<Buffer> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      return await attemptSynthesis(chunks, params);
+      return await attemptSynthesis(chunk, params);
     } catch (err) {
       if (
         err instanceof EdgeHttpUpgradeError &&
@@ -237,7 +240,7 @@ async function streamSynthesis(chunks: string[], params: SynthesisParams): Promi
   throw new Error("Edge TTS synthesis failed after retry");
 }
 
-function attemptSynthesis(chunks: string[], params: SynthesisParams): Promise<Buffer> {
+function attemptSynthesis(chunk: string, params: SynthesisParams): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     const gec = generateSecMsGec();
     const url =
@@ -248,7 +251,6 @@ function attemptSynthesis(chunks: string[], params: SynthesisParams): Promise<Bu
     const ws = new WebSocket(url, { headers });
     const audioChunks: Buffer[] = [];
     let audioReceived = false;
-    let chunkIndex = 0;
     let settled = false;
     let timer: NodeJS.Timeout | null = null;
 
@@ -287,20 +289,16 @@ function attemptSynthesis(chunks: string[], params: SynthesisParams): Promise<Bu
         '{"sentenceBoundaryEnabled":"true","wordBoundaryEnabled":"false"},' +
         '"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
       ws.send(configMessage);
-      sendNextChunk();
-    });
 
-    const sendNextChunk = (): void => {
-      if (chunkIndex >= chunks.length) return;
-      const ssml = buildSsml(params.voice, params.rate, params.volume, params.pitch, chunks[chunkIndex]);
-      const message =
+      const ssml = buildSsml(params.voice, params.rate, params.volume, params.pitch, chunk);
+      const ssmlMessage =
         `X-RequestId:${connectId()}\r\n` +
         "Content-Type:application/ssml+xml\r\n" +
         `X-Timestamp:${jsDateString()}Z\r\n` +
         "Path:ssml\r\n\r\n" +
         ssml;
-      ws.send(message);
-    };
+      ws.send(ssmlMessage);
+    });
 
     ws.on("message", (data, isBinary) => {
       if (settled) return;
@@ -339,25 +337,18 @@ function attemptSynthesis(chunks: string[], params: SynthesisParams): Promise<Bu
       const headerBlock = sep >= 0 ? text.slice(0, sep) : text;
       if (!headerBlock.includes("Path:turn.end")) return;
 
-      chunkIndex++;
-      if (chunkIndex >= chunks.length) {
-        if (!audioReceived) {
-          finish(new Error("Edge TTS: no audio received from service"));
-        } else {
-          finish(null, Buffer.concat(audioChunks));
-        }
+      if (!audioReceived) {
+        finish(new Error("Edge TTS: no audio received from service"));
       } else {
-        sendNextChunk();
+        finish(null, Buffer.concat(audioChunks));
       }
     });
 
+    // A close before turn.end means the turn never completed; partial audio
+    // must not be returned as success.
     ws.on("close", () => {
       if (!settled) {
-        if (!audioReceived) {
-          finish(new Error("Edge TTS: connection closed before audio was received"));
-        } else {
-          finish(null, Buffer.concat(audioChunks));
-        }
+        finish(new Error("Edge TTS: connection closed before synthesis completed"));
       }
     });
   });
@@ -391,5 +382,10 @@ export async function synthesizeWithEdgeTts(
     `[EdgeTTS] Synthesizing: voice=${voice}, chunks=${chunks.length}, chars=${text.length}`,
   );
 
-  return streamSynthesis(chunks, { voice, rate, volume, pitch });
+  const params: SynthesisParams = { voice, rate, volume, pitch };
+  const buffers: Buffer[] = [];
+  for (const chunk of chunks) {
+    buffers.push(await synthesizeChunk(chunk, params));
+  }
+  return Buffer.concat(buffers);
 }

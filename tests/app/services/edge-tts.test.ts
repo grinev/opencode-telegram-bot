@@ -108,26 +108,51 @@ describe("splitTextByByteLength", () => {
 });
 
 describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
-  const fakeWs = {
-    on: vi.fn(),
-    send: vi.fn(),
-    close: vi.fn(),
-    removeAllListeners: vi.fn(),
-    readyState: 1,
-  };
+  interface FakeWs {
+    on: ReturnType<typeof vi.fn>;
+    send: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+    removeAllListeners: ReturnType<typeof vi.fn>;
+    readyState: number;
+  }
+
+  let sockets: FakeWs[] = [];
+
+  function createFakeWs(): FakeWs {
+    return {
+      on: vi.fn(),
+      send: vi.fn(),
+      close: vi.fn(),
+      removeAllListeners: vi.fn(),
+      readyState: 1,
+    };
+  }
+
+  function emitOn(ws: FakeWs, event: string, ...args: unknown[]): void {
+    const handler = ws.on.mock.calls.find((c) => c[0] === event)?.[1];
+    if (handler) (handler as (...a: unknown[]) => void)(...args);
+  }
 
   function emit(event: string, ...args: unknown[]): void {
-    const handler = fakeWs.on.mock.calls.find((c) => c[0] === event)?.[1];
-    if (handler) (handler as (...a: unknown[]) => void)(...args);
+    emitOn(sockets[sockets.length - 1], event, ...args);
+  }
+
+  /** Drains pending microtasks so awaited chunk promises settle. */
+  async function flush(): Promise<void> {
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+  }
+
+  function audioFrame(audioBytes: Buffer): Buffer {
+    // Format: [2-byte header length][headers + \r\n][audio data]
+    const headers = Buffer.from("Path:audio\r\nContent-Type:audio/mpeg\r\n", "utf-8");
+    const prefix = Buffer.alloc(2);
+    prefix.writeUInt16BE(headers.length, 0);
+    return Buffer.concat([prefix, headers, audioBytes]);
   }
 
   beforeEach(() => {
     vi.useFakeTimers();
-    fakeWs.on.mockClear();
-    fakeWs.send.mockClear();
-    fakeWs.close.mockClear();
-    fakeWs.removeAllListeners.mockClear();
-    fakeWs.readyState = 1;
+    sockets = [];
     vi.resetModules();
   });
 
@@ -137,7 +162,11 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
 
   function installMockWs(): void {
     vi.doMock("ws", () => ({
-      WebSocket: vi.fn(() => fakeWs),
+      WebSocket: vi.fn(() => {
+        const ws = createFakeWs();
+        sockets.push(ws);
+        return ws;
+      }),
     }));
   }
 
@@ -156,27 +185,91 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
 
     emit("open");
 
-    // Two messages sent on open: speech.config then first ssml.
-    expect(fakeWs.send).toHaveBeenCalledTimes(2);
-    expect(fakeWs.send.mock.calls[0][0]).toContain("Path:speech.config");
-    const ssml = String(fakeWs.send.mock.calls[1][0]);
+    // Two messages sent on open: speech.config then the ssml.
+    const ws = sockets[0];
+    expect(ws.send).toHaveBeenCalledTimes(2);
+    expect(ws.send.mock.calls[0][0]).toContain("Path:speech.config");
+    const ssml = String(ws.send.mock.calls[1][0]);
     expect(ssml).toContain("Path:ssml");
     expect(ssml).toContain("<voice name='en-US-AriaNeural'>");
     expect(ssml).toContain("Hello world");
 
     // Simulate a binary audio frame from the service.
-    // Format: [2-byte header length][headers + \r\n][audio data]
-    const headers = Buffer.from("Path:audio\r\nContent-Type:audio/mpeg\r\n", "utf-8");
-    const prefix = Buffer.alloc(2);
-    prefix.writeUInt16BE(headers.length, 0);
     const audioBytes = Buffer.from([0xff, 0xf3, 0x90, 0x00]);
-    emit("message", Buffer.concat([prefix, headers, audioBytes]), true);
+    emit("message", audioFrame(audioBytes), true);
 
     // Simulate turn.end on the text channel.
     emit("message", "X-RequestId:abc\r\nPath:turn.end\r\n\r\n", false);
 
     const result = await promise;
     expect(result).toEqual(audioBytes);
+  });
+
+  it("opens a separate WebSocket per chunk and concatenates the audio", async () => {
+    installMockWs();
+    const { synthesizeWithEdgeTts } = await import(
+      "../../../src/app/services/edge-tts.js"
+    );
+
+    // ~6000 bytes of ASCII splits into two chunks at the 4096-byte limit.
+    const text = "word ".repeat(1200);
+    const promise = synthesizeWithEdgeTts(text, { voice: "en-US-AriaNeural" });
+    await flush();
+
+    expect(sockets).toHaveLength(1);
+    emitOn(sockets[0], "open");
+    const firstAudio = Buffer.from([0x01, 0x02]);
+    emitOn(sockets[0], "message", audioFrame(firstAudio), true);
+    emitOn(sockets[0], "message", "Path:turn.end\r\n\r\n", false);
+    await flush();
+
+    // The second chunk must get its own fresh connection.
+    expect(sockets).toHaveLength(2);
+    emitOn(sockets[1], "open");
+    expect(sockets[1].send.mock.calls[0][0]).toContain("Path:speech.config");
+    const secondAudio = Buffer.from([0x03, 0x04]);
+    emitOn(sockets[1], "message", audioFrame(secondAudio), true);
+    emitOn(sockets[1], "message", "Path:turn.end\r\n\r\n", false);
+
+    const result = await promise;
+    expect(result).toEqual(Buffer.concat([firstAudio, secondAudio]));
+  });
+
+  it("rejects instead of returning partial audio when a later chunk fails", async () => {
+    installMockWs();
+    const { synthesizeWithEdgeTts } = await import(
+      "../../../src/app/services/edge-tts.js"
+    );
+
+    const text = "word ".repeat(1200);
+    const promise = synthesizeWithEdgeTts(text, { voice: "en-US-AriaNeural" });
+    await flush();
+
+    emitOn(sockets[0], "open");
+    emitOn(sockets[0], "message", audioFrame(Buffer.from([0x01])), true);
+    emitOn(sockets[0], "message", "Path:turn.end\r\n\r\n", false);
+    await flush();
+
+    expect(sockets).toHaveLength(2);
+    emitOn(sockets[1], "open");
+    emitOn(sockets[1], "close");
+
+    await expect(promise).rejects.toThrow("connection closed");
+  });
+
+  it("rejects when the connection closes after partial audio but before turn.end", async () => {
+    installMockWs();
+    const { synthesizeWithEdgeTts } = await import(
+      "../../../src/app/services/edge-tts.js"
+    );
+
+    const promise = synthesizeWithEdgeTts("Hello", { voice: "en-US-AriaNeural" });
+    await Promise.resolve();
+    emit("open");
+    emit("message", audioFrame(Buffer.from([0x01])), true);
+    emit("close");
+
+    await expect(promise).rejects.toThrow("connection closed before synthesis completed");
   });
 
   it("rejects when no audio is received before turn.end", async () => {
