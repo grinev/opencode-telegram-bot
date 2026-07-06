@@ -33,6 +33,22 @@ function getOptionalPositiveIntEnvVar(key: string, defaultValue: number): number
   return parsedValue;
 }
 
+// Like getOptionalPositiveIntEnvVar, but also accepts 0 (used to disable a feature).
+function getOptionalNonNegativeIntEnvVar(key: string, defaultValue: number): number {
+  const value = getEnvVar(key, false);
+
+  if (!value) {
+    return defaultValue;
+  }
+
+  const parsedValue = Number.parseInt(value, 10);
+  if (Number.isNaN(parsedValue) || parsedValue < 0) {
+    return defaultValue;
+  }
+
+  return parsedValue;
+}
+
 function getOptionalLocaleEnvVar(key: string, defaultValue: Locale): Locale {
   const value = getEnvVar(key, false);
   return normalizeLocale(value, defaultValue);
@@ -167,6 +183,11 @@ export const config = {
     locale: getOptionalLocaleEnvVar("BOT_LOCALE", "en"),
     trackBackgroundSessions: getOptionalBooleanEnvVar("TRACK_BACKGROUND_SESSIONS", true),
     messageFormatMode: getOptionalMessageFormatModeEnvVar("MESSAGE_FORMAT_MODE", "markdown"),
+    // Telegram splits long outgoing text into several messages, and clients can
+    // also deliver a single paste as multiple updates. Queue quick consecutive
+    // text prompts within this window (ms) and send them as one OpenCode prompt.
+    // 0 disables merging and processes every message immediately.
+    messageMergeWindowMs: getOptionalNonNegativeIntEnvVar("MESSAGE_MERGE_WINDOW_MS", 1500),
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),

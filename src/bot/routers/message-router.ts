@@ -1,4 +1,5 @@
 import type { Bot, Context } from "grammy";
+import { config } from "../../config.js";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { questionManager } from "../../app/managers/question-manager.js";
 import { t } from "../../i18n/index.js";
@@ -21,7 +22,7 @@ import {
 import { handleDocumentMessage } from "../handlers/document-handler.js";
 import { createMediaGroupAttachmentMiddleware } from "../handlers/media-group-handler.js";
 import { handlePhotoMessage } from "../handlers/photo-handler.js";
-import { processUserPrompt } from "../handlers/prompt.js";
+import { queuePromptForMerging } from "../handlers/message-merger.js";
 import { handleCatalogTextArguments } from "../handlers/text-message-handler.js";
 import { handleVoiceMessage } from "../handlers/voice-handler.js";
 import { unknownCommandMiddleware } from "../middleware/unknown-command.js";
@@ -190,8 +191,10 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
       return;
     }
 
-    await processUserPrompt(ctx, text, promptDeps);
+    queuePromptForMerging(ctx, text, promptDeps, config.bot.messageMergeWindowMs);
 
-    logger.debug("[Bot] message:text handler completed (prompt sent in background)");
+    logger.debug(
+      `[Bot] message:text handler completed (merge window=${config.bot.messageMergeWindowMs}ms)`,
+    );
   });
 }
