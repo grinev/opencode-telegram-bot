@@ -7,6 +7,7 @@ dotenv.config({ path: runtimePaths.envFilePath, quiet: true });
 
 export type MessageFormatMode = "raw" | "markdown";
 export type TtsProvider = "openai" | "google" | "elevenlabs" | "edge";
+export type SttRequestFormat = "multipart" | "json";
 
 function getEnvVar(key: string, required: boolean = true): string {
   const value = process.env[key];
@@ -88,6 +89,26 @@ function getOptionalTtsProviderEnvVar(key: string, defaultValue: TtsProvider): T
   const normalized = value.trim().toLowerCase();
   if (VALID_TTS_PROVIDERS.includes(normalized as TtsProvider)) {
     return normalized as TtsProvider;
+  }
+
+  return defaultValue;
+}
+
+const VALID_STT_REQUEST_FORMATS: SttRequestFormat[] = ["multipart", "json"];
+
+function getOptionalSttRequestFormatEnvVar(
+  key: string,
+  defaultValue: SttRequestFormat,
+): SttRequestFormat {
+  const value = getEnvVar(key, false);
+
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (VALID_STT_REQUEST_FORMATS.includes(normalized as SttRequestFormat)) {
+    return normalized as SttRequestFormat;
   }
 
   return defaultValue;
@@ -180,6 +201,9 @@ export const config = {
     model: getEnvVar("STT_MODEL", false) || "whisper-large-v3-turbo",
     language: getEnvVar("STT_LANGUAGE", false),
     notePrompt: getEnvVar("STT_NOTE_PROMPT", false),
+    // "multipart" (default) = standard OpenAI/Groq Whisper form-data upload.
+    // "json" = base64 audio in an `input_audio` JSON body (e.g. OpenRouter).
+    requestFormat: getOptionalSttRequestFormatEnvVar("STT_REQUEST_FORMAT", "multipart"),
   },
   tts: (() => {
     const provider = getOptionalTtsProviderEnvVar("TTS_PROVIDER", "openai");
