@@ -146,6 +146,13 @@ function parseLegacyModelCallback(data: string): ModelInfo | null {
   };
 }
 
+function isShortModelCallback(data: string): boolean {
+  return (
+    data.startsWith(MODEL_SEARCH_RESULT_CALLBACK_PREFIX) ||
+    data.startsWith(MODEL_LIST_CALLBACK_PREFIX)
+  );
+}
+
 /**
  * Shared logic for applying a model selection and updating UI.
  * Used by both the regular inline menu flow and the search results flow.
@@ -217,11 +224,12 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
   logger.debug(`[ModelHandler] Received callback: ${callbackQuery.data}`);
 
   try {
-    const modelInfo =
-      (await resolveModelListCallback(callbackQuery.data)) ??
-      parseLegacyModelCallback(callbackQuery.data);
+    const modelInfo = await resolveModelListCallback(callbackQuery.data);
+    const shouldUseLegacyFallback = !isShortModelCallback(callbackQuery.data);
+    const resolvedModelInfo =
+      modelInfo ?? (shouldUseLegacyFallback ? parseLegacyModelCallback(callbackQuery.data) : null);
 
-    if (!modelInfo) {
+    if (!resolvedModelInfo) {
       logger.error(`[ModelHandler] Invalid callback data format: ${callbackQuery.data}`);
       clearActiveInlineMenu("model_select_invalid_callback");
       await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
@@ -229,7 +237,7 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     }
 
     clearActiveInlineMenu("model_selected");
-    await applyModelSelectionAndNotify(ctx, modelInfo);
+    await applyModelSelectionAndNotify(ctx, resolvedModelInfo);
 
     return true;
   } catch (err) {
@@ -410,6 +418,12 @@ export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
 
   // Backward compatibility for callbacks from already-rendered search result messages.
   if (data.startsWith("model:")) {
+    if (isShortModelCallback(data)) {
+      logger.error(`[ModelHandler] Invalid search result callback data: ${data}`);
+      await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
+      return true;
+    }
+
     const modelInfo = parseLegacyModelCallback(data);
     if (!modelInfo) {
       return true;

@@ -183,6 +183,43 @@ describe("bot model selection", () => {
         variant: "default",
       });
     });
+
+    it("rejects stale search result callbacks instead of parsing them as legacy models", async () => {
+      const ctx = mockContext({
+        callbackQuery: {
+          data: "model:result:0",
+          message: { message_id: 999 },
+        },
+        api: {},
+      });
+
+      const result = await handleModelSelect(ctx);
+
+      expect(result).toBe(true);
+      expect(mocked.selectModelMock).not.toHaveBeenCalled();
+      expect(ctx.answerCallbackQuery).toHaveBeenCalled();
+    });
+
+    it("rejects unresolved short list callbacks instead of parsing them as legacy models", async () => {
+      mocked.getModelSelectionListsMock.mockResolvedValue({
+        favorites: [],
+        recent: [],
+      });
+
+      const ctx = mockContext({
+        callbackQuery: {
+          data: "model:list:recent:0",
+          message: { message_id: 999 },
+        },
+        api: {},
+      });
+
+      const result = await handleModelSelect(ctx);
+
+      expect(result).toBe(true);
+      expect(mocked.selectModelMock).not.toHaveBeenCalled();
+      expect(ctx.answerCallbackQuery).toHaveBeenCalled();
+    });
   });
 
   describe("handleModelSearchCallback", () => {
@@ -377,6 +414,32 @@ describe("bot model selection", () => {
         modelID: longModelID,
         variant: "default",
       });
+    });
+
+    it("rejects stale short list callbacks instead of parsing them as legacy models", async () => {
+      mocked.interactionManagerGetSnapshotMock.mockReturnValue({
+        kind: "custom",
+        metadata: {
+          flow: "model-search",
+          stage: "results",
+          messageId: 999,
+          models: [],
+        },
+      });
+
+      const ctx = mockContext({
+        callbackQuery: {
+          data: "model:list:recent:0",
+          message: { message_id: 999 },
+        },
+        api: {},
+      });
+
+      const result = await handleModelSearchResults(ctx);
+
+      expect(result).toBe(true);
+      expect(mocked.selectModelMock).not.toHaveBeenCalled();
+      expect(ctx.answerCallbackQuery).toHaveBeenCalled();
     });
   });
 });
