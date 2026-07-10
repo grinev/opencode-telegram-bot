@@ -1,6 +1,6 @@
 import { Context, InlineKeyboard } from "grammy";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
-import type { InteractionState } from "../../app/types/interaction.js";
+import type { InteractionMetadata, InteractionState } from "../../app/types/interaction.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 
@@ -32,6 +32,7 @@ interface InlineMenuReplyOptions {
   text: string;
   keyboard: InlineKeyboard;
   parseMode?: "Markdown" | "HTML";
+  metadata?: InteractionMetadata;
 }
 
 export function isInlineMenuKind(value: string): value is InlineMenuKind {
@@ -118,6 +119,7 @@ export async function replyWithInlineMenu(
     kind: "inline",
     expectedInput: "callback",
     metadata: {
+      ...options.metadata,
       menuKind: options.menuKind,
       messageId: message.message_id,
     },

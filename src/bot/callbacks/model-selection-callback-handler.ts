@@ -1,10 +1,6 @@
 import { Context, InlineKeyboard } from "grammy";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
-import {
-  getModelSelectionLists,
-  searchModels,
-  selectModel,
-} from "../../app/services/model-selection-service.js";
+import { searchModels, selectModel } from "../../app/services/model-selection-service.js";
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { formatModelForDisplay } from "../../app/types/model.js";
 import type { ModelInfo } from "../../app/types/model.js";
@@ -29,6 +25,11 @@ interface ModelSearchMetadata {
   stage: string;
   messageId?: number;
   models: ModelInfo[];
+}
+
+interface ModelListMetadata {
+  favorites: ModelInfo[];
+  recent: ModelInfo[];
 }
 
 function parseModelItems(value: unknown): ModelInfo[] {
@@ -77,6 +78,23 @@ function parseModelSearchMetadata(): ModelSearchMetadata | null {
   return { flow, stage, messageId, models: parseModelItems(state.metadata.models) };
 }
 
+function parseModelListMetadata(): ModelListMetadata | null {
+  const state = interactionManager.getSnapshot();
+  if (!state || state.kind !== "inline" || state.metadata.menuKind !== "model") {
+    return null;
+  }
+
+  const modelLists = state.metadata.modelLists;
+  if (typeof modelLists !== "object" || modelLists === null) {
+    return null;
+  }
+
+  return {
+    favorites: parseModelItems("favorites" in modelLists ? modelLists.favorites : undefined),
+    recent: parseModelItems("recent" in modelLists ? modelLists.recent : undefined),
+  };
+}
+
 function parseNonNegativeIndex(value: string): number | null {
   if (!/^\d+$/.test(value)) {
     return null;
@@ -98,7 +116,7 @@ function parseCallbackIndex(data: string, prefix: string): number | null {
   return parseNonNegativeIndex(data.slice(prefix.length));
 }
 
-async function resolveModelListCallback(data: string): Promise<ModelInfo | null> {
+function resolveModelListCallback(data: string): ModelInfo | null {
   if (!data.startsWith(MODEL_LIST_CALLBACK_PREFIX)) {
     return null;
   }
@@ -114,7 +132,11 @@ async function resolveModelListCallback(data: string): Promise<ModelInfo | null>
     return null;
   }
 
-  const lists = await getModelSelectionLists();
+  const lists = parseModelListMetadata();
+  if (!lists) {
+    return null;
+  }
+
   const model = kind === "favorites" ? lists.favorites[index] : lists.recent[index];
   if (!model) {
     return null;
@@ -224,7 +246,7 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
   logger.debug(`[ModelHandler] Received callback: ${callbackQuery.data}`);
 
   try {
-    const modelInfo = await resolveModelListCallback(callbackQuery.data);
+    const modelInfo = resolveModelListCallback(callbackQuery.data);
     const shouldUseLegacyFallback = !isShortModelCallback(callbackQuery.data);
     const resolvedModelInfo =
       modelInfo ?? (shouldUseLegacyFallback ? parseLegacyModelCallback(callbackQuery.data) : null);

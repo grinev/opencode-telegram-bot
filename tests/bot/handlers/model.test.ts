@@ -19,6 +19,7 @@ const mocked = vi.hoisted(() => ({
   pinnedGetContextInfoMock: vi.fn(),
   pinnedGetContextLimitMock: vi.fn(),
   createMainKeyboardMock: vi.fn(),
+  replyWithInlineMenuMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/services/model-selection-service.js", () => ({
@@ -66,10 +67,13 @@ vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
 vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
   ensureActiveInlineMenu: mocked.ensureActiveInlineMenuMock,
   clearActiveInlineMenu: vi.fn(),
-  replyWithInlineMenu: vi.fn(),
+  replyWithInlineMenu: mocked.replyWithInlineMenuMock,
 }));
 
-import { buildModelSelectionMenu } from "../../../src/bot/menus/model-selection-menu.js";
+import {
+  buildModelSelectionMenu,
+  showModelSelectionMenu,
+} from "../../../src/bot/menus/model-selection-menu.js";
 
 import {
   handleModelSelect,
@@ -110,6 +114,7 @@ describe("bot model selection", () => {
     mocked.pinnedGetContextInfoMock.mockReset().mockReturnValue(null);
     mocked.pinnedGetContextLimitMock.mockReset().mockReturnValue(0);
     mocked.createMainKeyboardMock.mockReset().mockReturnValue({ keyboard: [["main"]] });
+    mocked.replyWithInlineMenuMock.mockReset().mockResolvedValue(999);
   });
 
   describe("buildModelSelectionMenu", () => {
@@ -156,14 +161,44 @@ describe("bot model selection", () => {
       expect(Buffer.byteLength(callbackData ?? "", "utf-8")).toBeLessThanOrEqual(64);
       expect(callbackData).not.toContain(longModelID);
     });
+
+    it("stores the rendered model lists with the active menu", async () => {
+      const modelLists = {
+        favorites: [{ providerID: "openai", modelID: "gpt-4o" }],
+        recent: [{ providerID: "google", modelID: "gemini-pro" }],
+      };
+      mocked.getModelSelectionListsMock.mockResolvedValue(modelLists);
+      const ctx = mockContext();
+
+      await showModelSelectionMenu(ctx);
+
+      expect(mocked.replyWithInlineMenuMock).toHaveBeenCalledWith(
+        ctx,
+        expect.objectContaining({
+          menuKind: "model",
+          metadata: { modelLists },
+        }),
+      );
+    });
   });
 
   describe("handleModelSelect", () => {
-    it("resolves short list callback data to the original long model ID", async () => {
+    it("resolves short list callback data from the rendered menu snapshot", async () => {
       const longModelID = "accounts/hubabuba3227-1hvtqlh/deployments/kpwpvuky";
+      mocked.interactionManagerGetSnapshotMock.mockReturnValue({
+        kind: "inline",
+        metadata: {
+          menuKind: "model",
+          messageId: 999,
+          modelLists: {
+            favorites: [],
+            recent: [{ providerID: "fireworks", modelID: longModelID }],
+          },
+        },
+      });
       mocked.getModelSelectionListsMock.mockResolvedValue({
         favorites: [],
-        recent: [{ providerID: "fireworks", modelID: longModelID }],
+        recent: [{ providerID: "openai", modelID: "different-model" }],
       });
 
       const ctx = mockContext({
@@ -182,6 +217,7 @@ describe("bot model selection", () => {
         modelID: longModelID,
         variant: "default",
       });
+      expect(mocked.getModelSelectionListsMock).not.toHaveBeenCalled();
     });
 
     it("rejects stale search result callbacks instead of parsing them as legacy models", async () => {
@@ -201,9 +237,13 @@ describe("bot model selection", () => {
     });
 
     it("rejects unresolved short list callbacks instead of parsing them as legacy models", async () => {
-      mocked.getModelSelectionListsMock.mockResolvedValue({
-        favorites: [],
-        recent: [],
+      mocked.interactionManagerGetSnapshotMock.mockReturnValue({
+        kind: "inline",
+        metadata: {
+          menuKind: "model",
+          messageId: 999,
+          modelLists: { favorites: [], recent: [] },
+        },
       });
 
       const ctx = mockContext({

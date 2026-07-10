@@ -94,6 +94,7 @@ export async function showModelSelectionMenu(ctx: Context): Promise<void> {
       menuKind: "model",
       text,
       keyboard,
+      metadata: { modelLists },
     });
   } catch (err) {
     logger.error("[ModelHandler] Error showing model menu:", err);
