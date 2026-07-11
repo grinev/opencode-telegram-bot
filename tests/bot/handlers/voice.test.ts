@@ -6,6 +6,7 @@ import { t } from "../../../src/i18n/index.js";
 
 const mocked = vi.hoisted(() => ({
   getTtsModeMock: vi.fn(),
+  flushPendingPromptMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -19,6 +20,11 @@ vi.mock("../../../src/utils/logger.js", () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock("../../../src/bot/handlers/message-merger.js", () => ({
+  flushPendingPrompt: mocked.flushPendingPromptMock,
+  __resetMessageMergerForTests: vi.fn(),
 }));
 
 async function loadVoiceModule() {
@@ -148,6 +154,7 @@ describe("bot/handlers/voice-handler", () => {
 
     await handleVoiceMessage(ctx, deps);
 
+    expect(mocked.flushPendingPromptMock).toHaveBeenCalledWith(777);
     expect(replyMock).toHaveBeenCalledWith(t("stt.recognizing"));
     expect(processPromptMock).toHaveBeenCalledWith(ctx, "run tests", deps, [], {
       responseMode: "text_only",

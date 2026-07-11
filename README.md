@@ -232,8 +232,8 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `BASH_TOOL_DISPLAY_MAX_LENGTH`             | Maximum displayed length for `bash` tool commands in Telegram summaries; longer commands are truncated                |    No    | `128`                    |
 | `TRACK_BACKGROUND_SESSIONS`                | Track detached/non-current sessions in the current selected project/worktree and send short notifications             |    No    | `true`                   |
 | `RESPONSE_STREAM_THROTTLE_MS`              | Stream update throttle in milliseconds for assistant, thinking, and tool message edits                                |    No    | `1000`                   |
-| `MESSAGE_FORMAT_MODE` | Assistant reply formatting mode: `markdown` (Telegram MarkdownV2) or `raw` | No | `markdown`
-`MESSAGE_MERGE_WINDOW_MS` | Merge quick consecutive text messages into one OpenCode prompt (ms). Telegram splits long text into several messages; within this window they are buffered and sent together. `0` disables merging | No | `1500` |               |
+| `MESSAGE_FORMAT_MODE`                      | Assistant reply formatting mode: `markdown` (Telegram MarkdownV2) or `raw`                                            |    No    | `markdown`               |
+| `MESSAGE_MERGE_WINDOW_MS`                  | Merge Telegram-split long text messages into one prompt after this wait window (ms); `0` disables merging             |    No    | `1500`                   |
 | `CODE_FILE_MAX_SIZE_KB`                    | Max file size (KB) to send as document                                                                                |    No    | `100`                    |
 | `STT_API_URL`                              | Whisper-compatible API base URL (enables voice/audio transcription)                                                   |    No    | —                        |
 | `STT_API_KEY`                              | API key for your STT provider                                                                                         |    No    | —                        |

@@ -23,6 +23,7 @@ import { helpCommand } from "../commands/help-command.js";
 import { statusCommand } from "../commands/status-command.js";
 import { BOT_COMMANDS } from "../commands/definitions.js";
 import { logger } from "../../utils/logger.js";
+import { flushPendingPrompt } from "../handlers/message-merger.js";
 
 interface CommandRouterDeps {
   ensureEventSubscription: (directory: string) => Promise<void>;
@@ -60,6 +61,13 @@ export async function ensureCommandsInitialized(ctx: Context, next: NextFunction
 }
 
 export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps): void {
+  bot.use(async (ctx, next) => {
+    if (ctx.chat && ctx.message?.text?.startsWith("/")) {
+      flushPendingPrompt(ctx.chat.id);
+    }
+    await next();
+  });
+
   bot.command("start", startCommand);
   bot.command("help", helpCommand);
   bot.command("status", statusCommand);

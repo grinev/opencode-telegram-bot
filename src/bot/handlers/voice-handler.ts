@@ -13,6 +13,7 @@ import {
   type SttResult,
 } from "../../app/services/stt-service.js";
 import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
+import { flushPendingPrompt } from "./message-merger.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { buildTelegramFileUrl } from "../../app/services/file-download-service.js";
@@ -190,6 +191,8 @@ export async function handleVoiceMessage(ctx: Context, deps: VoiceMessageDeps): 
     logger.warn("[Voice] Received voice/audio message with no file_id");
     return;
   }
+
+  flushPendingPrompt(ctx.chat!.id);
 
   // Check if STT is configured
   if (!sttConfigured()) {

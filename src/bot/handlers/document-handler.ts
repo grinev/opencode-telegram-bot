@@ -12,6 +12,7 @@ import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import type { FilePartInput, Model } from "@opencode-ai/sdk/v2";
+import { flushPendingPrompt } from "./message-merger.js";
 
 export interface DocumentHandlerDeps extends ProcessPromptDeps {
   downloadFile?: (
@@ -44,6 +45,8 @@ export async function handleDocumentMessage(
   if (!doc) {
     return;
   }
+
+  flushPendingPrompt(ctx.chat!.id);
 
   const caption = ctx.message.caption || "";
   const mimeType = doc.mime_type || "";

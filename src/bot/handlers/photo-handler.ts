@@ -5,6 +5,7 @@ import { getModelCapabilities, supportsInput } from "../../app/services/model-ca
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
+import { flushPendingPrompt } from "./message-merger.js";
 import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
 
 export interface PhotoHandlerDeps extends ProcessPromptDeps {
@@ -30,6 +31,8 @@ export async function handlePhotoMessage(ctx: Context, deps: PhotoHandlerDeps): 
   if (!photos || photos.length === 0) {
     return;
   }
+
+  flushPendingPrompt(ctx.chat!.id);
 
   const caption = ctx.message.caption || "";
   const largestPhoto = photos[photos.length - 1];

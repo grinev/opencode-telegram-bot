@@ -2,6 +2,8 @@ import type { Context } from "grammy";
 import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
 import { logger } from "../../utils/logger.js";
 
+const TELEGRAM_SPLIT_CHUNK_MIN_LENGTH = 4000;
+
 interface PendingPrompt {
   texts: string[];
   ctx: Context;
@@ -32,14 +34,15 @@ function flushPending(chatId: number): void {
     logger.debug(`[Bot] Flushing single pending prompt (chatId=${chatId})`);
   }
 
-  void processUserPrompt(ctx, texts.join("\n\n"), deps);
+  void processUserPrompt(ctx, texts.join("\n\n"), deps).catch((err) => {
+    logger.error(`[Bot] Failed to process merged prompt (chatId=${chatId})`, err);
+  });
 }
 
 /**
- * Buffers a plain-text prompt so several quick consecutive messages (e.g.
- * Telegram splitting one long message into chunks) are merged into a single
- * OpenCode prompt. Each new chunk restarts the wait window; once the window
- * elapses with no new chunk, the buffered text is sent at once.
+ * Buffers a near-limit plain-text prompt so Telegram-split chunks are merged
+ * into a single OpenCode prompt. Short messages are processed immediately
+ * unless they follow a buffered chunk. Each new chunk restarts the wait window.
  *
  * Pass `mergeWindowMs <= 0` to disable merging and process the message
  * immediately.
@@ -51,13 +54,15 @@ export function queuePromptForMerging(
   mergeWindowMs: number,
 ): void {
   const chatId = ctx.chat!.id;
+  const existing = pendingByChat.get(chatId);
 
-  if (mergeWindowMs <= 0) {
-    void processUserPrompt(ctx, text, deps);
+  if (mergeWindowMs <= 0 || (!existing && text.length < TELEGRAM_SPLIT_CHUNK_MIN_LENGTH)) {
+    void processUserPrompt(ctx, text, deps).catch((err) => {
+      logger.error(`[Bot] Failed to process prompt (chatId=${chatId})`, err);
+    });
     return;
   }
 
-  const existing = pendingByChat.get(chatId);
   if (existing) {
     existing.texts.push(text);
     existing.ctx = ctx;

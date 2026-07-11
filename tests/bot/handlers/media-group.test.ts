@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context, NextFunction } from "grammy";
+
+const flushPendingPromptMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../../src/bot/handlers/message-merger.js", () => ({
+  flushPendingPrompt: flushPendingPromptMock,
+  __resetMessageMergerForTests: vi.fn(),
+}));
+
 import {
   MediaGroupAttachmentHandler,
   type MediaGroupHandlerDeps,
@@ -126,6 +134,7 @@ async function addToHandler(handler: MediaGroupAttachmentHandler, ctx: Context):
 describe("bot/handlers/media-group", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    flushPendingPromptMock.mockClear();
   });
 
   afterEach(() => {
@@ -153,6 +162,7 @@ describe("bot/handlers/media-group", () => {
     await addToHandler(handler, second.ctx);
     await handler.flushAll();
 
+    expect(flushPendingPromptMock).toHaveBeenCalledWith(777);
     expect(first.replyMock).toHaveBeenCalledWith(t("bot.files_downloading"));
     expect(processPromptMock).toHaveBeenCalledTimes(1);
     expect(processPromptMock).toHaveBeenCalledWith(

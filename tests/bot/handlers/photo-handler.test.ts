@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
+
+const flushPendingPromptMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../../src/bot/handlers/message-merger.js", () => ({
+  flushPendingPrompt: flushPendingPromptMock,
+  __resetMessageMergerForTests: vi.fn(),
+}));
+
 import { handlePhotoMessage, type PhotoHandlerDeps } from "../../../src/bot/handlers/photo-handler.js";
 import { t } from "../../../src/i18n/index.js";
 
@@ -49,6 +57,7 @@ function createDeps(overrides: Partial<PhotoHandlerDeps> = {}): {
 describe("bot/handlers/photo-handler", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    flushPendingPromptMock.mockClear();
   });
 
   it("downloads the largest photo and sends it as a file part", async () => {
@@ -57,6 +66,7 @@ describe("bot/handlers/photo-handler", () => {
 
     await handlePhotoMessage(ctx, deps);
 
+    expect(flushPendingPromptMock).toHaveBeenCalledWith(777);
     expect(replyMock).toHaveBeenCalledWith(t("bot.photo_downloading"));
     expect(downloadMock).toHaveBeenCalledWith(ctx.api, "large-photo");
     expect(processPromptMock).toHaveBeenCalledWith(

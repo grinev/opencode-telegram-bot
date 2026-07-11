@@ -12,6 +12,7 @@ import {
   toDataUri,
 } from "../../app/services/file-download-service.js";
 import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
+import { flushPendingPrompt } from "./message-merger.js";
 
 const DEFAULT_MEDIA_GROUP_DEBOUNCE_MS = 1_000;
 
@@ -111,6 +112,8 @@ export class MediaGroupAttachmentHandler {
       await next();
       return;
     }
+
+    flushPendingPrompt(chatId);
 
     const key = this.getBatchKey(chatId, mediaGroupId);
     const existingBatch = this.batches.get(key);

@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
+
+const flushPendingPromptMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../../src/bot/handlers/message-merger.js", () => ({
+  flushPendingPrompt: flushPendingPromptMock,
+  __resetMessageMergerForTests: vi.fn(),
+}));
+
 import {
   handleDocumentMessage,
   type DocumentHandlerDeps,
@@ -73,6 +81,7 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
 describe("bot/handlers/document", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    flushPendingPromptMock.mockClear();
   });
 
   describe("text files", () => {
@@ -82,6 +91,7 @@ describe("bot/handlers/document", () => {
 
       await handleDocumentMessage(ctx, deps);
 
+      expect(flushPendingPromptMock).toHaveBeenCalledWith(777);
       expect(replyMock).toHaveBeenCalledWith(t("bot.file_downloading"));
       expect(downloadMock).toHaveBeenCalled();
       expect(processPromptMock).toHaveBeenCalledWith(

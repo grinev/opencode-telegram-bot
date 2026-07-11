@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Context, NextFunction } from "grammy";
+
+const flushPendingPromptMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../../src/bot/handlers/message-merger.js", () => ({
+  flushPendingPrompt: flushPendingPromptMock,
+  __resetMessageMergerForTests: vi.fn(),
+}));
+
 import {
   ensureCommandsInitialized,
   registerCommandRouter,
@@ -9,7 +17,7 @@ import { config } from "../../../src/config.js";
 
 describe("bot/routers/command-router", () => {
   it("registers bot slash command handlers", () => {
-    const bot = { command: vi.fn() };
+    const bot = { command: vi.fn(), use: vi.fn() };
 
     registerCommandRouter(bot as never, { ensureEventSubscription: vi.fn() });
 
@@ -36,6 +44,19 @@ describe("bot/routers/command-router", () => {
       "skills",
       "mcps",
     ]);
+  });
+
+  it("flushes a pending prompt before routing a command", async () => {
+    const bot = { command: vi.fn(), use: vi.fn() };
+    const next = vi.fn();
+    registerCommandRouter(bot as never, { ensureEventSubscription: vi.fn() });
+    const middleware = bot.use.mock.calls[0][0];
+    const ctx = { chat: { id: 123 }, message: { text: "/new" } } as unknown as Context;
+
+    await middleware(ctx, next);
+
+    expect(flushPendingPromptMock).toHaveBeenCalledWith(123);
+    expect(next).toHaveBeenCalledOnce();
   });
 
   it("initializes commands for the authorized chat", async () => {
