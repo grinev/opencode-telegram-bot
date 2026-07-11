@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocked = vi.hoisted(() => ({
   opencodeClient: {
-    session: { list: vi.fn().mockResolvedValue({ data: [] }) },
+    session: {
+      list: vi.fn().mockResolvedValue({ data: [] }),
+      messages: vi.fn().mockResolvedValue({ data: [] }),
+    },
     config: { get: vi.fn().mockResolvedValue({ data: {} }) },
   },
   getCurrentSession: vi.fn(),
@@ -83,12 +86,66 @@ describe("pinned/manager", () => {
     mocked.getStoredModel.mockReturnValue({ providerID: "openai", modelID: "gpt-5" });
     mocked.getModelContextLimit.mockResolvedValue(204800);
     mocked.getPinnedMessageId.mockReturnValue(null);
+    mocked.opencodeClient.session.messages.mockResolvedValue({ data: [] });
     mocked.getGitWorktreeContext.mockResolvedValue({
       mainProjectPath: "D:/repo",
       activeWorktreePath: "D:/repo",
       branch: "main",
       isLinkedWorktree: false,
       worktrees: [],
+    });
+  });
+
+  describe("loadContextFromHistory", () => {
+    it("restores the latest non-summary non-zero context instead of the historical peak", async () => {
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+      mocked.opencodeClient.session.messages.mockResolvedValue({
+        data: [
+          {
+            info: {
+              role: "assistant",
+              time: { created: 200 },
+              tokens: { input: 300, cache: { read: 100 } },
+              cost: 0.5,
+            },
+            parts: [],
+          },
+          {
+            info: {
+              role: "assistant",
+              time: { created: 100 },
+              tokens: { input: 900, cache: { read: 100 } },
+              cost: 0.25,
+            },
+            parts: [],
+          },
+          {
+            info: {
+              role: "assistant",
+              time: { created: 300 },
+              tokens: { input: 0, cache: { read: 0 } },
+              cost: 0.1,
+            },
+            parts: [],
+          },
+          {
+            info: {
+              role: "assistant",
+              summary: true,
+              time: { created: 400 },
+              tokens: { input: 1500, cache: { read: 0 } },
+              cost: 4,
+            },
+            parts: [],
+          },
+        ],
+      });
+
+      await pinnedMessageManager.loadContextFromHistory("ses-1", "D:/repo");
+
+      const state = pinnedMessageManager.getState();
+      expect(state.tokensUsed).toBe(400);
+      expect(state.cost).toBeCloseTo(0.85);
     });
   });
 

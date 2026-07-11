@@ -174,9 +174,10 @@ class PinnedMessageManager {
         return;
       }
 
-      // Get the maximum context size and total cost from session history
+      // Get the latest measured context size and total cost from session history
       // Context = input + cache.read (cache.read contains previously cached context)
-      let maxContextSize = 0;
+      let latestContextSize = 0;
+      let latestContextCreated = Number.NEGATIVE_INFINITY;
       let totalCost = 0;
       logger.debug(`[PinnedManager] Processing ${messagesData.length} messages from history`);
 
@@ -188,6 +189,7 @@ class PinnedMessageManager {
               input: number;
               cache?: { read: number };
             };
+            time?: { created?: number };
             cost?: number;
           };
 
@@ -206,9 +208,10 @@ class PinnedMessageManager {
             `[PinnedManager] Assistant message: input=${input}, cache.read=${cacheRead}, total=${contextSize}, cost=$${cost.toFixed(2)}`,
           );
 
-          // Keep track of maximum context size (peak usage in session)
-          if (contextSize > maxContextSize) {
-            maxContextSize = contextSize;
+          const created = assistantInfo.time?.created ?? 0;
+          if (contextSize > 0 && created >= latestContextCreated) {
+            latestContextSize = contextSize;
+            latestContextCreated = created;
           }
 
           // Accumulate total session cost
@@ -216,7 +219,7 @@ class PinnedMessageManager {
         }
       });
 
-      this.state.tokensUsed = maxContextSize;
+      this.state.tokensUsed = latestContextSize;
       this.state.cost = totalCost;
       this.state.sessionId = sessionId;
 
