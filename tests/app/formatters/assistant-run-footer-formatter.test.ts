@@ -10,7 +10,7 @@ describe("app/formatters/assistant-run-footer-formatter", () => {
         modelID: "gpt-5.4",
         elapsedMs: 57932,
       }),
-    ).toBe("📋 Plan · 🤖 openai/gpt-5.4 · 🕒 57s");
+    ).toBe("📋 Plan · 🧠 openai/gpt-5.4 · 🕒 57s");
   });
 
   it("formats duration less than 1 second as 0s", () => {
@@ -21,7 +21,7 @@ describe("app/formatters/assistant-run-footer-formatter", () => {
         modelID: "claude-3",
         elapsedMs: 500,
       }),
-    ).toBe("🛠️ Build · 🤖 anthropic/claude-3 · 🕒 0s");
+    ).toBe("🛠️ Build · 🧠 anthropic/claude-3 · 🕒 0s");
   });
 
   it("formats duration with only seconds", () => {
@@ -32,7 +32,7 @@ describe("app/formatters/assistant-run-footer-formatter", () => {
         modelID: "claude-3",
         elapsedMs: 45000,
       }),
-    ).toBe("🛠️ Build · 🤖 anthropic/claude-3 · 🕒 45s");
+    ).toBe("🛠️ Build · 🧠 anthropic/claude-3 · 🕒 45s");
   });
 
   it("formats duration with minutes and seconds", () => {
@@ -43,7 +43,7 @@ describe("app/formatters/assistant-run-footer-formatter", () => {
         modelID: "claude-3",
         elapsedMs: 1425000,
       }),
-    ).toBe("🛠️ Build · 🤖 anthropic/claude-3 · 🕒 23m 45s");
+    ).toBe("🛠️ Build · 🧠 anthropic/claude-3 · 🕒 23m 45s");
   });
 
   it("formats duration with hours, minutes, and seconds", () => {
@@ -54,7 +54,7 @@ describe("app/formatters/assistant-run-footer-formatter", () => {
         modelID: "claude-3",
         elapsedMs: 5025000,
       }),
-    ).toBe("🛠️ Build · 🤖 anthropic/claude-3 · 🕒 1h 23m 45s");
+    ).toBe("🛠️ Build · 🧠 anthropic/claude-3 · 🕒 1h 23m 45s");
   });
 
   it("formats duration with hours and seconds (no minutes)", () => {
@@ -65,7 +65,7 @@ describe("app/formatters/assistant-run-footer-formatter", () => {
         modelID: "claude-3",
         elapsedMs: 3605000,
       }),
-    ).toBe("🛠️ Build · 🤖 anthropic/claude-3 · 🕒 1h 5s");
+    ).toBe("🛠️ Build · 🧠 anthropic/claude-3 · 🕒 1h 5s");
   });
 
   it("formats negative duration as 0s", () => {
@@ -76,6 +76,6 @@ describe("app/formatters/assistant-run-footer-formatter", () => {
         modelID: "claude-3",
         elapsedMs: -1000,
       }),
-    ).toBe("🛠️ Build · 🤖 anthropic/claude-3 · 🕒 0s");
+    ).toBe("🛠️ Build · 🧠 anthropic/claude-3 · 🕒 0s");
   });
 });

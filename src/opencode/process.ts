@@ -46,11 +46,20 @@ export function resolveLocalOpencodeTarget(apiUrl: string): LocalOpencodeTarget 
 }
 
 function resolveWindowsOpencodeExe(): string {
-  // npm on Windows usually puts opencode.cmd on PATH (not opencode.exe).
-  // We locate the shim and derive the real exe path from its directory.
   const pathEnv = process.env.PATH ?? "";
   const pathEntries = pathEnv.split(path.delimiter).filter(Boolean);
 
+  // First pass: look for opencode.exe directly on PATH.
+  // Covers non-npm installations (install script, scoop, choco, manual download, etc.).
+  for (const entry of pathEntries) {
+    const candidateExe = path.join(entry, "opencode.exe");
+    if (existsSync(candidateExe)) {
+      return candidateExe;
+    }
+  }
+
+  // Second pass: look for opencode.cmd (npm global install).
+  // Derive the real exe path from the shim location.
   for (const entry of pathEntries) {
     const opencodeCmd = path.join(entry, "opencode.cmd");
     if (!existsSync(opencodeCmd)) {

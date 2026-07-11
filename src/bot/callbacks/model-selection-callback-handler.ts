@@ -1,9 +1,6 @@
 import { Context, InlineKeyboard } from "grammy";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
-import {
-  searchModels,
-  selectModel,
-} from "../../app/services/model-selection-service.js";
+import { searchModels, selectModel } from "../../app/services/model-selection-service.js";
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { formatModelForDisplay } from "../../app/types/model.js";
 import type { ModelInfo } from "../../app/types/model.js";
@@ -15,15 +12,51 @@ import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 import {
+  MODEL_LIST_CALLBACK_PREFIX,
   MODEL_SEARCH_AGAIN_CALLBACK,
   MODEL_SEARCH_CALLBACK,
   MODEL_SEARCH_CANCEL_CALLBACK,
 } from "../menus/model-selection-menu.js";
 
+const MODEL_SEARCH_RESULT_CALLBACK_PREFIX = "model:result:";
+
 interface ModelSearchMetadata {
   flow: string;
   stage: string;
   messageId?: number;
+  models: ModelInfo[];
+}
+
+interface ModelListMetadata {
+  favorites: ModelInfo[];
+  recent: ModelInfo[];
+}
+
+function parseModelItems(value: unknown): ModelInfo[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      !("providerID" in item) ||
+      !("modelID" in item)
+    ) {
+      return [];
+    }
+
+    const providerID = item.providerID;
+    const modelID = item.modelID;
+    if (typeof providerID !== "string" || typeof modelID !== "string") {
+      return [];
+    }
+
+    const variant =
+      "variant" in item && typeof item.variant === "string" ? item.variant : "default";
+    return [{ providerID, modelID, variant }];
+  });
 }
 
 function parseModelSearchMetadata(): ModelSearchMetadata | null {
@@ -42,17 +75,111 @@ function parseModelSearchMetadata(): ModelSearchMetadata | null {
   const messageId =
     typeof state.metadata.messageId === "number" ? state.metadata.messageId : undefined;
 
-  return { flow, stage, messageId };
+  return { flow, stage, messageId, models: parseModelItems(state.metadata.models) };
+}
+
+function parseModelListMetadata(): ModelListMetadata | null {
+  const state = interactionManager.getSnapshot();
+  if (!state || state.kind !== "inline" || state.metadata.menuKind !== "model") {
+    return null;
+  }
+
+  const modelLists = state.metadata.modelLists;
+  if (typeof modelLists !== "object" || modelLists === null) {
+    return null;
+  }
+
+  return {
+    favorites: parseModelItems("favorites" in modelLists ? modelLists.favorites : undefined),
+    recent: parseModelItems("recent" in modelLists ? modelLists.recent : undefined),
+  };
+}
+
+function parseNonNegativeIndex(value: string): number | null {
+  if (!/^\d+$/.test(value)) {
+    return null;
+  }
+
+  const index = Number.parseInt(value, 10);
+  if (!Number.isInteger(index) || index < 0) {
+    return null;
+  }
+
+  return index;
+}
+
+function parseCallbackIndex(data: string, prefix: string): number | null {
+  if (!data.startsWith(prefix)) {
+    return null;
+  }
+
+  return parseNonNegativeIndex(data.slice(prefix.length));
+}
+
+function resolveModelListCallback(data: string): ModelInfo | null {
+  if (!data.startsWith(MODEL_LIST_CALLBACK_PREFIX)) {
+    return null;
+  }
+
+  const parts = data.slice(MODEL_LIST_CALLBACK_PREFIX.length).split(":");
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const [kind, indexText] = parts;
+  const index = parseNonNegativeIndex(indexText);
+  if ((kind !== "favorites" && kind !== "recent") || index === null) {
+    return null;
+  }
+
+  const lists = parseModelListMetadata();
+  if (!lists) {
+    return null;
+  }
+
+  const model = kind === "favorites" ? lists.favorites[index] : lists.recent[index];
+  if (!model) {
+    return null;
+  }
+
+  return {
+    providerID: model.providerID,
+    modelID: model.modelID,
+    variant: "default",
+  };
+}
+
+function parseLegacyModelCallback(data: string): ModelInfo | null {
+  const parts = data.split(":");
+  if (parts.length < 3) {
+    return null;
+  }
+
+  const providerID = parts[1];
+  const modelID = parts.slice(2).join(":");
+  if (!providerID || !modelID) {
+    return null;
+  }
+
+  return {
+    providerID,
+    modelID,
+    variant: "default",
+  };
+}
+
+function isShortModelCallback(data: string): boolean {
+  return (
+    data.startsWith(MODEL_SEARCH_RESULT_CALLBACK_PREFIX) ||
+    data.startsWith(MODEL_LIST_CALLBACK_PREFIX)
+  );
 }
 
 /**
  * Shared logic for applying a model selection and updating UI.
  * Used by both the regular inline menu flow and the search results flow.
  */
-async function applyModelSelectionAndNotify(
-  ctx: Context,
-  modelInfo: ModelInfo,
-): Promise<void> {
+async function applyModelSelectionAndNotify(ctx: Context, modelInfo: ModelInfo): Promise<void> {
   if (ctx.chat) {
     keyboardManager.initialize(ctx.api, ctx.chat.id);
   }
@@ -119,26 +246,20 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
   logger.debug(`[ModelHandler] Received callback: ${callbackQuery.data}`);
 
   try {
-    // Parse callback data: "model:providerID:modelID"
-    const parts = callbackQuery.data.split(":");
-    if (parts.length < 3) {
+    const modelInfo = resolveModelListCallback(callbackQuery.data);
+    const shouldUseLegacyFallback = !isShortModelCallback(callbackQuery.data);
+    const resolvedModelInfo =
+      modelInfo ?? (shouldUseLegacyFallback ? parseLegacyModelCallback(callbackQuery.data) : null);
+
+    if (!resolvedModelInfo) {
       logger.error(`[ModelHandler] Invalid callback data format: ${callbackQuery.data}`);
       clearActiveInlineMenu("model_select_invalid_callback");
       await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
       return true;
     }
 
-    const providerID = parts[1];
-    const modelID = parts.slice(2).join(":"); // Handle model IDs that may contain ":"
-
-    const modelInfo: ModelInfo = {
-      providerID,
-      modelID,
-      variant: "default",
-    };
-
     clearActiveInlineMenu("model_selected");
-    await applyModelSelectionAndNotify(ctx, modelInfo);
+    await applyModelSelectionAndNotify(ctx, resolvedModelInfo);
 
     return true;
   } catch (err) {
@@ -210,9 +331,9 @@ export async function handleModelSearchTextInput(ctx: Context): Promise<boolean>
 
     const keyboard = new InlineKeyboard();
 
-    for (const model of results) {
+    for (const [index, model] of results.entries()) {
       const label = `${model.providerID}/${model.modelID}`;
-      keyboard.text(label, `model:${model.providerID}:${model.modelID}`).row();
+      keyboard.text(label, `${MODEL_SEARCH_RESULT_CALLBACK_PREFIX}${index}`).row();
     }
 
     keyboard.row();
@@ -233,6 +354,11 @@ export async function handleModelSearchTextInput(ctx: Context): Promise<boolean>
         flow: "model-search",
         stage: "results",
         messageId: sent.message_id,
+        models: results.map((model) => ({
+          providerID: model.providerID,
+          modelID: model.modelID,
+          variant: "default",
+        })),
       },
     });
 
@@ -299,21 +425,31 @@ export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
     return true;
   }
 
-  // Model selection from search results
-  if (data.startsWith("model:")) {
-    const parts = data.split(":");
-    if (parts.length < 3) {
+  const resultIndex = parseCallbackIndex(data, MODEL_SEARCH_RESULT_CALLBACK_PREFIX);
+  if (resultIndex !== null) {
+    const modelInfo = meta.models[resultIndex];
+    if (!modelInfo) {
+      await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
       return true;
     }
 
-    const providerID = parts[1];
-    const modelID = parts.slice(2).join(":");
+    interactionManager.clear("model_search_selected");
+    await applyModelSelectionAndNotify(ctx, modelInfo);
+    return true;
+  }
 
-    const modelInfo: ModelInfo = {
-      providerID,
-      modelID,
-      variant: "default",
-    };
+  // Backward compatibility for callbacks from already-rendered search result messages.
+  if (data.startsWith("model:")) {
+    if (isShortModelCallback(data)) {
+      logger.error(`[ModelHandler] Invalid search result callback data: ${data}`);
+      await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
+      return true;
+    }
+
+    const modelInfo = parseLegacyModelCallback(data);
+    if (!modelInfo) {
+      return true;
+    }
 
     interactionManager.clear("model_search_selected");
     await applyModelSelectionAndNotify(ctx, modelInfo);

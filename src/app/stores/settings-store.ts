@@ -8,6 +8,7 @@ import type {
   ScheduledTaskSessionIgnoreInfo,
   Settings,
 } from "../types/settings.js";
+import { config } from "../../config.js";
 import { getRuntimePaths } from "../../runtime/paths.js";
 import { logger } from "../../utils/logger.js";
 
@@ -228,6 +229,75 @@ export function __resetSettingsForTests(): void {
   settingsWriteQueue = Promise.resolve();
 }
 
+const VALID_TTS_MODES: readonly TtsMode[] = ["off", "all", "auto"];
+const VALID_STREAMING_MODES: readonly ResponseStreamingMode[] = ["edit", "draft"];
+
+function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
+  const knownKeys = new Set([
+    "ttsMode",
+    "compactOutputMode",
+    "showThinkingContent",
+    "showAssistantRunFooter",
+    "responseStreamingMode",
+    "sendDiffFileAttachments",
+  ]);
+
+  for (const [key, value] of Object.entries(preset)) {
+    if (!knownKeys.has(key)) {
+      throw new Error(
+        `INITIAL_SETTINGS_PRESET: unknown key "${key}". Supported keys: ${[...knownKeys].join(", ")}.`,
+      );
+    }
+    if (key === "ttsMode") {
+      if (typeof value !== "string" || !VALID_TTS_MODES.includes(value as TtsMode)) {
+        throw new Error(
+          `INITIAL_SETTINGS_PRESET: invalid value for "ttsMode"; expected one of ${VALID_TTS_MODES.join(", ")}.`,
+        );
+      }
+      if (currentSettings.ttsMode === undefined) {
+        currentSettings.ttsMode = value as TtsMode;
+      }
+    } else if (key === "responseStreamingMode") {
+      if (
+        typeof value !== "string" ||
+        !VALID_STREAMING_MODES.includes(value as ResponseStreamingMode)
+      ) {
+        throw new Error(
+          `INITIAL_SETTINGS_PRESET: invalid value for "responseStreamingMode"; expected one of ${VALID_STREAMING_MODES.join(", ")}.`,
+        );
+      }
+      if (currentSettings.responseStreamingMode === undefined) {
+        currentSettings.responseStreamingMode = value as ResponseStreamingMode;
+      }
+    } else {
+      // Boolean settings: compactOutputMode, showThinkingContent, showAssistantRunFooter, sendDiffFileAttachments
+      if (typeof value !== "boolean") {
+        throw new Error(
+          `INITIAL_SETTINGS_PRESET: "${key}" must be a boolean.`,
+        );
+      }
+      switch (key) {
+        case "compactOutputMode":
+          if (currentSettings.compactOutputMode === undefined)
+            currentSettings.compactOutputMode = value;
+          break;
+        case "showThinkingContent":
+          if (currentSettings.showThinkingContent === undefined)
+            currentSettings.showThinkingContent = value;
+          break;
+        case "showAssistantRunFooter":
+          if (currentSettings.showAssistantRunFooter === undefined)
+            currentSettings.showAssistantRunFooter = value;
+          break;
+        case "sendDiffFileAttachments":
+          if (currentSettings.sendDiffFileAttachments === undefined)
+            currentSettings.sendDiffFileAttachments = value;
+          break;
+      }
+    }
+  }
+}
+
 export async function loadSettings(): Promise<void> {
   const loadedSettings = (await readSettingsFile()) as Settings & {
     serverProcess?: unknown;
@@ -258,6 +328,8 @@ export async function loadSettings(): Promise<void> {
   currentSettings.scheduledTasks = cloneScheduledTasks(loadedSettings.scheduledTasks) ?? [];
   currentSettings.scheduledTaskSessionIgnores =
     cloneScheduledTaskSessionIgnores(loadedSettings.scheduledTaskSessionIgnores) ?? [];
+
+  applyInitialSettingsPreset(config.bot.initialSettingsPreset);
 
   if (requiresRewrite) {
     void writeSettingsFile(currentSettings);

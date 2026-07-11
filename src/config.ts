@@ -7,6 +7,7 @@ dotenv.config({ path: runtimePaths.envFilePath, quiet: true });
 
 export type MessageFormatMode = "raw" | "markdown";
 export type TtsProvider = "openai" | "google" | "elevenlabs" | "edge";
+export type SttRequestFormat = "multipart" | "json";
 
 function getEnvVar(key: string, required: boolean = true): string {
   const value = process.env[key];
@@ -92,6 +93,27 @@ function getOptionalMessageFormatModeEnvVar(
   return defaultValue;
 }
 
+export function parseInitialSettingsPreset(): Record<string, unknown> {
+  const raw = getEnvVar("INITIAL_SETTINGS_PRESET", false).trim();
+  if (!raw) {
+    return {};
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      "INITIAL_SETTINGS_PRESET contains invalid JSON. Fix or unset the variable.",
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(
+      "INITIAL_SETTINGS_PRESET must be a JSON object.",
+    );
+  }
+  return parsed as Record<string, unknown>;
+}
+
 const VALID_TTS_PROVIDERS: TtsProvider[] = ["openai", "google", "elevenlabs", "edge"];
 
 function getOptionalTtsProviderEnvVar(key: string, defaultValue: TtsProvider): TtsProvider {
@@ -104,6 +126,26 @@ function getOptionalTtsProviderEnvVar(key: string, defaultValue: TtsProvider): T
   const normalized = value.trim().toLowerCase();
   if (VALID_TTS_PROVIDERS.includes(normalized as TtsProvider)) {
     return normalized as TtsProvider;
+  }
+
+  return defaultValue;
+}
+
+const VALID_STT_REQUEST_FORMATS: SttRequestFormat[] = ["multipart", "json"];
+
+function getOptionalSttRequestFormatEnvVar(
+  key: string,
+  defaultValue: SttRequestFormat,
+): SttRequestFormat {
+  const value = getEnvVar(key, false);
+
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (VALID_STT_REQUEST_FORMATS.includes(normalized as SttRequestFormat)) {
+    return normalized as SttRequestFormat;
   }
 
   return defaultValue;
@@ -183,11 +225,10 @@ export const config = {
     locale: getOptionalLocaleEnvVar("BOT_LOCALE", "en"),
     trackBackgroundSessions: getOptionalBooleanEnvVar("TRACK_BACKGROUND_SESSIONS", true),
     messageFormatMode: getOptionalMessageFormatModeEnvVar("MESSAGE_FORMAT_MODE", "markdown"),
-    // Telegram splits long outgoing text into several messages, and clients can
-    // also deliver a single paste as multiple updates. Queue quick consecutive
-    // text prompts within this window (ms) and send them as one OpenCode prompt.
-    // 0 disables merging and processes every message immediately.
+    // Buffer near-limit text for this window so Telegram-split chunks can be merged.
+    // Short messages are processed immediately; 0 disables merging entirely.
     messageMergeWindowMs: getOptionalNonNegativeIntEnvVar("MESSAGE_MERGE_WINDOW_MS", 1500),
+    initialSettingsPreset: parseInitialSettingsPreset(),
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),
@@ -201,6 +242,9 @@ export const config = {
     model: getEnvVar("STT_MODEL", false) || "whisper-large-v3-turbo",
     language: getEnvVar("STT_LANGUAGE", false),
     notePrompt: getEnvVar("STT_NOTE_PROMPT", false),
+    // "multipart" (default) = standard OpenAI/Groq Whisper form-data upload.
+    // "json" = base64 audio in an `input_audio` JSON body (e.g. OpenRouter).
+    requestFormat: getOptionalSttRequestFormatEnvVar("STT_REQUEST_FORMAT", "multipart"),
   },
   tts: (() => {
     const provider = getOptionalTtsProviderEnvVar("TTS_PROVIDER", "openai");

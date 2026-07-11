@@ -15,6 +15,7 @@ const mockStt = vi.hoisted(() => ({
   apiKey: "",
   model: "whisper-large-v3-turbo",
   language: "",
+  requestFormat: "multipart" as "multipart" | "json",
 }));
 
 vi.mock("../../../src/config.js", () => ({
@@ -48,6 +49,7 @@ describe("isSttConfigured", () => {
     mockStt.apiKey = "";
     mockStt.model = "whisper-large-v3-turbo";
     mockStt.language = "";
+    mockStt.requestFormat = "multipart";
   });
 
   it("returns false when both apiUrl and apiKey are empty", () => {
@@ -77,6 +79,7 @@ describe("transcribeAudio", () => {
     mockStt.apiKey = "sk-test-key";
     mockStt.model = "whisper-large-v3-turbo";
     mockStt.language = "";
+    mockStt.requestFormat = "multipart";
     vi.restoreAllMocks();
   });
 
@@ -173,5 +176,60 @@ describe("transcribeAudio", () => {
     await expect(transcribeAudio(audioBuffer, "voice.oga")).rejects.toThrow(
       "STT API response does not contain a text field",
     );
+  });
+
+  it("sends a base64 input_audio JSON body when requestFormat is json", async () => {
+    mockStt.requestFormat = "json";
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ text: "Hello world" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const audioBuffer = Buffer.from("fake-audio-data");
+    const result = await transcribeAudio(audioBuffer, "voice.oga");
+
+    expect(result).toEqual({ text: "Hello world" });
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, options] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://api.groq.com/openai/v1/audio/transcriptions");
+    expect(options?.method).toBe("POST");
+    const headers = options?.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe("Bearer sk-test-key");
+    expect(headers["Content-Type"]).toBe("application/json");
+
+    const parsedBody = JSON.parse(options?.body as string) as {
+      model: string;
+      input_audio: { data: string; format: string };
+      language?: string;
+    };
+    expect(parsedBody.model).toBe("whisper-large-v3-turbo");
+    expect(parsedBody.input_audio.format).toBe("ogg");
+    expect(parsedBody.input_audio.data).toBe(audioBuffer.toString("base64"));
+    expect(parsedBody.language).toBeUndefined();
+  });
+
+  it("includes language in the JSON body when requestFormat is json and language is set", async () => {
+    mockStt.requestFormat = "json";
+    mockStt.language = "ru";
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ text: "Привет" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await transcribeAudio(Buffer.from("fake-audio-data"), "voice.mp3");
+
+    const parsedBody = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string) as {
+      input_audio: { format: string };
+      language: string;
+    };
+    expect(parsedBody.input_audio.format).toBe("mp3");
+    expect(parsedBody.language).toBe("ru");
   });
 });

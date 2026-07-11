@@ -214,7 +214,7 @@ describe("app/services/scheduled-task-runtime-service", () => {
       expect.objectContaining({
         chatId: 777,
         format: "raw",
-        text: "🛠️ Build · 🤖 openai/gpt-5 · 🕒 1m",
+        text: "🛠️ Build · 🧠 openai/gpt-5 · 🕒 1m",
       }),
     );
     expect(footerCall).not.toHaveProperty("options");
@@ -259,7 +259,7 @@ describe("app/services/scheduled-task-runtime-service", () => {
     );
     expect(mocked.sendBotTextMock).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        text: expect.stringContaining("Build · 🤖"),
+        text: expect.stringContaining("Build · 🧠"),
       }),
     );
 

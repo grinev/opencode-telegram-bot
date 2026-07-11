@@ -35,7 +35,7 @@ export function formatModelForButton(providerID: string, modelID: string): strin
   const displayProviderId =
     providerID.length > 15 ? `${providerID.substring(0, 12)}...` : providerID;
 
-  return `🤖 ${displayProviderId}\n${displayModelId}`;
+  return `🧠 ${displayProviderId}\n${displayModelId}`;
 }
 
 /**

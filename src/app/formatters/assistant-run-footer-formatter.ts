@@ -30,5 +30,5 @@ export function formatAssistantRunFooter({
   elapsedMs,
 }: AssistantRunFooterParams): string {
   const agentDisplay = getAgentDisplayName(agent);
-  return `${agentDisplay} · 🤖 ${providerID}/${modelID} · 🕒 ${formatDuration(elapsedMs)}`;
+  return `${agentDisplay} · 🧠 ${providerID}/${modelID} · 🕒 ${formatDuration(elapsedMs)}`;
 }

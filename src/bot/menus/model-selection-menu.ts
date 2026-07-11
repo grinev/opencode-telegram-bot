@@ -3,11 +3,7 @@ import {
   fetchCurrentModel,
   getModelSelectionLists,
 } from "../../app/services/model-selection-service.js";
-import type {
-  FavoriteModel,
-  ModelInfo,
-  ModelSelectionLists,
-} from "../../app/types/model.js";
+import type { FavoriteModel, ModelInfo, ModelSelectionLists } from "../../app/types/model.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { replyWithInlineMenu } from "./inline-menu.js";
@@ -15,6 +11,13 @@ import { replyWithInlineMenu } from "./inline-menu.js";
 export const MODEL_SEARCH_CALLBACK = "model:search";
 export const MODEL_SEARCH_AGAIN_CALLBACK = "model:search:again";
 export const MODEL_SEARCH_CANCEL_CALLBACK = "model:search:cancel";
+export const MODEL_LIST_CALLBACK_PREFIX = "model:list:";
+
+type ModelListKind = "favorites" | "recent";
+
+export function buildModelListCallback(kind: ModelListKind, index: number): string {
+  return `${MODEL_LIST_CALLBACK_PREFIX}${kind}:${index}`;
+}
 
 function buildModelSelectionMenuText(modelLists: ModelSelectionLists): string {
   const lines = [t("model.menu.select"), t("model.menu.favorites_title")];
@@ -52,7 +55,12 @@ export async function buildModelSelectionMenu(
     return keyboard;
   }
 
-  const addButton = (model: FavoriteModel, prefix: string): void => {
+  const addButton = (
+    model: FavoriteModel,
+    prefix: string,
+    kind: ModelListKind,
+    index: number,
+  ): void => {
     const isActive =
       currentModel &&
       model.providerID === currentModel.providerID &&
@@ -61,11 +69,11 @@ export async function buildModelSelectionMenu(
     const label = `${prefix} ${model.providerID}/${model.modelID}`;
     const labelWithCheck = isActive ? `✅ ${label}` : label;
 
-    keyboard.text(labelWithCheck, `model:${model.providerID}:${model.modelID}`).row();
+    keyboard.text(labelWithCheck, buildModelListCallback(kind, index)).row();
   };
 
-  favorites.forEach((model) => addButton(model, "⭐"));
-  recent.forEach((model) => addButton(model, "🕘"));
+  favorites.forEach((model, index) => addButton(model, "⭐", "favorites", index));
+  recent.forEach((model, index) => addButton(model, "🕘", "recent", index));
 
   return keyboard;
 }
@@ -86,6 +94,7 @@ export async function showModelSelectionMenu(ctx: Context): Promise<void> {
       menuKind: "model",
       text,
       keyboard,
+      metadata: { modelLists },
     });
   } catch (err) {
     logger.error("[ModelHandler] Error showing model menu:", err);

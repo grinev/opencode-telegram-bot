@@ -22,7 +22,7 @@ describe("bot/message-patterns", () => {
   });
 
   it("matches single-line model button text", () => {
-    expect("🤖 cliproxyapi2/gpt-5.3-codex").toMatch(MODEL_BUTTON_TEXT_PATTERN);
+    expect("🧠 cliproxyapi2/gpt-5.3-codex").toMatch(MODEL_BUTTON_TEXT_PATTERN);
   });
 
   it("does not treat custom agent labels as model buttons", () => {

@@ -87,6 +87,12 @@ describe("bot/menus/inline-menu", () => {
       menuKind: "model",
       text: "Select model",
       keyboard,
+      metadata: {
+        modelLists: {
+          favorites: [{ providerID: "openai", modelID: "gpt-4o" }],
+          recent: [],
+        },
+      },
     });
 
     expect(ctx.reply).toHaveBeenCalledTimes(1);
@@ -102,6 +108,10 @@ describe("bot/menus/inline-menu", () => {
     expect(state?.expectedInput).toBe("callback");
     expect(state?.metadata.menuKind).toBe("model");
     expect(state?.metadata.messageId).toBe(42);
+    expect(state?.metadata.modelLists).toEqual({
+      favorites: [{ providerID: "openai", modelID: "gpt-4o" }],
+      recent: [],
+    });
   });
 
   it("accepts callback from active inline menu", async () => {

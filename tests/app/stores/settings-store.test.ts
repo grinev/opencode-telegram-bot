@@ -23,6 +23,7 @@ describe("app/stores/settings-store", () => {
   let tempHome: string;
 
   beforeEach(async () => {
+    delete process.env.INITIAL_SETTINGS_PRESET;
     tempHome = await mkdtemp(path.join(os.tmpdir(), "opencode-telegram-settings-store-"));
     process.env.OPENCODE_TELEGRAM_HOME = tempHome;
     setRuntimeMode("installed");
@@ -76,6 +77,71 @@ describe("app/stores/settings-store", () => {
     await loadSettings();
 
     expect(getShowAssistantRunFooter()).toBe(true);
+  });
+
+  it("applies INITIAL_SETTINGS_PRESET for settings not yet persisted", async () => {
+    vi.resetModules();
+    vi.stubEnv(
+      "INITIAL_SETTINGS_PRESET",
+      '{"showAssistantRunFooter":false,"compactOutputMode":true,"ttsMode":"auto","responseStreamingMode":"draft","sendDiffFileAttachments":false,"showThinkingContent":false}',
+    );
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getShowAssistantRunFooter()).toBe(false);
+    expect(store.getCompactOutputMode()).toBe(true);
+    expect(store.getTtsMode()).toBe("auto");
+    expect(store.getResponseStreamingMode()).toBe("draft");
+    expect(store.getSendDiffFileAttachments()).toBe(false);
+    expect(store.getShowThinkingContent()).toBe(false);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("does not overwrite a persisted setting with INITIAL_SETTINGS_PRESET", async () => {
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      JSON.stringify({ showAssistantRunFooter: true }),
+    );
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"showAssistantRunFooter":false}');
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getShowAssistantRunFooter()).toBe(true);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("throws on unknown keys in INITIAL_SETTINGS_PRESET", async () => {
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"unknownKey":true,"compactOutputMode":true}');
+
+    await expect((async () => {
+      const store = await import("../../../src/app/stores/settings-store.js");
+      await store.loadSettings();
+    })()).rejects.toThrow(/unknown key "unknownKey"/);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("throws when a preset key has the wrong type", async () => {
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"compactOutputMode":"yes"}');
+
+    await expect((async () => {
+      const store = await import("../../../src/app/stores/settings-store.js");
+      await store.loadSettings();
+    })()).rejects.toThrow(/"compactOutputMode" must be a boolean/);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
   });
 
   it("loads thinking content setting from settings.json", async () => {

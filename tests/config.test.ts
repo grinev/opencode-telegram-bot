@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-async function loadConfig() {
+async function loadConfigModule() {
   vi.resetModules();
-  const module = await import("../src/config.js");
+  return import("../src/config.js");
+}
+
+async function loadConfig() {
+  const module = await loadConfigModule();
   return module.config;
 }
 
@@ -70,6 +74,49 @@ describe("config boolean env parsing", () => {
     const config = await loadConfig();
 
     expect(config.bot.messageFormatMode).toBe("markdown");
+  });
+
+  it("returns an empty preset when INITIAL_SETTINGS_PRESET is not set", async () => {
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", "");
+
+    const config = await loadConfig();
+
+    expect(config.bot.initialSettingsPreset).toEqual({});
+  });
+
+  it("parses a valid INITIAL_SETTINGS_PRESET JSON object", async () => {
+    vi.stubEnv(
+      "INITIAL_SETTINGS_PRESET",
+      '{"showAssistantRunFooter":false,"compactOutputMode":true}',
+    );
+
+    const config = await loadConfig();
+
+    expect(config.bot.initialSettingsPreset).toEqual({
+      showAssistantRunFooter: false,
+      compactOutputMode: true,
+    });
+  });
+
+  it("throws when INITIAL_SETTINGS_PRESET contains invalid JSON", async () => {
+    const { parseInitialSettingsPreset } = await loadConfigModule();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", "{not valid json}");
+
+    expect(() => parseInitialSettingsPreset()).toThrow(/invalid JSON/);
+  });
+
+  it("throws when INITIAL_SETTINGS_PRESET is a JSON array", async () => {
+    const { parseInitialSettingsPreset } = await loadConfigModule();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '["not","an","object"]');
+
+    expect(() => parseInitialSettingsPreset()).toThrow(/must be a JSON object/);
+  });
+
+  it("throws when INITIAL_SETTINGS_PRESET is a JSON scalar", async () => {
+    const { parseInitialSettingsPreset } = await loadConfigModule();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", "true");
+
+    expect(() => parseInitialSettingsPreset()).toThrow(/must be a JSON object/);
   });
 
   it("parses supported locale from BOT_LOCALE", async () => {
