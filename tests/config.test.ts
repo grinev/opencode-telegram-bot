@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-async function loadConfig() {
+async function loadConfigModule() {
   vi.resetModules();
-  const module = await import("../src/config.js");
+  return import("../src/config.js");
+}
+
+async function loadConfig() {
+  const module = await loadConfigModule();
   return module.config;
 }
 
@@ -94,28 +98,25 @@ describe("config boolean env parsing", () => {
     });
   });
 
-  it("returns an empty preset when INITIAL_SETTINGS_PRESET contains invalid JSON", async () => {
+  it("throws when INITIAL_SETTINGS_PRESET contains invalid JSON", async () => {
+    const { parseInitialSettingsPreset } = await loadConfigModule();
     vi.stubEnv("INITIAL_SETTINGS_PRESET", "{not valid json}");
 
-    const config = await loadConfig();
-
-    expect(config.bot.initialSettingsPreset).toEqual({});
+    expect(() => parseInitialSettingsPreset()).toThrow(/invalid JSON/);
   });
 
-  it("returns an empty preset when INITIAL_SETTINGS_PRESET is a JSON array", async () => {
+  it("throws when INITIAL_SETTINGS_PRESET is a JSON array", async () => {
+    const { parseInitialSettingsPreset } = await loadConfigModule();
     vi.stubEnv("INITIAL_SETTINGS_PRESET", '["not","an","object"]');
 
-    const config = await loadConfig();
-
-    expect(config.bot.initialSettingsPreset).toEqual({});
+    expect(() => parseInitialSettingsPreset()).toThrow(/must be a JSON object/);
   });
 
-  it("returns an empty preset when INITIAL_SETTINGS_PRESET is a JSON scalar", async () => {
+  it("throws when INITIAL_SETTINGS_PRESET is a JSON scalar", async () => {
+    const { parseInitialSettingsPreset } = await loadConfigModule();
     vi.stubEnv("INITIAL_SETTINGS_PRESET", "true");
 
-    const config = await loadConfig();
-
-    expect(config.bot.initialSettingsPreset).toEqual({});
+    expect(() => parseInitialSettingsPreset()).toThrow(/must be a JSON object/);
   });
 
   it("parses supported locale from BOT_LOCALE", async () => {

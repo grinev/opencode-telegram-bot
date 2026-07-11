@@ -244,17 +244,15 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
 
   for (const [key, value] of Object.entries(preset)) {
     if (!knownKeys.has(key)) {
-      logger.warn(
-        `[SettingsManager] INITIAL_SETTINGS_PRESET: unknown key "${key}" — ignoring.`,
+      throw new Error(
+        `INITIAL_SETTINGS_PRESET: unknown key "${key}". Supported keys: ${[...knownKeys].join(", ")}.`,
       );
-      continue;
     }
     if (key === "ttsMode") {
       if (typeof value !== "string" || !VALID_TTS_MODES.includes(value as TtsMode)) {
-        logger.warn(
-          `[SettingsManager] INITIAL_SETTINGS_PRESET: invalid value for "ttsMode"; expected one of ${VALID_TTS_MODES.join(", ")} — ignoring.`,
+        throw new Error(
+          `INITIAL_SETTINGS_PRESET: invalid value for "ttsMode"; expected one of ${VALID_TTS_MODES.join(", ")}.`,
         );
-        continue;
       }
       if (currentSettings.ttsMode === undefined) {
         currentSettings.ttsMode = value as TtsMode;
@@ -264,10 +262,9 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
         typeof value !== "string" ||
         !VALID_STREAMING_MODES.includes(value as ResponseStreamingMode)
       ) {
-        logger.warn(
-          `[SettingsManager] INITIAL_SETTINGS_PRESET: invalid value for "responseStreamingMode"; expected one of ${VALID_STREAMING_MODES.join(", ")} — ignoring.`,
+        throw new Error(
+          `INITIAL_SETTINGS_PRESET: invalid value for "responseStreamingMode"; expected one of ${VALID_STREAMING_MODES.join(", ")}.`,
         );
-        continue;
       }
       if (currentSettings.responseStreamingMode === undefined) {
         currentSettings.responseStreamingMode = value as ResponseStreamingMode;
@@ -275,10 +272,9 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
     } else {
       // Boolean settings: compactOutputMode, showThinkingContent, showAssistantRunFooter, sendDiffFileAttachments
       if (typeof value !== "boolean") {
-        logger.warn(
-          `[SettingsManager] INITIAL_SETTINGS_PRESET: "${key}" must be a boolean — ignoring.`,
+        throw new Error(
+          `INITIAL_SETTINGS_PRESET: "${key}" must be a boolean.`,
         );
-        continue;
       }
       switch (key) {
         case "compactOutputMode":

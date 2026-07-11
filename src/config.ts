@@ -76,7 +76,7 @@ function getOptionalMessageFormatModeEnvVar(
   return defaultValue;
 }
 
-function parseInitialSettingsPreset(): Record<string, unknown> {
+export function parseInitialSettingsPreset(): Record<string, unknown> {
   const raw = getEnvVar("INITIAL_SETTINGS_PRESET", false).trim();
   if (!raw) {
     return {};
@@ -85,16 +85,14 @@ function parseInitialSettingsPreset(): Record<string, unknown> {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    console.warn(
-      "[config] INITIAL_SETTINGS_PRESET contains invalid JSON — ignoring preset.",
+    throw new Error(
+      "INITIAL_SETTINGS_PRESET contains invalid JSON. Fix or unset the variable.",
     );
-    return {};
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    console.warn(
-      "[config] INITIAL_SETTINGS_PRESET must be a JSON object — ignoring preset.",
+    throw new Error(
+      "INITIAL_SETTINGS_PRESET must be a JSON object.",
     );
-    return {};
   }
   return parsed as Record<string, unknown>;
 }

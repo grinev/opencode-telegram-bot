@@ -23,6 +23,7 @@ describe("app/stores/settings-store", () => {
   let tempHome: string;
 
   beforeEach(async () => {
+    delete process.env.INITIAL_SETTINGS_PRESET;
     tempHome = await mkdtemp(path.join(os.tmpdir(), "opencode-telegram-settings-store-"));
     process.env.OPENCODE_TELEGRAM_HOME = tempHome;
     setRuntimeMode("installed");
@@ -117,27 +118,27 @@ describe("app/stores/settings-store", () => {
     vi.resetModules();
   });
 
-  it("ignores unknown keys in INITIAL_SETTINGS_PRESET without crashing", async () => {
+  it("throws on unknown keys in INITIAL_SETTINGS_PRESET", async () => {
     vi.resetModules();
     vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"unknownKey":true,"compactOutputMode":true}');
 
-    const store = await import("../../../src/app/stores/settings-store.js");
-    await store.loadSettings();
-
-    expect(store.getCompactOutputMode()).toBe(true);
+    await expect((async () => {
+      const store = await import("../../../src/app/stores/settings-store.js");
+      await store.loadSettings();
+    })()).rejects.toThrow(/unknown key "unknownKey"/);
 
     vi.unstubAllEnvs();
     vi.resetModules();
   });
 
-  it("ignores a preset key with the wrong type without crashing", async () => {
+  it("throws when a preset key has the wrong type", async () => {
     vi.resetModules();
     vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"compactOutputMode":"yes"}');
 
-    const store = await import("../../../src/app/stores/settings-store.js");
-    await store.loadSettings();
-
-    expect(store.getCompactOutputMode()).toBe(false);
+    await expect((async () => {
+      const store = await import("../../../src/app/stores/settings-store.js");
+      await store.loadSettings();
+    })()).rejects.toThrow(/"compactOutputMode" must be a boolean/);
 
     vi.unstubAllEnvs();
     vi.resetModules();
