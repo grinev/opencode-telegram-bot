@@ -69,9 +69,13 @@ import {
 } from "../../app/managers/background-session-manager.js";
 import { buildBackgroundSessionOpenKeyboard } from "../menus/session-selection-menu.js";
 import { questionManager } from "../../app/managers/question-manager.js";
+import { permissionManager } from "../../app/managers/permission-manager.js";
 import { showCurrentQuestion } from "../menus/question-menu.js";
-import { showPermissionRequest } from "../menus/permission-menu.js";
-import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
+import { showPermissionRequest, syncPermissionInteractionState } from "../menus/permission-menu.js";
+import {
+  clearAllInteractionState,
+  interactionManager,
+} from "../../app/managers/interaction-manager.js";
 import { stopEventListening, subscribeToEvents } from "../../opencode/events.js";
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
@@ -679,6 +683,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     });
 
     summaryAggregator.setOnPermission(async (request) => {
+      const generation = permissionManager.getGeneration();
+
       if (!this.botInstance || !this.chatIdInstance) {
         logger.error("Bot or chat ID not available for showing permission request");
         return;
@@ -703,7 +709,33 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       logger.info(
         `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}, subagent=${isSubagent}`,
       );
-      await showPermissionRequest(this.botInstance.api, this.chatIdInstance, request);
+      await showPermissionRequest(this.botInstance.api, this.chatIdInstance, request, generation);
+    });
+
+    summaryAggregator.setOnPermissionReplied(async (_sessionId, requestID) => {
+      const messageIds = permissionManager.resolveRequest(requestID);
+      const interaction = interactionManager.getSnapshot();
+      if (!permissionManager.isActive() || !interaction || interaction.kind === "permission") {
+        syncPermissionInteractionState({ resolvedRequestID: requestID });
+      }
+
+      if (this.botInstance && this.chatIdInstance) {
+        const api = this.botInstance.api;
+        const chatId = this.chatIdInstance;
+        await Promise.all(
+          messageIds.map((messageId) =>
+            api.deleteMessage(chatId, messageId).catch((err) => {
+              logger.warn(`[Bot] Failed to delete resolved permission message ${messageId}:`, err);
+            }),
+          ),
+        );
+      }
+
+      if (messageIds.length > 0) {
+        logger.info(
+          `[Bot] Cleared resolved permission prompt: requestID=${requestID}, messages=${messageIds.length}`,
+        );
+      }
     });
 
     summaryAggregator.setOnThinking(async (update) => {

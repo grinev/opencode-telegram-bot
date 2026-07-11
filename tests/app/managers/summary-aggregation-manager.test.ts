@@ -1826,7 +1826,7 @@ describe("summary/aggregator", () => {
     expect(onTokens).not.toHaveBeenCalled();
   });
 
-  it("forwards permission.asked events from tracked subagent (child) sessions", async () => {
+  it("forwards permission.asked events from tracked subagent (child) sessions synchronously", () => {
     const onPermission = vi.fn();
     summaryAggregator.setOnPermission(onPermission);
     summaryAggregator.setSession("root-session");
@@ -1875,8 +1875,6 @@ describe("summary/aggregator", () => {
         always: [],
       },
     } as unknown as Event);
-
-    await new Promise((resolve) => setImmediate(resolve));
 
     expect(onPermission).toHaveBeenCalledTimes(1);
     expect(onPermission.mock.calls[0][0]).toEqual(

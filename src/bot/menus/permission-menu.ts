@@ -82,8 +82,17 @@ export async function showPermissionRequest(
   bot: Context["api"],
   chatId: number,
   request: PermissionRequest,
+  generation: number = permissionManager.getGeneration(),
 ): Promise<void> {
   logger.debug(`[PermissionHandler] Showing permission request: ${request.permission}`);
+
+  if (
+    generation !== permissionManager.getGeneration() ||
+    permissionManager.isResolved(request.id)
+  ) {
+    logger.debug(`[PermissionHandler] Skipping stale or already resolved request: ${request.id}`);
+    return;
+  }
 
   const text = formatPermissionText(request);
   const keyboard = buildPermissionKeyboard();
@@ -94,7 +103,12 @@ export async function showPermissionRequest(
     });
 
     logger.debug(`[PermissionHandler] Message sent, messageId=${message.message_id}`);
-    permissionManager.startPermission(request, message.message_id);
+    if (!permissionManager.startPermission(request, message.message_id, generation)) {
+      await bot.deleteMessage(chatId, message.message_id).catch((err) => {
+        logger.warn(`[PermissionHandler] Failed to delete stale permission message:`, err);
+      });
+      return;
+    }
 
     syncPermissionInteractionState({
       requestID: request.id,

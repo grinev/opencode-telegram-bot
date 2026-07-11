@@ -10,6 +10,7 @@ interface SummaryAggregatorPrivateState {
   onSessionCompactedCallback: null;
   onSessionErrorCallback: null;
   onPermissionCallback: null;
+  onPermissionRepliedCallback: null;
   onSessionDiffCallback: null;
   onFileChangeCallback: null;
   bot: null;
@@ -88,6 +89,7 @@ export async function resetSingletonState(): Promise<void> {
   aggregator.onSessionCompactedCallback = null;
   aggregator.onSessionErrorCallback = null;
   aggregator.onPermissionCallback = null;
+  aggregator.onPermissionRepliedCallback = null;
   aggregator.onSessionDiffCallback = null;
   aggregator.onFileChangeCallback = null;
   aggregator.bot = null;

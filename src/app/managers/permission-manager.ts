@@ -5,14 +5,25 @@ class PermissionManager {
   private state: PermissionState = {
     requestsByMessageId: new Map(),
   };
+  private resolvedRequestIDs = new Set<string>();
+  private generation = 0;
 
   /**
    * Register a new permission request message
    */
-  startPermission(request: PermissionRequest, messageId: number): void {
+  startPermission(
+    request: PermissionRequest,
+    messageId: number,
+    generation: number = this.generation,
+  ): boolean {
     logger.debug(
       `[PermissionManager] startPermission: id=${request.id}, permission=${request.permission}, messageId=${messageId}`,
     );
+
+    if (generation !== this.generation || this.resolvedRequestIDs.has(request.id)) {
+      logger.debug(`[PermissionManager] Ignoring stale or already resolved request: id=${request.id}`);
+      return false;
+    }
 
     if (this.state.requestsByMessageId.has(messageId)) {
       logger.warn(`[PermissionManager] Message ID already tracked, replacing: ${messageId}`);
@@ -23,6 +34,8 @@ class PermissionManager {
     logger.info(
       `[PermissionManager] New permission request: type=${request.permission}, patterns=${request.patterns.join(", ")}, pending=${this.state.requestsByMessageId.size}`,
     );
+
+    return true;
   }
 
   /**
@@ -102,6 +115,39 @@ class PermissionManager {
   }
 
   /**
+   * Remove all Telegram messages tracking an OpenCode permission request ID
+   */
+  resolveRequest(requestID: string): number[] {
+    this.resolvedRequestIDs.add(requestID);
+    const removedMessageIds: number[] = [];
+
+    for (const [messageId, request] of this.state.requestsByMessageId) {
+      if (request.id !== requestID) {
+        continue;
+      }
+
+      this.state.requestsByMessageId.delete(messageId);
+      removedMessageIds.push(messageId);
+    }
+
+    if (removedMessageIds.length > 0) {
+      logger.debug(
+        `[PermissionManager] Removed resolved permission request: id=${requestID}, messages=${removedMessageIds.length}, pending=${this.state.requestsByMessageId.size}`,
+      );
+    }
+
+    return removedMessageIds;
+  }
+
+  isResolved(requestID: string): boolean {
+    return this.resolvedRequestIDs.has(requestID);
+  }
+
+  getGeneration(): number {
+    return this.generation;
+  }
+
+  /**
    * Get number of active permission requests
    */
   getPendingCount(): number {
@@ -126,6 +172,8 @@ class PermissionManager {
     this.state = {
       requestsByMessageId: new Map(),
     };
+    this.resolvedRequestIDs.clear();
+    this.generation++;
   }
 }
 

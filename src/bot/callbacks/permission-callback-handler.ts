@@ -24,6 +24,27 @@ function isPermissionReply(value: string): value is PermissionReply {
   return value === "once" || value === "always" || value === "reject";
 }
 
+function isPermissionRequestNotFound(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as {
+    name?: unknown;
+    message?: unknown;
+    data?: { message?: unknown };
+  };
+
+  if (candidate.name === "NotFoundError") {
+    return true;
+  }
+
+  return [candidate.message, candidate.data?.message].some(
+    (message) =>
+      typeof message === "string" && message.toLowerCase().includes("permission request not found"),
+  );
+}
+
 export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data) return false;
@@ -121,6 +142,11 @@ async function handlePermissionReply(
       }),
     onSuccess: ({ error }) => {
       if (error) {
+        if (isPermissionRequestNotFound(error)) {
+          logger.debug(`[PermissionHandler] Permission request already resolved: ${requestID}`);
+          return;
+        }
+
         logger.error("[PermissionHandler] Failed to send permission reply:", error);
         if (ctx.api && chatId) {
           void ctx.api.sendMessage(chatId, t("permission.send_reply_error")).catch(() => {});

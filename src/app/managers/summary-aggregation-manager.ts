@@ -151,7 +151,9 @@ type SessionRetryCallback = (retryInfo: SessionRetryInfo) => void;
 
 type SessionIdleCallback = (sessionId: string) => void;
 
-type PermissionCallback = (request: PermissionRequest) => void;
+type PermissionCallback = (request: PermissionRequest) => void | Promise<void>;
+
+type PermissionRepliedCallback = (sessionId: string, requestID: string) => void | Promise<void>;
 
 type SessionDiffCallback = (sessionId: string, diffs: FileChange[]) => void;
 
@@ -251,6 +253,7 @@ class SummaryAggregator {
   private onSessionRetryCallback: SessionRetryCallback | null = null;
   private onSessionIdleCallback: SessionIdleCallback | null = null;
   private onPermissionCallback: PermissionCallback | null = null;
+  private onPermissionRepliedCallback: PermissionRepliedCallback | null = null;
   private onSessionDiffCallback: SessionDiffCallback | null = null;
   private onFileChangeCallback: FileChangeCallback | null = null;
   private onClearedCallback: ClearedCallback | null = null;
@@ -348,6 +351,10 @@ class SummaryAggregator {
 
   setOnPermission(callback: PermissionCallback): void {
     this.onPermissionCallback = callback;
+  }
+
+  setOnPermissionReplied(callback: PermissionRepliedCallback): void {
+    this.onPermissionRepliedCallback = callback;
   }
 
   setOnSessionDiff(callback: SessionDiffCallback): void {
@@ -466,7 +473,7 @@ class SummaryAggregator {
         this.handlePermissionAsked(event);
         break;
       case "permission.replied":
-        logger.info(`[Aggregator] Permission replied: requestID=${event.properties.requestID}`);
+        this.handlePermissionReplied(event);
         break;
       default:
         logger.debug(`[Aggregator] Unhandled event type: ${event.type}`);
@@ -2110,11 +2117,41 @@ class SummaryAggregator {
 
     if (this.onPermissionCallback) {
       const callback = this.onPermissionCallback;
+      try {
+        void Promise.resolve(callback(request as PermissionRequest)).catch((err) => {
+          logger.error("[Aggregator] Error in permission callback:", err);
+        });
+      } catch (err) {
+        logger.error("[Aggregator] Error in permission callback:", err);
+      }
+    }
+  }
+
+  private handlePermissionReplied(
+    event: Event & {
+      type: "permission.replied";
+    },
+  ): void {
+    const { sessionID, requestID } = event.properties;
+    const isCurrent = sessionID === this.currentSessionId;
+    const isTrackedChild = this.isTrackedChildSession(sessionID);
+
+    if (!isCurrent && !isTrackedChild) {
+      logger.debug(
+        `[Aggregator] Ignoring permission.replied for different session: ${sessionID} (current: ${this.currentSessionId})`,
+      );
+      return;
+    }
+
+    logger.info(`[Aggregator] Permission replied: requestID=${requestID}`);
+
+    if (this.onPermissionRepliedCallback) {
+      const callback = this.onPermissionRepliedCallback;
       setImmediate(async () => {
         try {
-          await callback(request as PermissionRequest);
+          await callback(sessionID, requestID);
         } catch (err) {
-          logger.error("[Aggregator] Error in permission callback:", err);
+          logger.error("[Aggregator] Error in permission replied callback:", err);
         }
       });
     }

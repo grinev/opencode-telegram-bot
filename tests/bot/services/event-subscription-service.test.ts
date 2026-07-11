@@ -135,6 +135,37 @@ function emitSessionIdle(summaryAggregator: { processEvent(event: Event): void }
   } as unknown as Event);
 }
 
+function emitPermissionAsked(
+  summaryAggregator: { processEvent(event: Event): void },
+  requestID: string,
+): void {
+  summaryAggregator.processEvent({
+    type: "permission.asked",
+    properties: {
+      id: requestID,
+      sessionID: "session-1",
+      permission: "external_directory",
+      patterns: ["D:/shared/*"],
+      metadata: {},
+      always: ["D:/shared/*"],
+    },
+  } as unknown as Event);
+}
+
+function emitPermissionReplied(
+  summaryAggregator: { processEvent(event: Event): void },
+  requestID: string,
+): void {
+  summaryAggregator.processEvent({
+    type: "permission.replied",
+    properties: {
+      sessionID: "session-1",
+      requestID,
+      reply: "always",
+    },
+  } as unknown as Event);
+}
+
 describe("bot/services/event-subscription-service", () => {
   let tempHome: string;
   let activeService: { cleanup(reason: string): void } | null = null;
@@ -356,5 +387,95 @@ describe("bot/services/event-subscription-service", () => {
     expect(api.sendMessage.mock.calls[0][2]).toEqual({ disable_notification: true });
     expect(api.sendMessage.mock.calls[1][1]).toContain("test-provider/test-model");
     expect(api.sendMessageDraft).not.toHaveBeenCalled();
+  });
+
+  it("clears permission prompts when OpenCode resolves pending requests", async () => {
+    const { api, summaryAggregator } = await setupService(true);
+    const [{ permissionManager }, { interactionManager }] = await Promise.all([
+      import("../../../src/app/managers/permission-manager.js"),
+      import("../../../src/app/managers/interaction-manager.js"),
+    ]);
+    api.sendMessage
+      .mockResolvedValueOnce({ message_id: 500 })
+      .mockResolvedValueOnce({ message_id: 501 });
+
+    emitPermissionAsked(summaryAggregator, "permission-1");
+    emitPermissionAsked(summaryAggregator, "permission-2");
+
+    await vi.waitFor(() => {
+      expect(permissionManager.getPendingCount()).toBe(2);
+    });
+
+    emitPermissionReplied(summaryAggregator, "permission-2");
+
+    await vi.waitFor(() => {
+      expect(permissionManager.getPendingCount()).toBe(1);
+    });
+    expect(api.deleteMessage).toHaveBeenCalledWith(42, 501);
+    expect(permissionManager.getRequestID(500)).toBe("permission-1");
+    expect(interactionManager.getSnapshot()?.metadata.pendingCount).toBe(1);
+
+    emitPermissionReplied(summaryAggregator, "permission-1");
+
+    await vi.waitFor(() => {
+      expect(permissionManager.isActive()).toBe(false);
+      expect(interactionManager.getSnapshot()).toBeNull();
+    });
+    expect(api.deleteMessage).toHaveBeenCalledWith(42, 500);
+  });
+
+  it("discards a permission prompt resolved while its Telegram message is being sent", async () => {
+    const { api, summaryAggregator } = await setupService(true);
+    const [{ permissionManager }, { interactionManager }] = await Promise.all([
+      import("../../../src/app/managers/permission-manager.js"),
+      import("../../../src/app/managers/interaction-manager.js"),
+    ]);
+    let resolveSend: (message: { message_id: number }) => void = () => {};
+    const pendingSend = new Promise<{ message_id: number }>((resolve) => {
+      resolveSend = resolve;
+    });
+    api.sendMessage.mockReturnValueOnce(pendingSend);
+
+    emitPermissionAsked(summaryAggregator, "permission-race");
+    await vi.waitFor(() => {
+      expect(api.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    emitPermissionReplied(summaryAggregator, "permission-race");
+    await vi.waitFor(() => {
+      expect(permissionManager.isResolved("permission-race")).toBe(true);
+    });
+
+    resolveSend({ message_id: 502 });
+
+    await vi.waitFor(() => {
+      expect(api.deleteMessage).toHaveBeenCalledWith(42, 502);
+    });
+    expect(permissionManager.isActive()).toBe(false);
+    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("does not replace a newer interaction when a permission is resolved", async () => {
+    const { api, summaryAggregator } = await setupService(true);
+    const [{ permissionManager }, { interactionManager }] = await Promise.all([
+      import("../../../src/app/managers/permission-manager.js"),
+      import("../../../src/app/managers/interaction-manager.js"),
+    ]);
+    api.sendMessage
+      .mockResolvedValueOnce({ message_id: 510 })
+      .mockResolvedValueOnce({ message_id: 511 });
+    emitPermissionAsked(summaryAggregator, "permission-1");
+    emitPermissionAsked(summaryAggregator, "permission-2");
+    await vi.waitFor(() => {
+      expect(permissionManager.getPendingCount()).toBe(2);
+    });
+    interactionManager.start({ kind: "rename", expectedInput: "text" });
+
+    emitPermissionReplied(summaryAggregator, "permission-2");
+
+    await vi.waitFor(() => {
+      expect(permissionManager.getPendingCount()).toBe(1);
+    });
+    expect(interactionManager.getSnapshot()?.kind).toBe("rename");
   });
 });
