@@ -21,7 +21,6 @@ describe("bot/routers/command-router", () => {
       "opencode_start",
       "opencode_stop",
       "projects",
-      "worktree",
       "git",
       "open",
       "ls",

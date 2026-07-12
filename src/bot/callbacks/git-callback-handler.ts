@@ -3,12 +3,21 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { runCommitFlow } from "../flows/commit-flow.js";
 import { runDiffFlow } from "../flows/diff-flow.js";
-import { GIT_COMMIT_CALLBACK, GIT_DIFF_CALLBACK } from "../menus/git-menu.js";
+import { runWorktreeFlow } from "../flows/worktree-flow.js";
+import {
+  GIT_COMMIT_CALLBACK,
+  GIT_DIFF_CALLBACK,
+  GIT_WORKTREE_CALLBACK,
+} from "../menus/git-menu.js";
 import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 
 export async function handleGitCallback(ctx: Context): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
-  if (data !== GIT_DIFF_CALLBACK && data !== GIT_COMMIT_CALLBACK) {
+  if (
+    data !== GIT_DIFF_CALLBACK &&
+    data !== GIT_COMMIT_CALLBACK &&
+    data !== GIT_WORKTREE_CALLBACK
+  ) {
     return false;
   }
 
@@ -26,8 +35,10 @@ export async function handleGitCallback(ctx: Context): Promise<boolean> {
   try {
     if (data === GIT_DIFF_CALLBACK) {
       await runDiffFlow(ctx);
-    } else {
+    } else if (data === GIT_COMMIT_CALLBACK) {
       await runCommitFlow(ctx);
+    } else {
+      await runWorktreeFlow(ctx);
     }
   } catch (error) {
     logger.error("[GitHandler] Error handling git action:", error);

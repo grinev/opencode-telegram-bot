@@ -8,6 +8,7 @@ import { t } from "../../../src/i18n/index.js";
 const mocked = vi.hoisted(() => ({
   runDiffFlowMock: vi.fn(),
   runCommitFlowMock: vi.fn(),
+  runWorktreeFlowMock: vi.fn(),
 }));
 
 vi.mock("../../../src/bot/flows/diff-flow.js", () => ({
@@ -16,6 +17,10 @@ vi.mock("../../../src/bot/flows/diff-flow.js", () => ({
 
 vi.mock("../../../src/bot/flows/commit-flow.js", () => ({
   runCommitFlow: mocked.runCommitFlowMock,
+}));
+
+vi.mock("../../../src/bot/flows/worktree-flow.js", () => ({
+  runWorktreeFlow: mocked.runWorktreeFlowMock,
 }));
 
 function startGitMenuInteraction(messageId = 900): void {
@@ -47,6 +52,7 @@ describe("git menu and callbacks", () => {
     interactionManager.clear("test_setup");
     mocked.runDiffFlowMock.mockReset().mockResolvedValue(undefined);
     mocked.runCommitFlowMock.mockReset().mockResolvedValue(undefined);
+    mocked.runWorktreeFlowMock.mockReset().mockResolvedValue(undefined);
   });
 
   it("builds a menu with diff and commit buttons", () => {
@@ -57,7 +63,7 @@ describe("git menu and callbacks", () => {
     const callbackData = keyboard.inline_keyboard
       .flat()
       .map((button) => (button as { callback_data?: string }).callback_data);
-    expect(callbackData).toEqual(["git:diff", "git:commit"]);
+    expect(callbackData).toEqual(["git:diff", "git:commit", "git:worktree"]);
   });
 
   it("runs the diff flow and closes the menu on git:diff", async () => {
@@ -83,6 +89,19 @@ describe("git menu and callbacks", () => {
     expect(interactionManager.getSnapshot()).toBeNull();
     expect(mocked.runCommitFlowMock).toHaveBeenCalledWith(ctx);
     expect(mocked.runDiffFlowMock).not.toHaveBeenCalled();
+  });
+
+  it("runs the worktree flow and closes the menu on git:worktree", async () => {
+    startGitMenuInteraction();
+
+    const ctx = createGitCallbackContext("git:worktree");
+    const handled = await handleGitCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(mocked.runWorktreeFlowMock).toHaveBeenCalledWith(ctx);
+    expect(mocked.runDiffFlowMock).not.toHaveBeenCalled();
+    expect(mocked.runCommitFlowMock).not.toHaveBeenCalled();
   });
 
   it("ignores non-git callback data", async () => {

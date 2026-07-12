@@ -1,4 +1,4 @@
-import type { CommandContext, Context } from "grammy";
+import type { Context } from "grammy";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
@@ -18,7 +18,7 @@ async function loadCurrentWorktreeContext() {
   return { currentProject, context };
 }
 
-export async function worktreeCommand(ctx: CommandContext<Context>) {
+export async function runWorktreeFlow(ctx: Context) {
   try {
     if (isForegroundBusy()) {
       await replyBusyBlocked(ctx);

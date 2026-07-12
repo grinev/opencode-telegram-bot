@@ -63,7 +63,7 @@ vi.mock("../../../src/utils/logger.js", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { worktreeCommand } from "../../../src/bot/commands/worktree-command.js";
+import { runWorktreeFlow } from "../../../src/bot/flows/worktree-flow.js";
 import { handleWorktreeCallback } from "../../../src/bot/callbacks/worktree-callback-handler.js";
 
 function createCommandContext(): Context {
@@ -110,7 +110,7 @@ describe("bot/commands/worktree", () => {
     mocked.currentProject = null;
 
     const ctx = createCommandContext();
-    await worktreeCommand(ctx as never);
+    await runWorktreeFlow(ctx as never);
 
     expect(ctx.reply).toHaveBeenCalledWith(t("worktree.project_not_selected"));
     expect(mocked.replyWithInlineMenuMock).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ describe("bot/commands/worktree", () => {
     });
 
     const ctx = createCommandContext();
-    await worktreeCommand(ctx as never);
+    await runWorktreeFlow(ctx as never);
 
     expect(mocked.replyWithInlineMenuMock).toHaveBeenCalledWith(
       ctx,
