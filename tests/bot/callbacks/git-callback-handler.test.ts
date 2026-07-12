@@ -10,6 +10,7 @@ const mocked = vi.hoisted(() => ({
   runCommitFlowMock: vi.fn(),
   runWorktreeFlowMock: vi.fn(),
   runPushFlowMock: vi.fn(),
+  runPullFlowMock: vi.fn(),
 }));
 
 vi.mock("../../../src/bot/flows/diff-flow.js", () => ({
@@ -26,6 +27,10 @@ vi.mock("../../../src/bot/flows/worktree-flow.js", () => ({
 
 vi.mock("../../../src/bot/flows/push-flow.js", () => ({
   runPushFlow: mocked.runPushFlowMock,
+}));
+
+vi.mock("../../../src/bot/flows/pull-flow.js", () => ({
+  runPullFlow: mocked.runPullFlowMock,
 }));
 
 function startGitMenuInteraction(messageId = 900): void {
@@ -59,6 +64,7 @@ describe("git menu and callbacks", () => {
     mocked.runCommitFlowMock.mockReset().mockResolvedValue(undefined);
     mocked.runWorktreeFlowMock.mockReset().mockResolvedValue(undefined);
     mocked.runPushFlowMock.mockReset().mockResolvedValue(undefined);
+    mocked.runPullFlowMock.mockReset().mockResolvedValue(undefined);
   });
 
   it("builds a menu with a status header and action buttons", () => {
@@ -83,7 +89,24 @@ describe("git menu and callbacks", () => {
     const callbackData = keyboard.inline_keyboard
       .flat()
       .map((button) => (button as { callback_data?: string }).callback_data);
-    expect(callbackData).toEqual(["git:diff", "git:commit", "git:push", "git:worktree"]);
+    expect(callbackData).toEqual([
+      "git:diff",
+      "git:commit",
+      "git:push",
+      "git:pull",
+      "git:worktree",
+    ]);
+  });
+
+  it("runs the pull flow and closes the menu on git:pull", async () => {
+    startGitMenuInteraction();
+
+    const ctx = createGitCallbackContext("git:pull");
+    const handled = await handleGitCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(mocked.runPullFlowMock).toHaveBeenCalledWith(ctx);
   });
 
   it("runs the push flow and closes the menu on git:push", async () => {

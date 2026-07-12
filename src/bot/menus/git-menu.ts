@@ -5,6 +5,7 @@ import { t } from "../../i18n/index.js";
 export const GIT_DIFF_CALLBACK = "git:diff";
 export const GIT_COMMIT_CALLBACK = "git:commit";
 export const GIT_PUSH_CALLBACK = "git:push";
+export const GIT_PULL_CALLBACK = "git:pull";
 export const GIT_WORKTREE_CALLBACK = "git:worktree";
 
 interface GitMenuView {
@@ -47,6 +48,7 @@ export function buildGitMenuView(status: GitRepoStatus): GitMenuView {
     .text(t("git.button.commit"), GIT_COMMIT_CALLBACK)
     .row()
     .text(t("git.button.push"), GIT_PUSH_CALLBACK)
+    .text(t("git.button.pull"), GIT_PULL_CALLBACK)
     .row()
     .text(t("git.button.worktree"), GIT_WORKTREE_CALLBACK);
 

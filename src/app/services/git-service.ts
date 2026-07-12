@@ -287,6 +287,28 @@ export async function pushCurrentBranch(
   await runGit(dir, args);
 }
 
+export interface GitPullResult {
+  pulledCommits: number;
+}
+
+/**
+ * Fast-forward pull of the current branch. Refuses to merge or rebase —
+ * a diverged branch fails instead of leaving a conflict to resolve remotely.
+ */
+export async function pullCurrentBranch(dir: string): Promise<GitPullResult> {
+  const before = (await runGit(dir, ["rev-parse", "HEAD"])).trim();
+  await runGit(dir, ["pull", "--ff-only"]);
+  const after = (await runGit(dir, ["rev-parse", "HEAD"])).trim();
+
+  if (before === after) {
+    return { pulledCommits: 0 };
+  }
+
+  const countOutput = (await runGit(dir, ["rev-list", "--count", `${before}..${after}`])).trim();
+  const count = Number.parseInt(countOutput, 10);
+  return { pulledCommits: Number.isFinite(count) && count > 0 ? count : 1 };
+}
+
 export async function hasChanges(dir: string): Promise<boolean> {
   const statusOutput = await runGit(dir, ["status", "--porcelain=v1", "-z"]);
   return statusOutput.trim().length > 0;

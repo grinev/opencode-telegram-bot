@@ -1,5 +1,5 @@
 import type { Context } from "grammy";
-import { getRepoStatus, pushCurrentBranch } from "../../app/services/git-service.js";
+import { getRepoStatus, pullCurrentBranch } from "../../app/services/git-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
@@ -7,7 +7,7 @@ import { t } from "../../i18n/index.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { shortGitErrorText } from "./git-error-text.js";
 
-export async function runPushFlow(ctx: Context) {
+export async function runPullFlow(ctx: Context) {
   try {
     if (isForegroundBusy()) {
       await replyBusyBlocked(ctx);
@@ -24,31 +24,32 @@ export async function runPushFlow(ctx: Context) {
     try {
       status = await getRepoStatus(currentProject.worktree);
     } catch (error) {
-      logger.debug("[Bot] Push flow failed to read git status:", error);
+      logger.debug("[Bot] Pull flow failed to read git status:", error);
       await ctx.reply(t("worktree.not_git_repo"));
       return;
     }
 
     if (status.detached) {
-      await ctx.reply(t("git.push.detached"));
+      await ctx.reply(t("git.pull.detached"));
       return;
     }
 
-    if (status.hasUpstream && status.ahead === 0) {
-      await ctx.reply(t("git.push.nothing"));
+    if (!status.hasUpstream) {
+      await ctx.reply(t("git.pull.no_upstream"));
       return;
     }
 
-    const progressMessage = await ctx.reply(t("git.push.pushing"));
+    const progressMessage = await ctx.reply(t("git.pull.pulling"));
 
+    let result;
     try {
-      await pushCurrentBranch(currentProject.worktree, status.branch, !status.hasUpstream);
+      result = await pullCurrentBranch(currentProject.worktree);
     } catch (error) {
-      logger.error("[Bot] Push failed:", error);
+      logger.error("[Bot] Pull failed:", error);
       await ctx.api
         .deleteMessage(progressMessage.chat.id, progressMessage.message_id)
         .catch(() => {});
-      await ctx.reply(t("git.push.error", { error: shortGitErrorText(error) }));
+      await ctx.reply(t("git.pull.error", { error: shortGitErrorText(error) }));
       return;
     }
 
@@ -56,12 +57,19 @@ export async function runPushFlow(ctx: Context) {
       .deleteMessage(progressMessage.chat.id, progressMessage.message_id)
       .catch(() => {});
 
-    const successText = status.hasUpstream
-      ? t("git.push.success", { count: String(status.ahead), branch: status.branch })
-      : t("git.push.success_new", { branch: status.branch });
-    await ctx.reply(successText);
+    if (result.pulledCommits === 0) {
+      await ctx.reply(t("git.pull.nothing"));
+      return;
+    }
+
+    await ctx.reply(
+      t("git.pull.success", {
+        count: String(result.pulledCommits),
+        branch: status.branch,
+      }),
+    );
   } catch (error) {
-    logger.error("[Bot] Error running push flow:", error);
-    await ctx.reply(t("git.push.error", { error: shortGitErrorText(error) })).catch(() => {});
+    logger.error("[Bot] Error running pull flow:", error);
+    await ctx.reply(t("git.pull.error", { error: shortGitErrorText(error) })).catch(() => {});
   }
 }

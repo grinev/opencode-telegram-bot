@@ -15,6 +15,7 @@ import {
   getFullPatch,
   getRepoStatus,
   hasChanges,
+  pullCurrentBranch,
   pushCurrentBranch,
 } from "../../../src/app/services/git-service.js";
 
@@ -118,6 +119,69 @@ describe("git-service", () => {
       }));
 
       await expect(pushCurrentBranch("/repo", "main", false)).rejects.toThrow("rejected");
+    });
+  });
+
+  describe("pullCurrentBranch", () => {
+    it("fast-forwards and counts the pulled commits", async () => {
+      let head = "aaa111";
+      const calls = setupGitResponses((args) => {
+        if (args[0] === "rev-parse") {
+          return { stdout: `${head}\n` };
+        }
+        if (args[0] === "pull") {
+          head = "bbb222";
+          return { stdout: "" };
+        }
+        if (args[0] === "rev-list") {
+          return { stdout: "3\n" };
+        }
+        throw new Error(`Unexpected git call: ${args.join(" ")}`);
+      });
+
+      const result = await pullCurrentBranch("/repo");
+
+      expect(result).toEqual({ pulledCommits: 3 });
+      expect(calls.map((call) => call.args[0])).toEqual([
+        "rev-parse",
+        "pull",
+        "rev-parse",
+        "rev-list",
+      ]);
+      expect(calls[1].args).toEqual(["pull", "--ff-only"]);
+      expect(calls[3].args).toEqual(["rev-list", "--count", "aaa111..bbb222"]);
+    });
+
+    it("reports zero commits when already up to date", async () => {
+      setupGitResponses((args) => {
+        if (args[0] === "rev-parse") {
+          return { stdout: "aaa111\n" };
+        }
+        if (args[0] === "pull") {
+          return { stdout: "Already up to date.\n" };
+        }
+        throw new Error(`Unexpected git call: ${args.join(" ")}`);
+      });
+
+      const result = await pullCurrentBranch("/repo");
+
+      expect(result).toEqual({ pulledCommits: 0 });
+    });
+
+    it("propagates fast-forward failures on diverged branches", async () => {
+      setupGitResponses((args) => {
+        if (args[0] === "rev-parse") {
+          return { stdout: "aaa111\n" };
+        }
+        return {
+          error: Object.assign(
+            new Error("Command failed: git pull\nfatal: Not possible to fast-forward, aborting."),
+            { code: 128 },
+          ),
+        };
+      });
+
+      await expect(pullCurrentBranch("/repo")).rejects.toThrow("Not possible to fast-forward");
     });
   });
 
