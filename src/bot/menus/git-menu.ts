@@ -3,6 +3,7 @@ import type { GitRepoStatus } from "../../app/services/git-service.js";
 import { t } from "../../i18n/index.js";
 
 export const GIT_DIFF_CALLBACK = "git:diff";
+export const GIT_LOG_CALLBACK = "git:log";
 export const GIT_COMMIT_CALLBACK = "git:commit";
 export const GIT_PUSH_CALLBACK = "git:push";
 export const GIT_PULL_CALLBACK = "git:pull";
@@ -44,6 +45,7 @@ function buildChangesLabel(status: GitRepoStatus): string {
 export function buildGitMenuView(status: GitRepoStatus): GitMenuView {
   const keyboard = new InlineKeyboard()
     .text(t("git.button.diff"), GIT_DIFF_CALLBACK)
+    .text(t("git.button.log"), GIT_LOG_CALLBACK)
     .row()
     .text(t("git.button.commit"), GIT_COMMIT_CALLBACK)
     .row()

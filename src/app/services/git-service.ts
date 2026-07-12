@@ -287,6 +287,58 @@ export async function pushCurrentBranch(
   await runGit(dir, args);
 }
 
+export interface GitLogEntry {
+  hash: string;
+  relativeDate: string;
+  subject: string;
+}
+
+const LOG_FIELD_SEPARATOR = "\x1f";
+
+/**
+ * Most recent commits on the current branch, newest first.
+ * A repository without any commits yet yields an empty list.
+ */
+export async function getRecentCommits(dir: string, limit: number): Promise<GitLogEntry[]> {
+  let stdout: string;
+  try {
+    stdout = await runGit(dir, [
+      "log",
+      "-n",
+      String(limit),
+      `--format=%h${LOG_FIELD_SEPARATOR}%cr${LOG_FIELD_SEPARATOR}%s`,
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("does not have any commits")) {
+      return [];
+    }
+    throw error;
+  }
+
+  return stdout
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .flatMap((line) => {
+      const [hash, relativeDate, subject] = line.split(LOG_FIELD_SEPARATOR);
+      if (!hash) {
+        return [];
+      }
+      return [{ hash, relativeDate: relativeDate ?? "", subject: subject ?? "" }];
+    });
+}
+
+/**
+ * Full diff of a single commit (message, stat-free `git show` output).
+ */
+export async function getCommitDiff(dir: string, hash: string): Promise<string> {
+  if (!/^[0-9a-f]{4,40}$/i.test(hash)) {
+    throw new Error(`Invalid commit hash: ${hash}`);
+  }
+
+  return runGit(dir, ["show", hash, "--"]);
+}
+
 export interface GitPullResult {
   pulledCommits: number;
 }

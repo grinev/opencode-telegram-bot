@@ -64,7 +64,7 @@ function parseDiffMenuMetadata(): DiffMenuMetadata | null {
   };
 }
 
-async function sendDiffText(ctx: Context, diffText: string): Promise<void> {
+export async function sendDiffText(ctx: Context, diffText: string): Promise<void> {
   const markdown = `\`\`\`diff\n${diffText}\n\`\`\``;
   const parts = renderTelegramParts(markdown, { maxPartLength: MAX_MESSAGE_LENGTH });
 

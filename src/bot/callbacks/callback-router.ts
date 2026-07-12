@@ -8,6 +8,7 @@ import { handleCompactConfirm } from "./context-control-callback-handler.js";
 import { handleCommitCallback } from "./commit-callback-handler.js";
 import { handleDiffCallback } from "./diff-callback-handler.js";
 import { handleGitCallback } from "./git-callback-handler.js";
+import { handleLogCallback } from "./log-callback-handler.js";
 import { handleLsCallback, handleOpenCallback } from "./file-browser-callback-handler.js";
 import { handleInlineMenuCancel } from "./inline-menu-cancel-callback-handler.js";
 import { handleMcpsCallback } from "./mcp-catalog-callback-handler.js";
@@ -100,10 +101,11 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
       const handledMcps = await handleMcpsCallback(ctx);
       const handledGit = await handleGitCallback(ctx);
       const handledDiff = await handleDiffCallback(ctx);
+      const handledLog = await handleLogCallback(ctx);
       const handledCommit = await handleCommitCallback(ctx);
 
       logger.debug(
-        `[Bot] Callback handled: backgroundSession=${handledBackgroundSession}, inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, modelSearch=${handledModelSearch}, modelSearchResults=${handledModelSearchResults}, model=${handledModel}, variant=${handledVariant}, settings=${handledSettings}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, messages=${handledMessages}, skills=${handledSkills}, mcps=${handledMcps}, git=${handledGit}, diff=${handledDiff}, commit=${handledCommit}`,
+        `[Bot] Callback handled: backgroundSession=${handledBackgroundSession}, inlineCancel=${handledInlineCancel}, session=${handledSession}, project=${handledProject}, worktree=${handledWorktree}, open=${handledOpen}, ls=${handledLs}, question=${handledQuestion}, permission=${handledPermission}, agent=${handledAgent}, modelSearch=${handledModelSearch}, modelSearchResults=${handledModelSearchResults}, model=${handledModel}, variant=${handledVariant}, settings=${handledSettings}, compactConfirm=${handledCompactConfirm}, task=${handledTask}, taskList=${handledTaskList}, rename=${handledRenameCancel}, commands=${handledCommands}, messages=${handledMessages}, skills=${handledSkills}, mcps=${handledMcps}, git=${handledGit}, diff=${handledDiff}, log=${handledLog}, commit=${handledCommit}`,
       );
 
       if (
@@ -132,6 +134,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
         !handledMcps &&
         !handledGit &&
         !handledDiff &&
+        !handledLog &&
         !handledCommit
       ) {
         logger.debug("Unknown callback query:", ctx.callbackQuery?.data);

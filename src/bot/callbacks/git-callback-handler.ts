@@ -3,12 +3,14 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { runCommitFlow } from "../flows/commit-flow.js";
 import { runDiffFlow } from "../flows/diff-flow.js";
+import { runLogFlow } from "../flows/log-flow.js";
 import { runPullFlow } from "../flows/pull-flow.js";
 import { runPushFlow } from "../flows/push-flow.js";
 import { runWorktreeFlow } from "../flows/worktree-flow.js";
 import {
   GIT_COMMIT_CALLBACK,
   GIT_DIFF_CALLBACK,
+  GIT_LOG_CALLBACK,
   GIT_PULL_CALLBACK,
   GIT_PUSH_CALLBACK,
   GIT_WORKTREE_CALLBACK,
@@ -19,6 +21,7 @@ export async function handleGitCallback(ctx: Context): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (
     data !== GIT_DIFF_CALLBACK &&
+    data !== GIT_LOG_CALLBACK &&
     data !== GIT_COMMIT_CALLBACK &&
     data !== GIT_PUSH_CALLBACK &&
     data !== GIT_PULL_CALLBACK &&
@@ -41,6 +44,8 @@ export async function handleGitCallback(ctx: Context): Promise<boolean> {
   try {
     if (data === GIT_DIFF_CALLBACK) {
       await runDiffFlow(ctx);
+    } else if (data === GIT_LOG_CALLBACK) {
+      await runLogFlow(ctx);
     } else if (data === GIT_COMMIT_CALLBACK) {
       await runCommitFlow(ctx);
     } else if (data === GIT_PUSH_CALLBACK) {

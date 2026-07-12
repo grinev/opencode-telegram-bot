@@ -20,6 +20,7 @@ const INLINE_MENU_KINDS = [
   "settings",
   "git",
   "diff",
+  "log",
 ] as const;
 
 export type InlineMenuKind = (typeof INLINE_MENU_KINDS)[number];

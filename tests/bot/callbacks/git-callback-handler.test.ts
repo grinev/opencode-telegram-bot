@@ -11,6 +11,7 @@ const mocked = vi.hoisted(() => ({
   runWorktreeFlowMock: vi.fn(),
   runPushFlowMock: vi.fn(),
   runPullFlowMock: vi.fn(),
+  runLogFlowMock: vi.fn(),
 }));
 
 vi.mock("../../../src/bot/flows/diff-flow.js", () => ({
@@ -31,6 +32,10 @@ vi.mock("../../../src/bot/flows/push-flow.js", () => ({
 
 vi.mock("../../../src/bot/flows/pull-flow.js", () => ({
   runPullFlow: mocked.runPullFlowMock,
+}));
+
+vi.mock("../../../src/bot/flows/log-flow.js", () => ({
+  runLogFlow: mocked.runLogFlowMock,
 }));
 
 function startGitMenuInteraction(messageId = 900): void {
@@ -65,6 +70,7 @@ describe("git menu and callbacks", () => {
     mocked.runWorktreeFlowMock.mockReset().mockResolvedValue(undefined);
     mocked.runPushFlowMock.mockReset().mockResolvedValue(undefined);
     mocked.runPullFlowMock.mockReset().mockResolvedValue(undefined);
+    mocked.runLogFlowMock.mockReset().mockResolvedValue(undefined);
   });
 
   it("builds a menu with a status header and action buttons", () => {
@@ -91,11 +97,23 @@ describe("git menu and callbacks", () => {
       .map((button) => (button as { callback_data?: string }).callback_data);
     expect(callbackData).toEqual([
       "git:diff",
+      "git:log",
       "git:commit",
       "git:push",
       "git:pull",
       "git:worktree",
     ]);
+  });
+
+  it("runs the log flow and closes the menu on git:log", async () => {
+    startGitMenuInteraction();
+
+    const ctx = createGitCallbackContext("git:log");
+    const handled = await handleGitCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(mocked.runLogFlowMock).toHaveBeenCalledWith(ctx);
   });
 
   it("runs the pull flow and closes the menu on git:pull", async () => {

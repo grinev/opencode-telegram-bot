@@ -13,6 +13,8 @@ import {
   getChangedFiles,
   getFileDiff,
   getFullPatch,
+  getCommitDiff,
+  getRecentCommits,
   getRepoStatus,
   hasChanges,
   pullCurrentBranch,
@@ -182,6 +184,60 @@ describe("git-service", () => {
       });
 
       await expect(pullCurrentBranch("/repo")).rejects.toThrow("Not possible to fast-forward");
+    });
+  });
+
+  describe("getRecentCommits", () => {
+    it("parses hash, relative date, and subject per line", async () => {
+      const calls = setupGitResponses(() => ({
+        stdout:
+          "abc1234\x1f2 hours ago\x1ffeat: add thing\n" +
+          "def5678\x1f3 days ago\x1ffix: repair \x1f is unusual but subjects are one line\n",
+      }));
+
+      const commits = await getRecentCommits("/repo", 10);
+
+      expect(calls[0].args.slice(0, 3)).toEqual(["log", "-n", "10"]);
+      expect(commits).toHaveLength(2);
+      expect(commits[0]).toEqual({
+        hash: "abc1234",
+        relativeDate: "2 hours ago",
+        subject: "feat: add thing",
+      });
+      expect(commits[1].hash).toBe("def5678");
+    });
+
+    it("returns an empty list for a repository without commits", async () => {
+      setupGitResponses(() => ({
+        error: Object.assign(
+          new Error(
+            "Command failed: git log\nfatal: your current branch 'main' does not have any commits yet",
+          ),
+          { code: 128 },
+        ),
+      }));
+
+      await expect(getRecentCommits("/repo", 10)).resolves.toEqual([]);
+    });
+  });
+
+  describe("getCommitDiff", () => {
+    it("shows the commit by hash", async () => {
+      const calls = setupGitResponses(() => ({ stdout: "commit abc1234\n+diff" }));
+
+      const diff = await getCommitDiff("/repo", "abc1234");
+
+      expect(calls[0].args).toEqual(["show", "abc1234", "--"]);
+      expect(diff).toContain("+diff");
+    });
+
+    it("rejects hashes that are not hex strings", async () => {
+      setupGitResponses(() => ({ stdout: "" }));
+
+      await expect(getCommitDiff("/repo", "HEAD~1; rm -rf /")).rejects.toThrow(
+        "Invalid commit hash",
+      );
+      expect(mocked.execFileMock).not.toHaveBeenCalled();
     });
   });
 
