@@ -55,15 +55,59 @@ describe("git menu and callbacks", () => {
     mocked.runWorktreeFlowMock.mockReset().mockResolvedValue(undefined);
   });
 
-  it("builds a menu with diff and commit buttons", () => {
-    const { text, keyboard } = buildGitMenuView();
+  it("builds a menu with a status header and action buttons", () => {
+    const { text, keyboard } = buildGitMenuView({
+      branch: "main",
+      detached: false,
+      hasUpstream: true,
+      ahead: 2,
+      behind: 1,
+      changedCount: 3,
+      conflictCount: 0,
+    });
 
-    expect(text).toBe(t("git.menu.title"));
+    expect(text).toBe(
+      t("git.menu.title", {
+        branch: "main",
+        sync: t("git.status.ahead_behind", { ahead: "2", behind: "1" }),
+        changes: t("git.status.changed_files", { count: "3" }),
+      }),
+    );
 
     const callbackData = keyboard.inline_keyboard
       .flat()
       .map((button) => (button as { callback_data?: string }).callback_data);
     expect(callbackData).toEqual(["git:diff", "git:commit", "git:worktree"]);
+  });
+
+  it("shows clean, synced status for an untouched repo", () => {
+    const { text } = buildGitMenuView({
+      branch: "main",
+      detached: false,
+      hasUpstream: true,
+      ahead: 0,
+      behind: 0,
+      changedCount: 0,
+      conflictCount: 0,
+    });
+
+    expect(text).toContain(t("git.status.synced"));
+    expect(text).toContain(t("git.status.clean"));
+  });
+
+  it("shows conflicts and missing upstream in the status header", () => {
+    const { text } = buildGitMenuView({
+      branch: "feature/x",
+      detached: false,
+      hasUpstream: false,
+      ahead: 0,
+      behind: 0,
+      changedCount: 4,
+      conflictCount: 2,
+    });
+
+    expect(text).toContain(t("git.status.no_upstream"));
+    expect(text).toContain(t("git.status.conflicts", { count: "2" }));
   });
 
   it("runs the diff flow and closes the menu on git:diff", async () => {

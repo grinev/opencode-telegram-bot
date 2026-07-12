@@ -1,4 +1,5 @@
 import type { CommandContext, Context } from "grammy";
+import { getRepoStatus } from "../../app/services/git-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
@@ -20,7 +21,16 @@ export async function gitCommand(ctx: CommandContext<Context>) {
       return;
     }
 
-    const { text, keyboard } = buildGitMenuView();
+    let status;
+    try {
+      status = await getRepoStatus(currentProject.worktree);
+    } catch (error) {
+      logger.debug("[Bot] /git failed to read git status:", error);
+      await ctx.reply(t("worktree.not_git_repo"));
+      return;
+    }
+
+    const { text, keyboard } = buildGitMenuView(status);
 
     await replyWithInlineMenu(ctx, {
       menuKind: "git",

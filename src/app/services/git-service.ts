@@ -15,6 +15,16 @@ export interface GitCommitResult {
   hash: string;
 }
 
+export interface GitRepoStatus {
+  branch: string;
+  detached: boolean;
+  hasUpstream: boolean;
+  ahead: number;
+  behind: number;
+  changedCount: number;
+  conflictCount: number;
+}
+
 function runGit(
   dir: string,
   args: string[],
@@ -206,6 +216,63 @@ export async function getFullPatch(dir: string): Promise<string> {
   }
 
   return patch;
+}
+
+/**
+ * Branch, upstream sync, and change-count summary from a single
+ * `git status --porcelain=v2 --branch` call.
+ */
+export async function getRepoStatus(dir: string): Promise<GitRepoStatus> {
+  const stdout = await runGit(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
+  const tokens = stdout.split("\0").filter((token) => token.length > 0);
+
+  const status: GitRepoStatus = {
+    branch: "",
+    detached: false,
+    hasUpstream: false,
+    ahead: 0,
+    behind: 0,
+    changedCount: 0,
+    conflictCount: 0,
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+
+    if (token.startsWith("# branch.head ")) {
+      const head = token.slice("# branch.head ".length);
+      status.detached = head === "(detached)";
+      status.branch = head;
+      continue;
+    }
+
+    if (token.startsWith("# branch.ab ")) {
+      const match = token.match(/^# branch\.ab \+(\d+) -(\d+)$/);
+      if (match) {
+        status.hasUpstream = true;
+        status.ahead = Number.parseInt(match[1], 10);
+        status.behind = Number.parseInt(match[2], 10);
+      }
+      continue;
+    }
+
+    if (token.startsWith("# ")) {
+      continue;
+    }
+
+    if (token.startsWith("1 ") || token.startsWith("? ")) {
+      status.changedCount++;
+    } else if (token.startsWith("2 ")) {
+      status.changedCount++;
+      // Rename/copy entries are followed by the original path as its own token.
+      i++;
+    } else if (token.startsWith("u ")) {
+      status.changedCount++;
+      status.conflictCount++;
+    }
+  }
+
+  return status;
 }
 
 export async function hasChanges(dir: string): Promise<boolean> {

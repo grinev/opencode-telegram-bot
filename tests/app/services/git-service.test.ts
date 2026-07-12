@@ -13,6 +13,7 @@ import {
   getChangedFiles,
   getFileDiff,
   getFullPatch,
+  getRepoStatus,
   hasChanges,
 } from "../../../src/app/services/git-service.js";
 
@@ -41,6 +42,55 @@ function setupGitResponses(
 describe("git-service", () => {
   beforeEach(() => {
     mocked.execFileMock.mockReset();
+  });
+
+  describe("getRepoStatus", () => {
+    it("parses branch, ahead/behind, and change counts from porcelain v2", async () => {
+      const statusOutput =
+        "# branch.oid 1234567\0" +
+        "# branch.head main\0" +
+        "# branch.upstream origin/main\0" +
+        "# branch.ab +2 -1\0" +
+        "1 .M N... 100644 100644 100644 abc def src/app.ts\0" +
+        "2 R. N... 100644 100644 100644 abc def R100 new.ts\0old.ts\0" +
+        "u UU N... 100644 100644 100644 100644 abc def ghi conflicted.ts\0" +
+        "? untracked.txt\0";
+
+      setupGitResponses((args) => {
+        if (args[0] === "status" && args.includes("--porcelain=v2")) {
+          return { stdout: statusOutput };
+        }
+        throw new Error(`Unexpected git call: ${args.join(" ")}`);
+      });
+
+      const status = await getRepoStatus("/repo");
+
+      expect(status).toEqual({
+        branch: "main",
+        detached: false,
+        hasUpstream: true,
+        ahead: 2,
+        behind: 1,
+        changedCount: 4,
+        conflictCount: 1,
+      });
+    });
+
+    it("reports missing upstream and detached HEAD", async () => {
+      setupGitResponses(() => ({
+        stdout: "# branch.oid 1234567\0# branch.head (detached)\0",
+      }));
+
+      const status = await getRepoStatus("/repo");
+
+      expect(status).toMatchObject({
+        detached: true,
+        hasUpstream: false,
+        ahead: 0,
+        behind: 0,
+        changedCount: 0,
+      });
+    });
   });
 
   describe("getChangedFiles", () => {
