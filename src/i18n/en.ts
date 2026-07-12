@@ -7,7 +7,7 @@ export const en = {
   "cmd.description.messages": "Browse session messages",
   "cmd.description.settings": "Change bot settings",
   "cmd.description.projects": "List projects",
-  "cmd.description.git": "Git commands (diff, log, commit, push, pull, worktree)",
+  "cmd.description.git": "Git commands",
   "cmd.description.task": "Create a scheduled task",
   "cmd.description.tasklist": "List scheduled tasks",
   "cmd.description.commands": "Custom commands",

@@ -9,7 +9,7 @@ export const ru: I18nDictionary = {
   "cmd.description.messages": "Сообщения текущей сессии",
   "cmd.description.settings": "Изменить настройки бота",
   "cmd.description.projects": "Список проектов",
-  "cmd.description.git": "Команды Git (diff, log, commit, push, pull, worktree)",
+  "cmd.description.git": "Команды Git",
   "cmd.description.task": "Создать задачу по расписанию",
   "cmd.description.tasklist": "Список задач по расписанию",
   "cmd.description.commands": "Пользовательские команды",

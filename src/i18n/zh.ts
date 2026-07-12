@@ -9,7 +9,7 @@ export const zh: I18nDictionary = {
   "cmd.description.messages": "浏览会话消息",
   "cmd.description.settings": "更改机器人设置",
   "cmd.description.projects": "列出项目",
-  "cmd.description.git": "Git 命令（diff、log、commit、push、pull、worktree）",
+  "cmd.description.git": "Git 命令",
   "cmd.description.task": "创建定时任务",
   "cmd.description.tasklist": "查看定时任务",
   "cmd.description.commands": "自定义命令",

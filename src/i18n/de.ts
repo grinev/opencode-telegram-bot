@@ -9,7 +9,7 @@ export const de: I18nDictionary = {
   "cmd.description.messages": "Sitzungsnachrichten durchsuchen",
   "cmd.description.settings": "Bot-Einstellungen ändern",
   "cmd.description.projects": "Projekte auflisten",
-  "cmd.description.git": "Git-Befehle (Diff, Log, Commit, Push, Pull, Worktree)",
+  "cmd.description.git": "Git-Befehle",
   "cmd.description.task": "Geplante Aufgabe erstellen",
   "cmd.description.tasklist": "Geplante Aufgaben anzeigen",
   "cmd.description.commands": "Benutzerdefinierte Befehle",
