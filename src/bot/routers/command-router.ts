@@ -5,6 +5,8 @@ import { opencodeStartCommand } from "../commands/opencode-start-command.js";
 import { opencodeStopCommand } from "../commands/opencode-stop-command.js";
 import { projectsCommand } from "../commands/projects-command.js";
 import { worktreeCommand } from "../commands/worktree-command.js";
+import { diffCommand } from "../commands/diff-command.js";
+import { commitCommand } from "../commands/commit-command.js";
 import { openCommand } from "../commands/open-command.js";
 import { lsCommand } from "../commands/ls-command.js";
 import { sessionsCommand } from "../commands/sessions-command.js";
@@ -68,6 +70,8 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
   bot.command("opencode_stop", opencodeStopCommand);
   bot.command("projects", projectsCommand);
   bot.command("worktree", worktreeCommand);
+  bot.command("diff", diffCommand);
+  bot.command("commit", commitCommand);
   bot.command("open", openCommand);
   bot.command("ls", lsCommand);
   bot.command("sessions", sessionsCommand);

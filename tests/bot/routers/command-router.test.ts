@@ -22,6 +22,8 @@ describe("bot/routers/command-router", () => {
       "opencode_stop",
       "projects",
       "worktree",
+      "diff",
+      "commit",
       "open",
       "ls",
       "sessions",
