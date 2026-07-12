@@ -15,6 +15,7 @@ import {
   getFullPatch,
   getRepoStatus,
   hasChanges,
+  pushCurrentBranch,
 } from "../../../src/app/services/git-service.js";
 
 type ExecFileCallback = (error: Error | null, stdout: string) => void;
@@ -90,6 +91,33 @@ describe("git-service", () => {
         behind: 0,
         changedCount: 0,
       });
+    });
+  });
+
+  describe("pushCurrentBranch", () => {
+    it("runs a plain push when an upstream exists", async () => {
+      const calls = setupGitResponses(() => ({ stdout: "" }));
+
+      await pushCurrentBranch("/repo", "main", false);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0].args).toEqual(["push"]);
+    });
+
+    it("sets the upstream on the first push", async () => {
+      const calls = setupGitResponses(() => ({ stdout: "" }));
+
+      await pushCurrentBranch("/repo", "feature/x", true);
+
+      expect(calls[0].args).toEqual(["push", "-u", "origin", "feature/x"]);
+    });
+
+    it("propagates push failures", async () => {
+      setupGitResponses(() => ({
+        error: Object.assign(new Error("Command failed: git push\nrejected"), { code: 1 }),
+      }));
+
+      await expect(pushCurrentBranch("/repo", "main", false)).rejects.toThrow("rejected");
     });
   });
 

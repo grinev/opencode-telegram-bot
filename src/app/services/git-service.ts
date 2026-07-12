@@ -275,6 +275,18 @@ export async function getRepoStatus(dir: string): Promise<GitRepoStatus> {
   return status;
 }
 
+/**
+ * Push the given branch to origin; the first push also sets the upstream.
+ */
+export async function pushCurrentBranch(
+  dir: string,
+  branch: string,
+  setUpstream: boolean,
+): Promise<void> {
+  const args = setUpstream ? ["push", "-u", "origin", branch] : ["push"];
+  await runGit(dir, args);
+}
+
 export async function hasChanges(dir: string): Promise<boolean> {
   const statusOutput = await runGit(dir, ["status", "--porcelain=v1", "-z"]);
   return statusOutput.trim().length > 0;
