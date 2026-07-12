@@ -18,6 +18,7 @@ const INLINE_MENU_KINDS = [
   "ls",
   "worktree",
   "settings",
+  "git",
   "diff",
 ] as const;
 

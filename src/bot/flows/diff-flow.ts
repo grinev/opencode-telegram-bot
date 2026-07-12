@@ -1,4 +1,4 @@
-import type { CommandContext, Context } from "grammy";
+import type { Context } from "grammy";
 import { getChangedFiles } from "../../app/services/git-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
@@ -8,7 +8,7 @@ import { buildDiffMenuView } from "../menus/diff-menu.js";
 import { replyWithInlineMenu } from "../menus/inline-menu.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 
-export async function diffCommand(ctx: CommandContext<Context>) {
+export async function runDiffFlow(ctx: Context) {
   try {
     if (isForegroundBusy()) {
       await replyBusyBlocked(ctx);
@@ -25,7 +25,7 @@ export async function diffCommand(ctx: CommandContext<Context>) {
     try {
       files = await getChangedFiles(currentProject.worktree);
     } catch (error) {
-      logger.debug("[Bot] /diff failed to read git status:", error);
+      logger.debug("[Bot] Diff flow failed to read git status:", error);
       await ctx.reply(t("worktree.not_git_repo"));
       return;
     }

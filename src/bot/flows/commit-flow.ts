@@ -1,4 +1,4 @@
-import type { CommandContext, Context } from "grammy";
+import type { Context } from "grammy";
 import { generateCommitMessage } from "../../app/services/commit-message-service.js";
 import { hasChanges } from "../../app/services/git-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
@@ -8,7 +8,7 @@ import { t } from "../../i18n/index.js";
 import { showCommitConfirmation } from "../menus/commit-menu.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 
-export async function commitCommand(ctx: CommandContext<Context>) {
+export async function runCommitFlow(ctx: Context) {
   try {
     if (isForegroundBusy()) {
       await replyBusyBlocked(ctx);
@@ -25,7 +25,7 @@ export async function commitCommand(ctx: CommandContext<Context>) {
     try {
       changed = await hasChanges(currentProject.worktree);
     } catch (error) {
-      logger.debug("[Bot] /commit failed to read git status:", error);
+      logger.debug("[Bot] Commit flow failed to read git status:", error);
       await ctx.reply(t("worktree.not_git_repo"));
       return;
     }
