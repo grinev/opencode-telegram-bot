@@ -314,6 +314,7 @@ export const zh: I18nDictionary = {
   "permission.blocked.expected_reply": "⚠️ 请先使用上方按钮回答权限请求。",
   "permission.blocked.command_not_allowed": "⚠️ 在你回答权限请求之前不可用此命令。",
   "permission.header": "{emoji} 权限请求：{name}\n\n",
+  "permission.grouped_count": "\n⚠️ 有 {count} 个相同的请求待处理，你的回答将同时应用于全部。\n",
   "permission.button.allow": "✅ 允许一次",
   "permission.button.always": "🔓 始终允许",
   "permission.button.reject": "❌ 拒绝",

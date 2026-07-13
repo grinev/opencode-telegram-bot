@@ -1826,7 +1826,7 @@ describe("summary/aggregator", () => {
     expect(onTokens).not.toHaveBeenCalled();
   });
 
-  it("forwards permission.asked events from tracked subagent (child) sessions synchronously", () => {
+  it("forwards permission.asked events from tracked subagent (child) sessions", async () => {
     const onPermission = vi.fn();
     summaryAggregator.setOnPermission(onPermission);
     summaryAggregator.setSession("root-session");
@@ -1876,7 +1876,9 @@ describe("summary/aggregator", () => {
       },
     } as unknown as Event);
 
-    expect(onPermission).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(onPermission).toHaveBeenCalledTimes(1);
+    });
     expect(onPermission.mock.calls[0][0]).toEqual(
       expect.objectContaining({
         id: "req-child-1",
@@ -1885,6 +1887,59 @@ describe("summary/aggregator", () => {
       }),
     );
     expect(summaryAggregator.isSubagentSession("child-session-1")).toBe(true);
+  });
+
+  it("serializes permission callbacks so equivalent requests can be registered before the next dispatch", async () => {
+    let releaseFirstPermission: () => void = () => {};
+    const firstPermissionDone = new Promise<void>((resolve) => {
+      releaseFirstPermission = resolve;
+    });
+    const calls: string[] = [];
+
+    summaryAggregator.setOnPermission(async (request) => {
+      calls.push(`start:${request.id}`);
+
+      if (request.id === "req-1") {
+        await firstPermissionDone;
+      }
+
+      calls.push(`end:${request.id}`);
+    });
+    summaryAggregator.setSession("session-1");
+
+    summaryAggregator.processEvent({
+      type: "permission.asked",
+      properties: {
+        id: "req-1",
+        sessionID: "session-1",
+        permission: "bash",
+        patterns: ["pwd"],
+        metadata: {},
+        always: [],
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "permission.asked",
+      properties: {
+        id: "req-2",
+        sessionID: "session-1",
+        permission: "bash",
+        patterns: ["pwd"],
+        metadata: {},
+        always: [],
+      },
+    } as unknown as Event);
+
+    await vi.waitFor(() => {
+      expect(calls).toEqual(["start:req-1"]);
+    });
+
+    releaseFirstPermission();
+
+    await vi.waitFor(() => {
+      expect(calls).toEqual(["start:req-1", "end:req-1", "start:req-2", "end:req-2"]);
+    });
   });
 
   it("ignores permission.asked events from unrelated sessions", async () => {

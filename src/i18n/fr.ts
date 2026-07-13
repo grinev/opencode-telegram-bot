@@ -366,6 +366,7 @@ export const fr: I18nDictionary = {
   "permission.blocked.command_not_allowed":
     "⚠️ Cette commande n'est pas disponible tant que vous n'avez pas répondu à la demande d'autorisation.",
   "permission.header": "{emoji} Demande d'autorisation : {name}\n\n",
+  "permission.grouped_count": "\n⚠️ {count} demandes identiques en attente — votre réponse s'applique à toutes.\n",
   "permission.button.allow": "✅ Autoriser une fois",
   "permission.button.always": "🔓 Toujours autoriser",
   "permission.button.reject": "❌ Refuser",

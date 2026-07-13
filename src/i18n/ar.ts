@@ -336,6 +336,7 @@ export const ar: I18nDictionary = {
   "permission.blocked.command_not_allowed":
     "⚠️ لا يمكن استخدام هذا الأمر قبل الرد على طلب الصلاحية.",
   "permission.header": "{emoji} طلب صلاحية: {name}\n\n",
+  "permission.grouped_count": "\n⚠️ يوجد {count} طلبات متطابقة قيد الانتظار — سيُطبَّق ردك عليها جميعًا.\n",
   "permission.button.allow": "✅ سماح لمرة واحدة",
   "permission.button.always": "🔓 سماح دائم",
   "permission.button.reject": "❌ رفض",

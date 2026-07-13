@@ -349,6 +349,7 @@ export const ru: I18nDictionary = {
   "permission.blocked.command_not_allowed":
     "⚠️ Эта команда недоступна, пока вы не ответите на запрос разрешения.",
   "permission.header": "{emoji} Запрос разрешения: {name}\n\n",
+  "permission.grouped_count": "\n⚠️ Ожидают {count} одинаковых запроса — ваш ответ применится ко всем.\n",
   "permission.button.allow": "✅ Разрешить один раз",
   "permission.button.always": "🔓 Разрешить всегда",
   "permission.button.reject": "❌ Отклонить",

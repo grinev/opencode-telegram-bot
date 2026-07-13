@@ -138,6 +138,7 @@ function emitSessionIdle(summaryAggregator: { processEvent(event: Event): void }
 function emitPermissionAsked(
   summaryAggregator: { processEvent(event: Event): void },
   requestID: string,
+  patterns: string[] = ["D:/shared/*"],
 ): void {
   summaryAggregator.processEvent({
     type: "permission.asked",
@@ -145,7 +146,7 @@ function emitPermissionAsked(
       id: requestID,
       sessionID: "session-1",
       permission: "external_directory",
-      patterns: ["D:/shared/*"],
+      patterns,
       metadata: {},
       always: ["D:/shared/*"],
     },
@@ -400,7 +401,7 @@ describe("bot/services/event-subscription-service", () => {
       .mockResolvedValueOnce({ message_id: 501 });
 
     emitPermissionAsked(summaryAggregator, "permission-1");
-    emitPermissionAsked(summaryAggregator, "permission-2");
+    emitPermissionAsked(summaryAggregator, "permission-2", ["D:/other/*"]);
 
     await vi.waitFor(() => {
       expect(permissionManager.getPendingCount()).toBe(2);
@@ -465,7 +466,7 @@ describe("bot/services/event-subscription-service", () => {
       .mockResolvedValueOnce({ message_id: 510 })
       .mockResolvedValueOnce({ message_id: 511 });
     emitPermissionAsked(summaryAggregator, "permission-1");
-    emitPermissionAsked(summaryAggregator, "permission-2");
+    emitPermissionAsked(summaryAggregator, "permission-2", ["D:/other/*"]);
     await vi.waitFor(() => {
       expect(permissionManager.getPendingCount()).toBe(2);
     });
