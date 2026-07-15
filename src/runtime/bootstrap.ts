@@ -562,13 +562,16 @@ function ensureInteractiveTty(): void {
 
 async function validateExistingEnv(envFilePath: string): Promise<EnvValidationResult> {
   const content = await readEnvFileIfExists(envFilePath);
+  const effectiveValues: Record<string, string> = content === null ? {} : dotenv.parse(content);
 
-  if (content === null) {
-    return { isValid: false, reason: "Missing .env" };
+  for (const key of WIZARD_ENV_KEYS) {
+    const processValue = process.env[key];
+    if (processValue !== undefined) {
+      effectiveValues[key] = processValue;
+    }
   }
 
-  const parsed = dotenv.parse(content);
-  return validateRuntimeEnvValues(parsed);
+  return validateRuntimeEnvValues(effectiveValues);
 }
 
 async function runWizardAndPersist(runtimePaths: RuntimePaths): Promise<void> {

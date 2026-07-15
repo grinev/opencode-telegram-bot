@@ -1,7 +1,14 @@
 import fs from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { buildEnvFileContent, validateRuntimeEnvValues } from "../../src/runtime/bootstrap.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildEnvFileContent,
+  ensureRuntimeConfigForStart,
+  validateRuntimeEnvValues,
+} from "../../src/runtime/bootstrap.js";
+import { setRuntimeMode } from "../../src/runtime/mode.js";
 
 const ENV_EXAMPLE_CONTENT = fs.readFileSync(path.resolve(process.cwd(), ".env.example"), "utf-8");
 
@@ -183,5 +190,90 @@ describe("runtime/bootstrap", () => {
       updated.lastIndexOf("CUSTOM_FLAG=enabled"),
     );
     expect(updated.trimEnd().endsWith("ANOTHER_CUSTOM=1")).toBe(true);
+  });
+});
+
+describe("runtime/bootstrap installed configuration", () => {
+  let tempHome: string;
+  let stdinTtyDescriptor: PropertyDescriptor | undefined;
+  let stdoutTtyDescriptor: PropertyDescriptor | undefined;
+
+  beforeEach(async () => {
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "opencode-telegram-bootstrap-"));
+    stdinTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+    stdoutTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+    Object.defineProperty(process.stdin, "isTTY", { configurable: true, value: false });
+    Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: false });
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "123456:process-token");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
+    vi.stubEnv("OPENCODE_MODEL_PROVIDER", "process-provider");
+    vi.stubEnv("OPENCODE_MODEL_ID", "process-model");
+    vi.stubEnv("OPENCODE_API_URL", "");
+    vi.stubEnv("BOT_LOCALE", "en");
+    setRuntimeMode("installed");
+  });
+
+  afterEach(async () => {
+    if (stdinTtyDescriptor) {
+      Object.defineProperty(process.stdin, "isTTY", stdinTtyDescriptor);
+    } else {
+      Reflect.deleteProperty(process.stdin, "isTTY");
+    }
+    if (stdoutTtyDescriptor) {
+      Object.defineProperty(process.stdout, "isTTY", stdoutTtyDescriptor);
+    } else {
+      Reflect.deleteProperty(process.stdout, "isTTY");
+    }
+    vi.unstubAllEnvs();
+    delete process.env.OPENCODE_TELEGRAM_RUNTIME_MODE;
+    await rm(tempHome, { recursive: true, force: true });
+  });
+
+  it("accepts required values from process.env without an .env file", async () => {
+    await ensureRuntimeConfigForStart();
+
+    expect(fs.existsSync(path.join(tempHome, ".env"))).toBe(false);
+    await expect(readFile(path.join(tempHome, "settings.json"), "utf-8")).resolves.toBe("{}\n");
+  });
+
+  it("merges .env values with process.env taking precedence", async () => {
+    delete process.env.OPENCODE_MODEL_PROVIDER;
+    delete process.env.OPENCODE_MODEL_ID;
+    await writeFile(
+      path.join(tempHome, ".env"),
+      [
+        "TELEGRAM_BOT_TOKEN=",
+        "TELEGRAM_ALLOWED_USER_ID=invalid",
+        "OPENCODE_MODEL_PROVIDER=file-provider",
+        "OPENCODE_MODEL_ID=file-model",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    await ensureRuntimeConfigForStart();
+
+    await expect(readFile(path.join(tempHome, "settings.json"), "utf-8")).resolves.toBe("{}\n");
+  });
+
+  it("rejects an invalid process.env value even when .env is valid", async () => {
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "invalid");
+    await writeFile(
+      path.join(tempHome, ".env"),
+      [
+        "TELEGRAM_BOT_TOKEN=123456:file-token",
+        "TELEGRAM_ALLOWED_USER_ID=42",
+        "OPENCODE_MODEL_PROVIDER=file-provider",
+        "OPENCODE_MODEL_ID=file-model",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    await expect(ensureRuntimeConfigForStart()).rejects.toThrow(
+      "Interactive wizard requires a TTY terminal",
+    );
+    expect(fs.existsSync(path.join(tempHome, "settings.json"))).toBe(false);
   });
 });
