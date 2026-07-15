@@ -21,7 +21,9 @@ class PermissionManager {
     );
 
     if (generation !== this.generation || this.resolvedRequestIDs.has(request.id)) {
-      logger.debug(`[PermissionManager] Ignoring stale or already resolved request: id=${request.id}`);
+      logger.debug(
+        `[PermissionManager] Ignoring stale or already resolved request: id=${request.id}`,
+      );
       return false;
     }
 
