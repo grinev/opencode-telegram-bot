@@ -253,6 +253,7 @@ class SummaryAggregator {
   private onSessionRetryCallback: SessionRetryCallback | null = null;
   private onSessionIdleCallback: SessionIdleCallback | null = null;
   private onPermissionCallback: PermissionCallback | null = null;
+  private permissionQueue: Promise<void> = Promise.resolve();
   private onPermissionRepliedCallback: PermissionRepliedCallback | null = null;
   private onSessionDiffCallback: SessionDiffCallback | null = null;
   private onFileChangeCallback: FileChangeCallback | null = null;
@@ -509,6 +510,7 @@ class SummaryAggregator {
     this.pendingChildSessionIdsByParent.clear();
     this.fallbackSubagentCardIdsByParent.clear();
     this.lastSubagentSnapshot = "";
+    this.permissionQueue = Promise.resolve();
     this.messageCount = 0;
     this.lastUpdated = 0;
 
@@ -2117,13 +2119,11 @@ class SummaryAggregator {
 
     if (this.onPermissionCallback) {
       const callback = this.onPermissionCallback;
-      try {
-        void Promise.resolve(callback(request as PermissionRequest)).catch((err) => {
+      this.permissionQueue = this.permissionQueue
+        .then(() => callback(request as PermissionRequest))
+        .catch((err) => {
           logger.error("[Aggregator] Error in permission callback:", err);
         });
-      } catch (err) {
-        logger.error("[Aggregator] Error in permission callback:", err);
-      }
     }
   }
 

@@ -94,6 +94,31 @@ export async function showPermissionRequest(
     return;
   }
 
+  const grouped = permissionManager.addEquivalentRequest(request, generation);
+  if (grouped) {
+    // Re-render the visible prompt so the user can see the answer will apply
+    // to more than one pending request.
+    await bot
+      .editMessageText(
+        chatId,
+        grouped.messageId,
+        formatPermissionText(grouped.request, grouped.count),
+        { reply_markup: buildPermissionKeyboard() },
+      )
+      .catch((err) => {
+        logger.warn("[PermissionHandler] Failed to update grouped permission message:", err);
+      });
+
+    syncPermissionInteractionState({
+      requestID: request.id,
+      messageId: grouped.messageId,
+      deduplicated: true,
+      groupedCount: grouped.count,
+    });
+    summaryAggregator.stopTypingIndicator();
+    return;
+  }
+
   const text = formatPermissionText(request);
   const keyboard = buildPermissionKeyboard();
 
@@ -125,7 +150,7 @@ export async function showPermissionRequest(
 /**
  * Format permission request text
  */
-function formatPermissionText(request: PermissionRequest): string {
+function formatPermissionText(request: PermissionRequest, groupedCount: number = 1): string {
   const emoji = PERMISSION_EMOJIS[request.permission] || "🔐";
   const nameKey = PERMISSION_NAME_KEYS[request.permission];
   const name = nameKey ? t(nameKey) : request.permission;
@@ -137,6 +162,10 @@ function formatPermissionText(request: PermissionRequest): string {
     request.patterns.forEach((pattern) => {
       text += `• ${pattern}\n`;
     });
+  }
+
+  if (groupedCount > 1) {
+    text += t("permission.grouped_count", { count: groupedCount });
   }
 
   return text;

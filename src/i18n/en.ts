@@ -347,6 +347,7 @@ export const en = {
   "permission.blocked.command_not_allowed":
     "⚠️ This command is not available until you answer the permission request.",
   "permission.header": "{emoji} Permission request: {name}\n\n",
+  "permission.grouped_count": "\n⚠️ {count} identical requests pending — your answer applies to all of them.\n",
   "permission.button.allow": "✅ Allow once",
   "permission.button.always": "🔓 Allow always",
   "permission.button.reject": "❌ Reject",
