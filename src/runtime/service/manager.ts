@@ -3,6 +3,7 @@ import fsPromises from "node:fs/promises";
 import path from "node:path";
 import { exec, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { getRuntimeMode } from "../mode.js";
 import { getRuntimePaths } from "../paths.js";
 import { buildServiceChildEnv } from "./env.js";
 import { logger } from "../../utils/logger.js";
@@ -244,7 +245,14 @@ export async function getBotServiceStatus(): Promise<BotServiceStatus> {
 
 export async function startBotDaemon(mode?: string): Promise<ServiceOperationResult> {
   const currentStatus = await getBotServiceStatus();
+  const cleanupInfo = currentStatus.cleanupReason
+    ? ` (previous state: ${currentStatus.cleanupReason})`
+    : "";
+
   if (currentStatus.status === "running" && currentStatus.service) {
+    logger.info(
+      `[Manager] Daemon start rejected: already running (PID=${currentStatus.service.pid})${cleanupInfo}`,
+    );
     return {
       success: false,
       service: currentStatus.service,
@@ -290,6 +298,9 @@ export async function startBotDaemon(mode?: string): Promise<ServiceOperationRes
     };
 
     await writeFileAtomically(stateFilePath, `${JSON.stringify(serviceState, null, 2)}\n`);
+    logger.info(
+      `[Manager] Daemon started: PID=${childProcess.pid}, log=${logFilePath}${cleanupInfo}`,
+    );
 
     return {
       success: true,
@@ -297,12 +308,14 @@ export async function startBotDaemon(mode?: string): Promise<ServiceOperationRes
       cleanupReason: currentStatus.cleanupReason,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`[Manager] Daemon start failed: ${errorMessage}${cleanupInfo}`);
     await clearServiceStateFile(stateFilePath);
     return {
       success: false,
       service: null,
       cleanupReason: currentStatus.cleanupReason,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
     };
   } finally {
     fs.closeSync(logFileDescriptor);
@@ -314,6 +327,9 @@ export async function stopBotDaemon(
 ): Promise<ServiceOperationResult> {
   const currentStatus = await getBotServiceStatus();
   if (currentStatus.status !== "running" || !currentStatus.service) {
+    logger.info(
+      `[Manager] Daemon stop skipped: not running (reason=${currentStatus.cleanupReason ?? "none"})`,
+    );
     return {
       success: true,
       service: null,
@@ -323,6 +339,7 @@ export async function stopBotDaemon(
   }
 
   const { pid } = currentStatus.service;
+  logger.info(`[Manager] Stopping daemon: PID=${pid}`);
 
   try {
     if (process.platform === "win32") {
@@ -332,6 +349,7 @@ export async function stopBotDaemon(
     }
 
     if (isProcessAlive(pid)) {
+      logger.warn(`[Manager] Daemon stop failed: process PID=${pid} still alive after ${timeoutMs}ms`);
       return {
         success: false,
         service: currentStatus.service,
@@ -341,6 +359,7 @@ export async function stopBotDaemon(
     }
 
     await clearServiceStateFile();
+    logger.info(`[Manager] Daemon stopped: PID=${pid}`);
 
     return {
       success: true,
@@ -348,11 +367,13 @@ export async function stopBotDaemon(
       cleanupReason: currentStatus.cleanupReason,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`[Manager] Daemon stop error: ${errorMessage}`);
     return {
       success: false,
       service: currentStatus.service,
       cleanupReason: currentStatus.cleanupReason,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
     };
   }
 }

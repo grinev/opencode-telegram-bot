@@ -31,6 +31,7 @@ let isListening = false;
 let activeDirectory: string | null = null;
 let streamAbortController: AbortController | null = null;
 let listenerGeneration = 0;
+let consecutiveTimeouts = 0;
 
 type StreamReadResult =
   | { type: "next"; result: IteratorResult<unknown, unknown> }
@@ -260,6 +261,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
         }
 
         reconnectAttempt = 0;
+        consecutiveTimeouts = 0;
         eventStream = subscription.stream;
         let usefulEventCount = 0;
 
@@ -347,6 +349,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
         }
 
         reconnectAttempt++;
+        consecutiveTimeouts = 0;
         const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
         logger.warn(
           `Event stream ended for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})`,
@@ -371,10 +374,15 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
         }
 
         reconnectAttempt++;
+        consecutiveTimeouts++;
         const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
         if (isEventStreamIdleTimeoutError(error)) {
+          const timeoutWarning =
+            consecutiveTimeouts >= 5
+              ? ` (${consecutiveTimeouts} consecutive timeouts — OpenCode server may be unreachable)`
+              : "";
           logger.warn(
-            `Event stream idle timeout for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})`,
+            `Event stream idle timeout for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})${timeoutWarning}`,
           );
         } else if (isExpectedOpencodeUnavailableError(error)) {
           logger.warn(

@@ -43,12 +43,28 @@ export async function startBotApp(): Promise<void> {
   const logFilePath = getLogFilePath();
 
   logger.info(`Starting OpenCode Telegram Bot v${version}...`);
+  logger.info(`Node.js ${process.version} on ${process.platform} ${process.arch}`);
   logger.info(`Config loaded from ${runtimePaths.envFilePath}`);
   if (logFilePath) {
     logger.info(`Logs are written to ${logFilePath}`);
   }
   logger.info(`Allowed User ID: ${config.telegram.allowedUserId}`);
   logger.debug(`[Runtime] Application start mode: ${mode}`);
+
+  const unhandledRejectionHandler = (reason: unknown): void => {
+    logger.error("[App] Unhandled promise rejection", reason);
+    void clearManagedServiceState().catch(() => {});
+    process.exit(1);
+  };
+
+  const uncaughtExceptionHandler = (error: Error): void => {
+    logger.error("[App] Uncaught exception", error);
+    void clearManagedServiceState().catch(() => {});
+    process.exit(1);
+  };
+
+  process.on("unhandledRejection", unhandledRejectionHandler);
+  process.on("uncaughtException", uncaughtExceptionHandler);
 
   await loadSettings();
   await reconcileStoredModelSelection();
@@ -142,6 +158,8 @@ export async function startBotApp(): Promise<void> {
       },
     });
   } finally {
+    process.off("unhandledRejection", unhandledRejectionHandler);
+    process.off("uncaughtException", uncaughtExceptionHandler);
     process.off("SIGINT", handleSigint);
     process.off("SIGTERM", handleSigterm);
     if (shutdownTimeout) {
