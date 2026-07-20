@@ -460,6 +460,8 @@ export const zh: I18nDictionary = {
   "tasklist.details":
     "⏰ 定时任务\n\n任务：{prompt}\n项目：{project}\n计划：{schedule}\n{cronLine}时区：{timezone}\n下次运行：{nextRunAt}\n上次运行：{lastRunAt}\n运行次数：{runCount}",
   "tasklist.details.cron": "Cron: {cron}",
+  "tasklist.button.show_prompt": "📄 显示完整提示词",
+  "tasklist.full_prompt_header": "📝 完整提示词：",
   "tasklist.button.delete": "🗑 删除",
   "tasklist.button.cancel": "❌ 取消",
   "tasklist.deleted_callback": "已删除",

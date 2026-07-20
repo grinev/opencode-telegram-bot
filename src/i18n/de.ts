@@ -525,6 +525,8 @@ export const de: I18nDictionary = {
   "tasklist.details":
     "⏰ Geplante Aufgabe\n\nAufgabe: {prompt}\nProjekt: {project}\nZeitplan: {schedule}\n{cronLine}Zeitzone: {timezone}\nNächster Lauf: {nextRunAt}\nLetzter Lauf: {lastRunAt}\nAnzahl Läufe: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",
+  "tasklist.button.show_prompt": "📄 Vollständigen Prompt anzeigen",
+  "tasklist.full_prompt_header": "📝 Vollständiger Prompt:",
   "tasklist.button.delete": "🗑 Löschen",
   "tasklist.button.cancel": "❌ Abbrechen",
   "tasklist.deleted_callback": "Gelöscht",

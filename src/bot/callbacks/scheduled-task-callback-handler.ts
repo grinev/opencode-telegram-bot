@@ -16,6 +16,7 @@ import {
   TASKLIST_CANCEL_CALLBACK,
   TASKLIST_DELETE_PREFIX,
   TASKLIST_OPEN_PREFIX,
+  TASKLIST_PROMPT_PREFIX,
 } from "../menus/scheduled-task-menu.js";
 
 interface TaskListListMetadata {
@@ -155,6 +156,40 @@ function formatDateTime(dateIso: string | null, timezone: string): string {
 }
 
 const TASK_DETAIL_PROMPT_BYTE_BUDGET = 3400;
+const TELEGRAM_MESSAGE_LIMIT = 4096;
+
+function isTaskDetailPromptTruncated(prompt: string): boolean {
+  return Buffer.byteLength(prompt, "utf-8") > TASK_DETAIL_PROMPT_BYTE_BUDGET;
+}
+
+function chunkTextByByteLength(text: string, maxBytes: number): string[] {
+  if (Buffer.byteLength(text, "utf-8") <= maxBytes) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let start = 0;
+
+  while (start < text.length) {
+    let lo = start;
+    let hi = text.length;
+
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >>> 1;
+      if (Buffer.byteLength(text.slice(start, mid), "utf-8") <= maxBytes) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+
+    const end = lo > start ? lo : start + 1;
+    chunks.push(text.slice(start, end));
+    start = end;
+  }
+
+  return chunks;
+}
 
 function truncatePromptForDetails(prompt: string): string {
   if (Buffer.byteLength(prompt, "utf-8") <= TASK_DETAIL_PROMPT_BYTE_BUDGET) {
@@ -298,7 +333,9 @@ export async function handleTaskListCallback(ctx: Context): Promise<boolean> {
 
       await ctx.answerCallbackQuery();
       await ctx.editMessageText(formatTaskDetails(task), {
-        reply_markup: buildTaskDetailsKeyboard(task.id),
+        reply_markup: buildTaskDetailsKeyboard(task.id, {
+          showFullPrompt: isTaskDetailPromptTruncated(task.prompt),
+        }),
       });
 
       interactionManager.transition({
@@ -331,6 +368,40 @@ export async function handleTaskListCallback(ctx: Context): Promise<boolean> {
       clearTaskListInteraction("tasklist_deleted");
       await ctx.answerCallbackQuery({ text: t("tasklist.deleted_callback") });
       await ctx.deleteMessage().catch(() => {});
+      return true;
+    }
+
+    if (data.startsWith(TASKLIST_PROMPT_PREFIX)) {
+      if (metadata.stage !== "detail") {
+        await ctx.answerCallbackQuery({ text: t("tasklist.inactive_callback"), show_alert: true });
+        return true;
+      }
+
+      const taskId = data.slice(TASKLIST_PROMPT_PREFIX.length);
+      if (taskId !== metadata.taskId) {
+        await ctx.answerCallbackQuery({ text: t("tasklist.inactive_callback"), show_alert: true });
+        return true;
+      }
+
+      const task = getScheduledTask(taskId);
+      if (!task) {
+        clearTaskListInteraction("tasklist_prompt_task_missing");
+        await ctx.answerCallbackQuery({ text: t("tasklist.inactive_callback"), show_alert: true });
+        await ctx.deleteMessage().catch(() => {});
+        return true;
+      }
+
+      await ctx.answerCallbackQuery();
+
+      const chunks = chunkTextByByteLength(
+        `${t("tasklist.full_prompt_header")}\n\n${task.prompt}`,
+        TELEGRAM_MESSAGE_LIMIT,
+      );
+
+      for (const chunk of chunks) {
+        await ctx.reply(chunk);
+      }
+
       return true;
     }
 

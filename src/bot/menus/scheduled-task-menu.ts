@@ -8,6 +8,7 @@ export const TASK_CANCEL_CALLBACK = "task:cancel";
 export const TASKLIST_CALLBACK_PREFIX = "tasklist:";
 export const TASKLIST_OPEN_PREFIX = `${TASKLIST_CALLBACK_PREFIX}open:`;
 export const TASKLIST_DELETE_PREFIX = `${TASKLIST_CALLBACK_PREFIX}delete:`;
+export const TASKLIST_PROMPT_PREFIX = `${TASKLIST_CALLBACK_PREFIX}prompt:`;
 export const TASKLIST_CANCEL_CALLBACK = `${TASKLIST_CALLBACK_PREFIX}cancel`;
 
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
@@ -47,8 +48,18 @@ export function buildTaskListKeyboard(tasks: ScheduledTask[]): InlineKeyboard {
   return keyboard;
 }
 
-export function buildTaskDetailsKeyboard(taskId: string): InlineKeyboard {
-  return new InlineKeyboard()
+export function buildTaskDetailsKeyboard(
+  taskId: string,
+  options?: { showFullPrompt?: boolean },
+): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+
+  if (options?.showFullPrompt) {
+    keyboard.text(t("tasklist.button.show_prompt"), `${TASKLIST_PROMPT_PREFIX}${taskId}`).row();
+  }
+
+  keyboard
     .text(t("tasklist.button.delete"), `${TASKLIST_DELETE_PREFIX}${taskId}`)
     .text(t("tasklist.button.cancel"), TASKLIST_CANCEL_CALLBACK);
+  return keyboard;
 }
