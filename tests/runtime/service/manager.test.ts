@@ -264,8 +264,8 @@ describe("runtime/service/manager", () => {
         command: string,
         callback: (error: Error | null, stdout: string, stderr: string) => void,
       ) => {
-        if (command.includes("wmic") && command.includes(String(stolenPid))) {
-          callback(null, "CreationDate\n20260719095542.123456+180", "");
+        if (command.includes("powershell") && command.includes(String(stolenPid))) {
+          callback(null, "20260719095542.123456+180\n", "");
         } else {
           callback(null, "", "");
         }
@@ -311,7 +311,7 @@ describe("runtime/service/manager", () => {
         command: string,
         callback: (error: Error | null, stdout: string, stderr: string) => void,
       ) => {
-        if (command.includes("wmic") && command.includes(String(pid))) {
+        if (command.includes("powershell") && command.includes(String(pid))) {
           const creationDateStr =
             daemonStartedAt.getFullYear().toString() +
             String(daemonStartedAt.getMonth() + 1).padStart(2, "0") +
@@ -320,7 +320,7 @@ describe("runtime/service/manager", () => {
             String(daemonStartedAt.getMinutes()).padStart(2, "0") +
             String(daemonStartedAt.getSeconds()).padStart(2, "0") +
             ".000000+180";
-          callback(null, `CreationDate\n${creationDateStr}`, "");
+          callback(null, `${creationDateStr}\n`, "");
         } else {
           callback(null, "", "");
         }
@@ -363,8 +363,8 @@ describe("runtime/service/manager", () => {
         command: string,
         callback: (error: Error | null, stdout: string, stderr: string) => void,
       ) => {
-        if (command.includes("wmic")) {
-          callback(new Error("WMIC failed"), "", "");
+        if (command.includes("powershell")) {
+          callback(new Error("PowerShell failed"), "", "");
         } else {
           callback(null, "", "");
         }

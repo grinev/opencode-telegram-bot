@@ -93,13 +93,9 @@ async function getProcessCreationTime(pid: number): Promise<Date | null> {
   try {
     if (process.platform === "win32") {
       const { stdout } = await execAsync(
-        `wmic process where ProcessId=${pid} get CreationDate`,
+        `powershell -NoProfile -Command "Get-WmiObject Win32_Process -Filter 'ProcessId=${pid}' | Select-Object -ExpandProperty CreationDate"`,
       );
-      const lines = stdout.trim().split(/\r?\n/);
-      if (lines.length < 2) {
-        return null;
-      }
-      const dateStr = lines[1]?.trim();
+      const dateStr = stdout.trim().split(/\r?\n/).find((l) => l.trim().length > 0)?.trim();
       if (!dateStr) {
         return null;
       }

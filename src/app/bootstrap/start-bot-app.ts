@@ -53,14 +53,16 @@ export async function startBotApp(): Promise<void> {
 
   const unhandledRejectionHandler = (reason: unknown): void => {
     logger.error("[App] Unhandled promise rejection", reason);
-    void clearManagedServiceState().catch(() => {});
-    process.exit(1);
+    void clearManagedServiceState()
+      .catch(() => {})
+      .finally(() => process.exit(1));
   };
 
   const uncaughtExceptionHandler = (error: Error): void => {
     logger.error("[App] Uncaught exception", error);
-    void clearManagedServiceState().catch(() => {});
-    process.exit(1);
+    void clearManagedServiceState()
+      .catch(() => {})
+      .finally(() => process.exit(1));
   };
 
   process.on("unhandledRejection", unhandledRejectionHandler);
