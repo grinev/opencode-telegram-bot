@@ -336,4 +336,142 @@ describe("bot/commands/tasklist", () => {
     expect(text).toContain("...");
     expect(Buffer.byteLength(text, "utf-8")).toBeLessThanOrEqual(4096);
   });
+
+  it("shows the 'Show full prompt' button when the prompt is truncated", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 1000,
+      },
+    });
+
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-long", { prompt: "B".repeat(4000) }),
+    );
+
+    const ctx = createCallbackContext("tasklist:open:task-long", 1000);
+    await handleTaskListCallback(ctx);
+
+    const [, options] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      { reply_markup: { inline_keyboard: Array<Array<{ text: string; callback_data?: string }>> } },
+    ];
+
+    const buttons = options.reply_markup.inline_keyboard.flat();
+    const showButton = buttons.find((button) => button.callback_data === "tasklist:prompt:task-long");
+    expect(showButton).toBeTruthy();
+    expect(showButton?.text).toBe(t("tasklist.button.show_prompt"));
+  });
+
+  it("hides the 'Show full prompt' button when the prompt fits the detail budget", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 1100,
+      },
+    });
+
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-short", { prompt: "Check weather" }),
+    );
+
+    const ctx = createCallbackContext("tasklist:open:task-short", 1100);
+    await handleTaskListCallback(ctx);
+
+    const [, options] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      { reply_markup: { inline_keyboard: Array<Array<{ text: string; callback_data?: string }>> } },
+    ];
+
+    const buttons = options.reply_markup.inline_keyboard.flat();
+    expect(buttons.some((button) => button.callback_data?.startsWith("tasklist:prompt:"))).toBe(false);
+  });
+
+  it("replies with the full prompt when 'Show full prompt' is tapped", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "detail",
+        messageId: 1200,
+        taskId: "task-full",
+      },
+    });
+
+    const longPrompt = "C".repeat(4000);
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-full", { prompt: longPrompt }),
+    );
+
+    const ctx = createCallbackContext("tasklist:prompt:task-full", 1200);
+    const handled = await handleTaskListCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.reply).toHaveBeenCalledTimes(1);
+
+    const [text] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(text).toContain(t("tasklist.full_prompt_header"));
+    expect(text).toContain(longPrompt);
+  });
+
+  it("splits the full prompt across messages when it exceeds the Telegram limit", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "detail",
+        messageId: 1300,
+        taskId: "task-huge",
+      },
+    });
+
+    const hugePrompt = "D".repeat(12000);
+    mocked.getScheduledTaskMock.mockReturnValue(
+      createTask("task-huge", { prompt: hugePrompt }),
+    );
+
+    const ctx = createCallbackContext("tasklist:prompt:task-huge", 1300);
+    await handleTaskListCallback(ctx);
+
+    const calls = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls as Array<[string]>;
+    expect(calls.length).toBeGreaterThan(1);
+
+    const combined = calls.map(([text]) => text).join("\n\n");
+    expect(combined).toContain(hugePrompt.slice(0, 1000));
+    expect(combined).toContain(hugePrompt.slice(-1000));
+
+    for (const [text] of calls) {
+      expect(Buffer.byteLength(text, "utf-8")).toBeLessThanOrEqual(4096);
+    }
+  });
+
+  it("rejects 'Show full prompt' taps outside the active detail view", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "tasklist",
+        stage: "list",
+        messageId: 1400,
+      },
+    });
+
+    const ctx = createCallbackContext("tasklist:prompt:task-full", 1400);
+    const handled = await handleTaskListCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("tasklist.inactive_callback"),
+      show_alert: true,
+    });
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
 });

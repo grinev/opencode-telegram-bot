@@ -491,6 +491,8 @@ export const ar: I18nDictionary = {
   "tasklist.details":
     "⏰ مهمة مجدولة\n\nالمهمة: {prompt}\nالمشروع: {project}\nالموعد: {schedule}\n{cronLine}المنطقة الزمنية: {timezone}\nالتشغيل التالي: {nextRunAt}\nآخر تشغيل: {lastRunAt}\nعدد مرات التشغيل: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",
+  "tasklist.button.show_prompt": "📄 عرض الموجّه كاملاً",
+  "tasklist.full_prompt_header": "📝 الموجّه الكامل:",
   "tasklist.button.delete": "🗑 حذف",
   "tasklist.button.cancel": "❌ إلغاء",
   "tasklist.deleted_callback": "تم الحذف",

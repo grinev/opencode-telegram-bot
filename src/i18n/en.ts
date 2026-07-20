@@ -505,6 +505,8 @@ export const en = {
   "tasklist.details":
     "⏰ Scheduled task\n\nTask: {prompt}\nProject: {project}\nSchedule: {schedule}\n{cronLine}Timezone: {timezone}\nNext run: {nextRunAt}\nLast run: {lastRunAt}\nRun count: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",
+  "tasklist.button.show_prompt": "📄 Show full prompt",
+  "tasklist.full_prompt_header": "📝 Full prompt:",
   "tasklist.button.delete": "🗑 Delete",
   "tasklist.button.cancel": "❌ Cancel",
   "tasklist.deleted_callback": "Deleted",

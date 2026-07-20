@@ -508,6 +508,8 @@ export const ru: I18nDictionary = {
   "tasklist.details":
     "⏰ Задача по расписанию\n\nЗадача: {prompt}\nПроект: {project}\nРасписание: {schedule}\n{cronLine}Часовой пояс: {timezone}\nСледующий запуск: {nextRunAt}\nПоследний запуск: {lastRunAt}\nКоличество запусков: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",
+  "tasklist.button.show_prompt": "📄 Показать полный промпт",
+  "tasklist.full_prompt_header": "📝 Полный промпт:",
   "tasklist.button.delete": "🗑 Удалить",
   "tasklist.button.cancel": "❌ Отмена",
   "tasklist.deleted_callback": "Удалено",

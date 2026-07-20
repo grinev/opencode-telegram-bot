@@ -523,6 +523,8 @@ export const es: I18nDictionary = {
   "tasklist.details":
     "⏰ Tarea programada\n\nTarea: {prompt}\nProyecto: {project}\nHorario: {schedule}\n{cronLine}Zona horaria: {timezone}\nPróxima ejecución: {nextRunAt}\nÚltima ejecución: {lastRunAt}\nNúmero de ejecuciones: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",
+  "tasklist.button.show_prompt": "📄 Mostrar prompt completo",
+  "tasklist.full_prompt_header": "📝 Prompt completo:",
   "tasklist.button.delete": "🗑 Eliminar",
   "tasklist.button.cancel": "❌ Cancelar",
   "tasklist.deleted_callback": "Eliminada",
