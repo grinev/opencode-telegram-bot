@@ -23,9 +23,11 @@ import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
+import { clearPromptQueue, scheduleQueueFlush } from "../handlers/prompt-queue.js";
 import {
   reconcileBusyState,
   setPromptResponseModeClearerForReconciliation,
+  setQueueFlusherForReconciliation,
   setResponseStreamerForReconciliation,
 } from "../../app/services/busy-reconciliation-service.js";
 import { finalizeAssistantResponse } from "../streaming/finalize-assistant-response.js";
@@ -185,6 +187,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       hasActiveStream: (sessionId) => this.hasActiveAssistantResponseStream(sessionId),
     });
     setPromptResponseModeClearerForReconciliation(clearPromptResponseMode);
+    setQueueFlusherForReconciliation((sessionId) => scheduleQueueFlush(sessionId));
 
     this.compactProgressStreamer = new CompactProgressStreamer({
       throttleMs: RESPONSE_STREAM_THROTTLE_MS,
@@ -879,6 +882,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       if (!this.botInstance || !this.chatIdInstance) {
         foregroundSessionState.markIdle(sessionId);
+        scheduleQueueFlush(sessionId);
         return;
       }
 
@@ -886,6 +890,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       if (!currentSession || currentSession.id !== sessionId) {
         foregroundSessionState.markIdle(sessionId);
         await scheduledTaskRuntime.flushDeferredDeliveries();
+        scheduleQueueFlush(sessionId);
         return;
       }
 
@@ -921,11 +926,15 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       } finally {
         foregroundSessionState.markIdle(sessionId);
         await scheduledTaskRuntime.flushDeferredDeliveries();
+        scheduleQueueFlush(sessionId);
       }
     });
 
     summaryAggregator.setOnSessionError(async (sessionId, message) => {
       await markAttachedSessionIdle(sessionId);
+      // A failed run is a bad moment to auto-fire more instructions: drop the
+      // queue and let the user resend once they have seen the error.
+      await clearPromptQueue(sessionId, "session_error");
       if (!this.botInstance || !this.chatIdInstance) {
         clearPromptResponseMode(sessionId);
         this.compactProgressStreamer.clearSession(sessionId, "session_error_no_bot_context");

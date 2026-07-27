@@ -668,4 +668,17 @@ export const de: I18nDictionary = {
   "ls.file.header": "Dateidetails",
   "ls.file.download": "📥 Herunterladen",
   "ls.file.back": "⬅️ Zurück",
+  "prompt_queue.queued": "⏳ In der Warteschlange (#{position}) — läuft, sobald der Agent frei ist.",
+  "prompt_queue.running": "▶️ Diese Nachricht aus der Warteschlange wird jetzt ausgeführt.",
+  "prompt_queue.cancelled": "🚫 Nachricht aus der Warteschlange abgebrochen.",
+  "prompt_queue.cancel_too_late": "Bereits gestartet — Abbruch nicht mehr möglich.",
+  "prompt_queue.dropped": "🚫 Nachricht verworfen: Die Sitzung hat sich geändert.",
+  "prompt_queue.cleared": "🚫 {count} Nachricht(en) aus der Warteschlange entfernt.",
+  "cmd.description.unqueue": "Neueste Nachricht aus der Warteschlange entfernen",
+  "unqueue.empty": "📭 Keine Nachrichten in der Warteschlange zum Entfernen.",
+  "unqueue.removed":
+    "↩️ Neueste Nachricht aus der Warteschlange entfernt ({remaining} übrig):\n{preview}",
+  "prompt_queue.failed": "🔴 Nachricht aus der Warteschlange konnte nicht ausgeführt werden.",
+  "prompt_queue.full": "⏳ Warteschlange voll ({limit}). Warte auf den Agenten oder nutze /abort.",
+  "prompt_queue.button.cancel": "❌ Abbrechen",
 };

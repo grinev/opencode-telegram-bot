@@ -41,6 +41,7 @@ import {
   reconcileBusyState,
   reconcileBusyStateNow,
   setPromptResponseModeClearerForReconciliation,
+  setQueueFlusherForReconciliation,
   setResponseStreamerForReconciliation,
 } from "../../../src/app/services/busy-reconciliation-service.js";
 
@@ -85,6 +86,20 @@ describe("busy reconciliation", () => {
     expect(mocked.clearRunMock).toHaveBeenCalledWith("session-1", "status_reconcile_idle");
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
     expect(mocked.flushDeferredDeliveriesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("drains the prompt queue when it recovers a stale busy session to idle", async () => {
+    const queueFlusher = vi.fn();
+    setQueueFlusherForReconciliation(queueFlusher);
+    markForegroundBusyAt("session-1", "D:/repo");
+    mocked.sessionStatusMock.mockResolvedValue({
+      data: { "session-1": { type: "idle" } },
+      error: null,
+    });
+
+    await reconcileBusyStateNow("D:/repo", 13_000);
+
+    expect(queueFlusher).toHaveBeenCalledWith("session-1");
   });
 
   it("keeps newly marked foreground busy state during the grace period", async () => {

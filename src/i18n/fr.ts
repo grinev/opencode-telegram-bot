@@ -667,4 +667,18 @@ export const fr: I18nDictionary = {
   "ls.file.header": "Détails du fichier",
   "ls.file.download": "📥 Télécharger",
   "ls.file.back": "⬅️ Retour",
+  "prompt_queue.queued":
+    "⏳ En file d'attente (#{position}) — sera exécuté dès que l'agent sera libre.",
+  "prompt_queue.running": "▶️ Exécution de ce message en file d'attente.",
+  "prompt_queue.cancelled": "🚫 Message en file d'attente annulé.",
+  "prompt_queue.cancel_too_late": "Déjà démarré — trop tard pour annuler.",
+  "prompt_queue.dropped": "🚫 Message abandonné : la session a changé.",
+  "prompt_queue.cleared": "🚫 {count} message(s) en file d'attente supprimé(s).",
+  "cmd.description.unqueue": "Supprimer le dernier message en file d'attente",
+  "unqueue.empty": "📭 Aucun message en file d'attente à supprimer.",
+  "unqueue.removed":
+    "↩️ Dernier message en file d'attente supprimé ({remaining} restant(s)) :\n{preview}",
+  "prompt_queue.failed": "🔴 Échec de l'exécution du message en file d'attente.",
+  "prompt_queue.full": "⏳ File pleine ({limit}). Attendez l'agent ou utilisez /abort.",
+  "prompt_queue.button.cancel": "❌ Annuler",
 };

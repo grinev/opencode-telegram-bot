@@ -274,7 +274,7 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
   });
 
-  it("blocks plain text while busy with generic blocked message", async () => {
+  it("lets plain text through while busy so the prompt handler can queue it", async () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("hello");
@@ -282,8 +282,8 @@ describe("interactionGuardMiddleware", () => {
 
     await interactionGuardMiddleware(ctx, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.reply).not.toHaveBeenCalled();
   });
 
   it("passes through after on-demand reconciliation clears stale busy state", async () => {
@@ -302,7 +302,7 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).not.toHaveBeenCalled();
   });
 
-  it("keeps blocking after on-demand reconciliation leaves state busy", async () => {
+  it("still reconciles busy state before queueing plain text", async () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("hello");
@@ -310,9 +310,11 @@ describe("interactionGuardMiddleware", () => {
 
     await interactionGuardMiddleware(ctx, next);
 
+    // A stale busy flag must not strand the prompt in the queue, so the guard
+    // reconciles even on the path that now lets the message through.
     expect(mocked.reconcileForegroundBusyStateMock).toHaveBeenCalledTimes(1);
-    expect(next).not.toHaveBeenCalled();
-    expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.reply).not.toHaveBeenCalled();
   });
 
   it("blocks callback while busy without active question or permission", async () => {

@@ -31,6 +31,12 @@ import {
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
 import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
+import {
+  clearPromptQueue,
+  failDispatchedQueuedPrompt,
+  queueBusyPrompt,
+  type QueuedPrompt,
+} from "./prompt-queue.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
@@ -39,8 +45,14 @@ const promptResponseModes = new Map<string, PromptResponseMode>();
 
 export type PromptResponseMode = "text_only" | "text_and_tts";
 
-type ProcessPromptOptions = {
+export type ProcessPromptOptions = {
   responseMode?: PromptResponseMode;
+  /**
+   * Set when this call is a replay of an already-queued prompt. Carries the
+   * queue entry so a still-busy session can park it again without posting a
+   * second acknowledgement.
+   */
+  queueItem?: QueuedPrompt;
 };
 
 export function getPromptBotInstance(): Bot<Context> | null {
@@ -88,6 +100,7 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
 }
 
 async function resetMismatchedSessionContext(): Promise<void> {
+  await clearPromptQueue(null, "session_mismatch_reset");
   detachAttachedSession("session_mismatch_reset");
   stopEventListening();
   summaryAggregator.clear();
@@ -211,10 +224,21 @@ export async function processUserPrompt(
     });
   }
 
-  const sessionIsBusy = await isSessionBusy(currentSession.id, currentSession.directory);
+  // Local state is authoritative for a run this bot started: OpenCode's status
+  // endpoint can still report idle in the moments right after a prompt is sent.
+  const sessionIsBusy =
+    foregroundSessionState.isBusy() ||
+    (await isSessionBusy(currentSession.id, currentSession.directory));
   if (sessionIsBusy) {
-    logger.info(`[Bot] Ignoring new prompt: session ${currentSession.id} is busy`);
-    await ctx.reply(t("bot.session_busy"));
+    logger.info(`[Bot] Session ${currentSession.id} is busy, queueing prompt for delivery`);
+    await queueBusyPrompt({
+      sessionId: currentSession.id,
+      ctx,
+      text,
+      deps,
+      fileParts,
+      options,
+    });
     return false;
   }
 
@@ -322,6 +346,11 @@ export async function processUserPrompt(
 
           // Send user-friendly error via API directly because ctx is no longer available
           void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+          // A replayed queued prompt failed to start: fix its "running" bubble
+          // and advance the rest of the queue, which no idle event will drain.
+          if (options.queueItem) {
+            void failDispatchedQueuedPrompt(options.queueItem);
+          }
           return;
         }
 
@@ -337,6 +366,9 @@ export async function processUserPrompt(
         logger.error("[Bot] session.promptAsync background failure details:", details);
         logger.error("[Bot] session.promptAsync raw background error object:", error);
         void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+        if (options.queueItem) {
+          void failDispatchedQueuedPrompt(options.queueItem);
+        }
       },
     });
 

@@ -25,6 +25,7 @@ const lastReconcileAtByDirectory = new Map<string, number>();
 
 let responseStreamerInstance: ResponseStreamerForReconciliation | null = null;
 let clearPromptResponseModeForReconciliation: ((sessionId: string) => void) | null = null;
+let queueFlusherForReconciliation: ((sessionId: string) => void) | null = null;
 
 export function setResponseStreamerForReconciliation(
   streamer: ResponseStreamerForReconciliation,
@@ -36,6 +37,16 @@ export function setPromptResponseModeClearerForReconciliation(
   clearer: (sessionId: string) => void,
 ): void {
   clearPromptResponseModeForReconciliation = clearer;
+}
+
+/**
+ * Injected so this app-layer service can drain the bot-layer prompt queue after
+ * it recovers a session to idle. Without it, a queue only drains on the
+ * session.idle SSE event; a run whose idle event was missed and recovered here
+ * would strand its queued prompts in memory forever.
+ */
+export function setQueueFlusherForReconciliation(flusher: (sessionId: string) => void): void {
+  queueFlusherForReconciliation = flusher;
 }
 
 function getReconciliationTargets(directory: string): {
@@ -76,6 +87,9 @@ async function clearForegroundBusySession(sessionId: string, reason: string): Pr
   foregroundSessionState.markIdle(sessionId);
   assistantRunState.clearRun(sessionId, reason);
   clearPromptResponseModeForReconciliation?.(sessionId);
+  // The session is idle again: drain any prompts that were parked while it ran
+  // but whose triggering session.idle event never arrived.
+  queueFlusherForReconciliation?.(sessionId);
 }
 
 export async function reconcileBusyStateNow(directory: string, now: number = Date.now()): Promise<void> {
@@ -184,4 +198,5 @@ export function __resetBusyReconciliationForTests(): void {
   lastReconcileAtByDirectory.clear();
   responseStreamerInstance = null;
   clearPromptResponseModeForReconciliation = null;
+  queueFlusherForReconciliation = null;
 }

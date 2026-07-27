@@ -87,7 +87,7 @@ function getInteractionBlockedMessage(
 export async function interactionGuardMiddleware(ctx: Context, next: NextFunction): Promise<void> {
   let decision = resolveInteractionGuardDecision(ctx);
 
-  if (!decision.allow && decision.busy) {
+  if (decision.busy && (!decision.allow || decision.queueable)) {
     await reconcileForegroundBusyState();
     decision = resolveInteractionGuardDecision(ctx);
   }

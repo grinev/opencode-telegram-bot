@@ -8,6 +8,7 @@ import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
 import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
+import { clearPromptQueue } from "../handlers/prompt-queue.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 
@@ -24,6 +25,12 @@ export async function detachCommand(ctx: CommandContext<Context>): Promise<void>
       await ctx.reply(t("detach.no_active_session"));
       return;
     }
+
+    // Detaching stops the aggregator from tracking this session, so its
+    // session.idle never reaches the queue flusher and reconciliation no longer
+    // targets it. Queued prompts would sit there until some later run happened
+    // to drain them, so drop them here and tell the user.
+    await clearPromptQueue(currentSession.id, "detach_command");
 
     detachAttachedSession("detach_command");
     clearPromptResponseMode(currentSession.id);

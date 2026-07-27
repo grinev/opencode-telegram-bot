@@ -19,6 +19,7 @@ const mocked = vi.hoisted(() => ({
   foregroundMarkIdleMock: vi.fn(),
   assistantClearRunMock: vi.fn(),
   clearPromptResponseModeMock: vi.fn(),
+  clearPromptQueueMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -72,6 +73,10 @@ vi.mock("../../../src/bot/handlers/prompt.js", () => ({
   clearPromptResponseMode: mocked.clearPromptResponseModeMock,
 }));
 
+vi.mock("../../../src/bot/handlers/prompt-queue.js", () => ({
+  clearPromptQueue: mocked.clearPromptQueueMock,
+}));
+
 function createContext(): Context {
   return {
     chat: { id: 777 },
@@ -107,6 +112,8 @@ describe("bot/commands/detach", () => {
     mocked.foregroundMarkIdleMock.mockClear();
     mocked.assistantClearRunMock.mockClear();
     mocked.clearPromptResponseModeMock.mockClear();
+    mocked.clearPromptQueueMock.mockClear();
+    mocked.clearPromptQueueMock.mockResolvedValue(undefined);
   });
 
   it("detaches selected session locally without stopping the OpenCode session", async () => {
@@ -131,6 +138,26 @@ describe("bot/commands/detach", () => {
       t("detach.success", { title: "Long Run" }),
       expect.objectContaining({ reply_markup: { keyboard: true } }),
     );
+  });
+
+  it("drops queued prompts before the session stops being tracked", async () => {
+    const ctx = createContext();
+
+    await detachCommand(ctx as never);
+
+    expect(mocked.clearPromptQueueMock).toHaveBeenCalledWith("session-1", "detach_command");
+    expect(mocked.clearPromptQueueMock.mock.invocationCallOrder[0]).toBeLessThan(
+      mocked.detachAttachedSessionMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("does not touch the prompt queue when there is no session to detach from", async () => {
+    mocked.currentSession = null;
+    const ctx = createContext();
+
+    await detachCommand(ctx as never);
+
+    expect(mocked.clearPromptQueueMock).not.toHaveBeenCalled();
   });
 
   it("uses the same detach behavior for an idle selected session", async () => {

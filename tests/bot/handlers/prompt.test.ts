@@ -115,6 +115,7 @@ vi.mock("../../../src/app/managers/foreground-session-state-manager.js", () => (
     markBusy: vi.fn(),
     markIdle: vi.fn(),
     clearAll: vi.fn(),
+    isBusy: vi.fn(() => false),
   },
 }));
 

@@ -642,6 +642,18 @@ export const en = {
   "ls.file.header": "File Details",
   "ls.file.download": "📥 Download",
   "ls.file.back": "⬅️ Back",
+  "prompt_queue.queued": "⏳ Queued (#{position}) — will run when the agent is free.",
+  "prompt_queue.running": "▶️ Running this queued message now.",
+  "prompt_queue.cancelled": "🚫 Queued message cancelled.",
+  "prompt_queue.cancel_too_late": "Already started — too late to cancel.",
+  "prompt_queue.dropped": "🚫 Queued message dropped: the session changed.",
+  "prompt_queue.cleared": "🚫 Cleared {count} queued message(s).",
+  "cmd.description.unqueue": "Remove the latest queued message",
+  "unqueue.empty": "📭 No queued messages to remove.",
+  "unqueue.removed": "↩️ Removed the latest queued message ({remaining} left):\n{preview}",
+  "prompt_queue.failed": "🔴 Failed to run this queued message.",
+  "prompt_queue.full": "⏳ Queue is full ({limit} messages). Wait for the agent or use /abort.",
+  "prompt_queue.button.cancel": "❌ Cancel",
 } as const;
 
 export type I18nKey = keyof typeof en;

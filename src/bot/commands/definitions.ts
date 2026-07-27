@@ -25,6 +25,7 @@ const COMMAND_DEFINITIONS: BotCommandI18nDefinition[] = [
   { command: "new", descriptionKey: "cmd.description.new" },
   { command: "abort", descriptionKey: "cmd.description.stop" },
   { command: "detach", descriptionKey: "cmd.description.detach" },
+  { command: "unqueue", descriptionKey: "cmd.description.unqueue" },
   { command: "sessions", descriptionKey: "cmd.description.sessions" },
   { command: "messages", descriptionKey: "cmd.description.messages" },
   { command: "settings", descriptionKey: "cmd.description.settings" },

@@ -47,4 +47,10 @@ export interface GuardDecision {
   reason?: BlockReason;
   command?: string;
   busy?: boolean;
+  /**
+   * Set when the input was allowed through *because* it can be parked in the
+   * prompt queue rather than because the session is free. The guard still
+   * reconciles busy state for these so a stale busy flag cannot strand a prompt.
+   */
+  queueable?: boolean;
 }

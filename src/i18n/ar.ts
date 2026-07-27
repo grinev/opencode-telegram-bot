@@ -624,4 +624,17 @@ export const ar: I18nDictionary = {
   "ls.file.header": "تفاصيل الملف",
   "ls.file.download": "📥 تنزيل الملف",
   "ls.file.back": "⬅️ رجوع",
+  "prompt_queue.queued":
+    "⏳ في قائمة الانتظار (#{position}) — سيتم التشغيل عندما يصبح الوكيل متاحًا.",
+  "prompt_queue.running": "▶️ يتم الآن تنفيذ هذه الرسالة من قائمة الانتظار.",
+  "prompt_queue.cancelled": "🚫 تم إلغاء الرسالة من قائمة الانتظار.",
+  "prompt_queue.cancel_too_late": "بدأ التنفيذ بالفعل — فات أوان الإلغاء.",
+  "prompt_queue.dropped": "🚫 تم إسقاط الرسالة: تغيّرت الجلسة.",
+  "prompt_queue.cleared": "🚫 تم مسح {count} رسالة من قائمة الانتظار.",
+  "cmd.description.unqueue": "إزالة آخر رسالة من قائمة الانتظار",
+  "unqueue.empty": "📭 لا توجد رسائل في قائمة الانتظار لإزالتها.",
+  "unqueue.removed": "↩️ تمت إزالة آخر رسالة من قائمة الانتظار (المتبقي {remaining}):\n{preview}",
+  "prompt_queue.failed": "🔴 فشل تنفيذ الرسالة من قائمة الانتظار.",
+  "prompt_queue.full": "⏳ قائمة الانتظار ممتلئة ({limit}). انتظر الوكيل أو استخدم /abort.",
+  "prompt_queue.button.cancel": "❌ إلغاء",
 };

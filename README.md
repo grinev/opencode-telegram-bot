@@ -135,6 +135,7 @@ opencode-telegram config
 | `/status`         | Server health, current project, session, and model info |
 | `/new`            | Create a new session                                    |
 | `/abort`          | Abort the current task                                  |
+| `/unqueue`        | Remove the latest queued message                        |
 | `/detach`         | Detach from the current session without stopping it     |
 | `/sessions`       | Browse and switch between recent sessions               |
 | `/messages`       | Browse user messages, revert or fork from a previous state     |

@@ -8,6 +8,7 @@ import { foregroundSessionState } from "../../app/managers/foreground-session-st
 import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
 import { markAttachedSessionIdle } from "../../app/services/attach-service.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
+import { clearPromptQueue } from "../handlers/prompt-queue.js";
 import { markUserAbortRequested } from "../../app/managers/abort-suppression-manager.js";
 
 type SessionState = "idle" | "busy" | "not-found";
@@ -27,6 +28,10 @@ async function releaseAbortBusyState(sessionId: string, reason: string): Promise
   assistantRunState.clearRun(sessionId, reason);
   await markAttachedSessionIdle(sessionId);
   clearPromptResponseMode(sessionId);
+  // Aborting halts the run; prompts parked behind it must not auto-fire into the
+  // just-stopped session. Explicit here so it no longer relies on a session.error
+  // event that may never arrive when abort is confirmed via status polling.
+  await clearPromptQueue(sessionId, reason);
 }
 
 async function pollSessionStatus(

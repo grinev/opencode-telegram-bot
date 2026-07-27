@@ -313,22 +313,75 @@ describe("interaction guard", () => {
     expect(blockedDecision.busy).toBe(true);
   });
 
-  it("blocks start, plain text, and media while busy without interaction", () => {
+  it("blocks disallowed commands while busy without interaction", () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const startDecision = resolveInteractionGuardDecision(createContext({ text: "/start" }));
+
+    expect(startDecision.allow).toBe(false);
+    expect(startDecision.reason).toBe("command_not_allowed");
+  });
+
+  it("lets plain text and media through while busy so they can be queued", () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+
     const textDecision = resolveInteractionGuardDecision(createContext({ text: "hello" }));
     const voiceDecision = resolveInteractionGuardDecision(createContext({ voice: true }));
     const photoDecision = resolveInteractionGuardDecision(createContext({ photo: true }));
 
-    expect(startDecision.allow).toBe(false);
-    expect(startDecision.reason).toBe("command_not_allowed");
+    expect(textDecision.allow).toBe(true);
+    expect(textDecision.busy).toBe(true);
+    expect(voiceDecision.allow).toBe(true);
+    expect(photoDecision.allow).toBe(true);
+  });
+
+  it("allows the queued-prompt cancel button while busy", () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+
+    const decision = resolveInteractionGuardDecision(createContext({ callbackData: "qcancel:3" }));
+
+    expect(decision.allow).toBe(true);
+  });
+
+  it("allows the queued-prompt cancel button while another interaction is pending", () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    interactionManager.start({
+      kind: "rename",
+      expectedInput: "text",
+    });
+
+    const decision = resolveInteractionGuardDecision(createContext({ callbackData: "qcancel:3" }));
+
+    expect(decision.allow).toBe(true);
+  });
+
+  it("keeps blocking reply-keyboard buttons while busy instead of queueing them", () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+
+    const agentDecision = resolveInteractionGuardDecision(
+      createContext({ text: "🤖 build Agent" }),
+    );
+    const modelDecision = resolveInteractionGuardDecision(createContext({ text: "🧠 gpt-5.5" }));
+    const variantDecision = resolveInteractionGuardDecision(createContext({ text: "💡 default" }));
+    const contextDecision = resolveInteractionGuardDecision(createContext({ text: "📊 12%" }));
+
+    expect(agentDecision.allow).toBe(false);
+    expect(modelDecision.allow).toBe(false);
+    expect(variantDecision.allow).toBe(false);
+    expect(contextDecision.allow).toBe(false);
+  });
+
+  it("still blocks plain text while busy when an interaction owns the next message", () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    interactionManager.start({
+      kind: "rename",
+      expectedInput: "text",
+    });
+
+    const textDecision = resolveInteractionGuardDecision(createContext({ text: "hello" }));
+
     expect(textDecision.allow).toBe(false);
     expect(textDecision.reason).toBe("expected_text");
-    expect(voiceDecision.allow).toBe(false);
-    expect(voiceDecision.reason).toBe("expected_text");
-    expect(photoDecision.allow).toBe(false);
-    expect(photoDecision.reason).toBe("expected_text");
   });
 
   it("allows valid question answers while busy", () => {
