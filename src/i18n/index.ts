@@ -5,6 +5,7 @@ import { es } from "./es.js";
 import { fr } from "./fr.js";
 import { ru } from "./ru.js";
 import { zh } from "./zh.js";
+import { pt } from "./pt.js";
 
 interface LocaleDefinition {
   code: string;
@@ -14,6 +15,12 @@ interface LocaleDefinition {
 }
 
 const LOCALE_DEFINITIONS = [
+  {
+    code: "pt",
+    label: "Português (Brasil)",
+    dateLocale: "pt-BR",
+    dictionary: pt,
+  },
   {
     code: "en",
     label: "English",

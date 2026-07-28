@@ -23,10 +23,12 @@ describe("i18n/index locale helpers", () => {
     expect(resolveSupportedLocale("de")).toBe("de");
     expect(resolveSupportedLocale("fr")).toBe("fr");
     expect(resolveSupportedLocale("fr-FR")).toBe("fr");
+    expect(resolveSupportedLocale("pt")).toBe("pt");
+    expect(resolveSupportedLocale("pt-BR")).toBe("pt");
   });
 
   it("normalizes unsupported locale values with fallback", () => {
-    expect(normalizeLocale("pt", "en")).toBe("en");
+    expect(normalizeLocale("xx", "en")).toBe("en");
     expect(normalizeLocale(undefined, "ru")).toBe("ru");
   });
 
