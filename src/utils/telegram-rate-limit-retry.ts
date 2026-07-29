@@ -1,3 +1,14 @@
+/**
+ * Telegram occasionally answers with a transient gateway error (`502 Bad
+ * Gateway` is the common one) instead of a proper Bot API response. These are
+ * not caller mistakes and usually succeed on the next attempt, so they are
+ * retried with an exponential backoff just like `429` is retried with the
+ * server-provided `retry_after`.
+ */
+const TRANSIENT_SERVER_ERROR_CODES = new Set([500, 502, 503, 504]);
+
+const MAX_SERVER_ERROR_BACKOFF_MS = 8000;
+
 interface RetryAttemptInfo {
   attempt: number;
   retryAfterMs: number;
@@ -61,21 +72,47 @@ function getRetryAfterSecondsFromError(error: unknown): number | null {
   return parsedSeconds;
 }
 
-function isTelegramRateLimitError(error: unknown): boolean {
+function getStatusCode(error: unknown): number | null {
   if (typeof error === "object" && error !== null) {
     const status = Reflect.get(error, "status");
-    if (typeof status === "number" && status === 429) {
-      return true;
+    if (typeof status === "number" && Number.isFinite(status)) {
+      return status;
     }
 
     const errorCode = Reflect.get(error, "error_code");
-    if (typeof errorCode === "number" && errorCode === 429) {
-      return true;
+    if (typeof errorCode === "number" && Number.isFinite(errorCode)) {
+      return errorCode;
     }
+  }
+
+  return null;
+}
+
+function isTelegramRateLimitError(error: unknown): boolean {
+  if (getStatusCode(error) === 429) {
+    return true;
   }
 
   const message = getErrorMessage(error).toLowerCase();
   return /\b429\b/.test(message) || message.includes("too many requests");
+}
+
+export function isTransientTelegramServerError(error: unknown): boolean {
+  const status = getStatusCode(error);
+  if (status !== null) {
+    return TRANSIENT_SERVER_ERROR_CODES.has(status);
+  }
+
+  const message = getErrorMessage(error);
+  return [...TRANSIENT_SERVER_ERROR_CODES].some((code) =>
+    new RegExp(`\\b${code}\\b`).test(message),
+  );
+}
+
+function getServerErrorBackoffMs(attempt: number, baseDelayMs: number): number {
+  const normalizedAttempt = Math.max(0, Math.floor(attempt));
+  const delayMs = baseDelayMs * 2 ** normalizedAttempt;
+  return Math.min(Math.max(1, Math.floor(delayMs)), MAX_SERVER_ERROR_BACKOFF_MS);
 }
 
 function wait(ms: number): Promise<void> {
@@ -84,20 +121,30 @@ function wait(ms: number): Promise<void> {
   });
 }
 
+/**
+ * Returns how long to wait before retrying, or `null` when the error is not
+ * worth retrying. `attempt` is the number of retries already performed and only
+ * affects the transient-server-error backoff.
+ */
 export function getTelegramRetryAfterMs(
   error: unknown,
   fallbackDelayMs: number = 1000,
+  attempt: number = 0,
 ): number | null {
-  if (!isTelegramRateLimitError(error)) {
-    return null;
+  if (isTelegramRateLimitError(error)) {
+    const retryAfterSeconds = getRetryAfterSecondsFromError(error);
+    if (retryAfterSeconds !== null) {
+      return retryAfterSeconds * 1000;
+    }
+
+    return Math.max(1, Math.floor(fallbackDelayMs));
   }
 
-  const retryAfterSeconds = getRetryAfterSecondsFromError(error);
-  if (retryAfterSeconds !== null) {
-    return retryAfterSeconds * 1000;
+  if (isTransientTelegramServerError(error)) {
+    return getServerErrorBackoffMs(attempt, fallbackDelayMs);
   }
 
-  return Math.max(1, Math.floor(fallbackDelayMs));
+  return null;
 }
 
 export async function withTelegramRateLimitRetry<T>(
@@ -112,7 +159,7 @@ export async function withTelegramRateLimitRetry<T>(
     try {
       return await operation();
     } catch (error) {
-      const retryAfterMs = getTelegramRetryAfterMs(error, fallbackDelayMs);
+      const retryAfterMs = getTelegramRetryAfterMs(error, fallbackDelayMs, attempt);
       if (retryAfterMs === null || attempt >= maxRetries) {
         throw error;
       }

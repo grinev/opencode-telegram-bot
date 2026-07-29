@@ -98,7 +98,7 @@ export function createBot(): Bot<Context> {
       maxRetries: 5,
       onRetry: ({ attempt, retryAfterMs, error }) => {
         logger.warn(
-          `[Bot API] Telegram rate limit on ${method}, retrying in ${retryAfterMs}ms (attempt=${attempt})`,
+          `[Bot API] Retryable Telegram error on ${method}, retrying in ${retryAfterMs}ms (attempt=${attempt})`,
           error,
         );
       },
