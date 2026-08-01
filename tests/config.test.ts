@@ -52,6 +52,37 @@ describe("config boolean env parsing", () => {
     expect(config.bot.messageFormatMode).toBe("markdown");
   });
 
+  it("returns an empty list when PROJECTS_EXCLUDED_PATHS is not set", async () => {
+    vi.stubEnv("PROJECTS_EXCLUDED_PATHS", "");
+
+    const config = await loadConfig();
+
+    expect(config.bot.excludedProjectPaths).toEqual([]);
+  });
+
+  it("parses PROJECTS_EXCLUDED_PATHS as a comma-separated path list", async () => {
+    vi.stubEnv(
+      "PROJECTS_EXCLUDED_PATHS",
+      "/home/user/repo-a,/home/user/repo-b,/home/user/repo-c",
+    );
+
+    const config = await loadConfig();
+
+    expect(config.bot.excludedProjectPaths).toEqual([
+      "/home/user/repo-a",
+      "/home/user/repo-b",
+      "/home/user/repo-c",
+    ]);
+  });
+
+  it("trims whitespace and drops empty entries from PROJECTS_EXCLUDED_PATHS", async () => {
+    vi.stubEnv("PROJECTS_EXCLUDED_PATHS", "  /home/user/repo-a , ,/home/user/repo-b  ");
+
+    const config = await loadConfig();
+
+    expect(config.bot.excludedProjectPaths).toEqual(["/home/user/repo-a", "/home/user/repo-b"]);
+  });
+
   it("parses markdown message format mode", async () => {
     vi.stubEnv("MESSAGE_FORMAT_MODE", "MARKDOWN");
 
