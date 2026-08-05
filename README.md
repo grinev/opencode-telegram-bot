@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@grinev/opencode-telegram-bot)](https://www.npmjs.com/package/@grinev/opencode-telegram-bot)
 [![CI](https://github.com/grinev/opencode-telegram-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/grinev/opencode-telegram-bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22.14-brightgreen)](https://nodejs.org)
 [![Follow updates](https://img.shields.io/badge/-Follow%20updates-333333?logo=x)](https://x.com/grin_rus)
 [![Community](https://img.shields.io/badge/Community-Telegram-26A5E4?logo=telegram&logoColor=white)](https://t.me/+Fj_IyKRi6-41MGUy)
 
@@ -55,7 +55,7 @@ Planned features currently in development are listed in [Current Task List](PROD
 
 ## Prerequisites
 
-- **Node.js 22+** — [download](https://nodejs.org)
+- **Node.js 22.14+** — [download](https://nodejs.org)
 - **OpenCode** — install from [opencode.ai](https://opencode.ai) or [GitHub](https://github.com/sst/opencode)
 - **Telegram Bot** — you'll create one during setup (takes 1 minute)
 

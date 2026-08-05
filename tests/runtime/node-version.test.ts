@@ -5,12 +5,19 @@ describe("getUnsupportedNodeVersionMessage", () => {
   it("rejects Node.js versions below 22", () => {
     const message = getUnsupportedNodeVersionMessage("20.20.1");
 
-    expect(message).toContain("requires Node.js 22 or newer");
+    expect(message).toContain("requires Node.js 22.14 or newer");
     expect(message).toContain("v20.20.1");
   });
 
+  it("rejects Node.js 22 minors without Node-API v10", () => {
+    const message = getUnsupportedNodeVersionMessage("22.12.0");
+
+    expect(message).toContain("requires Node.js 22.14 or newer");
+    expect(message).toContain("v22.12.0");
+  });
+
   it("accepts the minimum supported version", () => {
-    expect(getUnsupportedNodeVersionMessage("22.0.0")).toBeNull();
+    expect(getUnsupportedNodeVersionMessage("22.14.0")).toBeNull();
   });
 
   it("accepts newer major versions", () => {

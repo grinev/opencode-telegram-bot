@@ -18,7 +18,7 @@
     ".env.example"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14"
   },
   "scripts": {
     "build": "tsc",
