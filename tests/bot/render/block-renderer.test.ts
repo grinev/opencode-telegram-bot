@@ -118,6 +118,21 @@ describe("bot/render/block-renderer", () => {
     });
   });
 
+  it("carries codeDetails on large code blocks", () => {
+    const text = Array.from({ length: 10 }, (_, index) => `line ${index}`).join("\n");
+    const block: TelegramBlock = {
+      type: "code",
+      language: "ts",
+      text,
+    };
+
+    expect(renderTelegramBlock(block)).toMatchObject({
+      blockType: "code",
+      mode: "full",
+      codeDetails: { language: "ts", text },
+    });
+  });
+
   it("renders tables as aligned preformatted text", () => {
     const block: TelegramBlock = {
       type: "table",

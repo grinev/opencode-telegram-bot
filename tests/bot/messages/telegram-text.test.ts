@@ -399,4 +399,45 @@ describe("bot/messages/telegram-text", () => {
     expect(sendRichMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledTimes(1);
   });
+
+  it("sends native details block for large code parts via sendRichMessage", async () => {
+    const sendRichMessage = vi.fn().mockResolvedValue({ message_id: 778 });
+    const sendMessage = vi.fn();
+
+    const code = Array.from({ length: 10 }, (_, index) => `line ${index}`).join("\n");
+
+    await expect(
+      sendRenderedBotPart({
+        api: { sendMessage, sendRichMessage },
+        chatId: 100,
+        part: {
+          text: `\`\`\`ts\n${code}\n\`\`\``,
+          fallbackText: code,
+          source: "plain",
+          codeDetails: { language: "ts", text: code },
+        },
+      }),
+    ).resolves.toEqual({
+      messageId: 778,
+      deliveredSignature: getTelegramRenderedPartSignature({
+        text: `\`\`\`ts\n${code}\n\`\`\``,
+        codeDetails: { language: "ts", text: code },
+      }),
+    });
+
+    expect(sendRichMessage).toHaveBeenCalledTimes(1);
+    expect(sendRichMessage).toHaveBeenCalledWith(
+      100,
+      {
+        blocks: [
+          {
+            type: "details",
+            summary: "Code — ts (10 lines)",
+            blocks: [{ type: "pre", text: code, language: "ts" }],
+          },
+        ],
+      },
+      undefined,
+    );
+  });
 });

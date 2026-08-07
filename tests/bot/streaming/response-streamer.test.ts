@@ -21,10 +21,15 @@ function richPart(
   };
 }
 
-function signature(part: { text: string; entities?: unknown[]; tableRows?: unknown[][] }) {
+function signature(part: {
+  text: string;
+  entities?: unknown[];
+  tableRows?: unknown[][];
+  codeDetails?: { language?: string; text: string };
+}) {
   return `${part.text}\n${JSON.stringify(part.entities ?? null)}\n${JSON.stringify(
     part.tableRows ?? null,
-  )}`;
+  )}\n${JSON.stringify(part.codeDetails ?? null)}`;
 }
 
 describe("bot/streaming/response-streamer", () => {

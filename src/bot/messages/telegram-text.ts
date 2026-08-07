@@ -93,11 +93,11 @@ function stripRichFormattingOptions<T extends TelegramSendMessageOptions | undef
 }
 
 export function getTelegramRenderedPartSignature(
-  part: Pick<TelegramRenderedPart, "text" | "entities" | "tableRows">,
+  part: Pick<TelegramRenderedPart, "text" | "entities" | "tableRows" | "codeDetails">,
 ): string {
   return `${part.text}\n${JSON.stringify(part.entities ?? null)}\n${JSON.stringify(
     part.tableRows ?? null,
-  )}`;
+  )}\n${JSON.stringify(part.codeDetails ?? null)}`;
 }
 
 function buildNativeTableRichMessage(part: TelegramRenderedPart): RichMessageParam | null {
@@ -123,6 +123,38 @@ function buildNativeTableRichMessage(part: TelegramRenderedPart): RichMessagePar
       },
     ],
   };
+}
+
+function buildNativeCodeDetailsMessage(part: TelegramRenderedPart): RichMessageParam | null {
+  if (!part.codeDetails) {
+    return null;
+  }
+
+  const { language, text } = part.codeDetails;
+  const lineCount = text.split("\n").length;
+  const summary = language
+    ? `Code — ${language} (${lineCount} lines)`
+    : `Code (${lineCount} lines)`;
+
+  return {
+    blocks: [
+      {
+        type: "details",
+        summary,
+        blocks: [
+          {
+            type: "pre",
+            text,
+            ...(language ? { language } : {}),
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function buildNativeRichMessage(part: TelegramRenderedPart): RichMessageParam | null {
+  return buildNativeTableRichMessage(part) ?? buildNativeCodeDetailsMessage(part);
 }
 
 export async function sendBotText({
@@ -159,7 +191,7 @@ export async function sendRenderedBotPart({
     tableRows: part.tableRows?.length ?? 0,
   });
 
-  const nativeTableMessage = buildNativeTableRichMessage(part);
+  const nativeTableMessage = buildNativeRichMessage(part);
   if (nativeTableMessage && api.sendRichMessage) {
     try {
       const sentMessage = await api.sendRichMessage(chatId, nativeTableMessage, rawOptions);
@@ -224,7 +256,7 @@ export async function editRenderedBotPart({
     tableRows: part.tableRows?.length ?? 0,
   });
 
-  const nativeTableMessage = buildNativeTableRichMessage(part);
+  const nativeTableMessage = buildNativeRichMessage(part);
   if (nativeTableMessage) {
     try {
       await api.editMessageText(chatId, messageId, nativeTableMessage, rawOptions);
@@ -292,7 +324,7 @@ export async function sendDraftBotPart({
     tableRows: part.tableRows?.length ?? 0,
   });
 
-  const nativeTableMessage = buildNativeTableRichMessage(part);
+  const nativeTableMessage = buildNativeRichMessage(part);
   if (nativeTableMessage && api.sendRichMessageDraft) {
     try {
       await api.sendRichMessageDraft(chatId, draftId, nativeTableMessage as RichMessageDraftParam);
@@ -341,7 +373,7 @@ export async function completeDraftPart({
     tableRows: part.tableRows?.length ?? 0,
   });
 
-  const nativeTableMessage = buildNativeTableRichMessage(part);
+  const nativeTableMessage = buildNativeRichMessage(part);
   if (nativeTableMessage && api.sendRichMessage) {
     try {
       const sentMessage = await api.sendRichMessage(chatId, nativeTableMessage, rawOptions);

@@ -68,6 +68,7 @@ function clonePart(part: TelegramRenderedPart): TelegramRenderedPart {
     fallbackText: part.fallbackText,
     source: part.source,
     tableRows: part.tableRows ? part.tableRows.map((row) => [...row]) : undefined,
+    codeDetails: part.codeDetails ? { ...part.codeDetails } : undefined,
   };
 }
 
@@ -112,8 +113,12 @@ function getRetryAfterMs(error: unknown): number | null {
   return seconds * 1000;
 }
 
-function createSignature(part: Pick<TelegramRenderedPart, "text" | "entities" | "tableRows">): string {
-  return `${part.text}\n${JSON.stringify(part.entities ?? null)}\n${JSON.stringify(part.tableRows ?? null)}`;
+function createSignature(
+  part: Pick<TelegramRenderedPart, "text" | "entities" | "tableRows" | "codeDetails">,
+): string {
+  return `${part.text}\n${JSON.stringify(part.entities ?? null)}\n${JSON.stringify(
+    part.tableRows ?? null,
+  )}\n${JSON.stringify(part.codeDetails ?? null)}`;
 }
 
 function delay(ms: number): Promise<void> {
