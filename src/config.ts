@@ -19,6 +19,17 @@ function getEnvVar(key: string, required: boolean = true): string {
   return value || "";
 }
 
+function getOptionalPathListEnvVar(key: string, delimiter: string = ","): string[] {
+  const value = getEnvVar(key, false);
+  if (!value || value.trim() === "") {
+    return [];
+  }
+  return value
+    .split(delimiter)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 function getOptionalPositiveIntEnvVar(key: string, defaultValue: number): number {
   const value = getEnvVar(key, false);
 
@@ -230,6 +241,7 @@ export const config = {
     // Short messages are processed immediately; 0 disables merging entirely.
     messageMergeWindowMs: getOptionalNonNegativeIntEnvVar("MESSAGE_MERGE_WINDOW_MS", 1500),
     initialSettingsPreset: parseInitialSettingsPreset(),
+    excludedProjectPaths: getOptionalPathListEnvVar("PROJECTS_EXCLUDED_PATHS"),
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),

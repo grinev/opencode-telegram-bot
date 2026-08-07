@@ -3,9 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { projectListMock, cachedSessionProjectsMock } = vi.hoisted(() => ({
+const { projectListMock, cachedSessionProjectsMock, configMock } = vi.hoisted(() => ({
   projectListMock: vi.fn(),
   cachedSessionProjectsMock: vi.fn(),
+  configMock: {
+    bot: {
+      excludedProjectPaths: [] as string[],
+    },
+  },
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -14,6 +19,10 @@ vi.mock("../../../src/opencode/client.js", () => ({
       list: projectListMock,
     },
   },
+}));
+
+vi.mock("../../../src/config.js", () => ({
+  config: configMock,
 }));
 
 vi.mock("../../../src/app/services/session-cache-service.js", () => ({
@@ -29,6 +38,7 @@ describe("project/manager", () => {
   beforeEach(() => {
     projectListMock.mockReset();
     cachedSessionProjectsMock.mockReset();
+    configMock.bot.excludedProjectPaths = [];
   });
 
   afterEach(async () => {
@@ -89,6 +99,92 @@ describe("project/manager", () => {
       data: [
         { id: "main", worktree: mainWorktree, name: "Main" },
         { id: "feature", worktree: linkedWorktree, name: "Feature" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "main", worktree: mainWorktree, name: "Main" }]);
+  });
+
+  it("keeps all projects when no excluded paths are configured", async () => {
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([
+      { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+      { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+    ]);
+  });
+
+  it("filters out projects whose worktree matches an excluded path", async () => {
+    configMock.bot.excludedProjectPaths = ["/home/user/repo-b"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p1", worktree: "/home/user/repo-a", name: "Repo A" }]);
+  });
+
+  it("filters out projects matching any of multiple excluded paths", async () => {
+    configMock.bot.excludedProjectPaths = ["/home/user/repo-a", "/home/user/repo-b"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+        { id: "p3", worktree: "/home/user/repo-c", name: "Repo C" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p3", worktree: "/home/user/repo-c", name: "Repo C" }]);
+  });
+
+  it("applies exclusion after hiding linked git worktrees", async () => {
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), "opencode-excluded-worktrees-"));
+
+    const mainWorktree = path.join(tempRoot, "repo-main");
+    const linkedWorktree = path.join(tempRoot, "repo-feature");
+    const excludedWorktree = path.join(tempRoot, "repo-excluded");
+
+    await mkdir(path.join(mainWorktree, ".git"), { recursive: true });
+    await mkdir(linkedWorktree, { recursive: true });
+    await mkdir(excludedWorktree, { recursive: true });
+    await writeFile(
+      path.join(linkedWorktree, ".git"),
+      `gitdir: ${path.join(mainWorktree, ".git", "worktrees", "feature")}`,
+      "utf-8",
+    );
+
+    configMock.bot.excludedProjectPaths = [excludedWorktree];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "main", worktree: mainWorktree, name: "Main" },
+        { id: "feature", worktree: linkedWorktree, name: "Feature" },
+        { id: "excluded", worktree: excludedWorktree, name: "Excluded" },
       ],
       error: null,
     });
