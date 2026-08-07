@@ -3,6 +3,7 @@ import { ar } from "./ar.js";
 import { de } from "./de.js";
 import { es } from "./es.js";
 import { fr } from "./fr.js";
+import { it } from "./it.js";
 import { pt } from "./pt.js";
 import { ru } from "./ru.js";
 import { zh } from "./zh.js";
@@ -44,6 +45,12 @@ const LOCALE_DEFINITIONS = [
     label: "Français",
     dateLocale: "fr-FR",
     dictionary: fr,
+  },
+  {
+    code: "it",
+    label: "Italiano",
+    dateLocale: "it-IT",
+    dictionary: it,
   },
   {
     code: "pt",
