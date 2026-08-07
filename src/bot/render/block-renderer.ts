@@ -591,7 +591,9 @@ export function renderTelegramBlock(
         return createRenderedBlock(block.type, mode, text, text);
       }
 
-      return renderPreformattedBlock(block.type, mode, text);
+      const rendered = renderPreformattedBlock(block.type, mode, text);
+      rendered.tableRows = block.rows;
+      return rendered;
     }
     case "rule":
       return createRenderedBlock(block.type, mode, "──────────", "──────────");

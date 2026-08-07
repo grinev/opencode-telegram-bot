@@ -7,6 +7,7 @@ export interface TelegramRenderedPart {
   entities?: MessageEntity[];
   fallbackText: string;
   source: "entities" | "plain";
+  tableRows?: string[][];
 }
 
 export interface TelegramRenderedBlock {
@@ -16,6 +17,7 @@ export interface TelegramRenderedBlock {
   entities?: MessageEntity[];
   fallbackText: string;
   source: "entities" | "plain";
+  tableRows?: string[][];
 }
 
 export type TelegramBlock =

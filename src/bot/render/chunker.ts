@@ -108,12 +108,27 @@ function createRenderedPart(
   };
 }
 
+function createRenderedPartWithTableRows(
+  text: string,
+  fallbackText: string,
+  entities: MessageEntity[] | undefined,
+  tableRows: string[][] | undefined,
+): TelegramRenderedPart {
+  const part = createRenderedPart(text, fallbackText, entities);
+  if (tableRows?.length) {
+    part.tableRows = tableRows;
+  }
+
+  return part;
+}
+
 function clonePart(part: TelegramRenderedPart): TelegramRenderedPart {
   return {
     text: part.text,
     entities: part.entities ? [...part.entities] : undefined,
     fallbackText: part.fallbackText,
     source: part.source,
+    tableRows: part.tableRows ? part.tableRows.map((row) => [...row]) : undefined,
   };
 }
 
@@ -290,7 +305,7 @@ function splitBlockToParts(
   }
 
   if (block.text.length <= maxLength) {
-    return [createRenderedPart(block.text, block.fallbackText, block.entities)];
+    return [createRenderedPartWithTableRows(block.text, block.fallbackText, block.entities, block.tableRows)];
   }
 
   const preEntity = isFullRangePreEntity(block);
@@ -366,6 +381,13 @@ export function chunkTelegramRenderedBlocks(
     .filter((group) => group.length > 0);
   const parts: TelegramRenderedPart[] = [];
   let current = createBuilder();
+  const flushCurrent = (): void => {
+    const finalized = finalizeBuilder(current);
+    if (finalized) {
+      parts.push(finalized);
+    }
+    current = createBuilder();
+  };
 
   for (const blockParts of blockGroups) {
     for (let index = 0; index < blockParts.length; index++) {
@@ -373,15 +395,17 @@ export function chunkTelegramRenderedBlocks(
       const needsSeparator = index === 0 && current.text.length > 0;
       const prefix = needsSeparator ? blockSeparator : "";
 
+      if (chunk.tableRows) {
+        flushCurrent();
+        parts.push(chunk);
+        continue;
+      }
+
       if (
         current.text.length > 0 &&
         current.text.length + prefix.length + chunk.text.length > maxPartLength
       ) {
-        const finalized = finalizeBuilder(current);
-        if (finalized) {
-          parts.push(finalized);
-        }
-        current = createBuilder();
+        flushCurrent();
         appendToBuilder(current, chunk, "");
         continue;
       }

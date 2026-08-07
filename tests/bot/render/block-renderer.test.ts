@@ -135,6 +135,11 @@ describe("bot/render/block-renderer", () => {
       entities: [{ type: "pre", offset: 0, length: 63 }],
       fallbackText: "Name    | Score\n--------|------\napi.js  | +1.5 \nalert() | -1.5 ",
       source: "entities",
+      tableRows: [
+        ["Name", "Score"],
+        ["api.js", "+1.5"],
+        ["alert()", "-1.5"],
+      ],
     });
   });
 
