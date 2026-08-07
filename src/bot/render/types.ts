@@ -9,6 +9,7 @@ export interface TelegramRenderedPart {
   source: "entities" | "plain";
   tableRows?: string[][];
   codeDetails?: { language?: string; text: string };
+  thinkingText?: string;
 }
 
 export interface TelegramRenderedBlock {
@@ -20,6 +21,7 @@ export interface TelegramRenderedBlock {
   source: "entities" | "plain";
   tableRows?: string[][];
   codeDetails?: { language?: string; text: string };
+  thinkingText?: string;
 }
 
 export type TelegramBlock =

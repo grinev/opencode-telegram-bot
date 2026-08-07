@@ -121,6 +121,9 @@ function createRenderedPartWithDetails(
   if (block.codeDetails) {
     part.codeDetails = block.codeDetails;
   }
+  if (block.thinkingText) {
+    part.thinkingText = block.thinkingText;
+  }
 
   return part;
 }
@@ -133,6 +136,7 @@ function clonePart(part: TelegramRenderedPart): TelegramRenderedPart {
     source: part.source,
     tableRows: part.tableRows ? part.tableRows.map((row) => [...row]) : undefined,
     codeDetails: part.codeDetails ? { ...part.codeDetails } : undefined,
+    thinkingText: part.thinkingText,
   };
 }
 

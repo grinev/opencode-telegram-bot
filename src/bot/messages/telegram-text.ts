@@ -93,11 +93,14 @@ function stripRichFormattingOptions<T extends TelegramSendMessageOptions | undef
 }
 
 export function getTelegramRenderedPartSignature(
-  part: Pick<TelegramRenderedPart, "text" | "entities" | "tableRows" | "codeDetails">,
+  part: Pick<
+    TelegramRenderedPart,
+    "text" | "entities" | "tableRows" | "codeDetails" | "thinkingText"
+  >,
 ): string {
   return `${part.text}\n${JSON.stringify(part.entities ?? null)}\n${JSON.stringify(
     part.tableRows ?? null,
-  )}\n${JSON.stringify(part.codeDetails ?? null)}`;
+  )}\n${JSON.stringify(part.codeDetails ?? null)}\n${JSON.stringify(part.thinkingText ?? null)}`;
 }
 
 function buildNativeTableRichMessage(part: TelegramRenderedPart): RichMessageParam | null {
@@ -153,8 +156,31 @@ function buildNativeCodeDetailsMessage(part: TelegramRenderedPart): RichMessageP
   };
 }
 
+function buildNativeThinkingMessage(part: TelegramRenderedPart): RichMessageParam | null {
+  if (!part.thinkingText) {
+    return null;
+  }
+
+  return {
+    blocks: [
+      {
+        type: "thinking",
+        text: part.thinkingText,
+      },
+    ],
+  };
+}
+
 function buildNativeRichMessage(part: TelegramRenderedPart): RichMessageParam | null {
   return buildNativeTableRichMessage(part) ?? buildNativeCodeDetailsMessage(part);
+}
+
+function buildNativeDraftRichMessage(part: TelegramRenderedPart): RichMessageParam | null {
+  return (
+    buildNativeTableRichMessage(part) ??
+    buildNativeCodeDetailsMessage(part) ??
+    buildNativeThinkingMessage(part)
+  );
 }
 
 export async function sendBotText({
@@ -324,7 +350,7 @@ export async function sendDraftBotPart({
     tableRows: part.tableRows?.length ?? 0,
   });
 
-  const nativeTableMessage = buildNativeRichMessage(part);
+  const nativeTableMessage = buildNativeDraftRichMessage(part);
   if (nativeTableMessage && api.sendRichMessageDraft) {
     try {
       await api.sendRichMessageDraft(chatId, draftId, nativeTableMessage as RichMessageDraftParam);

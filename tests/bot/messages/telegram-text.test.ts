@@ -4,6 +4,7 @@ import {
   editBotText,
   getTelegramRenderedPartSignature,
   sendBotText,
+  sendDraftBotPart,
   sendRenderedBotPart,
 } from "../../../src/bot/messages/telegram-text.js";
 
@@ -438,6 +439,39 @@ describe("bot/messages/telegram-text", () => {
         ],
       },
       undefined,
+    );
+  });
+
+  it("sends native thinking block via sendRichMessageDraft when part has thinkingText", async () => {
+    const sendRichMessageDraft = vi.fn().mockResolvedValue(true);
+    const sendMessageDraft = vi.fn();
+
+    await expect(
+      sendDraftBotPart({
+        api: { sendRichMessageDraft, sendMessageDraft },
+        chatId: 100,
+        draftId: 500,
+        part: {
+          text: "Thinking — Analysis\nline one",
+          fallbackText: "Thinking — Analysis\n> line one",
+          source: "entities",
+          thinkingText: "Thinking — Analysis\nline one",
+        },
+      }),
+    ).resolves.toEqual({
+      deliveredSignature: getTelegramRenderedPartSignature({
+        text: "Thinking — Analysis\nline one",
+        thinkingText: "Thinking — Analysis\nline one",
+      }),
+    });
+
+    expect(sendRichMessageDraft).toHaveBeenCalledTimes(1);
+    expect(sendRichMessageDraft).toHaveBeenCalledWith(
+      100,
+      500,
+      {
+        blocks: [{ type: "thinking", text: "Thinking — Analysis\nline one" }],
+      },
     );
   });
 });
