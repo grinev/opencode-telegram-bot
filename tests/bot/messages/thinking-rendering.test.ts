@@ -22,6 +22,7 @@ describe("bot/messages/thinking-rendering", () => {
         entities: [{ type: "expandable_blockquote", offset: header.length + 1, length: text.length }],
         fallbackText: `${header}\n> Line one\n> Line two`,
         source: "entities",
+        thinkingText: `${header}\n${text}`,
       },
     ]);
   });

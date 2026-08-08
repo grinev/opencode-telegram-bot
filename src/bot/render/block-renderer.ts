@@ -3,6 +3,8 @@ import { renderInlineNodesValidated } from "./inline-renderer.js";
 import type { BlockRenderMode, InlineNode, TelegramBlock, TelegramRenderedBlock } from "./types.js";
 import { validateTelegramEntities } from "./validator.js";
 
+const CODE_DETAILS_MIN_LINES = 8;
+
 interface RenderedSegment {
   text: string;
   fallbackText: string;
@@ -584,14 +586,23 @@ export function renderTelegramBlock(
         return createRenderedBlock(block.type, mode, block.text, block.text);
       }
 
-      return renderPreformattedBlock(block.type, mode, block.text, block.language);
+      {
+        const rendered = renderPreformattedBlock(block.type, mode, block.text, block.language);
+        const lineCount = block.text.split("\n").length;
+        if (lineCount >= CODE_DETAILS_MIN_LINES) {
+          rendered.codeDetails = { language: block.language, text: block.text };
+        }
+        return rendered;
+      }
     case "table": {
       const text = buildAlignedTableText(block.rows);
       if (mode === "plain" || mode === "line-by-line") {
         return createRenderedBlock(block.type, mode, text, text);
       }
 
-      return renderPreformattedBlock(block.type, mode, text);
+      const rendered = renderPreformattedBlock(block.type, mode, text);
+      rendered.tableRows = block.rows;
+      return rendered;
     }
     case "rule":
       return createRenderedBlock(block.type, mode, "──────────", "──────────");

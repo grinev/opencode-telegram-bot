@@ -4,6 +4,7 @@ import {
   editBotText,
   getTelegramRenderedPartSignature,
   sendBotText,
+  sendDraftBotPart,
   sendRenderedBotPart,
 } from "../../../src/bot/messages/telegram-text.js";
 
@@ -289,5 +290,188 @@ describe("bot/messages/telegram-text", () => {
     expect(editMessageText).toHaveBeenNthCalledWith(2, 100, 500, "Hello raw", {
       reply_markup: { inline_keyboard: [] },
     });
+  });
+
+  it("sends native rich table via sendRichMessage when part has tableRows", async () => {
+    const sendRichMessage = vi.fn().mockResolvedValue({ message_id: 777 });
+    const sendMessage = vi.fn();
+
+    await expect(
+      sendRenderedBotPart({
+        api: { sendMessage, sendRichMessage },
+        chatId: 100,
+        part: {
+          text: "A | B\n---|---\n1 | 2",
+          fallbackText: "A | B\n---|---\n1 | 2",
+          source: "plain",
+          tableRows: [
+            ["A", "B"],
+            ["1", "2"],
+          ],
+        },
+      }),
+    ).resolves.toEqual({
+      messageId: 777,
+      deliveredSignature: getTelegramRenderedPartSignature({
+        text: "A | B\n---|---\n1 | 2",
+        tableRows: [
+          ["A", "B"],
+          ["1", "2"],
+        ],
+      }),
+    });
+
+    expect(sendRichMessage).toHaveBeenCalledTimes(1);
+    expect(sendRichMessage).toHaveBeenCalledWith(
+      100,
+      {
+        blocks: [
+          {
+            type: "table",
+            cells: [
+              [
+                { text: "A", is_header: true, align: "left", valign: "top" },
+                { text: "B", is_header: true, align: "left", valign: "top" },
+              ],
+              [
+                { text: "1", align: "left", valign: "top" },
+                { text: "2", align: "left", valign: "top" },
+              ],
+            ],
+            is_bordered: true,
+          },
+        ],
+      },
+      undefined,
+    );
+  });
+
+  it("falls back to plain text when sendRichMessage is unavailable", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 123 });
+
+    await expect(
+      sendRenderedBotPart({
+        api: { sendMessage },
+        chatId: 100,
+        part: {
+          text: "A | B\n---|---\n1 | 2",
+          fallbackText: "A | B\n---|---\n1 | 2",
+          source: "plain",
+          tableRows: [
+            ["A", "B"],
+            ["1", "2"],
+          ],
+        },
+      }),
+    ).resolves.toEqual({
+      messageId: 123,
+      deliveredSignature: getTelegramRenderedPartSignature({ text: "A | B\n---|---\n1 | 2" }),
+    });
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith(100, "A | B\n---|---\n1 | 2", undefined);
+  });
+
+  it("falls back to plain text when native table send fails", async () => {
+    const sendRichMessage = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Bad Request: cannot send rich message"));
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 123 });
+
+    await expect(
+      sendRenderedBotPart({
+        api: { sendRichMessage, sendMessage },
+        chatId: 100,
+        part: {
+          text: "A | B\n---|---\n1 | 2",
+          fallbackText: "A | B\n---|---\n1 | 2",
+          source: "plain",
+          tableRows: [
+            ["A", "B"],
+            ["1", "2"],
+          ],
+        },
+      }),
+    ).resolves.toEqual({
+      messageId: 123,
+      deliveredSignature: getTelegramRenderedPartSignature({ text: "A | B\n---|---\n1 | 2" }),
+    });
+
+    expect(sendRichMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends native details block for large code parts via sendRichMessage", async () => {
+    const sendRichMessage = vi.fn().mockResolvedValue({ message_id: 778 });
+    const sendMessage = vi.fn();
+
+    const code = Array.from({ length: 10 }, (_, index) => `line ${index}`).join("\n");
+
+    await expect(
+      sendRenderedBotPart({
+        api: { sendMessage, sendRichMessage },
+        chatId: 100,
+        part: {
+          text: `\`\`\`ts\n${code}\n\`\`\``,
+          fallbackText: code,
+          source: "plain",
+          codeDetails: { language: "ts", text: code },
+        },
+      }),
+    ).resolves.toEqual({
+      messageId: 778,
+      deliveredSignature: getTelegramRenderedPartSignature({
+        text: `\`\`\`ts\n${code}\n\`\`\``,
+        codeDetails: { language: "ts", text: code },
+      }),
+    });
+
+    expect(sendRichMessage).toHaveBeenCalledTimes(1);
+    expect(sendRichMessage).toHaveBeenCalledWith(
+      100,
+      {
+        blocks: [
+          {
+            type: "details",
+            summary: "Code — ts (10 lines)",
+            blocks: [{ type: "pre", text: code, language: "ts" }],
+          },
+        ],
+      },
+      undefined,
+    );
+  });
+
+  it("sends native thinking block via sendRichMessageDraft when part has thinkingText", async () => {
+    const sendRichMessageDraft = vi.fn().mockResolvedValue(true);
+    const sendMessageDraft = vi.fn();
+
+    await expect(
+      sendDraftBotPart({
+        api: { sendRichMessageDraft, sendMessageDraft },
+        chatId: 100,
+        draftId: 500,
+        part: {
+          text: "Thinking — Analysis\nline one",
+          fallbackText: "Thinking — Analysis\n> line one",
+          source: "entities",
+          thinkingText: "Thinking — Analysis\nline one",
+        },
+      }),
+    ).resolves.toEqual({
+      deliveredSignature: getTelegramRenderedPartSignature({
+        text: "Thinking — Analysis\nline one",
+        thinkingText: "Thinking — Analysis\nline one",
+      }),
+    });
+
+    expect(sendRichMessageDraft).toHaveBeenCalledTimes(1);
+    expect(sendRichMessageDraft).toHaveBeenCalledWith(
+      100,
+      500,
+      {
+        blocks: [{ type: "thinking", text: "Thinking — Analysis\nline one" }],
+      },
+    );
   });
 });

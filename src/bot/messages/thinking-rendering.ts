@@ -60,6 +60,7 @@ function createThinkingPart(header: string, text: string, expandable: boolean): 
     entities: [entity],
     fallbackText: `${header}\n${quoteFallbackText(text)}`,
     source: "entities",
+    thinkingText: renderedText,
   };
 }
 
@@ -92,6 +93,7 @@ export function makeThinkingPayloadExpandable(
     ...payload,
     parts: payload.parts.map((part) => ({
       ...part,
+      thinkingText: part.thinkingText,
       entities: part.entities?.map((entity) =>
         entity.type === "blockquote" ? { ...entity, type: "expandable_blockquote" } : entity,
       ),

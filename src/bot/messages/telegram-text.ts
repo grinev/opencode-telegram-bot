@@ -6,9 +6,16 @@ import {
 } from "./send-with-markdown-fallback.js";
 import type { TelegramRenderedPart } from "../render/types.js";
 
-type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
+type SendMessageApi = Pick<Api<RawApi>, "sendMessage"> & {
+  sendRichMessage?: Api<RawApi>["sendRichMessage"];
+};
 type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
-type SendDraftApi = Pick<Api<RawApi>, "sendMessageDraft">;
+type SendDraftApi = Pick<Api<RawApi>, "sendMessageDraft"> & {
+  sendRichMessageDraft?: Api<RawApi>["sendRichMessageDraft"];
+};
+
+type RichMessageParam = Parameters<NonNullable<SendMessageApi["sendRichMessage"]>>[1];
+type RichMessageDraftParam = Parameters<NonNullable<SendDraftApi["sendRichMessageDraft"]>>[2];
 
 type TelegramSendMessageOptions = Parameters<SendMessageApi["sendMessage"]>[2];
 type TelegramEditMessageOptions = Parameters<EditMessageApi["editMessageText"]>[3];
@@ -86,9 +93,94 @@ function stripRichFormattingOptions<T extends TelegramSendMessageOptions | undef
 }
 
 export function getTelegramRenderedPartSignature(
-  part: Pick<TelegramRenderedPart, "text" | "entities">,
+  part: Pick<
+    TelegramRenderedPart,
+    "text" | "entities" | "tableRows" | "codeDetails" | "thinkingText"
+  >,
 ): string {
-  return `${part.text}\n${JSON.stringify(part.entities ?? null)}`;
+  return `${part.text}\n${JSON.stringify(part.entities ?? null)}\n${JSON.stringify(
+    part.tableRows ?? null,
+  )}\n${JSON.stringify(part.codeDetails ?? null)}\n${JSON.stringify(part.thinkingText ?? null)}`;
+}
+
+function buildNativeTableRichMessage(part: TelegramRenderedPart): RichMessageParam | null {
+  if (!part.tableRows?.length) {
+    return null;
+  }
+
+  const cells = part.tableRows.map((row, rowIndex) =>
+    row.map((cell) => ({
+      text: String(cell ?? ""),
+      ...(rowIndex === 0 ? { is_header: true as const } : {}),
+      align: "left" as const,
+      valign: "top" as const,
+    })),
+  );
+
+  return {
+    blocks: [
+      {
+        type: "table",
+        cells,
+        is_bordered: true,
+      },
+    ],
+  };
+}
+
+function buildNativeCodeDetailsMessage(part: TelegramRenderedPart): RichMessageParam | null {
+  if (!part.codeDetails) {
+    return null;
+  }
+
+  const { language, text } = part.codeDetails;
+  const lineCount = text.split("\n").length;
+  const summary = language
+    ? `Code — ${language} (${lineCount} lines)`
+    : `Code (${lineCount} lines)`;
+
+  return {
+    blocks: [
+      {
+        type: "details",
+        summary,
+        blocks: [
+          {
+            type: "pre",
+            text,
+            ...(language ? { language } : {}),
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function buildNativeThinkingMessage(part: TelegramRenderedPart): RichMessageParam | null {
+  if (!part.thinkingText) {
+    return null;
+  }
+
+  return {
+    blocks: [
+      {
+        type: "thinking",
+        text: part.thinkingText,
+      },
+    ],
+  };
+}
+
+function buildNativeRichMessage(part: TelegramRenderedPart): RichMessageParam | null {
+  return buildNativeTableRichMessage(part) ?? buildNativeCodeDetailsMessage(part);
+}
+
+function buildNativeDraftRichMessage(part: TelegramRenderedPart): RichMessageParam | null {
+  return (
+    buildNativeTableRichMessage(part) ??
+    buildNativeCodeDetailsMessage(part) ??
+    buildNativeThinkingMessage(part)
+  );
 }
 
 export async function sendBotText({
@@ -122,7 +214,21 @@ export async function sendRenderedBotPart({
     textLength: part.text.length,
     fallbackTextLength: part.fallbackText.length,
     entityCount: part.entities?.length ?? 0,
+    tableRows: part.tableRows?.length ?? 0,
   });
+
+  const nativeTableMessage = buildNativeRichMessage(part);
+  if (nativeTableMessage && api.sendRichMessage) {
+    try {
+      const sentMessage = await api.sendRichMessage(chatId, nativeTableMessage, rawOptions);
+      return {
+        messageId: sentMessage.message_id,
+        deliveredSignature: getTelegramRenderedPartSignature(part),
+      };
+    } catch (error) {
+      logger.warn("[Bot] Native table send failed, falling back to text part", error);
+    }
+  }
 
   if (!part.entities?.length) {
     const sentMessage = await api.sendMessage(chatId, part.text, rawOptions);
@@ -173,7 +279,20 @@ export async function editRenderedBotPart({
     textLength: part.text.length,
     fallbackTextLength: part.fallbackText.length,
     entityCount: part.entities?.length ?? 0,
+    tableRows: part.tableRows?.length ?? 0,
   });
+
+  const nativeTableMessage = buildNativeRichMessage(part);
+  if (nativeTableMessage) {
+    try {
+      await api.editMessageText(chatId, messageId, nativeTableMessage, rawOptions);
+      return {
+        deliveredSignature: getTelegramRenderedPartSignature(part),
+      };
+    } catch (error) {
+      logger.warn("[Bot] Native table edit failed, falling back to text edit", error);
+    }
+  }
 
   if (!part.entities?.length) {
     await api.editMessageText(chatId, messageId, part.text, rawOptions);
@@ -228,7 +347,20 @@ export async function sendDraftBotPart({
     draftId,
     textLength: part.text.length,
     entityCount: part.entities?.length ?? 0,
+    tableRows: part.tableRows?.length ?? 0,
   });
+
+  const nativeTableMessage = buildNativeDraftRichMessage(part);
+  if (nativeTableMessage && api.sendRichMessageDraft) {
+    try {
+      await api.sendRichMessageDraft(chatId, draftId, nativeTableMessage as RichMessageDraftParam);
+      return {
+        deliveredSignature: getTelegramRenderedPartSignature(part),
+      };
+    } catch (error) {
+      logger.warn("[Bot] Native table draft failed, falling back to text draft", error);
+    }
+  }
 
   if (!part.entities?.length) {
     await api.sendMessageDraft(chatId, draftId, part.text);
@@ -264,7 +396,21 @@ export async function completeDraftPart({
   logger.debug("[Bot] Completing draft with real message", {
     textLength: part.text.length,
     entityCount: part.entities?.length ?? 0,
+    tableRows: part.tableRows?.length ?? 0,
   });
+
+  const nativeTableMessage = buildNativeRichMessage(part);
+  if (nativeTableMessage && api.sendRichMessage) {
+    try {
+      const sentMessage = await api.sendRichMessage(chatId, nativeTableMessage, rawOptions);
+      return {
+        messageId: sentMessage.message_id,
+        deliveredSignature: getTelegramRenderedPartSignature(part),
+      };
+    } catch (error) {
+      logger.warn("[Bot] Native table complete failed, falling back to text", error);
+    }
+  }
 
   if (!part.entities?.length) {
     const sentMessage = await api.sendMessage(chatId, part.text, rawOptions);
