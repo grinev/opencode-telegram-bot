@@ -664,7 +664,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           this.compactProgressStreamer.clearSession(sessionId, "assistant_finalize_failed");
           assistantRunState.clearRun(sessionId, "assistant_finalize_failed");
           logger.error("Failed to send message to Telegram:", err);
-          logger.error("[Bot] CRITICAL: Stopping event processing due to error");
+          logger.error(`[Bot] Dropped the assistant response for session ${sessionId}`);
           summaryAggregator.clear();
           foregroundSessionState.markIdle(sessionId);
         } finally {
