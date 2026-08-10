@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { MessageCompletionInfo } from "../../../src/app/managers/summary-aggregation-manager.js";
 import {
+  createEmptyTaskAttemptEvidence,
   isGenuinelyEmptyAssistantResponse,
   isSafeZeroWorkEmptyCompletion,
+  mergeTaskAttemptEvidence,
 } from "../../../src/bot/services/empty-completion-policy.js";
 
 function createInfo(overrides: Partial<MessageCompletionInfo> = {}): MessageCompletionInfo {
@@ -41,5 +43,73 @@ describe("empty completion policy", () => {
       ),
     ).toBe(false);
     expect(isSafeZeroWorkEmptyCompletion(createInfo({ finishReason: "stop" }))).toBe(false);
+  });
+
+  it("fails closed when any turn is missing token or cost data", () => {
+    expect(isSafeZeroWorkEmptyCompletion(createInfo({ tokens: undefined }))).toBe(false);
+    expect(isSafeZeroWorkEmptyCompletion(createInfo({ cost: undefined }))).toBe(false);
+  });
+
+  describe("attempt-wide evidence aggregation", () => {
+    it("keeps a single zero-work empty turn retry-safe", () => {
+      const evidence = mergeTaskAttemptEvidence(
+        createEmptyTaskAttemptEvidence(),
+        createInfo(),
+      );
+      expect(isSafeZeroWorkEmptyCompletion(evidence)).toBe(true);
+    });
+
+    it("blocks retry when an earlier turn used a tool", () => {
+      const earlier = createInfo({ hasToolActivity: true, tokens: { ...createInfo().tokens! } });
+      const evidence = mergeTaskAttemptEvidence(createEmptyTaskAttemptEvidence(), earlier);
+      const final = mergeTaskAttemptEvidence(evidence, createInfo());
+      expect(isSafeZeroWorkEmptyCompletion(final)).toBe(false);
+    });
+
+    it("blocks retry when an earlier turn reasoned", () => {
+      const earlier = createInfo({ hasReasoningActivity: true });
+      const evidence = mergeTaskAttemptEvidence(createEmptyTaskAttemptEvidence(), earlier);
+      const final = mergeTaskAttemptEvidence(evidence, createInfo());
+      expect(isSafeZeroWorkEmptyCompletion(final)).toBe(false);
+    });
+
+    it("blocks retry when an earlier turn consumed tokens even if the final is empty", () => {
+      const earlier = createInfo({
+        tokens: { input: 42, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      });
+      const evidence = mergeTaskAttemptEvidence(createEmptyTaskAttemptEvidence(), earlier);
+      const final = mergeTaskAttemptEvidence(evidence, createInfo());
+      expect(isSafeZeroWorkEmptyCompletion(final)).toBe(false);
+    });
+
+    it("blocks retry when any turn lacked token or cost reporting", () => {
+      const missingTokens = createInfo({ tokens: undefined });
+      const evidence = mergeTaskAttemptEvidence(createEmptyTaskAttemptEvidence(), missingTokens);
+      expect(isSafeZeroWorkEmptyCompletion(mergeTaskAttemptEvidence(evidence, createInfo()))).toBe(
+        false,
+      );
+
+      const missingCost = createInfo({ cost: undefined });
+      const evidence2 = mergeTaskAttemptEvidence(createEmptyTaskAttemptEvidence(), missingCost);
+      expect(isSafeZeroWorkEmptyCompletion(mergeTaskAttemptEvidence(evidence2, createInfo()))).toBe(
+        false,
+      );
+    });
+
+    it("uses the last known finish reason and ORs activity flags", () => {
+      const evidence = mergeTaskAttemptEvidence(
+        createEmptyTaskAttemptEvidence(),
+        createInfo({ finishReason: "stop" }),
+      );
+      const final = mergeTaskAttemptEvidence(evidence, createInfo({ finishReason: "length" }));
+      expect(final.finishReason).toBe("length");
+      expect(final.hasToolActivity).toBe(false);
+
+      const tooled = mergeTaskAttemptEvidence(
+        createEmptyTaskAttemptEvidence(),
+        createInfo({ hasToolActivity: true }),
+      );
+      expect(mergeTaskAttemptEvidence(tooled, createInfo()).hasToolActivity).toBe(true);
+    });
   });
 });

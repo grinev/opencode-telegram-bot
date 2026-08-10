@@ -7,7 +7,7 @@ import { t } from "../../i18n/index.js";
 import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
 import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
 import { markAttachedSessionIdle } from "../../app/services/attach-service.js";
-import { clearPromptResponseMode } from "../handlers/prompt.js";
+import { clearPromptResponseMode, clearPromptRetry } from "../handlers/prompt.js";
 import { markUserAbortRequested } from "../../app/managers/abort-suppression-manager.js";
 import { promptQueue } from "../../app/managers/prompt-queue-manager.js";
 import { promptAttachment } from "../../app/managers/prompt-attachment-manager.js";
@@ -29,6 +29,7 @@ async function releaseAbortBusyState(sessionId: string, reason: string): Promise
   assistantRunState.clearRun(sessionId, reason);
   await markAttachedSessionIdle(sessionId);
   clearPromptResponseMode(sessionId);
+  clearPromptRetry(sessionId);
 }
 
 async function pollSessionStatus(

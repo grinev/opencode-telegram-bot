@@ -7,7 +7,7 @@ import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
 import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
-import { clearPromptResponseMode } from "../handlers/prompt.js";
+import { clearPromptResponseMode, clearPromptRetry } from "../handlers/prompt.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 
@@ -27,6 +27,7 @@ export async function detachCommand(ctx: CommandContext<Context>): Promise<void>
 
     detachAttachedSession("detach_command");
     clearPromptResponseMode(currentSession.id);
+    clearPromptRetry(currentSession.id);
     foregroundSessionState.markIdle(currentSession.id);
     assistantRunState.clearRun(currentSession.id, "detach_command");
     clearAllInteractionState("detach_command");

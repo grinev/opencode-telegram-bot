@@ -33,6 +33,14 @@ import {
 import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
 import { promptAttachment } from "../../app/managers/prompt-attachment-manager.js";
 import { resolvePendingAttachment } from "../../app/services/prompt-attachment-service.js";
+import { scheduledTaskRuntime } from "../../app/services/scheduled-task-runtime-service.js";
+import { dispatchNextQueuedPrompt } from "./prompt-queue-dispatch.js";
+import {
+  createEmptyTaskAttemptEvidence,
+  isSafeZeroWorkEmptyCompletion,
+  mergeTaskAttemptEvidence,
+  type TaskAttemptEvidence,
+} from "../services/empty-completion-policy.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
@@ -48,17 +56,26 @@ export interface PromptDispatchOptions {
   variant?: string;
 }
 
-interface PromptRetryState {
+/**
+ * Lifecycle of a single prompt attempt. Distinguishes the original attempt from
+ * the one automatic retry, guards session.idle events that close the original
+ * attempt while the retry is in flight, and accumulates conservative work
+ * evidence across every assistant turn of the current attempt.
+ */
+interface PromptAttemptState {
   bot: Bot<Context>;
   chatId: number;
   promptOptions: PromptDispatchOptions;
   promptText: string;
   responseMode: PromptResponseMode;
-  attempted: boolean;
-  retryIdlePending: boolean;
+  retryDispatched: boolean;
+  idleGuard: boolean;
+  workEvidence: TaskAttemptEvidence;
 }
 
-const promptRetryStates = new Map<string, PromptRetryState>();
+const promptRetryStates = new Map<string, PromptAttemptState>();
+
+export type EmptyCompletionOutcome = "retried" | "failed" | "no_retry" | "ignored";
 
 export type PromptResponseMode = "text_only" | "text_and_tts";
 
@@ -90,12 +107,13 @@ export function consumePromptResponseMode(sessionId: string): PromptResponseMode
 
 export function registerPromptRetry(
   sessionId: string,
-  state: Omit<PromptRetryState, "attempted" | "retryIdlePending">,
+  state: Omit<PromptAttemptState, "retryDispatched" | "idleGuard" | "workEvidence">,
 ): void {
   promptRetryStates.set(sessionId, {
     ...state,
-    attempted: false,
-    retryIdlePending: false,
+    retryDispatched: false,
+    idleGuard: false,
+    workEvidence: createEmptyTaskAttemptEvidence(),
   });
 }
 
@@ -103,28 +121,105 @@ export function clearPromptRetry(sessionId: string): void {
   promptRetryStates.delete(sessionId);
 }
 
-export function hasPromptRetryAttempted(sessionId: string): boolean {
-  return promptRetryStates.get(sessionId)?.attempted ?? false;
+export function clearAllPromptRetry(): void {
+  promptRetryStates.clear();
 }
 
-export function consumePromptRetryIdle(sessionId: string): boolean {
+export function hasPromptRetryAttempted(sessionId: string): boolean {
+  return promptRetryStates.get(sessionId)?.retryDispatched ?? false;
+}
+
+export function getPromptRetryChatId(sessionId: string): number | null {
+  return promptRetryStates.get(sessionId)?.chatId ?? null;
+}
+
+/**
+ * Merges the completion evidence of one assistant turn into the running
+ * attempt-wide evidence, so a later empty completion is judged by everything the
+ * run actually did, not by the final message alone.
+ */
+export function recordAttemptEvidence(
+  sessionId: string,
+  evidence: TaskAttemptEvidence,
+): void {
   const state = promptRetryStates.get(sessionId);
-  if (!state?.retryIdlePending) {
-    return false;
+  if (!state) {
+    return;
   }
 
-  state.retryIdlePending = false;
-  return true;
+  state.workEvidence = mergeTaskAttemptEvidence(state.workEvidence, evidence);
+}
+
+/**
+ * Guards the idle event that closes the original empty completion while the
+ * automatic retry is still in flight. A stale or duplicate idle must never
+ * finish the active retry early, emit a footer, or dispatch queued work. The
+ * guard stays up until the retry completion clears the state.
+ */
+export function consumePromptRetryIdle(sessionId: string): boolean {
+  return promptRetryStates.get(sessionId)?.idleGuard === true;
+}
+
+/**
+ * Decides what an empty completion means for the current prompt attempt:
+ * retried (zero-work original, retry dispatched), failed (the retry itself came
+ * back empty), no_retry (work evidence says the run is not provably zero-work),
+ * or ignored (no prompt attempt is registered for this session).
+ */
+export function handleEmptyCompletion(sessionId: string): EmptyCompletionOutcome {
+  const state = promptRetryStates.get(sessionId);
+  if (!state) {
+    return "ignored";
+  }
+
+  if (!state.retryDispatched && isSafeZeroWorkEmptyCompletion(state.workEvidence)) {
+    return retryPromptOnce(sessionId) ? "retried" : "no_retry";
+  }
+
+  if (state.retryDispatched) {
+    clearPromptRetry(sessionId);
+    return "failed";
+  }
+
+  clearPromptRetry(sessionId);
+  return "no_retry";
+}
+
+/**
+ * Clears the retry state and restores a coherent idle state after the retry API
+ * call itself failed. Only the state this attempt registered is invalidated, so
+ * a slower duplicate callback can never wipe out a newer prompt's state.
+ */
+function abandonRetryAttempt(
+  sessionId: string,
+  state: PromptAttemptState,
+  reason: string,
+): void {
+  if (promptRetryStates.get(sessionId) !== state) {
+    return;
+  }
+
+  clearPromptRetry(sessionId);
+  foregroundSessionState.markIdle(sessionId);
+  void markAttachedSessionIdle(sessionId);
+  assistantRunState.clearRun(sessionId, reason);
+  clearPromptResponseMode(sessionId);
+  void state.bot.api.sendMessage(state.chatId, t("bot.prompt_send_error")).catch(() => {});
+  // The idle that would normally drive the queue was consumed by the guard, so
+  // the canonical lifecycle is resumed from here.
+  void dispatchNextQueuedPrompt();
+  void scheduledTaskRuntime.flushDeferredDeliveries();
 }
 
 export function retryPromptOnce(sessionId: string): boolean {
   const state = promptRetryStates.get(sessionId);
-  if (!state || state.attempted) {
+  if (!state || state.retryDispatched) {
     return false;
   }
 
-  state.attempted = true;
-  state.retryIdlePending = true;
+  state.retryDispatched = true;
+  state.idleGuard = true;
+  state.workEvidence = createEmptyTaskAttemptEvidence();
   foregroundSessionState.markBusy(sessionId, state.promptOptions.directory);
   void markAttachedSessionBusy(sessionId);
   assistantRunState.startRun(sessionId, {
@@ -147,20 +242,18 @@ export function retryPromptOnce(sessionId: string): boolean {
         return;
       }
 
-      clearPromptRetry(sessionId);
-      foregroundSessionState.markIdle(sessionId);
-      void markAttachedSessionIdle(sessionId);
-      assistantRunState.clearRun(sessionId, "session_prompt_retry_api_error");
-      clearPromptResponseMode(sessionId);
-      void state.bot.api.sendMessage(state.chatId, t("bot.prompt_send_error")).catch(() => {});
+      logger.error(
+        `[Bot] Automatic empty-completion retry rejected by OpenCode: session=${sessionId}`,
+        error,
+      );
+      abandonRetryAttempt(sessionId, state, "session_prompt_retry_api_error");
     },
-    onError: () => {
-      clearPromptRetry(sessionId);
-      foregroundSessionState.markIdle(sessionId);
-      void markAttachedSessionIdle(sessionId);
-      assistantRunState.clearRun(sessionId, "session_prompt_retry_background_error");
-      clearPromptResponseMode(sessionId);
-      void state.bot.api.sendMessage(state.chatId, t("bot.prompt_send_error")).catch(() => {});
+    onError: (error) => {
+      logger.error(
+        `[Bot] Automatic empty-completion retry background failure: session=${sessionId}`,
+        error,
+      );
+      abandonRetryAttempt(sessionId, state, "session_prompt_retry_background_error");
     },
   });
 

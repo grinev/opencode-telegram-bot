@@ -34,11 +34,14 @@ import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import {
+  clearAllPromptRetry,
   clearPromptResponseMode,
   clearPromptRetry,
   consumePromptRetryIdle,
+  getPromptRetryChatId,
+  handleEmptyCompletion,
   hasPromptRetryAttempted,
-  retryPromptOnce,
+  recordAttemptEvidence,
 } from "../handlers/prompt.js";
 import {
   reconcileBusyState,
@@ -60,7 +63,10 @@ import {
 import { formatAssistantRunFooter } from "../../app/formatters/assistant-run-footer-formatter.js";
 import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
 import { scheduledTaskRuntime } from "../../app/services/scheduled-task-runtime-service.js";
-import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
+import {
+  assistantRunState,
+  type AssistantRunInfo,
+} from "../../app/managers/assistant-run-state-manager.js";
 import { ResponseStreamer, type StreamingMessagePayload } from "../streaming/response-streamer.js";
 import { ToolCallStreamer, type ToolStreamKey } from "../streaming/tool-call-streamer.js";
 import { RunningToolTracker, type RunningToolTick } from "../streaming/running-tool-tracker.js";
@@ -103,7 +109,6 @@ import {
 } from "./assistant-response-export-service.js";
 import {
   isGenuinelyEmptyAssistantResponse,
-  isSafeZeroWorkEmptyCompletion,
 } from "./empty-completion-policy.js";
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
@@ -159,6 +164,15 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     { callId: string; activity: string }
   >();
   private readonly subagentSnapshots = new Map<string, SubagentInfo[]>();
+  // Terminal assistant response of the in-flight run, keyed by session. Replaced
+  // by each delivered non-empty completion and marked null when a completion is
+  // empty, so a run that ends without a deliverable never overwrites the
+  // previous last good response. The chatId is captured from the originating
+  // completion rather than the mutable service-wide chat context.
+  private readonly pendingFinalResponses = new Map<
+    string,
+    { chatId: number; text: string } | null
+  >();
 
   constructor() {
     this.runningToolTracker = new RunningToolTracker({
@@ -503,8 +517,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     this.compactProgressFinalizationTasks.clear();
     this.thinkingSections.clear();
     this.sessionCompletionTasks.clear();
+    this.pendingFinalResponses.clear();
     this.clearToolElapsedState(null, reason);
     assistantRunState.clearAll(reason);
+    clearAllPromptRetry();
   }
 
   cleanup(reason: string): void {
@@ -588,6 +604,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         if (!this.botInstance || !this.chatIdInstance) {
           logger.error("Bot or chat ID not available for sending message");
           clearPromptResponseMode(sessionId);
+          clearPromptRetry(sessionId);
+          this.pendingFinalResponses.delete(sessionId);
           this.clearAssistantResponseStream(sessionId, messageId, "bot_context_missing");
           this.clearThinkingStream(sessionId, messageId, "bot_context_missing");
           this.toolCallStreamer.clearSession(sessionId, "bot_context_missing");
@@ -601,6 +619,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         const currentSession = getCurrentSession();
         if (currentSession?.id !== sessionId) {
           clearPromptResponseMode(sessionId);
+          clearPromptRetry(sessionId);
+          this.pendingFinalResponses.delete(sessionId);
           this.clearAssistantResponseStream(sessionId, messageId, "session_mismatch");
           this.clearThinkingStream(sessionId, messageId, "session_mismatch");
           this.toolCallStreamer.clearSession(sessionId, "session_mismatch");
@@ -616,25 +636,30 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         const chatId = this.chatIdInstance;
 
         try {
+          recordAttemptEvidence(sessionId, completionInfo);
+
           if (isGenuinelyEmptyAssistantResponse(messageText)) {
             this.clearAssistantResponseStream(sessionId, messageId, "empty_completion");
             this.clearThinkingStream(sessionId, messageId, "empty_completion");
             this.compactProgressStreamer.clearSession(sessionId, "empty_completion");
 
-            if (isSafeZeroWorkEmptyCompletion(completionInfo) && retryPromptOnce(sessionId)) {
-              await botApi.sendMessage(chatId, t("bot.empty_completion_retry"));
-            } else if (hasPromptRetryAttempted(sessionId)) {
-              clearPromptRetry(sessionId);
-              await botApi.sendMessage(chatId, t("bot.empty_completion_failed"));
-            } else {
-              clearPromptRetry(sessionId);
-              await botApi.sendMessage(chatId, t("bot.empty_completion_no_retry"));
+            this.pendingFinalResponses.set(sessionId, null);
+            const originChatId = getPromptRetryChatId(sessionId) ?? chatId;
+            const outcome = handleEmptyCompletion(sessionId);
+            if (outcome === "retried") {
+              await botApi.sendMessage(originChatId, t("bot.empty_completion_retry"));
+            } else if (outcome === "failed") {
+              await botApi.sendMessage(originChatId, t("bot.empty_completion_failed"));
+            } else if (outcome === "no_retry") {
+              await botApi.sendMessage(originChatId, t("bot.empty_completion_no_retry"));
             }
 
             return;
           }
 
-          clearPromptRetry(sessionId);
+          if (hasPromptRetryAttempted(sessionId)) {
+            clearPromptRetry(sessionId);
+          }
           assistantRunState.markResponseCompleted(sessionId, {
             agent: completionInfo.agent,
             providerID: completionInfo.providerID,
@@ -685,15 +710,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             },
           });
 
-          rememberAssistantResponse(chatId, sessionId, messageText);
-          if (shouldAutomaticallyExportAssistantResponse(messageText)) {
-            await sendAssistantResponseDocument(botApi, chatId, messageText).catch((error) => {
-              logger.warn(
-                `[Bot] Failed to send automatic Markdown response export: session=${sessionId}`,
-                error,
-              );
-            });
-          }
+          this.pendingFinalResponses.set(sessionId, { chatId, text: messageText });
 
           await sendTtsResponseForSession({
             api: botApi,
@@ -1165,6 +1182,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
       clearPromptResponseMode(sessionId);
+      await this.commitPendingFinalResponse(sessionId, completedRun);
+      clearPromptRetry(sessionId);
 
       if (!this.botInstance || !this.chatIdInstance) {
         foregroundSessionState.markIdle(sessionId);
@@ -1218,6 +1237,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       await markAttachedSessionIdle(sessionId);
       this.clearToolElapsedState(sessionId, "session_error");
       clearPromptRetry(sessionId);
+      this.pendingFinalResponses.delete(sessionId);
 
       if (!this.botInstance || !this.chatIdInstance) {
         clearPromptResponseMode(sessionId);
@@ -1655,6 +1675,41 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
     this.sessionCompletionTasks.set(sessionId, nextTask);
     return nextTask;
+  }
+
+  /**
+   * Stores the terminal successfully delivered assistant response of a finished
+   * run for /lastfile and automatic Markdown export. Intermediate commentary
+   * only overwrites the pending slot during the run, and a failed or empty run
+   * never commits, so the previous last good response is preserved.
+   */
+  private async commitPendingFinalResponse(
+    sessionId: string,
+    completedRun: AssistantRunInfo | null,
+  ): Promise<void> {
+    const pending = this.pendingFinalResponses.get(sessionId);
+    this.pendingFinalResponses.delete(sessionId);
+
+    if (
+      pending === undefined ||
+      pending === null ||
+      !completedRun?.hasCompletedResponse ||
+      !this.botInstance
+    ) {
+      return;
+    }
+
+    rememberAssistantResponse(pending.chatId, sessionId, pending.text);
+    if (shouldAutomaticallyExportAssistantResponse(pending.text)) {
+      await sendAssistantResponseDocument(this.botInstance.api, pending.chatId, pending.text).catch(
+        (error) => {
+          logger.warn(
+            `[Bot] Failed to send automatic Markdown response export: session=${sessionId}`,
+            error,
+          );
+        },
+      );
+    }
   }
 
   private finalizeCompactProgress(sessionId: string): Promise<void> {
