@@ -69,11 +69,23 @@ interface PromptAttemptState {
   promptText: string;
   responseMode: PromptResponseMode;
   retryDispatched: boolean;
-  idleGuard: boolean;
+  /** True once the retry produced a terminal-eligible non-empty response. From
+   *  that point the settle timer is the only thing that finalizes the retry, so
+   *  every session.idle - including a stale duplicate of the original attempt's
+   *  idle - is consumed and cannot finish the retry early. */
+  retryResponseDelivered: boolean;
+  settleTimer: ReturnType<typeof setTimeout> | null;
   workEvidence: TaskAttemptEvidence;
 }
 
 const promptRetryStates = new Map<string, PromptAttemptState>();
+
+// How long the retry stays "open" after its terminal response before the settle
+// timer finalizes it. Long enough to absorb a burst of stale/duplicate idle
+// events from the original attempt, short enough to stay imperceptible.
+const RETRY_SETTLE_MS = 300;
+
+let onRetrySettleCallback: ((sessionId: string) => void) | null = null;
 
 export type EmptyCompletionOutcome = "retried" | "failed" | "no_retry" | "ignored";
 
@@ -107,21 +119,39 @@ export function consumePromptResponseMode(sessionId: string): PromptResponseMode
 
 export function registerPromptRetry(
   sessionId: string,
-  state: Omit<PromptAttemptState, "retryDispatched" | "idleGuard" | "workEvidence">,
+  state: Omit<
+    PromptAttemptState,
+    "retryDispatched" | "retryResponseDelivered" | "settleTimer" | "workEvidence"
+  >,
 ): void {
   promptRetryStates.set(sessionId, {
     ...state,
     retryDispatched: false,
-    idleGuard: false,
+    retryResponseDelivered: false,
+    settleTimer: null,
     workEvidence: createEmptyTaskAttemptEvidence(),
   });
 }
 
+function clearRetrySettleTimer(state: PromptAttemptState): void {
+  if (state.settleTimer) {
+    clearTimeout(state.settleTimer);
+    state.settleTimer = null;
+  }
+}
+
 export function clearPromptRetry(sessionId: string): void {
+  const state = promptRetryStates.get(sessionId);
+  if (state) {
+    clearRetrySettleTimer(state);
+  }
   promptRetryStates.delete(sessionId);
 }
 
 export function clearAllPromptRetry(): void {
+  for (const state of promptRetryStates.values()) {
+    clearRetrySettleTimer(state);
+  }
   promptRetryStates.clear();
 }
 
@@ -131,6 +161,59 @@ export function hasPromptRetryAttempted(sessionId: string): boolean {
 
 export function getPromptRetryChatId(sessionId: string): number | null {
   return promptRetryStates.get(sessionId)?.chatId ?? null;
+}
+
+/**
+ * Arms (or re-arms) the retry settle timer. When it fires, the retry is
+ * finalized through the registered callback - the same idle finalization used
+ * by a normal run. The timer is cancelled on every retry lifecycle invalidation
+ * and replaced by a fresh one on every consumed idle and new message start, so
+ * a stale idle from the original attempt can never finalize the retry before
+ * its own idle.
+ */
+function armRetrySettle(state: PromptAttemptState, sessionId: string): void {
+  clearRetrySettleTimer(state);
+
+  state.settleTimer = setTimeout(() => {
+    state.settleTimer = null;
+    if (promptRetryStates.get(sessionId) !== state || !state.retryResponseDelivered) {
+      return;
+    }
+    onRetrySettleCallback?.(sessionId);
+  }, RETRY_SETTLE_MS);
+}
+
+export function setOnRetrySettle(callback: ((sessionId: string) => void) | null): void {
+  onRetrySettleCallback = callback;
+}
+
+/**
+ * Records that the retry produced a terminal-eligible non-empty response. The
+ * retry state is kept alive so every subsequent idle is still consumed, and the
+ * settle timer becomes the single point where the retry finalizes.
+ */
+export function markPromptRetryResponseDelivered(sessionId: string): void {
+  const state = promptRetryStates.get(sessionId);
+  if (!state) {
+    return;
+  }
+
+  state.retryResponseDelivered = true;
+  armRetrySettle(state, sessionId);
+}
+
+/**
+ * Extends the retry settle window because the retry produced more activity
+ * (a newer assistant message started), meaning the current candidate was
+ * intermediate. No-op unless a retry response was already delivered.
+ */
+export function resetPromptRetrySettle(sessionId: string): void {
+  const state = promptRetryStates.get(sessionId);
+  if (!state || !state.retryResponseDelivered) {
+    return;
+  }
+
+  armRetrySettle(state, sessionId);
 }
 
 /**
@@ -151,13 +234,26 @@ export function recordAttemptEvidence(
 }
 
 /**
- * Guards the idle event that closes the original empty completion while the
- * automatic retry is still in flight. A stale or duplicate idle must never
- * finish the active retry early, emit a footer, or dispatch queued work. The
- * guard stays up until the retry completion clears the state.
+ * Guards every idle event that belongs to a retry lifecycle. The guard only
+ * activates once the retry has actually been dispatched - a registered but
+ * never-replayed attempt must not swallow the normal idle finalization. While
+ * the guard is up the idle is consumed (never finalized); once a retry response
+ * was delivered the consume also extends the settle window, so the retry is
+ * finalized by its settle timer rather than by the first idle that happens to
+ * arrive. A stale or duplicate idle from the original attempt therefore cannot
+ * finish the retry early, emit a footer, commit /lastfile, export Markdown,
+ * mark the foreground idle, or dispatch queued prompts.
  */
 export function consumePromptRetryIdle(sessionId: string): boolean {
-  return promptRetryStates.get(sessionId)?.idleGuard === true;
+  const state = promptRetryStates.get(sessionId);
+  if (!state || !state.retryDispatched) {
+    return false;
+  }
+
+  if (state.retryResponseDelivered) {
+    armRetrySettle(state, sessionId);
+  }
+  return true;
 }
 
 /**
@@ -218,7 +314,8 @@ export function retryPromptOnce(sessionId: string): boolean {
   }
 
   state.retryDispatched = true;
-  state.idleGuard = true;
+  clearRetrySettleTimer(state);
+  state.retryResponseDelivered = false;
   state.workEvidence = createEmptyTaskAttemptEvidence();
   foregroundSessionState.markBusy(sessionId, state.promptOptions.directory);
   void markAttachedSessionBusy(sessionId);

@@ -41,7 +41,10 @@ import {
   getPromptRetryChatId,
   handleEmptyCompletion,
   hasPromptRetryAttempted,
+  markPromptRetryResponseDelivered,
   recordAttemptEvidence,
+  resetPromptRetrySettle,
+  setOnRetrySettle,
 } from "../handlers/prompt.js";
 import {
   reconcileBusyState,
@@ -109,6 +112,7 @@ import {
 } from "./assistant-response-export-service.js";
 import {
   isGenuinelyEmptyAssistantResponse,
+  isTerminalAssistantResponse,
 } from "./empty-completion-policy.js";
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
@@ -164,14 +168,16 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     { callId: string; activity: string }
   >();
   private readonly subagentSnapshots = new Map<string, SubagentInfo[]>();
-  // Terminal assistant response of the in-flight run, keyed by session. Replaced
-  // by each delivered non-empty completion and marked null when a completion is
-  // empty, so a run that ends without a deliverable never overwrites the
-  // previous last good response. The chatId is captured from the originating
-  // completion rather than the mutable service-wide chat context.
+  // Terminal assistant response of the in-flight run, keyed by session. A
+  // candidate is only established by a terminal-eligible (non-empty, no error,
+  // no tool activity) completion and is invalidated whenever a newer assistant
+  // message starts; marked null when a completion is empty, so a run that ends
+  // without a deliverable never overwrites the previous last good response. The
+  // chatId is captured from the originating prompt rather than the mutable
+  // service-wide chat context.
   private readonly pendingFinalResponses = new Map<
     string,
-    { chatId: number; text: string } | null
+    { chatId: number; text: string; messageId: string; hasError: boolean } | null
   >();
 
   constructor() {
@@ -247,6 +253,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       hasActiveStream: (sessionId) => this.hasActiveAssistantResponseStream(sessionId),
     });
     setPromptResponseModeClearerForReconciliation(clearPromptResponseMode);
+    setOnRetrySettle((sessionId) => {
+      void this.handleRetrySettle(sessionId);
+    });
 
     this.compactProgressStreamer = new CompactProgressStreamer({
       throttleMs: RESPONSE_STREAM_THROTTLE_MS,
@@ -554,6 +563,17 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       this.clearToolElapsedState(null, "summary_aggregator_clear");
     });
 
+    summaryAggregator.setOnAssistantMessageStarted((sessionId, messageId) => {
+      // Routed through the same serialized task queue as completions so the
+      // invalidation is observed in event order: an older completion that set
+      // the candidate always lands before the start that supersedes it.
+      void this.enqueueSessionCompletionTask(sessionId, () => {
+        this.invalidateIntermediateFinalCandidate(sessionId, messageId);
+        resetPromptRetrySettle(sessionId);
+        return Promise.resolve();
+      });
+    });
+
     summaryAggregator.setOnPartial((sessionId, messageId, messageText) => {
       if (!this.botInstance || !this.chatIdInstance) {
         return;
@@ -657,14 +677,17 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             return;
           }
 
-          if (hasPromptRetryAttempted(sessionId)) {
-            clearPromptRetry(sessionId);
+          const isTerminalResponse = isTerminalAssistantResponse(completionInfo);
+          if (isTerminalResponse) {
+            if (hasPromptRetryAttempted(sessionId)) {
+              markPromptRetryResponseDelivered(sessionId);
+            }
+            assistantRunState.markResponseCompleted(sessionId, {
+              agent: completionInfo.agent,
+              providerID: completionInfo.providerID,
+              modelID: completionInfo.modelID,
+            });
           }
-          assistantRunState.markResponseCompleted(sessionId, {
-            agent: completionInfo.agent,
-            providerID: completionInfo.providerID,
-            modelID: completionInfo.modelID,
-          });
 
           await this.completeThinkingStream(sessionId, messageId);
 
@@ -710,12 +733,23 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             },
           });
 
-          this.pendingFinalResponses.set(sessionId, { chatId, text: messageText });
+          // Intermediate commentary, truncated output, or an errored/aborted
+          // message is streamed so the user sees it, but never becomes the
+          // /lastfile candidate or the automatic Markdown export.
+          const originChatId = getPromptRetryChatId(sessionId) ?? chatId;
+          if (isTerminalResponse) {
+            this.pendingFinalResponses.set(sessionId, {
+              chatId: originChatId,
+              text: messageText,
+              messageId,
+              hasError: false,
+            });
+          }
 
           await sendTtsResponseForSession({
             api: botApi,
             sessionId,
-            chatId,
+            chatId: originChatId,
             text: messageText,
           });
         } catch (err) {
@@ -1173,64 +1207,12 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       if (consumePromptRetryIdle(sessionId)) {
         logger.debug(
-          `[Bot] Ignoring idle event that closed the retried empty completion: session=${sessionId}`,
+          `[Bot] Ignoring idle event while a retry lifecycle is active: session=${sessionId}`,
         );
         return;
       }
 
-      await markAttachedSessionIdle(sessionId);
-
-      const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
-      clearPromptResponseMode(sessionId);
-      await this.commitPendingFinalResponse(sessionId, completedRun);
-      clearPromptRetry(sessionId);
-
-      if (!this.botInstance || !this.chatIdInstance) {
-        foregroundSessionState.markIdle(sessionId);
-        return;
-      }
-
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
-        foregroundSessionState.markIdle(sessionId);
-        await scheduledTaskRuntime.flushDeferredDeliveries();
-        return;
-      }
-
-      try {
-        await Promise.all([
-          this.toolMessageBatcher.flushSession(sessionId, "session_idle"),
-          this.toolCallStreamer.flushSession(sessionId, "session_idle"),
-        ]);
-
-        if (getShowAssistantRunFooter() && completedRun?.hasCompletedResponse) {
-          const agent = completedRun.actualAgent || completedRun.configuredAgent;
-          const providerID = completedRun.actualProviderID || completedRun.configuredProviderID;
-          const modelID = completedRun.actualModelID || completedRun.configuredModelID;
-
-          if (agent && providerID && modelID) {
-            const keyboard = this.getCurrentReplyKeyboard();
-            await this.botInstance.api.sendMessage(
-              this.chatIdInstance,
-              formatAssistantRunFooter({
-                agent,
-                providerID,
-                modelID,
-                elapsedMs: Date.now() - completedRun.startedAt,
-              }),
-              {
-                ...(keyboard ? { reply_markup: keyboard } : {}),
-              },
-            );
-          }
-        }
-      } catch (err) {
-        logger.error("[Bot] Failed to send session idle footer:", err);
-      } finally {
-        foregroundSessionState.markIdle(sessionId);
-        await scheduledTaskRuntime.flushDeferredDeliveries();
-        void dispatchNextQueuedPrompt();
-      }
+      await this.finalizeIdleSession(sessionId);
     });
 
     summaryAggregator.setOnSessionError(async (sessionId, message) => {
@@ -1678,25 +1660,120 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   }
 
   /**
+   * A newer assistant message starting proves the previous pending candidate
+   * was only intermediate commentary. The candidate is dropped so a run that
+   * never delivers a terminal answer cannot commit it as /lastfile, export it,
+   * or report the task as complete.
+   */
+  private invalidateIntermediateFinalCandidate(sessionId: string, messageId: string): void {
+    const pending = this.pendingFinalResponses.get(sessionId);
+    if (!pending || pending.messageId === messageId) {
+      return;
+    }
+
+    logger.debug(
+      `[Bot] Invalidated intermediate final response candidate: session=${sessionId}, supersededMessageId=${pending.messageId}, startedMessageId=${messageId}`,
+    );
+    this.pendingFinalResponses.delete(sessionId);
+  }
+
+  /**
+   * Finalizes a retried run once its settle window has passed. The retry's own
+   * idle events are all consumed by the guard, so this is the single point
+   * where the retry is committed and its footer is emitted - a stale idle from
+   * the original attempt can never reach this path.
+   */
+  private async handleRetrySettle(sessionId: string): Promise<void> {
+    logger.debug(`[Bot] Finalizing retried completion after settle window: session=${sessionId}`);
+    this.clearToolElapsedState(sessionId, "retry_settle");
+    await this.sessionCompletionTasks.get(sessionId)?.catch(() => undefined);
+    await this.finalizeIdleSession(sessionId);
+  }
+
+  /**
+   * Shared idle finalization for a normal run and for a retried run whose
+   * settle timer fired. The success footer is emitted only when a terminal
+   * final response was actually committed, so a run that ended on intermediate
+   * or truncated output is never announced as a completed task.
+   */
+  private async finalizeIdleSession(sessionId: string): Promise<void> {
+    await markAttachedSessionIdle(sessionId);
+
+    const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
+    clearPromptResponseMode(sessionId);
+    const committedChatId = await this.commitPendingFinalResponse(sessionId, completedRun);
+    clearPromptRetry(sessionId);
+
+    if (!this.botInstance || !this.chatIdInstance) {
+      foregroundSessionState.markIdle(sessionId);
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession || currentSession.id !== sessionId) {
+      foregroundSessionState.markIdle(sessionId);
+      await scheduledTaskRuntime.flushDeferredDeliveries();
+      return;
+    }
+
+    try {
+      await Promise.all([
+        this.toolMessageBatcher.flushSession(sessionId, "session_idle"),
+        this.toolCallStreamer.flushSession(sessionId, "session_idle"),
+      ]);
+
+      if (getShowAssistantRunFooter() && completedRun && committedChatId !== null) {
+        const agent = completedRun.actualAgent || completedRun.configuredAgent;
+        const providerID = completedRun.actualProviderID || completedRun.configuredProviderID;
+        const modelID = completedRun.actualModelID || completedRun.configuredModelID;
+
+        if (agent && providerID && modelID) {
+          const keyboard = this.getCurrentReplyKeyboard();
+          await this.botInstance.api.sendMessage(
+            committedChatId,
+            formatAssistantRunFooter({
+              agent,
+              providerID,
+              modelID,
+              elapsedMs: Date.now() - completedRun.startedAt,
+            }),
+            {
+              ...(keyboard ? { reply_markup: keyboard } : {}),
+            },
+          );
+        }
+      }
+    } catch (err) {
+      logger.error("[Bot] Failed to send session idle footer:", err);
+    } finally {
+      foregroundSessionState.markIdle(sessionId);
+      await scheduledTaskRuntime.flushDeferredDeliveries();
+      void dispatchNextQueuedPrompt();
+    }
+  }
+
+  /**
    * Stores the terminal successfully delivered assistant response of a finished
-   * run for /lastfile and automatic Markdown export. Intermediate commentary
-   * only overwrites the pending slot during the run, and a failed or empty run
-   * never commits, so the previous last good response is preserved.
+   * run for /lastfile and automatic Markdown export, returning the originating
+   * chat the response is bound to (or null when nothing was committed).
+   * Intermediate commentary, errored/truncated messages, and empty runs never
+   * commit, so the previous last good response is preserved.
    */
   private async commitPendingFinalResponse(
     sessionId: string,
     completedRun: AssistantRunInfo | null,
-  ): Promise<void> {
+  ): Promise<number | null> {
     const pending = this.pendingFinalResponses.get(sessionId);
     this.pendingFinalResponses.delete(sessionId);
 
     if (
       pending === undefined ||
       pending === null ||
+      pending.hasError ||
       !completedRun?.hasCompletedResponse ||
       !this.botInstance
     ) {
-      return;
+      return null;
     }
 
     rememberAssistantResponse(pending.chatId, sessionId, pending.text);
@@ -1710,6 +1787,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         },
       );
     }
+    return pending.chatId;
   }
 
   private finalizeCompactProgress(sessionId: string): Promise<void> {

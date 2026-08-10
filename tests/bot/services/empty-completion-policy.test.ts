@@ -4,6 +4,7 @@ import {
   createEmptyTaskAttemptEvidence,
   isGenuinelyEmptyAssistantResponse,
   isSafeZeroWorkEmptyCompletion,
+  isTerminalAssistantResponse,
   mergeTaskAttemptEvidence,
 } from "../../../src/bot/services/empty-completion-policy.js";
 
@@ -110,6 +111,49 @@ describe("empty completion policy", () => {
         createInfo({ hasToolActivity: true }),
       );
       expect(mergeTaskAttemptEvidence(tooled, createInfo()).hasToolActivity).toBe(true);
+    });
+  });
+
+  describe("terminal response detection", () => {
+    it("treats a clean non-empty completion as terminal", () => {
+      expect(isTerminalAssistantResponse({ hasError: false, hasToolActivity: false })).toBe(true);
+      expect(isTerminalAssistantResponse({})).toBe(true);
+    });
+
+    it("rejects an errored or aborted completion", () => {
+      expect(isTerminalAssistantResponse({ hasError: true })).toBe(false);
+      expect(isTerminalAssistantResponse({ hasError: true, hasToolActivity: false })).toBe(false);
+    });
+
+    it("rejects a completion whose message called a tool", () => {
+      expect(isTerminalAssistantResponse({ hasToolActivity: true })).toBe(false);
+    });
+
+    it("rejects known non-terminal finish reasons but accepts unknown ones", () => {
+      expect(isTerminalAssistantResponse({ finishReason: "max_tokens" })).toBe(false);
+      expect(isTerminalAssistantResponse({ finishReason: "length" })).toBe(false);
+      expect(isTerminalAssistantResponse({ finishReason: "content_filter" })).toBe(false);
+      expect(isTerminalAssistantResponse({ finishReason: "tool_use" })).toBe(false);
+      expect(isTerminalAssistantResponse({ finishReason: "end_turn" })).toBe(true);
+      expect(isTerminalAssistantResponse({ finishReason: undefined })).toBe(true);
+      expect(isTerminalAssistantResponse({ finishReason: "unusual-reason" })).toBe(true);
+    });
+
+    it("fails closed when error and tool activity are combined with otherwise clean signals", () => {
+      expect(
+        isTerminalAssistantResponse({
+          hasError: true,
+          hasToolActivity: false,
+          finishReason: "end_turn",
+        }),
+      ).toBe(false);
+      expect(
+        isTerminalAssistantResponse({
+          hasError: false,
+          hasToolActivity: true,
+          finishReason: "end_turn",
+        }),
+      ).toBe(false);
     });
   });
 });

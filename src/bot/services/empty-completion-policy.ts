@@ -97,3 +97,55 @@ export function isSafeZeroWorkEmptyCompletion(evidence: TaskAttemptEvidence): bo
     hasUnknownFinishReason(evidence.finishReason)
   );
 }
+
+/**
+ * Finish reasons that prove a completed assistant message did NOT end with a
+ * terminal, successfully delivered answer. Anything else (including an unknown
+ * or missing reason) is treated as potentially terminal: the primary signals
+ * for a truncated or interrupted response are the upstream message error and
+ * tool activity, so the finish reason only ever disqualifies a known
+ * non-terminal value and never rejects a normal answer.
+ */
+const KNOWN_NON_TERMINAL_FINISH_REASONS = new Set([
+  "max_tokens",
+  "length",
+  "error",
+  "content_filter",
+  "tool_use",
+  "function_call",
+  "aborted",
+  "incomplete",
+]);
+
+export function isKnownNonTerminalFinishReason(finishReason: string | undefined): boolean {
+  const normalized = finishReason?.trim().toLowerCase() ?? "";
+  return normalized.length > 0 && KNOWN_NON_TERMINAL_FINISH_REASONS.has(normalized);
+}
+
+/**
+ * A completed non-empty assistant message is a terminal final-response
+ * candidate only when it survived with no upstream error, performed no tool
+ * activity (a message that called a tool is never the closing answer of a
+ * run), and did not end on a known non-terminal finish reason. The check is
+ * deliberately conservative: a run whose last message fails any of these
+ * signals is never reported as a completed task.
+ */
+export function isTerminalAssistantResponse(completion: {
+  hasError?: boolean;
+  hasToolActivity?: boolean;
+  finishReason?: string;
+}): boolean {
+  if (completion.hasError) {
+    return false;
+  }
+
+  if (completion.hasToolActivity) {
+    return false;
+  }
+
+  if (isKnownNonTerminalFinishReason(completion.finishReason)) {
+    return false;
+  }
+
+  return true;
+}

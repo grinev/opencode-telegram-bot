@@ -28,6 +28,11 @@ export interface MessageCompletionInfo {
   cost?: number;
   hasToolActivity: boolean;
   hasReasoningActivity: boolean;
+  /** True when the completed assistant message carries an upstream error
+   *  (aborted, output length, provider error, ...). Such a completion is not a
+   *  successfully delivered task response. */
+  hasError?: boolean;
+  errorName?: string;
 }
 
 type MessageCompleteCallback = (
@@ -36,6 +41,8 @@ type MessageCompleteCallback = (
   messageText: string,
   completionInfo: MessageCompletionInfo,
 ) => void;
+
+type AssistantMessageStartedCallback = (sessionId: string, messageId: string) => void;
 
 type MessagePartialCallback = (sessionId: string, messageId: string, messageText: string) => void;
 
@@ -304,6 +311,7 @@ class SummaryAggregator {
   private messageCount = 0;
   private lastUpdated = 0;
   private onCompleteCallback: MessageCompleteCallback | null = null;
+  private onAssistantMessageStartedCallback: AssistantMessageStartedCallback | null = null;
   private onPartialCallback: MessagePartialCallback | null = null;
   private onExternalUserInputCallback: ExternalUserInputCallback | null = null;
   private onToolCallback: ToolCallback | null = null;
@@ -357,6 +365,10 @@ class SummaryAggregator {
 
   setOnComplete(callback: MessageCompleteCallback): void {
     this.onCompleteCallback = callback;
+  }
+
+  setOnAssistantMessageStarted(callback: AssistantMessageStartedCallback): void {
+    this.onAssistantMessageStartedCallback = callback;
   }
 
   setOnPartial(callback: MessagePartialCallback): void {
@@ -1173,6 +1185,11 @@ class SummaryAggregator {
         });
         this.messageCount++;
         this.startTypingIndicator();
+
+        // Fired synchronously, like the completion callback: the consumer must
+        // observe the message start in event order so it can invalidate an
+        // older pending final response before any newer completion lands.
+        this.onAssistantMessageStartedCallback?.(info.sessionID, messageID);
       }
 
       const textState = this.getOrCreateTextMessageState(messageID);
@@ -1230,6 +1247,8 @@ class SummaryAggregator {
           cost: typeof info.cost === "number" ? info.cost : undefined,
           hasToolActivity: activity.hasToolActivity,
           hasReasoningActivity: activity.hasReasoningActivity,
+          hasError: info.error !== undefined,
+          errorName: info.error !== undefined ? String(info.error.name) : undefined,
         };
 
         logger.debug(
