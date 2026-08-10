@@ -13,6 +13,7 @@ const mocked = vi.hoisted(() => ({
   safeBackgroundTask: vi.fn(),
   dispatchNextQueuedPrompt: vi.fn(),
   promptAsyncMock: vi.fn(),
+  sessionStatusMock: vi.fn(),
 }));
 
 vi.mock("../../../src/opencode/events.js", () => ({
@@ -23,7 +24,7 @@ vi.mock("../../../src/opencode/events.js", () => ({
 vi.mock("../../../src/opencode/client.js", () => ({
   opencodeClient: {
     session: {
-      status: vi.fn().mockResolvedValue({ data: {}, error: null }),
+      status: mocked.sessionStatusMock,
       promptAsync: mocked.promptAsyncMock,
     },
   },
@@ -143,6 +144,8 @@ function emitAssistantCompleted(summaryAggregator: { processEvent(event: Event):
         agent: "test-agent",
         providerID: "test-provider",
         modelID: "test-model",
+        // The authoritative OpenCode message finish for a successful run.
+        finish: "stop",
         time: { created: Date.now() - 1000, completed: Date.now() },
       },
     },
@@ -355,6 +358,8 @@ describe("bot/services/event-subscription-service", () => {
     mocked.dispatchNextQueuedPrompt.mockReset();
     mocked.promptAsyncMock.mockReset();
     mocked.promptAsyncMock.mockResolvedValue({ data: {}, error: null });
+    mocked.sessionStatusMock.mockReset();
+    mocked.sessionStatusMock.mockResolvedValue({ data: {}, error: null });
 
     const exportService = await import("../../../src/bot/services/assistant-response-export-service.js");
     exportService.__resetAssistantResponseExportsForTests();
@@ -857,6 +862,9 @@ describe("bot/services/event-subscription-service", () => {
             agent: "test-agent",
             providerID: "test-provider",
             modelID: "test-model",
+            // The authoritative OpenCode message finish for a successful run;
+            // overrides may replace it with a non-terminal reason.
+            finish: "stop",
             time: { created: Date.now() - 1000, completed: Date.now() },
             ...overrides,
           },
@@ -1413,7 +1421,12 @@ describe("bot/services/event-subscription-service", () => {
         emitAssistantCompleted(summaryAggregator, "message-2");
 
         // Stale duplicate idle of the ORIGINAL attempt arrives AFTER the retry
-        // produced its response. It must be fully inert.
+        // produced its response, while the authoritative session status says the
+        // retry is still busy. It must be fully inert.
+        mocked.sessionStatusMock.mockResolvedValueOnce({
+          data: { "session-1": { type: "busy" } },
+          error: null,
+        });
         emitSessionIdle(summaryAggregator);
         await flushRealDispatch();
         expect(countFooters(api)).toBe(0);
@@ -1422,7 +1435,9 @@ describe("bot/services/event-subscription-service", () => {
         expect(foregroundSessionState.isBusy()).toBe(true);
         expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
 
-        // The real retry idle then finalizes exactly once.
+        // The real retry idle, with the authoritative status now genuinely idle,
+        // finalizes exactly once.
+        mocked.sessionStatusMock.mockResolvedValueOnce({ data: {}, error: null });
         emitSessionIdle(summaryAggregator);
         await vi.waitFor(
           () => {
@@ -1466,6 +1481,171 @@ describe("bot/services/event-subscription-service", () => {
         );
         expect(footerCalls).toHaveLength(1);
         expect(footerCalls[0][0]).toBe(42);
+      });
+
+      it("fails closed for a non-empty response with a missing or unknown finish reason", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+        const { assistantRunState } = await import(
+          "../../../src/app/managers/assistant-run-state-manager.js"
+        );
+
+        emitAssistantText(summaryAggregator, "Good answer", "message-0");
+        emitAssistantCompleted(summaryAggregator, "message-0");
+        emitSessionIdle(summaryAggregator);
+        await vi.waitFor(() => {
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+        });
+
+        for (const finish of [undefined, "unknown"]) {
+          assistantRunState.startRun("session-1", {
+            startedAt: Date.now(),
+            configuredAgent: "test-agent",
+            configuredProviderID: "test-provider",
+            configuredModelID: "test-model",
+          });
+          const footersBefore = countFooters(api);
+          const messageId = `message-${finish === undefined ? "missing" : "unknown"}`;
+
+          // Partial/truncated-looking response: non-empty, no explicit error,
+          // finish missing or unknown. Must never be reported as complete.
+          emitAssistantText(summaryAggregator, "Partial answer that looks truncated", messageId);
+          emitAssistantCompleted(summaryAggregator, messageId, { finish });
+          emitSessionIdle(summaryAggregator);
+
+          await flushRealDispatch();
+          await vi.waitFor(() => {
+            expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(
+              "Good answer",
+            );
+          });
+          expect(countFooters(api)).toBe(footersBefore);
+          expect(api.sendDocument).not.toHaveBeenCalled();
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+        }
+      });
+
+      it("does not finalize the retry on a stale idle even after a long delay while the session is busy", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+        const { foregroundSessionState } = await import(
+          "../../../src/app/managers/foreground-session-state-manager.js"
+        );
+        await registerPromptAttempt(api);
+
+        emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+        emitSessionIdle(summaryAggregator);
+
+        await vi.waitFor(() => {
+          expect(mocked.safeBackgroundTask).toHaveBeenCalledWith(
+            expect.objectContaining({ taskName: "session.promptAsync.retry" }),
+          );
+        });
+
+        const retryOptions = getRetryTaskOptions();
+        await retryOptions.task();
+        retryOptions.onSuccess?.({ error: null });
+
+        const longText = `# Heading\n\n${"x".repeat(6000)}`;
+        emitAssistantText(summaryAggregator, longText, "message-2");
+        emitAssistantCompleted(summaryAggregator, "message-2");
+
+        // Stale original idle while the authoritative status says the retry is
+        // still busy. It must be fully inert.
+        mocked.sessionStatusMock.mockResolvedValueOnce({
+          data: { "session-1": { type: "busy" } },
+          error: null,
+        });
+        emitSessionIdle(summaryAggregator);
+        await flushRealDispatch();
+        expect(countFooters(api)).toBe(0);
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBeNull();
+        expect(api.sendDocument).not.toHaveBeenCalled();
+        expect(foregroundSessionState.isBusy()).toBe(true);
+        expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
+
+        // Wait LONGER than the old 300ms timer window: nothing may finalize.
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await flushRealDispatch();
+        expect(countFooters(api)).toBe(0);
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBeNull();
+        expect(api.sendDocument).not.toHaveBeenCalled();
+        expect(foregroundSessionState.isBusy()).toBe(true);
+        expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
+
+        // The genuine retry idle, with authoritative idle status, finalizes
+        // exactly once and exports the long response.
+        mocked.sessionStatusMock.mockResolvedValueOnce({ data: {}, error: null });
+        emitSessionIdle(summaryAggregator);
+        await vi.waitFor(
+          () => {
+            expect(api.sendDocument).toHaveBeenCalledTimes(1);
+          },
+          { timeout: 5000 },
+        );
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(longText);
+        expect(foregroundSessionState.isBusy()).toBe(false);
+        expect(countFooters(api)).toBe(1);
+        expect(mocked.dispatchNextQueuedPrompt).toHaveBeenCalledTimes(1);
+        expect(mocked.safeBackgroundTask).toHaveBeenCalledTimes(1);
+      });
+
+      it("fails closed when the authoritative session status lookup fails during retry finalization", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+        const { foregroundSessionState } = await import(
+          "../../../src/app/managers/foreground-session-state-manager.js"
+        );
+        await registerPromptAttempt(api);
+
+        emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+        emitSessionIdle(summaryAggregator);
+
+        await vi.waitFor(() => {
+          expect(mocked.safeBackgroundTask).toHaveBeenCalledWith(
+            expect.objectContaining({ taskName: "session.promptAsync.retry" }),
+          );
+        });
+
+        const retryOptions = getRetryTaskOptions();
+        await retryOptions.task();
+        retryOptions.onSuccess?.({ error: null });
+
+        emitAssistantText(summaryAggregator, "Recovered answer", "message-2");
+        emitAssistantCompleted(summaryAggregator, "message-2");
+
+        for (const failingStatus of [
+          { data: null, error: new Error("status lookup failed") },
+          { data: { "session-1": { type: "unexpected" } }, error: null },
+        ]) {
+          mocked.sessionStatusMock.mockResolvedValueOnce(failingStatus);
+          emitSessionIdle(summaryAggregator);
+          await flushRealDispatch();
+          expect(countFooters(api)).toBe(0);
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBeNull();
+          expect(api.sendDocument).not.toHaveBeenCalled();
+          expect(foregroundSessionState.isBusy()).toBe(true);
+          expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
+        }
+
+        // A later genuine idle with authoritative idle status still finalizes
+        // exactly once.
+        mocked.sessionStatusMock.mockResolvedValueOnce({ data: {}, error: null });
+        emitSessionIdle(summaryAggregator);
+        await vi.waitFor(
+          () => {
+            expect(countFooters(api)).toBe(1);
+          },
+          { timeout: 5000 },
+        );
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(
+          "Recovered answer",
+        );
+        expect(foregroundSessionState.isBusy()).toBe(false);
+        expect(countFooters(api)).toBe(1);
       });
     });
   });

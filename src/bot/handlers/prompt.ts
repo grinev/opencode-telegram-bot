@@ -70,22 +70,14 @@ interface PromptAttemptState {
   responseMode: PromptResponseMode;
   retryDispatched: boolean;
   /** True once the retry produced a terminal-eligible non-empty response. From
-   *  that point the settle timer is the only thing that finalizes the retry, so
-   *  every session.idle - including a stale duplicate of the original attempt's
-   *  idle - is consumed and cannot finish the retry early. */
+   *  that point an idle is only finalized after the authoritative OpenCode
+   *  session status confirms the session is genuinely idle; a stale idle from
+   *  the original attempt while the retry is still busy is consumed instead. */
   retryResponseDelivered: boolean;
-  settleTimer: ReturnType<typeof setTimeout> | null;
   workEvidence: TaskAttemptEvidence;
 }
 
 const promptRetryStates = new Map<string, PromptAttemptState>();
-
-// How long the retry stays "open" after its terminal response before the settle
-// timer finalizes it. Long enough to absorb a burst of stale/duplicate idle
-// events from the original attempt, short enough to stay imperceptible.
-const RETRY_SETTLE_MS = 300;
-
-let onRetrySettleCallback: ((sessionId: string) => void) | null = null;
 
 export type EmptyCompletionOutcome = "retried" | "failed" | "no_retry" | "ignored";
 
@@ -119,39 +111,21 @@ export function consumePromptResponseMode(sessionId: string): PromptResponseMode
 
 export function registerPromptRetry(
   sessionId: string,
-  state: Omit<
-    PromptAttemptState,
-    "retryDispatched" | "retryResponseDelivered" | "settleTimer" | "workEvidence"
-  >,
+  state: Omit<PromptAttemptState, "retryDispatched" | "retryResponseDelivered" | "workEvidence">,
 ): void {
   promptRetryStates.set(sessionId, {
     ...state,
     retryDispatched: false,
     retryResponseDelivered: false,
-    settleTimer: null,
     workEvidence: createEmptyTaskAttemptEvidence(),
   });
 }
 
-function clearRetrySettleTimer(state: PromptAttemptState): void {
-  if (state.settleTimer) {
-    clearTimeout(state.settleTimer);
-    state.settleTimer = null;
-  }
-}
-
 export function clearPromptRetry(sessionId: string): void {
-  const state = promptRetryStates.get(sessionId);
-  if (state) {
-    clearRetrySettleTimer(state);
-  }
   promptRetryStates.delete(sessionId);
 }
 
 export function clearAllPromptRetry(): void {
-  for (const state of promptRetryStates.values()) {
-    clearRetrySettleTimer(state);
-  }
   promptRetryStates.clear();
 }
 
@@ -164,33 +138,9 @@ export function getPromptRetryChatId(sessionId: string): number | null {
 }
 
 /**
- * Arms (or re-arms) the retry settle timer. When it fires, the retry is
- * finalized through the registered callback - the same idle finalization used
- * by a normal run. The timer is cancelled on every retry lifecycle invalidation
- * and replaced by a fresh one on every consumed idle and new message start, so
- * a stale idle from the original attempt can never finalize the retry before
- * its own idle.
- */
-function armRetrySettle(state: PromptAttemptState, sessionId: string): void {
-  clearRetrySettleTimer(state);
-
-  state.settleTimer = setTimeout(() => {
-    state.settleTimer = null;
-    if (promptRetryStates.get(sessionId) !== state || !state.retryResponseDelivered) {
-      return;
-    }
-    onRetrySettleCallback?.(sessionId);
-  }, RETRY_SETTLE_MS);
-}
-
-export function setOnRetrySettle(callback: ((sessionId: string) => void) | null): void {
-  onRetrySettleCallback = callback;
-}
-
-/**
  * Records that the retry produced a terminal-eligible non-empty response. The
- * retry state is kept alive so every subsequent idle is still consumed, and the
- * settle timer becomes the single point where the retry finalizes.
+ * retry state is kept alive so the retry is only finalized once the
+ * authoritative OpenCode session status confirms the session is genuinely idle.
  */
 export function markPromptRetryResponseDelivered(sessionId: string): void {
   const state = promptRetryStates.get(sessionId);
@@ -199,21 +149,77 @@ export function markPromptRetryResponseDelivered(sessionId: string): void {
   }
 
   state.retryResponseDelivered = true;
-  armRetrySettle(state, sessionId);
 }
 
 /**
- * Extends the retry settle window because the retry produced more activity
- * (a newer assistant message started), meaning the current candidate was
- * intermediate. No-op unless a retry response was already delivered.
+ * Queries the authoritative OpenCode session status for a retried run. OpenCode
+ * keeps a session in its active status map while it is busy and deletes it when
+ * it goes idle (publishing session.idle at the same time), and its own
+ * `SessionStatus.get()` defaults a missing session to "idle" - so a missing or
+ * "idle" entry is positive proof the run finished. A failed or unexpected
+ * lookup returns "unknown".
  */
-export function resetPromptRetrySettle(sessionId: string): void {
+async function queryAuthoritativeSessionState(
+  sessionId: string,
+  directory: string,
+): Promise<"idle" | "busy" | "unknown"> {
+  try {
+    const { data, error } = await opencodeClient.session.status({ directory });
+
+    if (error || !data) {
+      logger.warn(`[Bot] Failed to verify retry session status: session=${sessionId}`, error);
+      return "unknown";
+    }
+
+    const status = (data as Record<string, { type?: string }>)[sessionId];
+    if (!status || status.type === "idle") {
+      return "idle";
+    }
+
+    if (status.type === "busy" || status.type === "retry") {
+      return "busy";
+    }
+
+    return "unknown";
+  } catch (err) {
+    logger.warn(`[Bot] Error verifying retry session status: session=${sessionId}`, err);
+    return "unknown";
+  }
+}
+
+export type RetryIdleDecision = "none" | "consumed" | "finalize";
+
+/**
+ * Decides how a session.idle during a retry lifecycle should be handled.
+ *
+ * - `none`: no active retry for this session; the idle is a normal one.
+ * - `consumed`: the idle belongs to the retry (the original attempt's idle, a
+ *   stale duplicate, or the retry still busy per the authoritative status). It
+ *   must not finalize anything.
+ * - `finalize`: the retry produced a terminal response AND the authoritative
+ *   OpenCode session status confirms the session is genuinely idle, so the
+ *   caller finalizes the run exactly once.
+ *
+ * The guard only activates once the retry is actually dispatched, so a
+ * registered-but-unreplayed attempt never swallows a normal run's idle. When
+ * the status lookup fails or is ambiguous the idle is consumed and success is
+ * never finalized (fail closed).
+ */
+export async function decidePromptRetryIdle(sessionId: string): Promise<RetryIdleDecision> {
   const state = promptRetryStates.get(sessionId);
-  if (!state || !state.retryResponseDelivered) {
-    return;
+  if (!state || !state.retryDispatched) {
+    return "none";
   }
 
-  armRetrySettle(state, sessionId);
+  if (!state.retryResponseDelivered) {
+    return "consumed";
+  }
+
+  const sessionState = await queryAuthoritativeSessionState(
+    sessionId,
+    state.promptOptions.directory,
+  );
+  return sessionState === "idle" ? "finalize" : "consumed";
 }
 
 /**
@@ -231,29 +237,6 @@ export function recordAttemptEvidence(
   }
 
   state.workEvidence = mergeTaskAttemptEvidence(state.workEvidence, evidence);
-}
-
-/**
- * Guards every idle event that belongs to a retry lifecycle. The guard only
- * activates once the retry has actually been dispatched - a registered but
- * never-replayed attempt must not swallow the normal idle finalization. While
- * the guard is up the idle is consumed (never finalized); once a retry response
- * was delivered the consume also extends the settle window, so the retry is
- * finalized by its settle timer rather than by the first idle that happens to
- * arrive. A stale or duplicate idle from the original attempt therefore cannot
- * finish the retry early, emit a footer, commit /lastfile, export Markdown,
- * mark the foreground idle, or dispatch queued prompts.
- */
-export function consumePromptRetryIdle(sessionId: string): boolean {
-  const state = promptRetryStates.get(sessionId);
-  if (!state || !state.retryDispatched) {
-    return false;
-  }
-
-  if (state.retryResponseDelivered) {
-    armRetrySettle(state, sessionId);
-  }
-  return true;
 }
 
 /**
@@ -314,7 +297,6 @@ export function retryPromptOnce(sessionId: string): boolean {
   }
 
   state.retryDispatched = true;
-  clearRetrySettleTimer(state);
   state.retryResponseDelivered = false;
   state.workEvidence = createEmptyTaskAttemptEvidence();
   foregroundSessionState.markBusy(sessionId, state.promptOptions.directory);

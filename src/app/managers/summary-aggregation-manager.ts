@@ -196,7 +196,6 @@ interface TextMessageState {
 }
 
 interface MessageActivityState {
-  finishReason?: string;
   hasToolActivity: boolean;
   hasReasoningActivity: boolean;
 }
@@ -1231,10 +1230,12 @@ class SummaryAggregator {
           modelID: info.modelID,
           createdAt: time?.created,
           completedAt: time?.completed,
+          // Authoritative message finish only: OpenCode always stamps the
+          // message-level finish reason when a run ends; a missing value means
+          // the message was interrupted and must fail closed, so a per-step
+          // finish reason is never substituted here.
           finishReason:
-            typeof info.finish === "string" && info.finish.trim()
-              ? info.finish.trim()
-              : activity.finishReason,
+            typeof info.finish === "string" && info.finish.trim() ? info.finish.trim() : undefined,
           tokens: info.tokens
             ? {
                 input: info.tokens.input,
@@ -1555,10 +1556,6 @@ class SummaryAggregator {
           }
         }
       }
-    }
-
-    if (part.type === "step-finish" && typeof part.reason === "string" && part.reason.trim()) {
-      activity.finishReason = part.reason.trim();
     }
 
     this.lastUpdated = Date.now();

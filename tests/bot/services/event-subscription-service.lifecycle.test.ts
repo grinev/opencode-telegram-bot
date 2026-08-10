@@ -98,6 +98,8 @@ function emitAssistantCompleted(aggregator: Aggregator): void {
         agent: "test-agent",
         providerID: "test-provider",
         modelID: "test-model",
+        // The authoritative OpenCode message finish for a successful run.
+        finish: "stop",
         time: { created: Date.now() - 1000, completed: Date.now() },
       },
     },

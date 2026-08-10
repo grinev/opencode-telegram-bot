@@ -37,14 +37,12 @@ import {
   clearAllPromptRetry,
   clearPromptResponseMode,
   clearPromptRetry,
-  consumePromptRetryIdle,
+  decidePromptRetryIdle,
   getPromptRetryChatId,
   handleEmptyCompletion,
   hasPromptRetryAttempted,
   markPromptRetryResponseDelivered,
   recordAttemptEvidence,
-  resetPromptRetrySettle,
-  setOnRetrySettle,
 } from "../handlers/prompt.js";
 import {
   reconcileBusyState,
@@ -253,9 +251,6 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       hasActiveStream: (sessionId) => this.hasActiveAssistantResponseStream(sessionId),
     });
     setPromptResponseModeClearerForReconciliation(clearPromptResponseMode);
-    setOnRetrySettle((sessionId) => {
-      void this.handleRetrySettle(sessionId);
-    });
 
     this.compactProgressStreamer = new CompactProgressStreamer({
       throttleMs: RESPONSE_STREAM_THROTTLE_MS,
@@ -569,7 +564,6 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       // the candidate always lands before the start that supersedes it.
       void this.enqueueSessionCompletionTask(sessionId, () => {
         this.invalidateIntermediateFinalCandidate(sessionId, messageId);
-        resetPromptRetrySettle(sessionId);
         return Promise.resolve();
       });
     });
@@ -1205,13 +1199,16 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       this.clearToolElapsedState(sessionId, "session_idle");
       await this.sessionCompletionTasks.get(sessionId)?.catch(() => undefined);
 
-      if (consumePromptRetryIdle(sessionId)) {
+      const retryDecision = await decidePromptRetryIdle(sessionId);
+      if (retryDecision === "consumed") {
         logger.debug(
           `[Bot] Ignoring idle event while a retry lifecycle is active: session=${sessionId}`,
         );
         return;
       }
 
+      // "none" (no retry lifecycle) and "finalize" (genuine retry idle,
+      // confirmed against the authoritative session status) both finalize.
       await this.finalizeIdleSession(sessionId);
     });
 
@@ -1678,23 +1675,11 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   }
 
   /**
-   * Finalizes a retried run once its settle window has passed. The retry's own
-   * idle events are all consumed by the guard, so this is the single point
-   * where the retry is committed and its footer is emitted - a stale idle from
-   * the original attempt can never reach this path.
-   */
-  private async handleRetrySettle(sessionId: string): Promise<void> {
-    logger.debug(`[Bot] Finalizing retried completion after settle window: session=${sessionId}`);
-    this.clearToolElapsedState(sessionId, "retry_settle");
-    await this.sessionCompletionTasks.get(sessionId)?.catch(() => undefined);
-    await this.finalizeIdleSession(sessionId);
-  }
-
-  /**
-   * Shared idle finalization for a normal run and for a retried run whose
-   * settle timer fired. The success footer is emitted only when a terminal
-   * final response was actually committed, so a run that ended on intermediate
-   * or truncated output is never announced as a completed task.
+   * Shared idle finalization for a normal run and for a retried run whose idle
+   * was confirmed against the authoritative OpenCode session status. The
+   * success footer is emitted only when a terminal final response was actually
+   * committed, so a run that ended on intermediate or truncated output is never
+   * announced as a completed task.
    */
   private async finalizeIdleSession(sessionId: string): Promise<void> {
     await markAttachedSessionIdle(sessionId);

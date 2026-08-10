@@ -115,43 +115,61 @@ describe("empty completion policy", () => {
   });
 
   describe("terminal response detection", () => {
-    it("treats a clean non-empty completion as terminal", () => {
-      expect(isTerminalAssistantResponse({ hasError: false, hasToolActivity: false })).toBe(true);
-      expect(isTerminalAssistantResponse({})).toBe(true);
+    it("treats a clean non-empty completion with the successful finish reason as terminal", () => {
+      expect(isTerminalAssistantResponse({ hasError: false, hasToolActivity: false, finishReason: "stop" })).toBe(
+        true,
+      );
+      expect(isTerminalAssistantResponse({ finishReason: "stop" })).toBe(true);
     });
 
-    it("rejects an errored or aborted completion", () => {
-      expect(isTerminalAssistantResponse({ hasError: true })).toBe(false);
-      expect(isTerminalAssistantResponse({ hasError: true, hasToolActivity: false })).toBe(false);
+    it("rejects an errored or aborted completion even with a successful finish", () => {
+      expect(isTerminalAssistantResponse({ hasError: true, finishReason: "stop" })).toBe(false);
+      expect(isTerminalAssistantResponse({ hasError: true, hasToolActivity: false, finishReason: "stop" })).toBe(
+        false,
+      );
     });
 
-    it("rejects a completion whose message called a tool", () => {
-      expect(isTerminalAssistantResponse({ hasToolActivity: true })).toBe(false);
+    it("rejects a completion whose message called a tool even with a successful finish", () => {
+      expect(isTerminalAssistantResponse({ hasToolActivity: true, finishReason: "stop" })).toBe(false);
     });
 
-    it("rejects known non-terminal finish reasons but accepts unknown ones", () => {
-      expect(isTerminalAssistantResponse({ finishReason: "max_tokens" })).toBe(false);
-      expect(isTerminalAssistantResponse({ finishReason: "length" })).toBe(false);
-      expect(isTerminalAssistantResponse({ finishReason: "content_filter" })).toBe(false);
-      expect(isTerminalAssistantResponse({ finishReason: "tool_use" })).toBe(false);
-      expect(isTerminalAssistantResponse({ finishReason: "end_turn" })).toBe(true);
-      expect(isTerminalAssistantResponse({ finishReason: undefined })).toBe(true);
-      expect(isTerminalAssistantResponse({ finishReason: "unusual-reason" })).toBe(true);
+    it("fails closed when the finish reason is missing", () => {
+      expect(isTerminalAssistantResponse({ finishReason: undefined })).toBe(false);
+      expect(isTerminalAssistantResponse({})).toBe(false);
+      expect(isTerminalAssistantResponse({ hasError: false, hasToolActivity: false })).toBe(false);
     });
 
-    it("fails closed when error and tool activity are combined with otherwise clean signals", () => {
+    it("rejects unknown and arbitrary unexpected finish reasons", () => {
+      expect(isTerminalAssistantResponse({ finishReason: "unknown" })).toBe(false);
+      expect(isTerminalAssistantResponse({ finishReason: "unusual-reason" })).toBe(false);
+      expect(isTerminalAssistantResponse({ finishReason: "end_turn" })).toBe(false);
+      expect(isTerminalAssistantResponse({ finishReason: "" })).toBe(false);
+    });
+
+    it("rejects every known non-terminal OpenCode finish reason", () => {
+      // The authoritative @opencode-ai/llm FinishReason literal schema.
+      for (const reason of ["length", "tool-calls", "content-filter", "error", "unknown"]) {
+        expect(isTerminalAssistantResponse({ finishReason: reason })).toBe(false);
+      }
+      // Reviewer-flagged truncation/interruption names must also fail closed.
+      for (const reason of ["max_tokens", "aborted", "tool_use", "function_call", "incomplete"]) {
+        expect(isTerminalAssistantResponse({ finishReason: reason })).toBe(false);
+      }
+    });
+
+    it("fails closed when error and tool activity are combined with a successful finish", () => {
       expect(
         isTerminalAssistantResponse({
           hasError: true,
           hasToolActivity: false,
-          finishReason: "end_turn",
+          finishReason: "stop",
         }),
       ).toBe(false);
       expect(
         isTerminalAssistantResponse({
           hasError: false,
           hasToolActivity: true,
-          finishReason: "end_turn",
+          finishReason: "stop",
         }),
       ).toBe(false);
     });

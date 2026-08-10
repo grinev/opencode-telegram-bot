@@ -99,36 +99,36 @@ export function isSafeZeroWorkEmptyCompletion(evidence: TaskAttemptEvidence): bo
 }
 
 /**
- * Finish reasons that prove a completed assistant message did NOT end with a
- * terminal, successfully delivered answer. Anything else (including an unknown
- * or missing reason) is treated as potentially terminal: the primary signals
- * for a truncated or interrupted response are the upstream message error and
- * tool activity, so the finish reason only ever disqualifies a known
- * non-terminal value and never rejects a normal answer.
+ * Finish reasons OpenCode actually emits on a completed assistant message,
+ * from the @opencode-ai/llm `FinishReason` literal schema
+ * (`packages/llm/src/schema/ids.ts`):
+ *
+ *   ["stop", "length", "tool-calls", "content-filter", "error", "unknown"]
+ *
+ * Only `"stop"` means the model ended its turn with a successfully delivered
+ * answer. Every other value means the run stopped early, called a tool, was
+ * filtered, errored, or has an unknown reason. session/llm/ai-sdk.ts also maps
+ * any unrecognized AI SDK finish reason to `"unknown"`, so no other value can
+ * appear on a real message.
  */
-const KNOWN_NON_TERMINAL_FINISH_REASONS = new Set([
-  "max_tokens",
-  "length",
-  "error",
-  "content_filter",
-  "tool_use",
-  "function_call",
-  "aborted",
-  "incomplete",
-]);
+const TERMINAL_FINISH_REASONS = new Set(["stop"]);
 
-export function isKnownNonTerminalFinishReason(finishReason: string | undefined): boolean {
-  const normalized = finishReason?.trim().toLowerCase() ?? "";
-  return normalized.length > 0 && KNOWN_NON_TERMINAL_FINISH_REASONS.has(normalized);
+export function isKnownTerminalFinishReason(finishReason: string | undefined): boolean {
+  if (finishReason === undefined) {
+    return false;
+  }
+
+  const normalized = finishReason.trim().toLowerCase();
+  return normalized.length > 0 && TERMINAL_FINISH_REASONS.has(normalized);
 }
 
 /**
  * A completed non-empty assistant message is a terminal final-response
- * candidate only when it survived with no upstream error, performed no tool
- * activity (a message that called a tool is never the closing answer of a
- * run), and did not end on a known non-terminal finish reason. The check is
- * deliberately conservative: a run whose last message fails any of these
- * signals is never reported as a completed task.
+ * candidate only when it has positive evidence of success: no upstream error,
+ * no tool activity (a message that called a tool is never the closing answer
+ * of a run), and an explicitly known successful finish reason. Missing,
+ * unknown, or arbitrary finish reasons fail closed - a non-empty message by
+ * itself is never treated as a completed task.
  */
 export function isTerminalAssistantResponse(completion: {
   hasError?: boolean;
@@ -143,9 +143,5 @@ export function isTerminalAssistantResponse(completion: {
     return false;
   }
 
-  if (isKnownNonTerminalFinishReason(completion.finishReason)) {
-    return false;
-  }
-
-  return true;
+  return isKnownTerminalFinishReason(completion.finishReason);
 }
