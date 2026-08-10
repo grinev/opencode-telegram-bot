@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
 import {
   consumePromptResponseMode,
+  hasPromptRetryAttempted,
   processUserPrompt,
+  retryPromptOnce,
   type ProcessPromptDeps,
 } from "../../../src/bot/handlers/prompt.js";
 import { promptAttachment } from "../../../src/app/managers/prompt-attachment-manager.js";
@@ -236,6 +238,25 @@ describe("bot/handlers/prompt", () => {
       ensureEventSubscription: expect.any(Function),
     });
     expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "Review README");
+  });
+
+  it("replays the same prompt at most once", async () => {
+    await processUserPrompt(createContext(), "Review README", createDeps());
+
+    expect(retryPromptOnce("session-1")).toBe(true);
+    expect(retryPromptOnce("session-1")).toBe(false);
+    expect(hasPromptRetryAttempted("session-1")).toBe(true);
+    expect(mocked.safeBackgroundTaskMock).toHaveBeenCalledTimes(2);
+    expect(mocked.safeBackgroundTaskMock.mock.calls[1][0].task).toBeTypeOf("function");
+    await mocked.safeBackgroundTaskMock.mock.calls[1][0].task();
+    expect(mocked.sessionPromptAsyncMock).toHaveBeenLastCalledWith({
+      sessionID: "session-1",
+      directory: "D:\\Projects\\Repo",
+      parts: [{ type: "text", text: "Review README" }],
+      agent: "build",
+      model: { providerID: "openai", modelID: "gpt-5" },
+      variant: "default",
+    });
   });
 
   it("starts prompts through promptAsync instead of the streaming prompt endpoint", async () => {

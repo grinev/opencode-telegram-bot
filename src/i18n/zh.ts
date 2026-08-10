@@ -2,6 +2,7 @@ import type { I18nDictionary } from "./en.js";
 
 export const zh: I18nDictionary = {
   "cmd.description.status": "服务器和会话状态",
+  "cmd.description.lastfile": "导出助手的最后一条回复",
   "cmd.description.new": "创建新会话",
   "cmd.description.stop": "停止当前操作",
   "cmd.description.detach": "从当前会话分离",
@@ -75,6 +76,12 @@ export const zh: I18nDictionary = {
   "bot.session_reset_project_mismatch":
     "⚠️ 活动会话与所选项目不匹配，因此已重置。使用 /sessions 选择一个会话，或 /new 创建新会话。",
   "bot.prompt_send_error": "向 OpenCode 发送请求失败。",
+  "bot.empty_completion_retry": "⚠️ OpenCode 返回了空完成结果。\n将自动重试一次…",
+  "bot.empty_completion_failed": "⚠️ OpenCode 重试一次后仍未返回可用内容。不会继续重试。",
+  "bot.empty_completion_no_retry":
+    "⚠️ OpenCode 结束时没有可用回复。\n未自动重试，因为任务可能已经执行了操作。请手动重试。",
+  "bot.lastfile_empty": "当前会话没有可导出的已成功发送的助手回复。",
+  "bot.lastfile_error": "⚠️ 导出助手最后一条回复失败。",
   "bot.session_error": "🔴 OpenCode 返回错误：{message}",
   "bot.session_retry": "🔁 {message}\n\n提供方在重复重试时持续返回同一错误。使用 /abort 可停止。",
   "bot.external_user_input": "外部用户输入",

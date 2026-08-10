@@ -33,7 +33,13 @@ import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import { clearPromptResponseMode } from "../handlers/prompt.js";
+import {
+  clearPromptResponseMode,
+  clearPromptRetry,
+  consumePromptRetryIdle,
+  hasPromptRetryAttempted,
+  retryPromptOnce,
+} from "../handlers/prompt.js";
 import {
   reconcileBusyState,
   setPromptResponseModeClearerForReconciliation,
@@ -90,6 +96,15 @@ import {
   interactionManager,
 } from "../../app/managers/interaction-manager.js";
 import { stopEventListening, subscribeToEvents } from "../../opencode/events.js";
+import {
+  rememberAssistantResponse,
+  sendAssistantResponseDocument,
+  shouldAutomaticallyExportAssistantResponse,
+} from "./assistant-response-export-service.js";
+import {
+  isGenuinelyEmptyAssistantResponse,
+  isSafeZeroWorkEmptyCompletion,
+} from "./empty-completion-policy.js";
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
 const RESPONSE_STREAM_THROTTLE_MS = config.bot.responseStreamThrottleMs;
@@ -601,6 +616,25 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         const chatId = this.chatIdInstance;
 
         try {
+          if (isGenuinelyEmptyAssistantResponse(messageText)) {
+            this.clearAssistantResponseStream(sessionId, messageId, "empty_completion");
+            this.clearThinkingStream(sessionId, messageId, "empty_completion");
+            this.compactProgressStreamer.clearSession(sessionId, "empty_completion");
+
+            if (isSafeZeroWorkEmptyCompletion(completionInfo) && retryPromptOnce(sessionId)) {
+              await botApi.sendMessage(chatId, t("bot.empty_completion_retry"));
+            } else if (hasPromptRetryAttempted(sessionId)) {
+              clearPromptRetry(sessionId);
+              await botApi.sendMessage(chatId, t("bot.empty_completion_failed"));
+            } else {
+              clearPromptRetry(sessionId);
+              await botApi.sendMessage(chatId, t("bot.empty_completion_no_retry"));
+            }
+
+            return;
+          }
+
+          clearPromptRetry(sessionId);
           assistantRunState.markResponseCompleted(sessionId, {
             agent: completionInfo.agent,
             providerID: completionInfo.providerID,
@@ -650,6 +684,16 @@ class EventSubscriptionService implements BotEventSubscriptionService {
               });
             },
           });
+
+          rememberAssistantResponse(chatId, sessionId, messageText);
+          if (shouldAutomaticallyExportAssistantResponse(messageText)) {
+            await sendAssistantResponseDocument(botApi, chatId, messageText).catch((error) => {
+              logger.warn(
+                `[Bot] Failed to send automatic Markdown response export: session=${sessionId}`,
+                error,
+              );
+            });
+          }
 
           await sendTtsResponseForSession({
             api: botApi,
@@ -1105,11 +1149,19 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     });
 
     summaryAggregator.setOnSessionIdle(async (sessionId) => {
-      await markAttachedSessionIdle(sessionId);
       // Cleared unconditionally: a session can go idle after it stopped being
       // the current one, and the early returns below would leak the tracker.
       this.clearToolElapsedState(sessionId, "session_idle");
       await this.sessionCompletionTasks.get(sessionId)?.catch(() => undefined);
+
+      if (consumePromptRetryIdle(sessionId)) {
+        logger.debug(
+          `[Bot] Ignoring idle event that closed the retried empty completion: session=${sessionId}`,
+        );
+        return;
+      }
+
+      await markAttachedSessionIdle(sessionId);
 
       const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
       clearPromptResponseMode(sessionId);
@@ -1165,6 +1217,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     summaryAggregator.setOnSessionError(async (sessionId, message) => {
       await markAttachedSessionIdle(sessionId);
       this.clearToolElapsedState(sessionId, "session_error");
+      clearPromptRetry(sessionId);
 
       if (!this.botInstance || !this.chatIdInstance) {
         clearPromptResponseMode(sessionId);

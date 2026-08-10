@@ -105,6 +105,7 @@ No public inbound ports are required for normal usage.
 Current command set:
 
 - `/status` - server, project, and session status
+- `/lastfile` - export the latest delivered assistant response as Markdown
 - `/new` - create a new session
 - `/abort` - stop the current task
 - `/detach` - detach the bot from the current session without stopping it

@@ -222,6 +222,10 @@ export const config = {
       false,
     ),
     responseStreamThrottleMs: getOptionalPositiveIntEnvVar("RESPONSE_STREAM_THROTTLE_MS", 1000),
+    assistantResponseFileThreshold: getOptionalPositiveIntEnvVar(
+      "ASSISTANT_RESPONSE_FILE_THRESHOLD",
+      5000,
+    ),
     bashToolDisplayMaxLength: getOptionalPositiveIntEnvVar("BASH_TOOL_DISPLAY_MAX_LENGTH", 128),
     locale: getOptionalLocaleEnvVar("BOT_LOCALE", "en"),
     trackBackgroundSessions: getOptionalBooleanEnvVar("TRACK_BACKGROUND_SESSIONS", true),

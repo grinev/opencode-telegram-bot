@@ -2,6 +2,7 @@ import type { I18nDictionary } from "./en.js";
 
 export const de: I18nDictionary = {
   "cmd.description.status": "Server- und Sitzungsstatus",
+  "cmd.description.lastfile": "Letzte Assistentenantwort exportieren",
   "cmd.description.new": "Neue Sitzung erstellen",
   "cmd.description.stop": "Aktuelle Aktion stoppen",
   "cmd.description.detach": "Von aktueller Sitzung trennen",
@@ -86,6 +87,15 @@ export const de: I18nDictionary = {
   "bot.session_reset_project_mismatch":
     "⚠️ Die aktive Sitzung passt nicht zum ausgewählten Projekt und wurde daher zurückgesetzt. Nutze /sessions zur Auswahl oder /new, um eine neue Sitzung zu erstellen.",
   "bot.prompt_send_error": "Anfrage konnte nicht an OpenCode gesendet werden.",
+  "bot.empty_completion_retry":
+    "⚠️ OpenCode hat eine leere Antwort geliefert.\nEin erneuter Versuch wird einmal ausgeführt…",
+  "bot.empty_completion_failed":
+    "⚠️ OpenCode endete auch nach einem erneuten Versuch ohne brauchbare Antwort. Kein weiterer Versuch.",
+  "bot.empty_completion_no_retry":
+    "⚠️ OpenCode endete ohne brauchbare Antwort.\nKein automatischer Versuch, da die Aufgabe möglicherweise bereits Änderungen ausgeführt hat. Bitte manuell erneut versuchen.",
+  "bot.lastfile_empty":
+    "Für diese Sitzung ist keine erfolgreich zugestellte Assistentenantwort verfügbar.",
+  "bot.lastfile_error": "⚠️ Die letzte Assistentenantwort konnte nicht exportiert werden.",
   "bot.session_error": "🔴 OpenCode meldete einen Fehler: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nDer Provider liefert bei wiederholten Versuchen immer wieder denselben Fehler. Mit /abort abbrechen.",

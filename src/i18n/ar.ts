@@ -9,6 +9,7 @@ import type { I18nDictionary } from "./en.js";
  */
 export const ar: I18nDictionary = {
   "cmd.description.status": "عرض حالة الخادم والجلسة",
+  "cmd.description.lastfile": "تصدير آخر رد للمساعد",
   "cmd.description.new": "بدء جلسة جديدة",
   "cmd.description.stop": "إيقاف المهمة الحالية",
   "cmd.description.detach": "الخروج من الجلسة دون إيقافها",
@@ -86,6 +87,13 @@ export const ar: I18nDictionary = {
   "bot.session_reset_project_mismatch":
     "⚠️ الجلسة النشطة مرتبطة بمشروع مختلف، لذلك تمت إعادة ضبطها. استخدم /sessions لاختيار جلسة أو /new لبدء جلسة جديدة.",
   "bot.prompt_send_error": "تعذر إرسال الطلب إلى OpenCode.",
+  "bot.empty_completion_retry": "⚠️ أعاد OpenCode إكمالًا فارغًا.\nجارٍ إعادة المحاولة مرة واحدة…",
+  "bot.empty_completion_failed":
+    "⚠️ انتهى OpenCode دون رد صالح بعد إعادة محاولة واحدة. لن تتم إعادة المحاولة.",
+  "bot.empty_completion_no_retry":
+    "⚠️ انتهى OpenCode دون رد صالح.\nلم تتم إعادة المحاولة تلقائيًا لأن المهمة ربما نفذت عملًا بالفعل. أعد المحاولة يدويًا.",
+  "bot.lastfile_empty": "لا يوجد رد مساعد مُسلّم بنجاح لهذه الجلسة.",
+  "bot.lastfile_error": "⚠️ تعذر تصدير آخر رد للمساعد.",
   "bot.session_error": "🔴 أعاد OpenCode الخطأ التالي: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nاستمر مزوّد الخدمة في إرجاع الخطأ نفسه بعد عدة محاولات. استخدم /abort لإيقاف المهمة.",

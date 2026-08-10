@@ -2,6 +2,7 @@ import type { I18nDictionary } from "./en.js";
 
 export const pt: I18nDictionary = {
   "cmd.description.status": "Status do servidor e da sessão",
+  "cmd.description.lastfile": "Exportar a última resposta do assistente",
   "cmd.description.new": "Criar uma nova sessão",
   "cmd.description.stop": "Parar a ação atual",
   "cmd.description.detach": "Desconectar da sessão atual",
@@ -86,6 +87,15 @@ export const pt: I18nDictionary = {
   "bot.session_reset_project_mismatch":
     "⚠️ A sessão ativa não corresponde ao projeto selecionado, então ela foi redefinida. Use /sessions para escolher uma ou /new para criar uma nova sessão.",
   "bot.prompt_send_error": "Não foi possível enviar a solicitação ao OpenCode.",
+  "bot.empty_completion_retry":
+    "⚠️ O OpenCode retornou uma conclusão vazia.\nTentando novamente uma vez…",
+  "bot.empty_completion_failed":
+    "⚠️ O OpenCode terminou sem uma resposta utilizável após uma nova tentativa. Nenhuma outra tentativa será feita.",
+  "bot.empty_completion_no_retry":
+    "⚠️ O OpenCode terminou sem uma resposta utilizável.\nNenhuma nova tentativa automática: a tarefa pode já ter realizado alterações. Tente novamente manualmente.",
+  "bot.lastfile_empty":
+    "Não há uma resposta do assistente entregue com sucesso disponível para esta sessão.",
+  "bot.lastfile_error": "⚠️ Não foi possível exportar a última resposta do assistente.",
   "bot.session_error": "🔴 O OpenCode retornou um erro: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nO provedor continua retornando o mesmo erro nas novas tentativas. Use /abort para abortar.",

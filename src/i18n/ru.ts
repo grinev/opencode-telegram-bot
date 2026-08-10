@@ -2,6 +2,7 @@ import type { I18nDictionary } from "./en.js";
 
 export const ru: I18nDictionary = {
   "cmd.description.status": "Статус сервера и сессии",
+  "cmd.description.lastfile": "Экспортировать последний ответ ассистента",
   "cmd.description.new": "Создать новую сессию",
   "cmd.description.stop": "Прервать текущее действие",
   "cmd.description.detach": "Отсоединиться от текущей сессии",
@@ -82,6 +83,13 @@ export const ru: I18nDictionary = {
   "bot.session_reset_project_mismatch":
     "⚠️ Активная сессия не соответствует выбранному проекту, поэтому была сброшена. Используйте /sessions для выбора или /new для создания новой сессии.",
   "bot.prompt_send_error": "Не удалось отправить запрос в OpenCode.",
+  "bot.empty_completion_retry": "⚠️ OpenCode вернул пустой ответ.\nПовторяю один раз…",
+  "bot.empty_completion_failed":
+    "⚠️ OpenCode завершил работу без пригодного ответа после одной повторной попытки. Дальше повторов не будет.",
+  "bot.empty_completion_no_retry":
+    "⚠️ OpenCode завершил работу без пригодного ответа.\nАвтоматический повтор не выполнен, поскольку задача могла уже внести изменения. Повторите вручную.",
+  "bot.lastfile_empty": "Для этой сессии нет успешно доставленного ответа ассистента.",
+  "bot.lastfile_error": "⚠️ Не удалось экспортировать последний ответ ассистента.",
   "bot.session_error": "🔴 OpenCode вернул ошибку: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nПровайдер возвращает одну и ту же ошибку при повторных запросах. Используйте /abort для остановки.",

@@ -39,6 +39,27 @@ let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
 const promptResponseModes = new Map<string, PromptResponseMode>();
 
+export interface PromptDispatchOptions {
+  sessionID: string;
+  directory: string;
+  parts: Array<TextPartInput | FilePartInput>;
+  model?: { providerID: string; modelID: string };
+  agent?: string;
+  variant?: string;
+}
+
+interface PromptRetryState {
+  bot: Bot<Context>;
+  chatId: number;
+  promptOptions: PromptDispatchOptions;
+  promptText: string;
+  responseMode: PromptResponseMode;
+  attempted: boolean;
+  retryIdlePending: boolean;
+}
+
+const promptRetryStates = new Map<string, PromptRetryState>();
+
 export type PromptResponseMode = "text_only" | "text_and_tts";
 
 type ProcessPromptOptions = {
@@ -65,6 +86,85 @@ export function consumePromptResponseMode(sessionId: string): PromptResponseMode
   const responseMode = promptResponseModes.get(sessionId) ?? null;
   promptResponseModes.delete(sessionId);
   return responseMode;
+}
+
+export function registerPromptRetry(
+  sessionId: string,
+  state: Omit<PromptRetryState, "attempted" | "retryIdlePending">,
+): void {
+  promptRetryStates.set(sessionId, {
+    ...state,
+    attempted: false,
+    retryIdlePending: false,
+  });
+}
+
+export function clearPromptRetry(sessionId: string): void {
+  promptRetryStates.delete(sessionId);
+}
+
+export function hasPromptRetryAttempted(sessionId: string): boolean {
+  return promptRetryStates.get(sessionId)?.attempted ?? false;
+}
+
+export function consumePromptRetryIdle(sessionId: string): boolean {
+  const state = promptRetryStates.get(sessionId);
+  if (!state?.retryIdlePending) {
+    return false;
+  }
+
+  state.retryIdlePending = false;
+  return true;
+}
+
+export function retryPromptOnce(sessionId: string): boolean {
+  const state = promptRetryStates.get(sessionId);
+  if (!state || state.attempted) {
+    return false;
+  }
+
+  state.attempted = true;
+  state.retryIdlePending = true;
+  foregroundSessionState.markBusy(sessionId, state.promptOptions.directory);
+  void markAttachedSessionBusy(sessionId);
+  assistantRunState.startRun(sessionId, {
+    startedAt: Date.now(),
+    configuredAgent: state.promptOptions.agent,
+    configuredProviderID: state.promptOptions.model?.providerID,
+    configuredModelID: state.promptOptions.model?.modelID,
+  });
+  setPromptResponseMode(sessionId, state.responseMode);
+  if (state.promptText.trim().length > 0) {
+    externalUserInputSuppressionManager.register(sessionId, state.promptText);
+  }
+
+  safeBackgroundTask({
+    taskName: "session.promptAsync.retry",
+    task: () => opencodeClient.session.promptAsync(state.promptOptions),
+    onSuccess: ({ error }) => {
+      if (!error) {
+        logger.info(`[Bot] Automatic empty-completion retry accepted: session=${sessionId}`);
+        return;
+      }
+
+      clearPromptRetry(sessionId);
+      foregroundSessionState.markIdle(sessionId);
+      void markAttachedSessionIdle(sessionId);
+      assistantRunState.clearRun(sessionId, "session_prompt_retry_api_error");
+      clearPromptResponseMode(sessionId);
+      void state.bot.api.sendMessage(state.chatId, t("bot.prompt_send_error")).catch(() => {});
+    },
+    onError: () => {
+      clearPromptRetry(sessionId);
+      foregroundSessionState.markIdle(sessionId);
+      void markAttachedSessionIdle(sessionId);
+      assistantRunState.clearRun(sessionId, "session_prompt_retry_background_error");
+      clearPromptResponseMode(sessionId);
+      void state.bot.api.sendMessage(state.chatId, t("bot.prompt_send_error")).catch(() => {});
+    },
+  });
+
+  return true;
 }
 
 async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
@@ -95,6 +195,10 @@ async function resetMismatchedSessionContext(): Promise<void> {
   summaryAggregator.clear();
   foregroundSessionState.clearAll("session_mismatch_reset");
   assistantRunState.clearAll("session_mismatch_reset");
+  const currentSession = getCurrentSession();
+  if (currentSession) {
+    clearPromptRetry(currentSession.id);
+  }
   clearAllInteractionState("session_mismatch_reset");
   clearSession();
   keyboardManager.clearContext();
@@ -287,14 +391,7 @@ export async function processUserPrompt(
     // above and would otherwise be missing from the logs.
     const filePartCount = parts.filter((part) => part.type === "file").length;
 
-    const promptOptions: {
-      sessionID: string;
-      directory: string;
-      parts: Array<TextPartInput | FilePartInput>;
-      model?: { providerID: string; modelID: string };
-      agent?: string;
-      variant?: string;
-    } = {
+    const promptOptions: PromptDispatchOptions = {
       sessionID: currentSession.id,
       directory: currentSession.directory,
       parts,
@@ -338,6 +435,13 @@ export async function processUserPrompt(
       configuredModelID: storedModel.modelID,
     });
     setPromptResponseMode(currentSession.id, responseMode);
+    registerPromptRetry(currentSession.id, {
+      bot,
+      chatId: ctx.chat!.id,
+      promptOptions,
+      promptText: text,
+      responseMode,
+    });
 
     if (text.trim().length > 0) {
       externalUserInputSuppressionManager.register(currentSession.id, text);
@@ -353,6 +457,7 @@ export async function processUserPrompt(
       task: () => opencodeClient.session.promptAsync(promptOptions),
       onSuccess: ({ error }) => {
         if (error) {
+          clearPromptRetry(currentSession.id);
           foregroundSessionState.markIdle(currentSession.id);
           void markAttachedSessionIdle(currentSession.id);
           assistantRunState.clearRun(currentSession.id, "session_prompt_api_error");
@@ -373,6 +478,7 @@ export async function processUserPrompt(
         logger.info("[Bot] session.promptAsync accepted");
       },
       onError: (error) => {
+        clearPromptRetry(currentSession.id);
         foregroundSessionState.markIdle(currentSession.id);
         void markAttachedSessionIdle(currentSession.id);
         assistantRunState.clearRun(currentSession.id, "session_prompt_background_error");
@@ -391,6 +497,7 @@ export async function processUserPrompt(
       foregroundSessionState.markIdle(currentSession.id);
       await markAttachedSessionIdle(currentSession.id);
       assistantRunState.clearRun(currentSession.id, "session_prompt_handler_error");
+      clearPromptRetry(currentSession.id);
     }
     logger.error("Error in prompt handler:", err);
     if (interactionManager.getSnapshot()) {
