@@ -301,4 +301,41 @@ describe("utils/logger", () => {
 
     __resetLoggerForTests();
   });
+
+  it("keeps file logging but stops console writes after an EPIPE", async () => {
+    const tempHome = await createTempHome();
+    const consoleLogMock = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const consoleWarnMock = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const consoleErrorMock = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-11T12:34:56.000Z"));
+    vi.stubEnv("LOG_LEVEL", "info");
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
+    setRuntimeMode("sources");
+
+    const { initializeLogger, logger, flushLogger, __resetLoggerForTests } =
+      await loadLoggerModule();
+
+    await initializeLogger();
+    logger.info("before pipe break");
+    process.stderr.emit("error", Object.assign(new Error("write EPIPE"), { code: "EPIPE" }));
+    logger.warn("after pipe break");
+    logger.error("still logging to file");
+    await flushLogger();
+
+    const expectedPath = path.join(tempHome, "logs", `bot-2026-04-11_12-34-56_${process.pid}.log`);
+    const content = await fs.readFile(expectedPath, "utf-8");
+    expect(content).toContain("[INFO] before pipe break");
+    expect(content).toContain("[WARN] after pipe break");
+    expect(content).toContain("[ERROR] still logging to file");
+    expect(consoleLogMock).toHaveBeenCalledTimes(1);
+    expect(consoleWarnMock).not.toHaveBeenCalled();
+    expect(consoleErrorMock).not.toHaveBeenCalled();
+
+    __resetLoggerForTests();
+    consoleLogMock.mockRestore();
+    consoleWarnMock.mockRestore();
+    consoleErrorMock.mockRestore();
+  });
 });
