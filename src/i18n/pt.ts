@@ -538,6 +538,8 @@ export const pt: I18nDictionary = {
   "tasklist.details.cron": "Cron: {cron}",
   "tasklist.button.delete": "🗑 Excluir",
   "tasklist.button.cancel": "❌ Cancelar",
+  "tasklist.button.show_prompt": "📄 Mostrar prompt completo",
+  "tasklist.full_prompt_header": "📝 Prompt completo:",
   "tasklist.deleted_callback": "Excluída",
   "tasklist.inactive_callback": "Este menu de tarefas agendadas está inativo",
   "tasklist.load_error": "🔴 Não foi possível carregar as tarefas agendadas.",
