@@ -19,6 +19,7 @@ const mocked = vi.hoisted(() => ({
   foregroundMarkIdleMock: vi.fn(),
   assistantClearRunMock: vi.fn(),
   clearPromptResponseModeMock: vi.fn(),
+  clearPromptRetryMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -70,6 +71,7 @@ vi.mock("../../../src/app/managers/assistant-run-state-manager.js", () => ({
 
 vi.mock("../../../src/bot/handlers/prompt.js", () => ({
   clearPromptResponseMode: mocked.clearPromptResponseModeMock,
+  clearPromptRetry: mocked.clearPromptRetryMock,
 }));
 
 function createContext(): Context {
@@ -107,6 +109,7 @@ describe("bot/commands/detach", () => {
     mocked.foregroundMarkIdleMock.mockClear();
     mocked.assistantClearRunMock.mockClear();
     mocked.clearPromptResponseModeMock.mockClear();
+    mocked.clearPromptRetryMock.mockClear();
   });
 
   it("detaches selected session locally without stopping the OpenCode session", async () => {
@@ -120,6 +123,7 @@ describe("bot/commands/detach", () => {
     expect(mocked.foregroundMarkIdleMock).toHaveBeenCalledWith("session-1");
     expect(mocked.assistantClearRunMock).toHaveBeenCalledWith("session-1", "detach_command");
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.clearPromptRetryMock).toHaveBeenCalledWith("session-1");
     expect(mocked.pinnedClearMock).toHaveBeenCalledTimes(1);
     expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalledTimes(1);
     expect(mocked.pinnedGetContextLimitMock).toHaveBeenCalledTimes(1);

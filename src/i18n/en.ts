@@ -1,5 +1,6 @@
 export const en = {
   "cmd.description.status": "Server and session status",
+  "cmd.description.lastfile": "Export the last assistant response",
   "cmd.description.new": "Create a new session",
   "cmd.description.stop": "Stop current action",
   "cmd.description.detach": "Detach from current session",
@@ -83,6 +84,14 @@ export const en = {
   "bot.session_reset_project_mismatch":
     "⚠️ Active session does not match the selected project, so it was reset. Use /sessions to pick one or /new to create a new session.",
   "bot.prompt_send_error": "Failed to send request to OpenCode.",
+  "bot.empty_completion_retry": "⚠️ OpenCode returned an empty completion.\nRetrying once…",
+  "bot.empty_completion_failed":
+    "⚠️ OpenCode ended without a usable response after one retry. No further retry was attempted.",
+  "bot.empty_completion_no_retry":
+    "⚠️ OpenCode ended without a usable response.\nNo automatic retry was attempted because the task may already have performed work. Please retry manually.",
+  "bot.lastfile_empty":
+    "No successfully delivered assistant response is available for this session.",
+  "bot.lastfile_error": "⚠️ Failed to export the last assistant response.",
   "bot.session_error": "🔴 OpenCode returned an error: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nProvider keeps returning the same error on repeated retries. Use /abort to abort.",

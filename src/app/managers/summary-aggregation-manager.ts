@@ -23,6 +23,16 @@ export interface MessageCompletionInfo {
   modelID?: string;
   createdAt?: number;
   completedAt?: number;
+  finishReason?: string;
+  tokens?: TokensInfo;
+  cost?: number;
+  hasToolActivity: boolean;
+  hasReasoningActivity: boolean;
+  /** True when the completed assistant message carries an upstream error
+   *  (aborted, output length, provider error, ...). Such a completion is not a
+   *  successfully delivered task response. */
+  hasError?: boolean;
+  errorName?: string;
 }
 
 type MessageCompleteCallback = (
@@ -31,6 +41,8 @@ type MessageCompleteCallback = (
   messageText: string,
   completionInfo: MessageCompletionInfo,
 ) => void;
+
+type AssistantMessageStartedCallback = (sessionId: string, messageId: string) => void;
 
 type MessagePartialCallback = (sessionId: string, messageId: string, messageText: string) => void;
 
@@ -183,6 +195,16 @@ interface TextMessageState {
   optimisticUpdateCount: number;
 }
 
+interface MessageActivityState {
+  hasToolActivity: boolean;
+  hasReasoningActivity: boolean;
+}
+
+interface PendingEmptyCompletion {
+  messageId: string;
+  info: MessageCompletionInfo;
+}
+
 interface ThinkingMessageState {
   orderedPartIds: string[];
   sections: Map<string, ThinkingSection>;
@@ -288,6 +310,7 @@ class SummaryAggregator {
   private messageCount = 0;
   private lastUpdated = 0;
   private onCompleteCallback: MessageCompleteCallback | null = null;
+  private onAssistantMessageStartedCallback: AssistantMessageStartedCallback | null = null;
   private onPartialCallback: MessagePartialCallback | null = null;
   private onExternalUserInputCallback: ExternalUserInputCallback | null = null;
   private onToolCallback: ToolCallback | null = null;
@@ -324,6 +347,8 @@ class SummaryAggregator {
   private typingIndicatorEnabled = true;
   private partHashes: Map<string, Set<string>> = new Map();
   private trackedSessionParents: Map<string, string | null> = new Map();
+  private messageActivityStates: Map<string, MessageActivityState> = new Map();
+  private pendingEmptyCompletions: Map<string, PendingEmptyCompletion> = new Map();
   private subagentStates: Map<string, SubagentState> = new Map();
   private subagentOrder: string[] = [];
   private subagentCardIdBySessionId: Map<string, string> = new Map();
@@ -339,6 +364,10 @@ class SummaryAggregator {
 
   setOnComplete(callback: MessageCompleteCallback): void {
     this.onCompleteCallback = callback;
+  }
+
+  setOnAssistantMessageStarted(callback: AssistantMessageStartedCallback): void {
+    this.onAssistantMessageStartedCallback = callback;
   }
 
   setOnPartial(callback: MessagePartialCallback): void {
@@ -556,6 +585,8 @@ class SummaryAggregator {
     this.partHashes.clear();
     this.knownTextPartIds.clear();
     this.syntheticPartIds.clear();
+    this.messageActivityStates.clear();
+    this.pendingEmptyCompletions.clear();
     this.processedToolStates.clear();
     this.thinkingFiredForMessages.clear();
     this.thinkingFinishedForMessages.clear();
@@ -1153,6 +1184,11 @@ class SummaryAggregator {
         });
         this.messageCount++;
         this.startTypingIndicator();
+
+        // Fired synchronously, like the completion callback: the consumer must
+        // observe the message start in event order so it can invalidate an
+        // older pending final response before any newer completion lands.
+        this.onAssistantMessageStartedCallback?.(info.sessionID, messageID);
       }
 
       const textState = this.getOrCreateTextMessageState(messageID);
@@ -1160,6 +1196,7 @@ class SummaryAggregator {
       const time = info.time;
       const isCompleted = Boolean(time?.completed);
       const messageText = this.getCombinedMessageText(messageID, isCompleted);
+      const activity = this.getOrCreateMessageActivityState(messageID);
 
       if (!isCompleted && textState.optimisticUpdateCount === 1) {
         this.emitPartialText(info.sessionID, messageID, messageText);
@@ -1187,6 +1224,33 @@ class SummaryAggregator {
 
       if (isCompleted) {
         const finalText = messageText;
+        const completionInfo: MessageCompletionInfo = {
+          agent: info.agent,
+          providerID: info.providerID,
+          modelID: info.modelID,
+          createdAt: time?.created,
+          completedAt: time?.completed,
+          // Authoritative message finish only: OpenCode always stamps the
+          // message-level finish reason when a run ends; a missing value means
+          // the message was interrupted and must fail closed, so a per-step
+          // finish reason is never substituted here.
+          finishReason:
+            typeof info.finish === "string" && info.finish.trim() ? info.finish.trim() : undefined,
+          tokens: info.tokens
+            ? {
+                input: info.tokens.input,
+                output: info.tokens.output,
+                reasoning: info.tokens.reasoning,
+                cacheRead: info.tokens.cache?.read || 0,
+                cacheWrite: info.tokens.cache?.write || 0,
+              }
+            : undefined,
+          cost: typeof info.cost === "number" ? info.cost : undefined,
+          hasToolActivity: activity.hasToolActivity,
+          hasReasoningActivity: activity.hasReasoningActivity,
+          hasError: info.error !== undefined,
+          errorName: info.error !== undefined ? String(info.error.name) : undefined,
+        };
 
         logger.debug(
           `[Aggregator] Message part completed: messageId=${messageID}, textLength=${finalText.length}, totalParts=${textState.orderedPartIds.length}, session=${this.currentSessionId}`,
@@ -1209,13 +1273,15 @@ class SummaryAggregator {
           this.onCostCallback(assistantInfo.cost);
         }
 
-        if (this.onCompleteCallback && finalText.length > 0) {
+        if (this.onCompleteCallback && finalText.trim().length > 0) {
+          this.pendingEmptyCompletions.delete(this.currentSessionId!);
           this.onCompleteCallback(this.currentSessionId!, messageID, finalText, {
-            agent: info.agent,
-            providerID: info.providerID,
-            modelID: info.modelID,
-            createdAt: time?.created,
-            completedAt: time?.completed,
+            ...completionInfo,
+          });
+        } else if (finalText.trim().length === 0) {
+          this.pendingEmptyCompletions.set(this.currentSessionId!, {
+            messageId: messageID,
+            info: completionInfo,
           });
         }
 
@@ -1287,6 +1353,7 @@ class SummaryAggregator {
 
     const messageID = part.messageID;
     const messageInfo = this.messages.get(messageID);
+    const activity = this.getOrCreateMessageActivityState(messageID);
 
     // OpenCode injects synthetic text parts of its own: expanded file attachments,
     // MCP resource dumps, plan-mode hints. They are context for the model, never content
@@ -1303,6 +1370,7 @@ class SummaryAggregator {
     }
 
     if (part.type === "reasoning") {
+      activity.hasReasoningActivity = true;
       this.registerThinkingPart(
         messageID,
         part.id,
@@ -1386,6 +1454,7 @@ class SummaryAggregator {
         }
       }
     } else if (part.type === "tool") {
+      activity.hasToolActivity = true;
       const state = part.state;
       const input = state.input;
       const title = "title" in state ? state.title : undefined;
@@ -1818,6 +1887,20 @@ class SummaryAggregator {
     return state;
   }
 
+  private getOrCreateMessageActivityState(messageID: string): MessageActivityState {
+    const existing = this.messageActivityStates.get(messageID);
+    if (existing) {
+      return existing;
+    }
+
+    const state: MessageActivityState = {
+      hasToolActivity: false,
+      hasReasoningActivity: false,
+    };
+    this.messageActivityStates.set(messageID, state);
+    return state;
+  }
+
   private registerKnownTextPart(messageID: string, partID: string): void {
     if (!this.knownTextPartIds.has(messageID)) {
       this.knownTextPartIds.set(messageID, new Set());
@@ -2051,6 +2134,17 @@ class SummaryAggregator {
     }
 
     logger.info(`[Aggregator] Session became idle: ${sessionID}`);
+
+    const pendingEmptyCompletion = this.pendingEmptyCompletions.get(sessionID);
+    this.pendingEmptyCompletions.delete(sessionID);
+    if (pendingEmptyCompletion && this.onCompleteCallback) {
+      this.onCompleteCallback(
+        sessionID,
+        pendingEmptyCompletion.messageId,
+        "",
+        pendingEmptyCompletion.info,
+      );
+    }
 
     // Stop typing indicator when session goes idle
     this.stopTypingIndicator();

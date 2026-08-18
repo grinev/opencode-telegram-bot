@@ -2,6 +2,7 @@ import type { I18nDictionary } from "./en.js";
 
 export const fr: I18nDictionary = {
   "cmd.description.status": "Statut du serveur et de la session",
+  "cmd.description.lastfile": "Exporter la dernière réponse de l’assistant",
   "cmd.description.new": "Créer une nouvelle session",
   "cmd.description.stop": "Arrêter l'action en cours",
   "cmd.description.detach": "Se détacher de la session actuelle",
@@ -86,6 +87,15 @@ export const fr: I18nDictionary = {
   "bot.session_reset_project_mismatch":
     "⚠️ La session active ne correspond pas au projet sélectionné, elle a donc été réinitialisée. Utilisez /sessions pour en choisir une ou /new pour créer une nouvelle session.",
   "bot.prompt_send_error": "Impossible d'envoyer la requête à OpenCode.",
+  "bot.empty_completion_retry":
+    "⚠️ OpenCode a renvoyé une réponse vide.\nNouvelle tentative unique…",
+  "bot.empty_completion_failed":
+    "⚠️ OpenCode s’est terminé sans réponse exploitable après une nouvelle tentative. Aucune autre tentative.",
+  "bot.empty_completion_no_retry":
+    "⚠️ OpenCode s’est terminé sans réponse exploitable.\nAucune nouvelle tentative automatique, car la tâche a peut-être déjà effectué des changements. Réessayez manuellement.",
+  "bot.lastfile_empty":
+    "Aucune réponse de l’assistant livrée avec succès n’est disponible pour cette session.",
+  "bot.lastfile_error": "⚠️ Échec de l’export de la dernière réponse de l’assistant.",
   "bot.session_error": "🔴 OpenCode a renvoyé une erreur : {message}",
   "bot.session_retry":
     "🔁 {message}\n\nLe fournisseur renvoie la même erreur à chaque nouvelle tentative. Utilisez /abort pour arrêter.",

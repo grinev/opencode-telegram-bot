@@ -10,11 +10,33 @@ import { resetSingletonState } from "../../helpers/reset-singleton-state.js";
 const mocked = vi.hoisted(() => ({
   subscribeToEvents: vi.fn(),
   stopEventListening: vi.fn(),
+  safeBackgroundTask: vi.fn(),
+  dispatchNextQueuedPrompt: vi.fn(),
+  promptAsyncMock: vi.fn(),
+  sessionStatusMock: vi.fn(),
 }));
 
 vi.mock("../../../src/opencode/events.js", () => ({
   subscribeToEvents: mocked.subscribeToEvents,
   stopEventListening: mocked.stopEventListening,
+}));
+
+vi.mock("../../../src/opencode/client.js", () => ({
+  opencodeClient: {
+    session: {
+      status: mocked.sessionStatusMock,
+      promptAsync: mocked.promptAsyncMock,
+    },
+  },
+}));
+
+vi.mock("../../../src/utils/safe-background-task.js", () => ({
+  safeBackgroundTask: mocked.safeBackgroundTask,
+}));
+
+vi.mock("../../../src/bot/handlers/prompt-queue-dispatch.js", () => ({
+  dispatchNextQueuedPrompt: mocked.dispatchNextQueuedPrompt,
+  __resetPromptQueueDispatchForTests: () => {},
 }));
 
 type FakeBotApi = {
@@ -122,6 +144,8 @@ function emitAssistantCompleted(summaryAggregator: { processEvent(event: Event):
         agent: "test-agent",
         providerID: "test-provider",
         modelID: "test-model",
+        // The authoritative OpenCode message finish for a successful run.
+        finish: "stop",
         time: { created: Date.now() - 1000, completed: Date.now() },
       },
     },
@@ -330,6 +354,15 @@ describe("bot/services/event-subscription-service", () => {
     mocked.subscribeToEvents.mockReset();
     mocked.stopEventListening.mockReset();
     mocked.subscribeToEvents.mockResolvedValue(undefined);
+    mocked.safeBackgroundTask.mockReset();
+    mocked.dispatchNextQueuedPrompt.mockReset();
+    mocked.promptAsyncMock.mockReset();
+    mocked.promptAsyncMock.mockResolvedValue({ data: {}, error: null });
+    mocked.sessionStatusMock.mockReset();
+    mocked.sessionStatusMock.mockResolvedValue({ data: {}, error: null });
+
+    const exportService = await import("../../../src/bot/services/assistant-response-export-service.js");
+    exportService.__resetAssistantResponseExportsForTests();
 
     const settingsStore = await import("../../../src/app/stores/settings-store.js");
     settingsStore.__resetSettingsForTests();
@@ -362,6 +395,7 @@ describe("bot/services/event-subscription-service", () => {
     } = {},
   ): Promise<{
     api: FakeBotApi;
+    service: ReturnType<typeof createEventSubscriptionService>;
     summaryAggregator: { setSession(sessionId: string): void; processEvent(event: Event): void };
   }> {
     const [
@@ -406,7 +440,7 @@ describe("bot/services/event-subscription-service", () => {
     summaryAggregator.setSession("session-1");
     emitAssistantMessage(summaryAggregator);
 
-    return { api, summaryAggregator };
+    return { api, service, summaryAggregator };
   }
 
   it("sends write tool output as a document attachment when diff files are enabled", async () => {
@@ -784,5 +818,835 @@ describe("bot/services/event-subscription-service", () => {
       expect(permissionManager.getPendingCount()).toBe(1);
     });
     expect(interactionManager.getSnapshot()?.kind).toBe("rename");
+  });
+
+  describe("empty completion retry lifecycle", () => {
+    type RetryTaskOptions = {
+      taskName: string;
+      task: () => Promise<unknown>;
+      onSuccess?: (value: { error: unknown | null }) => void;
+      onError?: (error: unknown) => void;
+    };
+
+    function emitAssistantText(
+      aggregator: { processEvent(event: Event): void },
+      text: string,
+      messageId: string,
+    ): void {
+      aggregator.processEvent({
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: `text-${messageId}`,
+            sessionID: "session-1",
+            messageID: messageId,
+            type: "text",
+            text,
+          },
+        },
+      } as unknown as Event);
+    }
+
+    function emitAssistantCompleted(
+      aggregator: { processEvent(event: Event): void },
+      messageId: string,
+      overrides: Record<string, unknown> = {},
+    ): void {
+      aggregator.processEvent({
+        type: "message.updated",
+        properties: {
+          info: {
+            id: messageId,
+            sessionID: "session-1",
+            role: "assistant",
+            agent: "test-agent",
+            providerID: "test-provider",
+            modelID: "test-model",
+            // The authoritative OpenCode message finish for a successful run;
+            // overrides may replace it with a non-terminal reason.
+            finish: "stop",
+            time: { created: Date.now() - 1000, completed: Date.now() },
+            ...overrides,
+          },
+        },
+      } as unknown as Event);
+    }
+
+    function emitAssistantStarted(
+      aggregator: { processEvent(event: Event): void },
+      messageId: string,
+    ): void {
+      aggregator.processEvent({
+        type: "message.updated",
+        properties: {
+          info: {
+            id: messageId,
+            sessionID: "session-1",
+            role: "assistant",
+            time: { created: Date.now() },
+          },
+        },
+      } as unknown as Event);
+    }
+
+    function emitToolPart(
+      aggregator: { processEvent(event: Event): void },
+      messageId: string,
+      callId: string,
+    ): void {
+      aggregator.processEvent({
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: `tool-${callId}`,
+            sessionID: "session-1",
+            messageID: messageId,
+            type: "tool",
+            callID: callId,
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { command: "npm test" },
+              metadata: {},
+              output: "ok",
+            },
+          },
+        },
+      } as unknown as Event);
+    }
+
+    function emitZeroWorkEmptyCompletion(
+      aggregator: { processEvent(event: Event): void },
+      messageId: string,
+    ): void {
+      emitAssistantCompleted(aggregator, messageId, {
+        finish: "unknown",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      });
+    }
+
+    async function registerPromptAttempt(api: FakeBotApi, chatId = 42): Promise<void> {
+      const { registerPromptRetry } = await import("../../../src/bot/handlers/prompt.js");
+      registerPromptRetry("session-1", {
+        bot: { api } as unknown as Bot<Context>,
+        chatId,
+        promptOptions: {
+          sessionID: "session-1",
+          directory: "D:/repo",
+          parts: [{ type: "text", text: "Review README" }],
+          agent: "build",
+        },
+        promptText: "Review README",
+        responseMode: "text_only",
+      });
+    }
+
+    function getRetryTaskOptions(): RetryTaskOptions {
+      const calls = mocked.safeBackgroundTask.mock.calls as unknown as [[RetryTaskOptions]];
+      const options = calls.find(([entry]) => entry.taskName === "session.promptAsync.retry")?.[0];
+      if (!options) {
+        throw new Error("retry background task was not captured");
+      }
+      return options;
+    }
+
+    function countFooters(api: FakeBotApi): number {
+      return api.sendMessage.mock.calls.filter(([, text]) =>
+        String(text).includes("test-provider/test-model"),
+      ).length;
+    }
+
+    async function flushRealDispatch(): Promise<void> {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
+    it("replays a provably zero-work empty completion exactly once", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      await registerPromptAttempt(api);
+
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(
+          api.sendMessage.mock.calls.some(([, text]) =>
+            String(text).includes("Retrying once"),
+          ),
+        ).toBe(true);
+      });
+      await vi.waitFor(() => {
+        expect(mocked.safeBackgroundTask).toHaveBeenCalledWith(
+          expect.objectContaining({ taskName: "session.promptAsync.retry" }),
+        );
+      });
+
+      // The idle that closed the original attempt was consumed by the guard.
+      expect(countFooters(api)).toBe(0);
+      expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
+    });
+
+    it("emits exactly one normal footer after a successful retry", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      await registerPromptAttempt(api);
+
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(mocked.safeBackgroundTask).toHaveBeenCalledWith(
+          expect.objectContaining({ taskName: "session.promptAsync.retry" }),
+        );
+      });
+
+      const retryOptions = getRetryTaskOptions();
+      await retryOptions.task();
+      retryOptions.onSuccess?.({ error: null });
+
+      emitAssistantText(summaryAggregator, "Final answer", "message-2");
+      emitAssistantCompleted(summaryAggregator, "message-2");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(
+          api.sendMessage.mock.calls.some(([, text]) => String(text) === "Final answer"),
+        ).toBe(true);
+      });
+      await vi.waitFor(
+        () => {
+          expect(countFooters(api)).toBe(1);
+        },
+        { timeout: 5000 },
+      );
+      expect(mocked.safeBackgroundTask).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not retry or emit a footer when the retry itself comes back empty", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      await registerPromptAttempt(api);
+
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(mocked.safeBackgroundTask).toHaveBeenCalledTimes(1);
+      });
+
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-2");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(
+          api.sendMessage.mock.calls.some(([, text]) =>
+            String(text).includes("No further retry was attempted"),
+          ),
+        ).toBe(true);
+      });
+      expect(mocked.safeBackgroundTask).toHaveBeenCalledTimes(1);
+      expect(countFooters(api)).toBe(0);
+    });
+
+    it("never replays the task when an earlier turn used a tool", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      await registerPromptAttempt(api);
+
+      emitBashTool(summaryAggregator, "completed");
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(
+          api.sendMessage.mock.calls.some(([, text]) =>
+            String(text).includes("No automatic retry was attempted"),
+          ),
+        ).toBe(true);
+      });
+      expect(mocked.safeBackgroundTask).not.toHaveBeenCalled();
+    });
+
+    it("never replays the task when an earlier turn reasoned", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      await registerPromptAttempt(api);
+
+      emitThinkingPart(summaryAggregator, "Careful thought");
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(
+          api.sendMessage.mock.calls.some(([, text]) =>
+            String(text).includes("No automatic retry was attempted"),
+          ),
+        ).toBe(true);
+      });
+      expect(mocked.safeBackgroundTask).not.toHaveBeenCalled();
+    });
+
+    it("ignores stale duplicate idle events while the retry is in flight", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      await registerPromptAttempt(api);
+
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(mocked.safeBackgroundTask).toHaveBeenCalledTimes(1);
+      });
+
+      emitSessionIdle(summaryAggregator);
+      emitSessionIdle(summaryAggregator);
+      await flushRealDispatch();
+
+      expect(countFooters(api)).toBe(0);
+      expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
+
+      const retryOptions = getRetryTaskOptions();
+      await retryOptions.task();
+      retryOptions.onSuccess?.({ error: null });
+
+      emitAssistantText(summaryAggregator, "Recovered", "message-2");
+      emitAssistantCompleted(summaryAggregator, "message-2");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(countFooters(api)).toBe(1);
+      });
+      expect(mocked.safeBackgroundTask).toHaveBeenCalledTimes(1);
+    });
+
+    it("restores idle state and releases the queue when the retry API call fails", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      const promptModule = await import("../../../src/bot/handlers/prompt.js");
+      const { foregroundSessionState } = await import(
+        "../../../src/app/managers/foreground-session-state-manager.js"
+      );
+      await registerPromptAttempt(api);
+
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(mocked.safeBackgroundTask).toHaveBeenCalledTimes(1);
+      });
+
+      const retryOptions = getRetryTaskOptions();
+      await retryOptions.task();
+      retryOptions.onSuccess?.({ error: new Error("retry rejected") });
+
+      await vi.waitFor(() => {
+        expect(mocked.dispatchNextQueuedPrompt).toHaveBeenCalled();
+      });
+      expect(foregroundSessionState.isBusy()).toBe(false);
+      expect(promptModule.hasPromptRetryAttempted("session-1")).toBe(false);
+      expect(
+        api.sendMessage.mock.calls.some(([, text]) =>
+          String(text).includes("Failed to send request to OpenCode."),
+        ),
+      ).toBe(true);
+    });
+
+    it("invalidates the retry lifecycle on runtime cleanup", async () => {
+      const { service } = await setupService(false);
+      const promptModule = await import("../../../src/bot/handlers/prompt.js");
+      await registerPromptAttempt({ sendMessage: vi.fn().mockResolvedValue(undefined) } as never);
+
+      service.clearRuntimeState("test_cleanup");
+      expect(promptModule.hasPromptRetryAttempted("session-1")).toBe(false);
+    });
+
+    it("invalidates the retry lifecycle on session errors", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      const promptModule = await import("../../../src/bot/handlers/prompt.js");
+      await registerPromptAttempt(api);
+
+      summaryAggregator.processEvent({
+        type: "session.error",
+        properties: { sessionID: "session-1", error: "boom" },
+      } as unknown as Event);
+      await flushRealDispatch();
+
+      expect(promptModule.hasPromptRetryAttempted("session-1")).toBe(false);
+
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-2");
+      emitSessionIdle(summaryAggregator);
+      await flushRealDispatch();
+
+      expect(mocked.safeBackgroundTask).not.toHaveBeenCalled();
+      expect(
+        api.sendMessage.mock.calls.some(([, text]) => String(text).includes("empty response")),
+      ).toBe(false);
+    });
+
+    it("invalidates the retry lifecycle when the completing session is no longer current", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      const promptModule = await import("../../../src/bot/handlers/prompt.js");
+      const sessionService = await import("../../../src/app/services/session-service.js");
+      await registerPromptAttempt(api);
+
+      sessionService.setCurrentSession({
+        id: "session-2",
+        title: "Other session",
+        directory: "D:/repo",
+      });
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+      await flushRealDispatch();
+
+      expect(promptModule.hasPromptRetryAttempted("session-1")).toBe(false);
+      expect(mocked.safeBackgroundTask).not.toHaveBeenCalled();
+    });
+
+    it("does not export an intermediate long response and keeps the last good one", async () => {
+      const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+      const exportService = await import(
+        "../../../src/bot/services/assistant-response-export-service.js"
+      );
+
+      emitAssistantText(summaryAggregator, "Good answer", "message-1");
+      emitAssistantCompleted(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+      await vi.waitFor(() => {
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+      });
+
+      await registerPromptAttempt(api);
+      emitAssistantText(summaryAggregator, "x".repeat(6000), "message-2");
+      emitAssistantCompleted(summaryAggregator, "message-2");
+      emitZeroWorkEmptyCompletion(summaryAggregator, "message-3");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(
+          api.sendMessage.mock.calls.some(([, text]) =>
+            String(text).includes("No automatic retry was attempted"),
+          ),
+        ).toBe(true);
+      });
+      expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+      expect(api.sendDocument).not.toHaveBeenCalled();
+    });
+
+    it("exports a long final response as a supplemental Markdown document", async () => {
+      const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+      const exportService = await import(
+        "../../../src/bot/services/assistant-response-export-service.js"
+      );
+
+      const longText = `# Heading\n\n${"x".repeat(6000)}`;
+      emitAssistantText(summaryAggregator, longText, "message-1");
+      emitAssistantCompleted(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(api.sendDocument).toHaveBeenCalledTimes(1);
+      });
+      expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(longText);
+    });
+
+    it("does not export a short final response", async () => {
+      const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+      const exportService = await import(
+        "../../../src/bot/services/assistant-response-export-service.js"
+      );
+
+      emitAssistantText(summaryAggregator, "Short answer", "message-1");
+      emitAssistantCompleted(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+
+      await vi.waitFor(() => {
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Short answer");
+      });
+      expect(api.sendDocument).not.toHaveBeenCalled();
+    });
+
+    it("scopes retry and export state by chat and session", async () => {
+      const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+      const promptModule = await import("../../../src/bot/handlers/prompt.js");
+      const exportService = await import(
+        "../../../src/bot/services/assistant-response-export-service.js"
+      );
+
+      emitAssistantText(summaryAggregator, "For session one", "message-1");
+      emitAssistantCompleted(summaryAggregator, "message-1");
+      emitSessionIdle(summaryAggregator);
+      await vi.waitFor(() => {
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(
+          "For session one",
+        );
+      });
+      expect(exportService.getRememberedAssistantResponse(43, "session-1")).toBeNull();
+      expect(exportService.getRememberedAssistantResponse(42, "session-2")).toBeNull();
+
+      await registerPromptAttempt(api);
+      expect(promptModule.hasPromptRetryAttempted("session-1")).toBe(false);
+      expect(promptModule.handleEmptyCompletion("session-2")).toBe("ignored");
+      promptModule.clearPromptRetry("session-1");
+    });
+
+    describe("final response terminality", () => {
+      async function startFreshRun(): Promise<void> {
+        const { assistantRunState } =
+          await import("../../../src/app/managers/assistant-run-state-manager.js");
+        assistantRunState.startRun("session-1", {
+          startedAt: Date.now(),
+          configuredAgent: "test-agent",
+          configuredProviderID: "test-provider",
+          configuredModelID: "test-model",
+        });
+      }
+
+      it("never reports an intermediate commentary run as complete when tool work follows", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+
+        emitAssistantText(summaryAggregator, "Good answer", "message-0");
+        emitAssistantCompleted(summaryAggregator, "message-0");
+        emitSessionIdle(summaryAggregator);
+        await vi.waitFor(() => {
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+        });
+        const footersBefore = countFooters(api);
+
+        await startFreshRun();
+
+        emitAssistantText(summaryAggregator, "Let me check the files", "message-1");
+        emitAssistantCompleted(summaryAggregator, "message-1");
+
+        emitAssistantStarted(summaryAggregator, "message-2");
+        emitAssistantText(summaryAggregator, "Running the tests", "message-2");
+        emitToolPart(summaryAggregator, "message-2", "call-tests");
+        emitAssistantCompleted(summaryAggregator, "message-2");
+        emitSessionIdle(summaryAggregator);
+
+        await flushRealDispatch();
+        await vi.waitFor(() => {
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+        });
+        expect(countFooters(api)).toBe(footersBefore);
+        expect(api.sendDocument).not.toHaveBeenCalled();
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+      });
+
+      it("does not announce a truncated/errored completion as a completed task", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+
+        emitAssistantText(summaryAggregator, "Good answer", "message-0");
+        emitAssistantCompleted(summaryAggregator, "message-0");
+        emitSessionIdle(summaryAggregator);
+        await vi.waitFor(() => {
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+        });
+        const footersBefore = countFooters(api);
+
+        await startFreshRun();
+
+        emitAssistantText(summaryAggregator, "Partial answer that got cut off", "message-1");
+        emitAssistantCompleted(summaryAggregator, "message-1", {
+          error: { name: "MessageAbortedError", data: { message: "aborted" } },
+        });
+        emitSessionIdle(summaryAggregator);
+
+        await flushRealDispatch();
+        await vi.waitFor(() => {
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+        });
+        expect(countFooters(api)).toBe(footersBefore);
+        expect(api.sendDocument).not.toHaveBeenCalled();
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+      });
+
+      it("emits exactly one footer and updates /lastfile for a normal short terminal response", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+
+        emitAssistantText(summaryAggregator, "Short answer", "message-1");
+        emitAssistantCompleted(summaryAggregator, "message-1");
+        emitSessionIdle(summaryAggregator);
+
+        await vi.waitFor(() => {
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(
+            "Short answer",
+          );
+        });
+        expect(countFooters(api)).toBe(1);
+        expect(api.sendDocument).not.toHaveBeenCalled();
+      });
+
+      it("emits one footer, updates /lastfile, and attaches one document for a long terminal response", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+
+        const longText = `# Heading\n\n${"x".repeat(6000)}`;
+        emitAssistantText(summaryAggregator, longText, "message-1");
+        emitAssistantCompleted(summaryAggregator, "message-1");
+        emitSessionIdle(summaryAggregator);
+
+        await vi.waitFor(() => {
+          expect(api.sendDocument).toHaveBeenCalledTimes(1);
+        });
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(longText);
+        expect(countFooters(api)).toBe(1);
+      });
+
+      it("keeps a stale original idle inert after the retry response and finalizes exactly once", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+        const { foregroundSessionState } =
+          await import("../../../src/app/managers/foreground-session-state-manager.js");
+        await registerPromptAttempt(api);
+
+        emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+        emitSessionIdle(summaryAggregator);
+
+        await vi.waitFor(() => {
+          expect(mocked.safeBackgroundTask).toHaveBeenCalledWith(
+            expect.objectContaining({ taskName: "session.promptAsync.retry" }),
+          );
+        });
+
+        const retryOptions = getRetryTaskOptions();
+        await retryOptions.task();
+        retryOptions.onSuccess?.({ error: null });
+
+        emitAssistantText(summaryAggregator, "Recovered answer", "message-2");
+        emitAssistantCompleted(summaryAggregator, "message-2");
+
+        // Stale duplicate idle of the ORIGINAL attempt arrives AFTER the retry
+        // produced its response, while the authoritative session status says the
+        // retry is still busy. It must be fully inert.
+        mocked.sessionStatusMock.mockResolvedValueOnce({
+          data: { "session-1": { type: "busy" } },
+          error: null,
+        });
+        emitSessionIdle(summaryAggregator);
+        await flushRealDispatch();
+        expect(countFooters(api)).toBe(0);
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBeNull();
+        expect(api.sendDocument).not.toHaveBeenCalled();
+        expect(foregroundSessionState.isBusy()).toBe(true);
+        expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
+
+        // The real retry idle, with the authoritative status now genuinely idle,
+        // finalizes exactly once.
+        mocked.sessionStatusMock.mockResolvedValueOnce({ data: {}, error: null });
+        emitSessionIdle(summaryAggregator);
+        await vi.waitFor(
+          () => {
+            expect(countFooters(api)).toBe(1);
+          },
+          { timeout: 5000 },
+        );
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(
+          "Recovered answer",
+        );
+        expect(foregroundSessionState.isBusy()).toBe(false);
+        expect(countFooters(api)).toBe(1);
+        expect(mocked.safeBackgroundTask).toHaveBeenCalledTimes(1);
+      });
+
+      it("binds the final response, export, and footer to the originating chat", async () => {
+        const { api, summaryAggregator, service } = await setupService(false, {
+          startAssistantRun: true,
+        });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+        const newBot = createFakeBot();
+        await registerPromptAttempt(api, 42);
+
+        // The mutable service-wide chat context moves to another chat mid-run.
+        service.setTelegramContext(newBot.bot, 43);
+
+        const longText = `# Heading\n\n${"x".repeat(6000)}`;
+        emitAssistantText(summaryAggregator, longText, "message-1");
+        emitAssistantCompleted(summaryAggregator, "message-1");
+        emitSessionIdle(summaryAggregator);
+
+        await vi.waitFor(() => {
+          expect(newBot.api.sendDocument).toHaveBeenCalledWith(42, expect.anything());
+        });
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(longText);
+        expect(exportService.getRememberedAssistantResponse(43, "session-1")).toBeNull();
+
+        const footerCalls = newBot.api.sendMessage.mock.calls.filter(([, text]) =>
+          String(text).includes("test-provider/test-model"),
+        );
+        expect(footerCalls).toHaveLength(1);
+        expect(footerCalls[0][0]).toBe(42);
+      });
+
+      it("fails closed for a non-empty response with a missing or unknown finish reason", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+        const { assistantRunState } = await import(
+          "../../../src/app/managers/assistant-run-state-manager.js"
+        );
+
+        emitAssistantText(summaryAggregator, "Good answer", "message-0");
+        emitAssistantCompleted(summaryAggregator, "message-0");
+        emitSessionIdle(summaryAggregator);
+        await vi.waitFor(() => {
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+        });
+
+        for (const finish of [undefined, "unknown"]) {
+          assistantRunState.startRun("session-1", {
+            startedAt: Date.now(),
+            configuredAgent: "test-agent",
+            configuredProviderID: "test-provider",
+            configuredModelID: "test-model",
+          });
+          const footersBefore = countFooters(api);
+          const messageId = `message-${finish === undefined ? "missing" : "unknown"}`;
+
+          // Partial/truncated-looking response: non-empty, no explicit error,
+          // finish missing or unknown. Must never be reported as complete.
+          emitAssistantText(summaryAggregator, "Partial answer that looks truncated", messageId);
+          emitAssistantCompleted(summaryAggregator, messageId, { finish });
+          emitSessionIdle(summaryAggregator);
+
+          await flushRealDispatch();
+          await vi.waitFor(() => {
+            expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(
+              "Good answer",
+            );
+          });
+          expect(countFooters(api)).toBe(footersBefore);
+          expect(api.sendDocument).not.toHaveBeenCalled();
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe("Good answer");
+        }
+      });
+
+      it("does not finalize the retry on a stale idle even after a long delay while the session is busy", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+        const { foregroundSessionState } = await import(
+          "../../../src/app/managers/foreground-session-state-manager.js"
+        );
+        await registerPromptAttempt(api);
+
+        emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+        emitSessionIdle(summaryAggregator);
+
+        await vi.waitFor(() => {
+          expect(mocked.safeBackgroundTask).toHaveBeenCalledWith(
+            expect.objectContaining({ taskName: "session.promptAsync.retry" }),
+          );
+        });
+
+        const retryOptions = getRetryTaskOptions();
+        await retryOptions.task();
+        retryOptions.onSuccess?.({ error: null });
+
+        const longText = `# Heading\n\n${"x".repeat(6000)}`;
+        emitAssistantText(summaryAggregator, longText, "message-2");
+        emitAssistantCompleted(summaryAggregator, "message-2");
+
+        // Stale original idle while the authoritative status says the retry is
+        // still busy. It must be fully inert.
+        mocked.sessionStatusMock.mockResolvedValueOnce({
+          data: { "session-1": { type: "busy" } },
+          error: null,
+        });
+        emitSessionIdle(summaryAggregator);
+        await flushRealDispatch();
+        expect(countFooters(api)).toBe(0);
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBeNull();
+        expect(api.sendDocument).not.toHaveBeenCalled();
+        expect(foregroundSessionState.isBusy()).toBe(true);
+        expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
+
+        // Wait LONGER than the old 300ms timer window: nothing may finalize.
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await flushRealDispatch();
+        expect(countFooters(api)).toBe(0);
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBeNull();
+        expect(api.sendDocument).not.toHaveBeenCalled();
+        expect(foregroundSessionState.isBusy()).toBe(true);
+        expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
+
+        // The genuine retry idle, with authoritative idle status, finalizes
+        // exactly once and exports the long response.
+        mocked.sessionStatusMock.mockResolvedValueOnce({ data: {}, error: null });
+        emitSessionIdle(summaryAggregator);
+        await vi.waitFor(
+          () => {
+            expect(api.sendDocument).toHaveBeenCalledTimes(1);
+          },
+          { timeout: 5000 },
+        );
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(longText);
+        expect(foregroundSessionState.isBusy()).toBe(false);
+        expect(countFooters(api)).toBe(1);
+        expect(mocked.dispatchNextQueuedPrompt).toHaveBeenCalledTimes(1);
+        expect(mocked.safeBackgroundTask).toHaveBeenCalledTimes(1);
+      });
+
+      it("fails closed when the authoritative session status lookup fails during retry finalization", async () => {
+        const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+        const exportService =
+          await import("../../../src/bot/services/assistant-response-export-service.js");
+        const { foregroundSessionState } = await import(
+          "../../../src/app/managers/foreground-session-state-manager.js"
+        );
+        await registerPromptAttempt(api);
+
+        emitZeroWorkEmptyCompletion(summaryAggregator, "message-1");
+        emitSessionIdle(summaryAggregator);
+
+        await vi.waitFor(() => {
+          expect(mocked.safeBackgroundTask).toHaveBeenCalledWith(
+            expect.objectContaining({ taskName: "session.promptAsync.retry" }),
+          );
+        });
+
+        const retryOptions = getRetryTaskOptions();
+        await retryOptions.task();
+        retryOptions.onSuccess?.({ error: null });
+
+        emitAssistantText(summaryAggregator, "Recovered answer", "message-2");
+        emitAssistantCompleted(summaryAggregator, "message-2");
+
+        for (const failingStatus of [
+          { data: null, error: new Error("status lookup failed") },
+          { data: { "session-1": { type: "unexpected" } }, error: null },
+        ]) {
+          mocked.sessionStatusMock.mockResolvedValueOnce(failingStatus);
+          emitSessionIdle(summaryAggregator);
+          await flushRealDispatch();
+          expect(countFooters(api)).toBe(0);
+          expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBeNull();
+          expect(api.sendDocument).not.toHaveBeenCalled();
+          expect(foregroundSessionState.isBusy()).toBe(true);
+          expect(mocked.dispatchNextQueuedPrompt).not.toHaveBeenCalled();
+        }
+
+        // A later genuine idle with authoritative idle status still finalizes
+        // exactly once.
+        mocked.sessionStatusMock.mockResolvedValueOnce({ data: {}, error: null });
+        emitSessionIdle(summaryAggregator);
+        await vi.waitFor(
+          () => {
+            expect(countFooters(api)).toBe(1);
+          },
+          { timeout: 5000 },
+        );
+        expect(exportService.getRememberedAssistantResponse(42, "session-1")).toBe(
+          "Recovered answer",
+        );
+        expect(foregroundSessionState.isBusy()).toBe(false);
+        expect(countFooters(api)).toBe(1);
+      });
+    });
   });
 });

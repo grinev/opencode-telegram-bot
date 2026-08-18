@@ -135,6 +135,7 @@ opencode-telegram config
 | Command           | Description                                             |
 | ----------------- | ------------------------------------------------------- |
 | `/status`         | Server health, current project, session, and model info |
+| `/lastfile`       | Export the latest delivered assistant response as Markdown |
 | `/new`            | Create a new session                                    |
 | `/abort`          | Abort the current task                                  |
 | `/detach`         | Detach from the current session without stopping it     |
@@ -235,6 +236,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `BASH_TOOL_DISPLAY_MAX_LENGTH`             | Maximum displayed length for `bash` tool commands in Telegram summaries; longer commands are truncated                |    No    | `128`                    |
 | `TRACK_BACKGROUND_SESSIONS`                | Track detached/non-current sessions in the current selected project/worktree and send short notifications             |    No    | `true`                   |
 | `RESPONSE_STREAM_THROTTLE_MS`              | Stream update throttle in milliseconds for assistant, thinking, and tool message edits                                |    No    | `1000`                   |
+| `ASSISTANT_RESPONSE_FILE_THRESHOLD`        | Automatically attach assistant replies longer than this many characters as Markdown                           |    No    | `5000`                   |
 | `MESSAGE_FORMAT_MODE`                      | Assistant reply formatting mode: `markdown` (native Telegram rich blocks) or `raw` (plain text)                       |    No    | `markdown`               |
 | `MESSAGE_MERGE_WINDOW_MS`                  | Merge Telegram-split long text messages into one prompt after this wait window (ms); `0` disables merging             |    No    | `1500`                   |
 | `INITIAL_SETTINGS_PRESET`                  | JSON object that seeds default `/settings` values on first run (keys not yet persisted); see [Runtime Settings](#runtime-settings) |    No    | `{}`                     |

@@ -24,6 +24,7 @@ const mocked = vi.hoisted(() => ({
   clearRunMock: vi.fn(),
   markAttachedSessionIdleMock: vi.fn(),
   clearPromptResponseModeMock: vi.fn(),
+  clearPromptRetryMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/services/session-service.js", () => ({
@@ -51,6 +52,7 @@ vi.mock("../../../src/app/services/attach-service.js", () => ({
 
 vi.mock("../../../src/bot/handlers/prompt.js", () => ({
   clearPromptResponseMode: mocked.clearPromptResponseModeMock,
+  clearPromptRetry: mocked.clearPromptRetryMock,
 }));
 
 const TEST_QUESTION: Question = {
@@ -93,6 +95,7 @@ describe("bot/commands/abort", () => {
     mocked.markAttachedSessionIdleMock.mockReset();
     mocked.markAttachedSessionIdleMock.mockResolvedValue(undefined);
     mocked.clearPromptResponseModeMock.mockReset();
+    mocked.clearPromptRetryMock.mockReset();
     __resetUserAbortErrorSuppressionForTests();
   });
 
@@ -105,6 +108,7 @@ describe("bot/commands/abort", () => {
     expect(mocked.clearRunMock).toHaveBeenCalledWith("session-1", reason);
     expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.clearPromptRetryMock).toHaveBeenCalledWith("session-1");
   }
 
   it("clears interaction state even when there is no active session", async () => {

@@ -2144,6 +2144,96 @@ describe("summary/aggregator", () => {
     expect(onComplete).not.toHaveBeenCalled();
   });
 
+  it("reports an empty completed response at session idle with final metadata", () => {
+    const onComplete = vi.fn();
+    summaryAggregator.setOnComplete(onComplete);
+    summaryAggregator.setSession("session-empty-final");
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "message-empty-final",
+          sessionID: "session-empty-final",
+          role: "assistant",
+          finish: "unknown",
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          time: { created: 1 },
+        },
+      },
+    } as unknown as Event);
+
+    for (const type of ["step-start", "step-finish"] as const) {
+      summaryAggregator.processEvent({
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: `${type}-1`,
+            sessionID: "session-empty-final",
+            messageID: "message-empty-final",
+            type,
+            ...(type === "step-finish"
+              ? {
+                  reason: "unknown",
+                  cost: 0,
+                  tokens: {
+                    input: 0,
+                    output: 0,
+                    reasoning: 0,
+                    cache: { read: 0, write: 0 },
+                  },
+                }
+              : {}),
+          },
+        },
+      } as unknown as Event);
+    }
+
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "message-empty-final",
+          sessionID: "session-empty-final",
+          role: "assistant",
+          finish: "unknown",
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          time: { created: 1, completed: 2 },
+        },
+      },
+    } as unknown as Event);
+
+    summaryAggregator.processEvent({
+      type: "session.idle",
+      properties: { sessionID: "session-empty-final" },
+    } as unknown as Event);
+
+    expect(onComplete).toHaveBeenCalledWith(
+      "session-empty-final",
+      "message-empty-final",
+      "",
+      expect.objectContaining({
+        finishReason: "unknown",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+        hasToolActivity: false,
+        hasReasoningActivity: false,
+      }),
+    );
+  });
+
   it("drops the empty-response placeholder while it is still streaming in", () => {
     const onPartial = vi.fn();
     summaryAggregator.setOnPartial(onPartial);
