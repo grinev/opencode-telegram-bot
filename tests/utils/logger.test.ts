@@ -338,4 +338,72 @@ describe("utils/logger", () => {
     consoleWarnMock.mockRestore();
     consoleErrorMock.mockRestore();
   });
+
+  it("re-throws non-EPIPE errors and does not mark console as broken", async () => {
+    const tempHome = await createTempHome();
+    const consoleLogMock = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const consoleWarnMock = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const consoleErrorMock = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-11T12:34:56.000Z"));
+    vi.stubEnv("LOG_LEVEL", "info");
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
+    setRuntimeMode("sources");
+
+    const { initializeLogger, logger, __resetLoggerForTests } =
+      await loadLoggerModule();
+
+    await initializeLogger();
+    logger.info("before non-EPIPE");
+
+    // Emit a non-EPIPE error (EIO)
+    const eioError = Object.assign(new Error("write EIO"), { code: "EIO" });
+    let thrown = false;
+    try {
+      process.stderr.emit("error", eioError);
+    } catch (e) {
+      thrown = true;
+      expect(e).toBe(eioError);
+    }
+
+    expect(thrown).toBe(true);
+
+    // Console should NOT be marked as broken
+    logger.warn("after non-EPIPE");
+    await expect(consoleWarnMock).toHaveBeenCalled();
+
+    __resetLoggerForTests();
+    consoleLogMock.mockRestore();
+    consoleWarnMock.mockRestore();
+    consoleErrorMock.mockRestore();
+  });
+
+  it("reportLoggerInternalError does not write to stderr after EPIPE", async () => {
+    const tempHome = await createTempHome();
+    const consoleErrorMock = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-11T12:34:56.000Z"));
+    vi.stubEnv("LOG_LEVEL", "info");
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
+    setRuntimeMode("sources");
+
+    const { initializeLogger, logger, flushLogger, __resetLoggerForTests } =
+      await loadLoggerModule();
+
+    await initializeLogger();
+    logger.info("before pipe break");
+    process.stderr.emit("error", Object.assign(new Error("write EPIPE"), { code: "EPIPE" }));
+
+    // Logger error after EPIPE should not write to stderr (console is broken)
+    logger.error("after pipe break - logger error");
+    await flushLogger();
+
+    // Console.error should not have been called after EPIPE
+    expect(consoleErrorMock).not.toHaveBeenCalled();
+
+    __resetLoggerForTests();
+    consoleErrorMock.mockRestore();
+  });
 });

@@ -142,6 +142,9 @@ function getLogFilePattern(mode: RuntimeMode): RegExp {
 }
 
 function reportLoggerInternalError(message: string, error?: unknown): void {
+  if (isConsoleOutputBroken()) {
+    return;
+  }
   const details =
     error instanceof Error
       ? (error.stack ?? `${error.name}: ${error.message}`)
@@ -172,7 +175,11 @@ function installConsolePipeGuard(): void {
       (error as NodeJS.ErrnoException).code === "EPIPE"
     ) {
       (globalThis as Record<string, unknown>)[CONSOLE_BROKEN_KEY] = true;
+      return;
     }
+
+    // Re-throw non-EPIPE errors to preserve fatal EventEmitter semantics
+    throw error;
   };
 
   process.stdout.on("error", handleStreamError);
