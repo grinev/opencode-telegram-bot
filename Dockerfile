@@ -13,10 +13,9 @@ RUN mkdir -p /app/data/logs /app/data/run && \
 # Set persistent home for the bot
 ENV OPENCODE_TELEGRAM_HOME=/app/data
 
-# Copy settings template as fallback (copied to actual location on startup if not exists)
-COPY settings.json.host /app/settings.json.host
-COPY settings.json.bak.host /app/settings.json.bak.host
-RUN chown node:node /app/settings.json.host /app/settings.json.bak.host
+# Copy settings template for reference (startup creates settings.json if missing)
+COPY settings.json.template /app/settings.json.template
+RUN chown node:node /app/settings.json.template
 
 USER node
 

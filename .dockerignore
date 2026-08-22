@@ -1,0 +1,37 @@
+# Environment files
+.env
+.env.*
+
+# Local data directories
+data/
+logs/
+backups/
+
+# OMO
+.omo/
+
+# Git
+.git/
+
+# Dependencies (bind mounted in docker-compose.yml, not copied to image)
+node_modules/
+dist/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local settings
+settings.json
+settings.json.*
+*.host
+
+# Build artifacts
+*.log
+npm-debug.log*

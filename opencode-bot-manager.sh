@@ -3,7 +3,8 @@
 
 set -euo pipefail
 
-PROJECT_DIR="/home/iagui/Opencode/opencode-telegram-bot"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$SCRIPT_DIR"
 COMPOSE_FILE="$PROJECT_DIR/docker-compose.yml"
 SERVICE_NAME="opencode-telegram-bot"
 
@@ -29,7 +30,7 @@ case "${1:-help}" in
     status)
         docker compose ps
         echo ""
-        echo "=== Health ==="
+        echo "=== OpenCode health ==="
         docker compose exec -T opencode-bot wget -q --spider http://localhost:4096/api/health && echo "OK" || echo "FAIL"
         ;;
     update)
@@ -56,50 +57,43 @@ case "${1:-help}" in
         docker compose exec opencode-bot sh
         ;;
     health)
-        echo "Bot health:"
+        echo "OpenCode health:"
         docker compose exec -T opencode-bot wget -qO- http://localhost:4096/api/health
         echo ""
         echo "Telegram bot info:"
-        curl -s "https://api.telegram.org/bot$(grep TELEGRAM_BOT_TOKEN .env | cut -d= -f2)/getMe" | jq .
-        ;;
-    install-service)
-        echo "Installing systemd service..."
-        sudo cp "$PROJECT_DIR/opencode-telegram-bot.service" /etc/systemd/system/
-        sudo systemctl daemon-reload
-        sudo systemctl enable opencode-telegram-bot
-        echo "Service installed. Use: sudo systemctl start opencode-telegram-bot"
-        ;;
-    uninstall-service)
-        sudo systemctl stop opencode-telegram-bot
-        sudo systemctl disable opencode-telegram-bot
-        sudo rm /etc/systemd/system/opencode-telegram-bot.service
-        sudo systemctl daemon-reload
-        echo "Service uninstalled"
+        # Read token from .env file into a variable to avoid exposing it in ps
+        if [[ -f .env ]]; then
+            TELEGRAM_BOT_TOKEN=$(grep '^TELEGRAM_BOT_TOKEN=' .env | cut -d= -f2-)
+            if [[ -n "$TELEGRAM_BOT_TOKEN" ]]; then
+                curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe" | jq .
+            else
+                echo "TELEGRAM_BOT_TOKEN not set in .env"
+            fi
+        else
+            echo ".env file not found"
+        fi
         ;;
     *)
         cat <<EOF
 OpenCode Telegram Bot Manager
 
-Usage: $0 <command>
+Usage: \$0 <command>
 
 Commands:
   start           Start the bot (docker compose up)
   stop            Stop the bot (docker compose down)
   restart         Restart the bot
   logs            Follow logs (Ctrl+C to exit)
-  status          Show container status and health
+  status          Show container status and OpenCode health
   update          Pull latest code + rebuild, restart (aborts if local changes)
   rebuild         Full rebuild from scratch (no cache)
   shell           Open shell in running container
-  health          Check bot and Telegram API health
-  install-service Install systemd service for auto-start on boot
-  uninstall-service Remove systemd service
+  health          Check OpenCode and Telegram API health
 
 Examples:
-  $0 start
-  $0 logs
-  $0 update
-  $0 install-service
+  \$0 start
+  \$0 logs
+  \$0 update
 EOF
         exit 1
         ;;
