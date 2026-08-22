@@ -13,10 +13,6 @@ RUN mkdir -p /app/data/logs /app/data/run && \
 # Set persistent home for the bot
 ENV OPENCODE_TELEGRAM_HOME=/app/data
 
-# Copy settings template for reference (startup creates settings.json if missing)
-COPY settings.json.template /app/settings.json.template
-RUN chown node:node /app/settings.json.template
-
 USER node
 
 # Single dumb-init entrypoint

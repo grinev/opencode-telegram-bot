@@ -60,18 +60,6 @@ case "${1:-help}" in
         echo "OpenCode health:"
         docker compose exec -T opencode-bot wget -qO- http://localhost:4096/api/health
         echo ""
-        echo "Telegram bot info:"
-        # Read token from .env file into a variable to avoid exposing it in ps
-        if [[ -f .env ]]; then
-            TELEGRAM_BOT_TOKEN=$(grep '^TELEGRAM_BOT_TOKEN=' .env | cut -d= -f2-)
-            if [[ -n "$TELEGRAM_BOT_TOKEN" ]]; then
-                curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe" | jq .
-            else
-                echo "TELEGRAM_BOT_TOKEN not set in .env"
-            fi
-        else
-            echo ".env file not found"
-        fi
         ;;
     *)
         cat <<EOF
@@ -88,7 +76,7 @@ Commands:
   update          Pull latest code + rebuild, restart (aborts if local changes)
   rebuild         Full rebuild from scratch (no cache)
   shell           Open shell in running container
-  health          Check OpenCode and Telegram API health
+  health          Check OpenCode health
 
 Examples:
   \$0 start
