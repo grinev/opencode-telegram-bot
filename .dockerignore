@@ -27,9 +27,10 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Local settings
+# Local settings (but NOT the template)
 settings.json
 settings.json.*
+!settings.json.template
 *.host
 
 # Build artifacts
