@@ -27,6 +27,10 @@ function plainSignature(text: string): string {
   return getTelegramRenderedPartSignature({ blocks: [], fallbackText: text, source: "plain" });
 }
 
+function badRequestError(message: string): Error & { error_code: number } {
+  return Object.assign(new Error(message), { error_code: 400 });
+}
+
 describe("bot/messages/telegram-text", () => {
   it("sends raw messages by default", async () => {
     const sendMessage = vi.fn().mockResolvedValue(undefined);
@@ -64,9 +68,9 @@ describe("bot/messages/telegram-text", () => {
     const sendMessage = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '.' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '.' is reserved"),
       )
-      .mockRejectedValueOnce(new Error("Bad Request: can't parse entities: unsupported start tag"))
+      .mockRejectedValueOnce(badRequestError("Bad Request: can't parse entities: unsupported start tag"))
       .mockResolvedValueOnce(undefined);
 
     await sendBotText({
@@ -159,7 +163,7 @@ describe("bot/messages/telegram-text", () => {
 
     it("retries as plain text after a rich send failure", async () => {
       const sendMessage = vi.fn().mockResolvedValue({ message_id: 222 });
-      const sendRichMessage = vi.fn().mockRejectedValue(new Error("Bad Request: RICH_BLOCK_INVALID"));
+      const sendRichMessage = vi.fn().mockRejectedValue(badRequestError("Bad Request: RICH_BLOCK_INVALID"));
 
       await expect(
         sendRenderedBotPart({
@@ -187,7 +191,7 @@ describe("bot/messages/telegram-text", () => {
         .mockResolvedValueOnce({ message_id: 11 })
         .mockResolvedValueOnce({ message_id: 12 })
         .mockResolvedValueOnce({ message_id: 13 });
-      const sendRichMessage = vi.fn().mockRejectedValue(new Error("Bad Request: too long"));
+      const sendRichMessage = vi.fn().mockRejectedValue(badRequestError("Bad Request: too long"));
 
       const result = await sendRenderedBotPart({
         api: { sendMessage, sendRichMessage },
@@ -208,7 +212,7 @@ describe("bot/messages/telegram-text", () => {
 
     it("rethrows instead of degrading when the caller opts out", async () => {
       const sendMessage = vi.fn();
-      const sendRichMessage = vi.fn().mockRejectedValue(new Error("Bad Request: RICH_BLOCK_INVALID"));
+      const sendRichMessage = vi.fn().mockRejectedValue(badRequestError("Bad Request: RICH_BLOCK_INVALID"));
 
       await expect(
         sendRenderedBotPart({
@@ -218,6 +222,22 @@ describe("bot/messages/telegram-text", () => {
           allowPlainFallback: false,
         }),
       ).rejects.toThrow("RICH_BLOCK_INVALID");
+
+      expect(sendMessage).not.toHaveBeenCalled();
+    });
+
+    it.each([429, 502])("does not retry as plain text after a rich %i error", async (errorCode) => {
+      const error = Object.assign(new Error(`Telegram error ${errorCode}`), { error_code: errorCode });
+      const sendMessage = vi.fn();
+      const sendRichMessage = vi.fn().mockRejectedValue(error);
+
+      await expect(
+        sendRenderedBotPart({
+          api: { sendMessage, sendRichMessage },
+          chatId: 100,
+          part: richPart,
+        }),
+      ).rejects.toBe(error);
 
       expect(sendMessage).not.toHaveBeenCalled();
     });
@@ -264,7 +284,7 @@ describe("bot/messages/telegram-text", () => {
     it("retries a failed rich edit as plain text when it fits one message", async () => {
       const editMessageText = vi
         .fn()
-        .mockRejectedValueOnce(new Error("Bad Request: RICH_BLOCK_INVALID"))
+        .mockRejectedValueOnce(badRequestError("Bad Request: RICH_BLOCK_INVALID"))
         .mockResolvedValueOnce(undefined);
 
       await expect(
@@ -283,7 +303,7 @@ describe("bot/messages/telegram-text", () => {
     });
 
     it("rethrows when the plain text would not fit a single edit", async () => {
-      const editMessageText = vi.fn().mockRejectedValue(new Error("Bad Request: RICH_BLOCK_INVALID"));
+      const editMessageText = vi.fn().mockRejectedValue(badRequestError("Bad Request: RICH_BLOCK_INVALID"));
 
       await expect(
         editRenderedBotPart({
@@ -298,7 +318,7 @@ describe("bot/messages/telegram-text", () => {
     });
 
     it("rethrows instead of degrading when the caller opts out", async () => {
-      const editMessageText = vi.fn().mockRejectedValue(new Error("Bad Request: RICH_BLOCK_INVALID"));
+      const editMessageText = vi.fn().mockRejectedValue(badRequestError("Bad Request: RICH_BLOCK_INVALID"));
 
       await expect(
         editRenderedBotPart({

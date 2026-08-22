@@ -33,6 +33,42 @@ let unsubscribeReadyRestore: (() => void) | null = null;
 
 const eventSubscriptionService: BotEventSubscriptionService = createEventSubscriptionService();
 
+const TRANSIENT_RETRY_SAFE_TELEGRAM_METHODS = new Set([
+  "editMessageReplyMarkup",
+  "editMessageText",
+  "sendChatAction",
+  "sendMessageDraft",
+  "sendRichMessageDraft",
+]);
+
+interface TelegramApiErrorResponse {
+  ok: false;
+  error_code: number;
+  description: string;
+  parameters?: object;
+}
+
+class TelegramApiResponseError extends Error {
+  constructor(readonly response: TelegramApiErrorResponse) {
+    super(response.description ?? "Telegram API request failed");
+    Object.assign(this, response);
+  }
+}
+
+export function shouldRetryTelegramServerError(method: string): boolean {
+  return TRANSIENT_RETRY_SAFE_TELEGRAM_METHODS.has(method);
+}
+
+function isTelegramApiErrorResponse(response: unknown): response is TelegramApiErrorResponse {
+  return (
+    typeof response === "object" &&
+    response !== null &&
+    Reflect.get(response, "ok") === false &&
+    typeof Reflect.get(response, "error_code") === "number" &&
+    typeof Reflect.get(response, "description") === "string"
+  );
+}
+
 export function createBot(): Bot<Context> {
   clearAllInteractionState("bot_startup");
   attachManager.clear("bot_startup");
@@ -100,15 +136,29 @@ export function createBot(): Bot<Context> {
       logger.debug(`[Bot API] sendMessage to chat ${(payload as { chat_id?: number }).chat_id}`);
     }
 
-    return withTelegramRateLimitRetry(() => prev(method, payload, signal), {
-      maxRetries: 5,
-      onRetry: ({ attempt, retryAfterMs, error }) => {
-        logger.warn(
-          `[Bot API] Telegram rate limit on ${method}, retrying in ${retryAfterMs}ms (attempt=${attempt})`,
-          error,
-        );
-      },
-    });
+    try {
+      return await withTelegramRateLimitRetry(async () => {
+        const response = await prev(method, payload, signal);
+        if (isTelegramApiErrorResponse(response)) {
+          throw new TelegramApiResponseError(response);
+        }
+        return response;
+      }, {
+        maxRetries: 5,
+        retryTransientServerErrors: shouldRetryTelegramServerError(method),
+        onRetry: ({ attempt, retryAfterMs, error }) => {
+          logger.warn(
+            `[Bot API] Retryable Telegram error on ${method}, retrying in ${retryAfterMs}ms (attempt=${attempt})`,
+            error,
+          );
+        },
+      });
+    } catch (error) {
+      if (error instanceof TelegramApiResponseError) {
+        return error.response;
+      }
+      throw error;
+    }
   });
 
   bot.use((ctx, next) => {

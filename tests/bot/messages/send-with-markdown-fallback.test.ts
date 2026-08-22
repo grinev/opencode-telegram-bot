@@ -5,6 +5,10 @@ import {
   sendMessageWithMarkdownFallback,
 } from "../../../src/bot/messages/send-with-markdown-fallback.js";
 
+function badRequestError(message: string): Error & { error_code: number } {
+  return Object.assign(new Error(message), { error_code: 400 });
+}
+
 describe("bot/messages/send-with-markdown-fallback", () => {
   it("sends with MarkdownV2 when there is no parse error", async () => {
     const sendMessage = vi.fn().mockResolvedValue(undefined);
@@ -28,7 +32,7 @@ describe("bot/messages/send-with-markdown-fallback", () => {
   it("retries in raw mode when Telegram rejects markdown entities", async () => {
     const sendMessage = vi
       .fn()
-      .mockRejectedValueOnce(new Error("Bad Request: can't parse entities: Unsupported start tag"))
+      .mockRejectedValueOnce(badRequestError("Bad Request: can't parse entities: Unsupported start tag"))
       .mockResolvedValueOnce(undefined);
 
     await sendMessageWithMarkdownFallback({
@@ -54,10 +58,10 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     const sendMessage = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '+' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '+' is reserved"),
       )
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '+' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '+' is reserved"),
       )
       .mockResolvedValueOnce(undefined);
 
@@ -93,9 +97,9 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     const sendMessage = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '.' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '.' is reserved"),
       )
-      .mockRejectedValueOnce(new Error("Bad Request: can't parse entities: unsupported start tag"))
+      .mockRejectedValueOnce(badRequestError("Bad Request: can't parse entities: unsupported start tag"))
       .mockResolvedValueOnce(undefined);
 
     await sendMessageWithMarkdownFallback({
@@ -114,9 +118,9 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     const sendMessage = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '.' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '.' is reserved"),
       )
-      .mockRejectedValueOnce(new Error("Bad Request: can't parse entities: unsupported start tag"))
+      .mockRejectedValueOnce(badRequestError("Bad Request: can't parse entities: unsupported start tag"))
       .mockResolvedValueOnce(undefined);
 
     await sendMessageWithMarkdownFallback({
@@ -134,7 +138,7 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     const sendMessage = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '(' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '(' is reserved"),
       )
       .mockResolvedValueOnce(undefined);
 
@@ -158,7 +162,7 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     const sendMessage = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '.' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '.' is reserved"),
       )
       .mockResolvedValueOnce(undefined);
 
@@ -178,22 +182,45 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     });
   });
 
-  it("retries non-markdown formatted send errors in raw mode", async () => {
-    const sendMessage = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("Bad Request: unexpected formatted send failure"))
-      .mockResolvedValueOnce(undefined);
+  it("does not retry a transport error in raw mode", async () => {
+    const error = Object.assign(new Error("Bad Gateway"), { error_code: 502 });
+    const sendMessage = vi.fn().mockRejectedValueOnce(error);
 
-    await sendMessageWithMarkdownFallback({
-      api: { sendMessage },
-      chatId: 123,
-      text: "hello",
-      parseMode: "MarkdownV2",
-    });
+    await expect(
+      sendMessageWithMarkdownFallback({
+        api: { sendMessage },
+        chatId: 123,
+        text: "hello",
+        parseMode: "MarkdownV2",
+      }),
+    ).rejects.toBe(error);
 
-    expect(sendMessage).toHaveBeenCalledTimes(2);
-    expect(sendMessage).toHaveBeenNthCalledWith(2, 123, "hello", undefined);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
   });
+
+  it.each([429, 502])(
+    "does not send a raw fallback when the escaped Markdown retry returns %i",
+    async (errorCode) => {
+      const error = Object.assign(new Error(`Telegram error ${errorCode}`), { error_code: errorCode });
+      const sendMessage = vi
+        .fn()
+        .mockRejectedValueOnce(
+          badRequestError("Bad Request: can't parse entities: Character '.' is reserved"),
+        )
+        .mockRejectedValueOnce(error);
+
+      await expect(
+        sendMessageWithMarkdownFallback({
+          api: { sendMessage },
+          chatId: 123,
+          text: "hello.",
+          parseMode: "MarkdownV2",
+        }),
+      ).rejects.toBe(error);
+
+      expect(sendMessage).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("detects parse errors from api error description fields", () => {
     const error = {
@@ -208,7 +235,7 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     const sendMessage = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '_' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '_' is reserved"),
       )
       .mockResolvedValueOnce(undefined);
 
@@ -248,7 +275,7 @@ describe("bot/messages/send-with-markdown-fallback", () => {
   it("retries message edit in raw mode when Telegram rejects markdown entities", async () => {
     const editMessageText = vi
       .fn()
-      .mockRejectedValueOnce(new Error("Bad Request: can't parse entities: unsupported start tag"))
+      .mockRejectedValueOnce(badRequestError("Bad Request: can't parse entities: unsupported start tag"))
       .mockResolvedValueOnce(undefined);
 
     await editMessageWithMarkdownFallback({
@@ -275,10 +302,10 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     const editMessageText = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '+' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '+' is reserved"),
       )
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '+' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '+' is reserved"),
       )
       .mockResolvedValueOnce(undefined);
 
@@ -315,9 +342,9 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     const editMessageText = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '.' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '.' is reserved"),
       )
-      .mockRejectedValueOnce(new Error("Bad Request: can't parse entities: unsupported start tag"))
+      .mockRejectedValueOnce(badRequestError("Bad Request: can't parse entities: unsupported start tag"))
       .mockResolvedValueOnce(undefined);
 
     await editMessageWithMarkdownFallback({
@@ -333,31 +360,30 @@ describe("bot/messages/send-with-markdown-fallback", () => {
     expect(editMessageText).toHaveBeenNthCalledWith(3, 111, 222, "Done.", undefined);
   });
 
-  it("retries non-markdown formatted edit errors in raw mode", async () => {
-    const editMessageText = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("Bad Request: unexpected formatted edit failure"))
-      .mockResolvedValueOnce(undefined);
+  it("does not retry a rate limit error in raw mode", async () => {
+    const error = Object.assign(new Error("Too Many Requests"), { error_code: 429 });
+    const editMessageText = vi.fn().mockRejectedValueOnce(error);
 
-    await editMessageWithMarkdownFallback({
-      api: { editMessageText },
-      chatId: 111,
-      messageId: 222,
-      text: "Done.",
-      parseMode: "MarkdownV2",
-    });
+    await expect(
+      editMessageWithMarkdownFallback({
+        api: { editMessageText },
+        chatId: 111,
+        messageId: 222,
+        text: "Done.",
+        parseMode: "MarkdownV2",
+      }),
+    ).rejects.toBe(error);
 
-    expect(editMessageText).toHaveBeenCalledTimes(2);
-    expect(editMessageText).toHaveBeenNthCalledWith(2, 111, 222, "Done.", undefined);
+    expect(editMessageText).toHaveBeenCalledTimes(1);
   });
 
   it("unescapes MarkdownV2 text for raw edit fallback when explicit fallback is not provided", async () => {
     const editMessageText = vi
       .fn()
       .mockRejectedValueOnce(
-        new Error("Bad Request: can't parse entities: Character '.' is reserved"),
+        badRequestError("Bad Request: can't parse entities: Character '.' is reserved"),
       )
-      .mockRejectedValueOnce(new Error("Bad Request: can't parse entities: unsupported start tag"))
+      .mockRejectedValueOnce(badRequestError("Bad Request: can't parse entities: unsupported start tag"))
       .mockResolvedValueOnce(undefined);
 
     await editMessageWithMarkdownFallback({

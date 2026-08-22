@@ -19,6 +19,7 @@ vi.mock("../../../src/opencode/events.js", () => ({
 
 type FakeBotApi = {
   sendMessage: ReturnType<typeof vi.fn>;
+  sendRichMessage: ReturnType<typeof vi.fn>;
   sendMessageDraft: ReturnType<typeof vi.fn>;
   editMessageText: ReturnType<typeof vi.fn>;
   deleteMessage: ReturnType<typeof vi.fn>;
@@ -28,6 +29,9 @@ type FakeBotApi = {
 function createFakeBot(): { bot: Bot<Context>; api: FakeBotApi } {
   const api: FakeBotApi = {
     sendMessage: vi.fn().mockResolvedValue({ message_id: 100 }),
+    sendRichMessage: vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("Bad Request: rich message unavailable"), { error_code: 400 })),
     sendMessageDraft: vi.fn().mockResolvedValue(undefined),
     editMessageText: vi.fn().mockResolvedValue(undefined),
     deleteMessage: vi.fn().mockResolvedValue(undefined),

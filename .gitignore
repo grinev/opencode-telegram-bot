@@ -21,6 +21,7 @@ Thumbs.db
 
 # Local AI tooling
 .claude/
+.codex/
 .kilocode/
 .opencode/
 opencode.json

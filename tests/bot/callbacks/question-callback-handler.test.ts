@@ -132,7 +132,9 @@ describe("bot question menu/callbacks", () => {
     const sendMessage = vi.fn().mockResolvedValueOnce({ message_id: 801 });
     const sendRichMessage = vi
       .fn()
-      .mockRejectedValueOnce(new Error("Bad Request: RICH_MESSAGE_BLOCK_UNSUPPORTED"));
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Bad Request: RICH_MESSAGE_BLOCK_UNSUPPORTED"), { error_code: 400 }),
+      );
     const api = {
       sendMessage,
       sendRichMessage,

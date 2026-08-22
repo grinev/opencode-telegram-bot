@@ -183,6 +183,9 @@ function createCallbackContext(data: string, messageId: number): Context {
     reply: vi.fn().mockResolvedValue(undefined),
     api: {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 888 }),
+      sendRichMessage: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error("Bad Request: rich message unavailable"), { error_code: 400 })),
       deleteMessage: vi.fn().mockResolvedValue(true),
       editMessageText: vi.fn().mockResolvedValue(true),
     },

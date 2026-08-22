@@ -3,6 +3,7 @@ import type { MessageEntity } from "grammy/types";
 import { logger } from "../../utils/logger.js";
 import {
   editMessageWithMarkdownFallback,
+  isTelegramBadRequestError,
   sendMessageWithMarkdownFallback,
 } from "./send-with-markdown-fallback.js";
 import { chunkPlainText } from "../render/chunker.js";
@@ -174,7 +175,7 @@ export async function sendRenderedBotPart({
       deliveredSignature: getTelegramRenderedPartSignature(part),
     };
   } catch (error) {
-    if (!allowPlainFallback) {
+    if (!allowPlainFallback || !isTelegramBadRequestError(error)) {
       throw error;
     }
 
@@ -242,7 +243,11 @@ export async function editRenderedBotPart({
   } catch (error) {
     // An edit targets exactly one message, so there is nothing to split it
     // across; a plain retry is only possible when the text fits a message.
-    if (!allowPlainFallback || part.fallbackText.length > TELEGRAM_TEXT_MESSAGE_LIMIT) {
+    if (
+      !allowPlainFallback ||
+      !isTelegramBadRequestError(error) ||
+      part.fallbackText.length > TELEGRAM_TEXT_MESSAGE_LIMIT
+    ) {
       throw error;
     }
 
