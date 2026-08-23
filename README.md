@@ -477,7 +477,11 @@ All configuration is provided through environment variables in the `.env` file. 
 
 #### Networking Note
 
-The provided `docker-compose.yml` uses `network_mode: host` (Linux only) because OpenCode by default binds to `127.0.0.1:4096` only. This allows the container to reach the OpenCode server on the host without additional configuration. On macOS/Windows, `network_mode: host` is not available; OpenCode must be configured to listen on `0.0.0.0` or a reachable IP, and `OPENCODE_API_URL` set accordingly.
+The provided `docker-compose.yml` uses `network_mode: host` because OpenCode by default binds to `127.0.0.1:4096` only. This allows the container to reach the OpenCode server on the host without additional configuration.
+
+- **Linux**: `network_mode: host` works natively.
+- **macOS/Windows (Docker Desktop 4.34+)**: host networking is supported when enabled in Settings → "Enable host networking".
+- If host networking is not available or not enabled, OpenCode must be configured to listen on `0.0.0.0` or a reachable IP, and `OPENCODE_API_URL` set accordingly.
 
 Port 4096 is **not** exposed by the bot image; it belongs to the OpenCode server, which runs separately.
 
