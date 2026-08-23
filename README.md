@@ -436,6 +436,51 @@ Build and run:
 npm run dev
 ```
 
+### Docker Deployment
+
+The bot can also be run as a container using Docker and Docker Compose.
+
+```bash
+git clone https://github.com/grinev/opencode-telegram-bot.git
+cd opencode-telegram-bot
+cp .env.example .env
+# Edit .env with your bot token, user ID, and model settings
+```
+
+Build and start:
+
+```bash
+docker compose up -d --build
+```
+
+Follow logs:
+
+```bash
+docker compose logs -f opencode-bot
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
+#### Persistence
+
+Runtime state (settings, logs, SQLite databases) is stored in a Docker named volume `opencode-bot-data` mapped to `/app/data` inside the container. The volume is created automatically on first run.
+
+#### Configuration
+
+All configuration is provided through environment variables in the `.env` file. The most relevant variables for Docker are:
+
+- `OPENCODE_API_URL` — URL of the OpenCode server. Default: `http://127.0.0.1:4096`. If running OpenCode on the Docker host (not in a container), `network_mode: host` allows using `127.0.0.1`. If OpenCode runs elsewhere, set the appropriate host/port.
+
+#### Networking Note
+
+The provided `docker-compose.yml` uses `network_mode: host` (Linux only) because OpenCode by default binds to `127.0.0.1:4096` only. This allows the container to reach the OpenCode server on the host without additional configuration. On macOS/Windows, `network_mode: host` is not available; OpenCode must be configured to listen on `0.0.0.0` or a reachable IP, and `OPENCODE_API_URL` set accordingly.
+
+Port 4096 is **not** exposed by the bot image; it belongs to the OpenCode server, which runs separately.
+
 ### Available Scripts
 
 | Script                          | Description                          |
