@@ -130,6 +130,44 @@ export async function handleDocumentMessage(
       "text/rtf",
     ];
 
+    // Image files: route to the model as image parts. Two delivery shapes exist —
+    // Telegram sets mime_type="image/jpeg" for some clients, but iOS "Send as File"
+    // (the highest-quality path) delivers application/octet-stream with only the
+    // filename extension to go on. Trust the extension as the fallback signal.
+    const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
+    const looksLikeImage =
+      (typeof mimeType === "string" && mimeType.startsWith("image/")) ||
+      IMAGE_EXTENSIONS.some((ext) => filename.toLowerCase().endsWith(ext));
+
+    if (looksLikeImage) {
+      const storedModel = getStored();
+      const capabilities = await getCapabilities(storedModel.providerID, storedModel.modelID);
+      if (!supportsInput(capabilities, "image")) {
+        logger.warn(
+          `[Document] Model doesn't support image input (${storedModel.providerID}/${storedModel.modelID})`,
+        );
+        await ctx.reply(t("bot.photo_model_no_image"));
+        if (caption.trim().length > 0) {
+          await processPrompt(ctx, caption, deps);
+        }
+        return;
+      }
+      await ctx.reply(t("bot.file_downloading"));
+      const downloadedFile = await downloadFile(ctx.api, doc.file_id);
+      const effectiveMime = mimeType.startsWith("image/") ? mimeType : "image/jpeg";
+      const filePart = {
+        type: "file" as const,
+        mime: effectiveMime,
+        filename: filename,
+        url: toDataUri(downloadedFile.buffer, effectiveMime),
+      };
+      logger.info(
+        `[Document] Sending image document (${downloadedFile.buffer.length} bytes, ${filename}, ${mimeType})`,
+      );
+      await processPrompt(ctx, caption, deps, [filePart]);
+      return;
+    }
+
     if (DOCUMENT_MIME_TYPES.includes(mimeType)) {
       const storedModel = getStored();
       const capabilities = await getCapabilities(storedModel.providerID, storedModel.modelID);
