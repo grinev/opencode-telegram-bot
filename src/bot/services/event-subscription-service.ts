@@ -9,7 +9,10 @@ import {
   type SubagentInfo,
   type ToolInfo,
 } from "../../app/managers/summary-aggregation-manager.js";
-import { formatCompactToolActivity, formatToolInfo } from "../../app/formatters/summary-formatter.js";
+import {
+  formatCompactToolActivity,
+  formatToolInfo,
+} from "../../app/formatters/summary-formatter.js";
 import { renderSubagentCards } from "../../app/formatters/subagent-formatter.js";
 import {
   RUNNING_ICON,
@@ -62,10 +65,7 @@ import { ResponseStreamer, type StreamingMessagePayload } from "../streaming/res
 import { ToolCallStreamer, type ToolStreamKey } from "../streaming/tool-call-streamer.js";
 import { RunningToolTracker, type RunningToolTick } from "../streaming/running-tool-tracker.js";
 import { CompactProgressStreamer } from "../streaming/compact-progress-streamer.js";
-import {
-  getSessionStreamThrottleMs,
-  resetStreamThrottle,
-} from "../streaming/stream-throttle.js";
+import { getSessionStreamThrottleMs, resetStreamThrottle } from "../streaming/stream-throttle.js";
 import { attachManager } from "../../app/managers/attach-manager.js";
 import {
   markAttachedSessionBusy,
@@ -77,10 +77,7 @@ import {
   prepareAssistantStreamingPayload,
   renderAssistantFinalPartsSafe,
 } from "../messages/assistant-rendering.js";
-import {
-  prepareThinkingPayload,
-  type ThinkingSection,
-} from "../messages/thinking-rendering.js";
+import { prepareThinkingPayload, type ThinkingSection } from "../messages/thinking-rendering.js";
 import { deliverExternalUserInputNotification } from "../messages/external-user-input-notification.js";
 import { dispatchNextQueuedPrompt } from "../handlers/prompt-queue-dispatch.js";
 import {
@@ -150,6 +147,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     { callId: string; activity: string }
   >();
   private readonly subagentSnapshots = new Map<string, SubagentInfo[]>();
+  // Where the currently visible question poll lives - question lifecycle
+  // callbacks carry no chat context, so remember it at display time.
+  private activePromptChatId: number | null = null;
 
   constructor() {
     this.runningToolTracker = new RunningToolTracker({
@@ -202,15 +202,11 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
           const keyboard = this.getCurrentReplyKeyboard();
 
-          await this.botInstance.api.sendDocument(
-            targetChatId,
-            new InputFile(tempFilePath),
-            {
-              caption: fileData.caption,
-              disable_notification: true,
-              ...(keyboard ? { reply_markup: keyboard } : {}),
-            },
-          );
+          await this.botInstance.api.sendDocument(targetChatId, new InputFile(tempFilePath), {
+            caption: fileData.caption,
+            disable_notification: true,
+            ...(keyboard ? { reply_markup: keyboard } : {}),
+          });
         } finally {
           await fs.unlink(tempFilePath).catch(() => {});
         }
@@ -361,11 +357,18 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   }
 
   // Which chat should receive events for this session? Prefer the operator
-  // bound via userSessions; fall back to the legacy followed session.
+  // bound via userSessions; fall back to the legacy followed session. Subagent
+  // sessions are never bound themselves - they inherit the operator who owns
+  // their root conversation, so prompts surface in the right human's chat.
   private chatIdForSession(sessionId: string): number | null {
     const bound = getSessionChatBinding(sessionId);
     if (bound != null && Number.isFinite(bound)) {
       return bound;
+    }
+
+    const parentSessionId = summaryAggregator.getParentSessionId(sessionId);
+    if (parentSessionId != null) {
+      return this.chatIdForSession(parentSessionId);
     }
 
     const rawCurrent = getRawCurrentSession();
@@ -619,7 +622,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             this.enqueueAssistantResponse(sessionId, messageId, preparedStreamPayload);
           })
           .catch((error) => {
-            logger.error("[Bot] Failed to finalize compact progress before assistant stream", error);
+            logger.error(
+              "[Bot] Failed to finalize compact progress before assistant stream",
+              error,
+            );
           });
         return;
       }
@@ -706,8 +712,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             prepareStreamingPayload: this.prepareFinalStreamingPayload,
             renderFinalParts: (text) => renderAssistantFinalPartsSafe(text),
             getReplyKeyboard: this.getCurrentReplyKeyboard,
-            notifyFirstFinalPart:
-              assistantResponseMode === "draft" && !getShowAssistantRunFooter(),
+            notifyFirstFinalPart: assistantResponseMode === "draft" && !getShowAssistantRunFooter(),
             sendRenderedPart: async (part, options) => {
               await sendRenderedBotPart({
                 api: botApi,
@@ -757,8 +762,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           await deliverExternalUserInputNotification({
             api: this.botInstance.api,
             chatId: notificationChatId,
-            currentSessionId:
-              this.ownsSession(sessionId) ? sessionId : (getCurrentSession()?.id ?? null),
+            currentSessionId: this.ownsSession(sessionId)
+              ? sessionId
+              : (getCurrentSession()?.id ?? null),
             sessionId,
             text: messageText,
             consumeSuppressedInput: (incomingSessionId, incomingText) =>
@@ -963,32 +969,41 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         logger.warn("[Bot] Replacing active poll with a new one");
 
         const previousMessageIds = questionManager.getMessageIds();
-        const pollChatId = this.sendTarget(targetChatId);
+        // Delete the OLD poll from the chat where it was actually shown.
+        const previousPollChatId = this.activePromptChatId ?? this.sendTarget(targetChatId);
         for (const messageId of previousMessageIds) {
-          if (pollChatId != null) {
-            await this.botInstance.api.deleteMessage(pollChatId, messageId).catch(() => {});
+          if (previousPollChatId != null) {
+            await this.botInstance.api.deleteMessage(previousPollChatId, messageId).catch(() => {});
           }
         }
 
         clearAllInteractionState("question_replaced_by_new_poll");
       }
 
-      logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
+      logger.info(
+        `[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`,
+      );
       questionManager.startQuestions(questions, requestID);
-      await showCurrentQuestion(this.botInstance.api, this.chatIdInstance);
+      // Render the poll where the asking session's operator lives - never
+      // unconditionally in the primary chat.
+      this.activePromptChatId = targetChatId;
+      await showCurrentQuestion(this.botInstance.api, targetChatId);
     });
 
     summaryAggregator.setOnQuestionError(async () => {
       logger.info("[Bot] Question tool failed, clearing active poll and deleting messages");
 
       const messageIds = questionManager.getMessageIds();
+      const pollChatId =
+        this.activePromptChatId ?? (this.isSoloOperator() ? this.chatIdInstance : null);
       for (const messageId of messageIds) {
-        if (this.chatIdInstance) {
-          await this.botInstance?.api.deleteMessage(this.chatIdInstance, messageId).catch((err) => {
+        if (pollChatId != null) {
+          await this.botInstance?.api.deleteMessage(pollChatId, messageId).catch((err) => {
             logger.error(`[Bot] Failed to delete question message ${messageId}:`, err);
           });
         }
       }
+      this.activePromptChatId = null;
 
       clearAllInteractionState("question_error");
     });
@@ -1019,12 +1034,19 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       logger.info(
         `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}, subagent=${isSubagent}`,
       );
-      await showPermissionRequest(
-        this.botInstance.api,
-        this.chatIdForSession(request.sessionID) ?? this.chatIdInstance,
-        request,
-        generation,
-      );
+
+      const targetChatId = this.sendTarget(this.chatIdForSession(request.sessionID));
+      if (targetChatId == null) {
+        // Multi-operator fail-closed: nobody owns this conversation, so showing
+        // the approval surface in the primary chat would let one operator
+        // approve another operator's work.
+        logger.warn(
+          `[Bot] Dropping permission request with no owning chat: type=${request.permission}, requestID=${request.id}`,
+        );
+        return;
+      }
+
+      await showPermissionRequest(this.botInstance.api, targetChatId, request, generation);
     });
 
     summaryAggregator.setOnPermissionReplied(async (sessionId, requestID) => {
@@ -1036,7 +1058,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       if (this.botInstance && this.chatIdInstance) {
         const api = this.botInstance.api;
-        const chatId = this.chatIdForSession(sessionId) ?? this.chatIdInstance;
+        const chatId = this.sendTarget(this.chatIdForSession(sessionId));
+        if (chatId == null) {
+          return;
+        }
         await Promise.all(
           messageIds.map((messageId) =>
             api.deleteMessage(chatId, messageId).catch((err) => {
@@ -1080,9 +1105,11 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       if (update.isFirstUpdate) {
         this.clearToolElapsedState(update.sessionId, "thinking_started");
-        void this.toolCallStreamer.breakSession(update.sessionId, "thinking_started").catch((error) => {
-          logger.error("[Bot] Failed to break tool stream before thinking message", error);
-        });
+        void this.toolCallStreamer
+          .breakSession(update.sessionId, "thinking_started")
+          .catch((error) => {
+            logger.error("[Bot] Failed to break tool stream before thinking message", error);
+          });
       }
 
       if (getShowThinkingContent()) {
@@ -1433,10 +1460,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       : this.assistantEditResponseStreamer;
   }
 
-  private getAssistantResponseStreamMode(sessionId: string, messageId: string): ResponseStreamingMode {
+  private getAssistantResponseStreamMode(
+    sessionId: string,
+    messageId: string,
+  ): ResponseStreamingMode {
     return (
-      this.assistantResponseStreamModes.get(this.getAssistantResponseStreamKey(sessionId, messageId)) ??
-      getResponseStreamingMode()
+      this.assistantResponseStreamModes.get(
+        this.getAssistantResponseStreamKey(sessionId, messageId),
+      ) ?? getResponseStreamingMode()
     );
   }
 
@@ -1611,6 +1642,12 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   }
 
   private getCurrentReplyKeyboard = () => {
+    // The reply keyboard is a single-slot global: in multi-operator mode its
+    // markup must never ride on messages streamed into another operator's chat.
+    if (config.telegram.allowedUserIds.length > 1) {
+      return undefined;
+    }
+
     if (!keyboardManager.isInitialized()) {
       return undefined;
     }
@@ -1648,7 +1685,11 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   }
 
   private clearThinkingStream(sessionId: string, messageId: string, reason: string): void {
-    this.thinkingResponseStreamer.clearMessage(sessionId, this.getThinkingStreamId(messageId), reason);
+    this.thinkingResponseStreamer.clearMessage(
+      sessionId,
+      this.getThinkingStreamId(messageId),
+      reason,
+    );
     this.thinkingSections.delete(this.getThinkingPayloadKey(sessionId, messageId));
   }
 
@@ -1688,7 +1729,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     }
   }
 
-  private enqueueSessionCompletionTask(sessionId: string, task: () => Promise<void>): Promise<void> {
+  private enqueueSessionCompletionTask(
+    sessionId: string,
+    task: () => Promise<void>,
+  ): Promise<void> {
     const previousTask = this.sessionCompletionTasks.get(sessionId) ?? Promise.resolve();
     const nextTask = previousTask
       .catch(() => undefined)

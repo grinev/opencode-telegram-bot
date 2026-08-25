@@ -1,4 +1,5 @@
 import { CommandContext, Context } from "grammy";
+import { config } from "../../config.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
@@ -86,14 +87,19 @@ export async function statusCommand(ctx: CommandContext<Context>) {
     }
 
     if (ctx.chat) {
-      if (!pinnedMessageManager.isInitialized()) {
+      // Single-slot pinned card: never arm it from one operator's /status in
+      // multi-operator mode (same suppression as attach-presentation).
+      const soloOperator = config.telegram.allowedUserIds.length <= 1;
+      if (soloOperator && !pinnedMessageManager.isInitialized()) {
         pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
       }
       // Fetch context limit if not yet loaded (e.g. fresh bot start)
       if (pinnedMessageManager.getContextLimit() === 0) {
         await pinnedMessageManager.refreshContextLimit();
       }
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      if (soloOperator) {
+        keyboardManager.initialize(ctx.api, ctx.chat.id);
+      }
     }
     // Sync current context (tokens used + limit) into keyboard state
     const contextInfo = pinnedMessageManager.getContextInfo();

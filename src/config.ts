@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { getRuntimePaths } from "./runtime/paths.js";
 import { normalizeLocale, type Locale } from "./i18n/index.js";
+import { logger } from "./utils/logger.js";
 
 const runtimePaths = getRuntimePaths();
 dotenv.config({ path: runtimePaths.envFilePath, quiet: true });
@@ -102,14 +103,10 @@ export function parseInitialSettingsPreset(): Record<string, unknown> {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error(
-      "INITIAL_SETTINGS_PRESET contains invalid JSON. Fix or unset the variable.",
-    );
+    throw new Error("INITIAL_SETTINGS_PRESET contains invalid JSON. Fix or unset the variable.");
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error(
-      "INITIAL_SETTINGS_PRESET must be a JSON object.",
-    );
+    throw new Error("INITIAL_SETTINGS_PRESET must be a JSON object.");
   }
   return parsed as Record<string, unknown>;
 }
@@ -154,17 +151,28 @@ function getOptionalSttRequestFormatEnvVar(
 // Multi-operator allowlist: comma-separated TELEGRAM_ALLOWED_USER_IDS entries plus
 // the legacy single-user TELEGRAM_ALLOWED_USER_ID variable, deduplicated in
 // first-seen order. Junk segments are ignored rather than fatal, so a partially
-// derived list still admits the operators it did parse.
+// derived list still admits the operators it did parse - with a warn naming the
+// ignored count, because a silent typo just looks like "the bot ignores me".
 export function parseAllowedUserIds(...rawLists: string[]): number[] {
   const ids = new Set<number>();
+  let ignoredSegments = 0;
   for (const rawList of rawLists) {
     for (const part of rawList.split(",")) {
       const parsed = Number.parseInt(part.trim(), 10);
       if (Number.isFinite(parsed)) {
         ids.add(parsed);
+      } else if (part.trim() !== "") {
+        ignoredSegments++;
       }
     }
   }
+
+  if (ignoredSegments > 0) {
+    logger.warn(
+      `[Config] Ignored ${ignoredSegments} segment(s) that did not parse as a user id while reading the TELEGRAM_ALLOWED_USER_IDS allowlist.`,
+    );
+  }
+
   return [...ids];
 }
 
@@ -282,8 +290,7 @@ export const config = {
           : provider === "edge"
             ? "en-US-EmmaMultilingualNeural"
             : "alloy";
-    const defaultModel =
-      provider === "elevenlabs" ? "eleven_flash_v2_5" : "gpt-4o-mini-tts";
+    const defaultModel = provider === "elevenlabs" ? "eleven_flash_v2_5" : "gpt-4o-mini-tts";
     return {
       apiUrl: getEnvVar("TTS_API_URL", false),
       apiKey: getEnvVar("TTS_API_KEY", false),

@@ -93,6 +93,60 @@ describe("multi-operator scoped session storage", () => {
     expect(store.getRawCurrentSession()).toBeUndefined();
   });
 
+  it("keeps a solo operator's cleared session cleared instead of resurrecting it", async () => {
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "1234");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_IDS", "");
+    const store = await loadStore();
+
+    // First contact adopts the legacy tape...
+    store.setCurrentSession(sessionInfo("legacy-1"));
+    await store.userScope.run({ userId: 1234 }, async () => {
+      expect(store.getCurrentSession()?.id).toBe("legacy-1");
+    });
+
+    // ...then /start, /detach, or a project switch clears it - and the clear
+    // must stick on every later read, not be re-seeded from the legacy pointer.
+    await store.userScope.run({ userId: 1234 }, async () => {
+      store.clearSession();
+      expect(store.getCurrentSession()).toBeUndefined();
+    });
+
+    await store.userScope.run({ userId: 1234 }, async () => {
+      expect(store.getCurrentSession()).toBeUndefined();
+      expect(store.getCurrentSession()).toBeUndefined();
+    });
+    expect(store.getAllUserSessions()["1234"]).toBeUndefined();
+    expect(store.getRawCurrentSession()).toBeUndefined();
+  });
+
+  it("mirrors a solo operator's scoped session onto the legacy pointer for unscoped readers", async () => {
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "1234");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_IDS", "");
+    const store = await loadStore();
+
+    await store.userScope.run({ userId: 1234 }, async () => {
+      store.setCurrentSession(sessionInfo("session-a"));
+    });
+
+    // Boot-time restore reads outside any scope; in solo mode it must observe
+    // exactly the tape the operator selected.
+    expect(store.getRawCurrentSession()?.id).toBe("session-a");
+    expect(store.getAllUserSessions()["1234"]?.id).toBe("session-a");
+  });
+
+  it("keeps multi-operator scoped writes off the shared legacy pointer", async () => {
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_IDS", "1234,5678");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "1234");
+    const store = await loadStore();
+
+    await store.userScope.run({ userId: 1234 }, async () => {
+      store.setCurrentSession(sessionInfo("session-a"));
+    });
+
+    expect(store.getRawCurrentSession()).toBeUndefined();
+    expect(store.getAllUserSessions()["1234"]?.id).toBe("session-a");
+  });
+
   it("clears only the scoped operator's session entry", async () => {
     vi.stubEnv("TELEGRAM_ALLOWED_USER_IDS", "1234,5678");
     vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "1234");

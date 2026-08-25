@@ -1,6 +1,10 @@
 import { Bot, Context } from "grammy";
 import { config } from "../config.js";
-import { getCurrentProject } from "../app/stores/settings-store.js";
+import {
+  getCurrentProject,
+  getRawCurrentSession,
+  getSessionChatBinding,
+} from "../app/stores/settings-store.js";
 import { attachManager } from "../app/managers/attach-manager.js";
 import { clearAllInteractionState } from "../app/managers/interaction-manager.js";
 import {
@@ -16,10 +20,7 @@ import { initializePromptQueueDispatch } from "./handlers/prompt-queue-dispatch.
 import { authMiddleware } from "./middleware/auth.js";
 import { interactionGuardMiddleware } from "./middleware/interaction-guard.js";
 import { staleUpdateMiddleware } from "./middleware/stale-update.js";
-import {
-  ensureCommandsInitialized,
-  registerCommandRouter,
-} from "./routers/command-router.js";
+import { ensureCommandsInitialized, registerCommandRouter } from "./routers/command-router.js";
 import { registerMessageRouter } from "./routers/message-router.js";
 import {
   createEventSubscriptionService,
@@ -93,12 +94,32 @@ export function createBot(): Bot<Context> {
 
   unsubscribeReadyRestore?.();
   unsubscribeReadyRestore = opencodeReadyLifecycle.onReady(async (reason) => {
-    const restored = await restoreAttachedCurrentSession({
-      bot,
-      chatId: config.telegram.allowedUserId,
-      ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
-      forceFullRestore: true,
-    });
+    // Multi-operator: the legacy pointer predates per-operator ownership, so a
+    // session no operator is bound to must never auto-attach into the primary
+    // chat - that would stream a stale conversation to whichever human happens
+    // to be primary. A session some operator still owns restores into ITS
+    // operator's chat; solo mode keeps the upstream restore untouched.
+    const legacySession = getRawCurrentSession();
+    const restoreChatId =
+      config.telegram.allowedUserIds.length > 1 && legacySession
+        ? getSessionChatBinding(legacySession.id)
+        : config.telegram.allowedUserId;
+
+    if (legacySession && restoreChatId == null) {
+      logger.info(
+        `[Bot] Skipping unbound legacy session restore in multi-operator mode: session=${legacySession.id}, reason=${reason}`,
+      );
+    }
+
+    const restored =
+      restoreChatId != null
+        ? await restoreAttachedCurrentSession({
+            bot,
+            chatId: restoreChatId,
+            ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
+            forceFullRestore: true,
+          })
+        : false;
 
     if (restored) {
       logger.info(`[Bot] Restored followed session after OpenCode ready: reason=${reason}`);
@@ -137,22 +158,25 @@ export function createBot(): Bot<Context> {
     }
 
     try {
-      return await withTelegramRateLimitRetry(async () => {
-        const response = await prev(method, payload, signal);
-        if (isTelegramApiErrorResponse(response)) {
-          throw new TelegramApiResponseError(response);
-        }
-        return response;
-      }, {
-        maxRetries: 5,
-        retryTransientServerErrors: shouldRetryTelegramServerError(method),
-        onRetry: ({ attempt, retryAfterMs, error }) => {
-          logger.warn(
-            `[Bot API] Retryable Telegram error on ${method}, retrying in ${retryAfterMs}ms (attempt=${attempt})`,
-            error,
-          );
+      return await withTelegramRateLimitRetry(
+        async () => {
+          const response = await prev(method, payload, signal);
+          if (isTelegramApiErrorResponse(response)) {
+            throw new TelegramApiResponseError(response);
+          }
+          return response;
         },
-      });
+        {
+          maxRetries: 5,
+          retryTransientServerErrors: shouldRetryTelegramServerError(method),
+          onRetry: ({ attempt, retryAfterMs, error }) => {
+            logger.warn(
+              `[Bot API] Retryable Telegram error on ${method}, retrying in ${retryAfterMs}ms (attempt=${attempt})`,
+              error,
+            );
+          },
+        },
+      );
     } catch (error) {
       if (error instanceof TelegramApiResponseError) {
         return error.response;

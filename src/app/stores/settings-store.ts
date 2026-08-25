@@ -59,10 +59,7 @@ async function readSettingsFile(): Promise<Settings> {
     return await readSettingsFileAt(settingsFilePath);
   } catch (primaryError) {
     if (!isFileNotFound(primaryError)) {
-      logger.warn(
-        `[SettingsManager] Cannot read settings file ${settingsFilePath}:`,
-        primaryError,
-      );
+      logger.warn(`[SettingsManager] Cannot read settings file ${settingsFilePath}:`, primaryError);
     }
 
     try {
@@ -174,7 +171,7 @@ export function getCurrentSession(): SessionInfo | undefined {
     // Backward-compat seed: a solo operator adopts the legacy tape on first
     // contact, so upgrading never orphans an existing conversation. With two or
     // more operators nobody inherits anything - clean start per human, by design.
-    if (currentSettings.currentSession && config.telegram.allowedUserIds.length === 1) {
+    if (currentSettings.currentSession && isSoloOperator()) {
       currentSettings.userSessions ??= {};
       currentSettings.userSessions[key] = currentSettings.currentSession;
       void writeSettingsFile(currentSettings);
@@ -187,11 +184,21 @@ export function getCurrentSession(): SessionInfo | undefined {
   return currentSettings.currentSession;
 }
 
+function isSoloOperator(): boolean {
+  return config.telegram.allowedUserIds.length === 1;
+}
+
 export function setCurrentSession(sessionInfo: SessionInfo): void {
   const userId = scopedUserId();
   if (userId != null) {
     currentSettings.userSessions ??= {};
     currentSettings.userSessions[String(userId)] = sessionInfo;
+    // Solo mode has ONE logical tape: mirror onto the legacy pointer so
+    // unscoped readers (boot-time restore) and a restart observe the session
+    // the operator actually selected. Multi-operator keeps the tapes isolated.
+    if (isSoloOperator()) {
+      currentSettings.currentSession = sessionInfo;
+    }
   } else {
     currentSettings.currentSession = sessionInfo;
   }
@@ -203,6 +210,11 @@ export function clearSession(): void {
   if (userId != null) {
     if (currentSettings.userSessions) {
       delete currentSettings.userSessions[String(userId)];
+    }
+    // Solo: drop the legacy pointer too, otherwise the backward-compat seed in
+    // getCurrentSession resurrects the cleared tape on the very next read.
+    if (isSoloOperator()) {
+      currentSettings.currentSession = undefined;
     }
   } else {
     currentSettings.currentSession = undefined;
@@ -424,9 +436,7 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
     } else {
       // Boolean settings: compactOutputMode, showThinkingContent, showAssistantRunFooter, sendDiffFileAttachments, promptQueueEnabled
       if (typeof value !== "boolean") {
-        throw new Error(
-          `INITIAL_SETTINGS_PRESET: "${key}" must be a boolean.`,
-        );
+        throw new Error(`INITIAL_SETTINGS_PRESET: "${key}" must be a boolean.`);
       }
       switch (key) {
         case "compactOutputMode":

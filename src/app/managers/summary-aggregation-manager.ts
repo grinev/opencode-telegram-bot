@@ -591,6 +591,19 @@ class SummaryAggregator {
     return this.isTrackedChildSession(sessionId);
   }
 
+  /**
+   * Public lookup: the tracked parent (root) session of a subagent, or null
+   * when the session is not a tracked child. Used to resolve which operator's
+   * chat owns a subagent's prompts.
+   */
+  getParentSessionId(sessionId: string): string | null {
+    const parentSessionId = this.trackedSessionParents.get(sessionId);
+    if (parentSessionId == null || parentSessionId === sessionId) {
+      return null;
+    }
+    return parentSessionId;
+  }
+
   private getQueue(map: Map<string, string[]>, parentSessionId: string): string[] {
     const existing = map.get(parentSessionId);
     if (existing) {
@@ -1173,7 +1186,6 @@ class SummaryAggregator {
       // (both intermediate and completed). This keeps keyboard context in sync.
       const assistantInfo = info;
 
-
       if (this.onTokensCallback && assistantInfo.tokens) {
         const tokens: TokensInfo = {
           input: assistantInfo.tokens.input,
@@ -1223,13 +1235,12 @@ class SummaryAggregator {
           });
         }
 
-          this.cleanupCompletedMessage(messageID);
+        this.cleanupCompletedMessage(messageID);
 
-          logger.debug(
-            `[Aggregator] Message completed cleanup: remaining messages=${this.textMessageStates.size}`,
-          );
-        }
-
+        logger.debug(
+          `[Aggregator] Message completed cleanup: remaining messages=${this.textMessageStates.size}`,
+        );
+      }
     }
   }
 
@@ -1303,11 +1314,7 @@ class SummaryAggregator {
     }
 
     if (part.type === "reasoning") {
-      this.registerThinkingPart(
-        messageID,
-        part.id,
-        this.extractReasoningTitle(part),
-      );
+      this.registerThinkingPart(messageID, part.id, this.extractReasoningTitle(part));
     }
 
     const deltaFromUpdated = "delta" in event.properties ? event.properties.delta : undefined;
@@ -1503,8 +1510,7 @@ class SummaryAggregator {
     // Same filter as in handleMessagePartUpdated, applied to the streaming path: a delta
     // event often carries only the part id, so the flag is looked up in the registry too.
     const isSynthetic =
-      part?.synthetic === true ||
-      (this.syntheticPartIds.get(messageID)?.has(partID) ?? false);
+      part?.synthetic === true || (this.syntheticPartIds.get(messageID)?.has(partID) ?? false);
     if (isSynthetic) {
       this.registerSyntheticPart(messageID, partID);
       return;
@@ -1705,11 +1711,7 @@ class SummaryAggregator {
       .map((section) => ({ ...section }));
   }
 
-  private emitThinkingUpdate(
-    sessionId: string,
-    messageId: string,
-    isFirstUpdate: boolean,
-  ): void {
+  private emitThinkingUpdate(sessionId: string, messageId: string, isFirstUpdate: boolean): void {
     if (!this.onThinkingCallback) {
       return;
     }
@@ -1742,7 +1744,10 @@ class SummaryAggregator {
   }
 
   private emitExternalUserInputIfReady(sessionId: string, messageId: string): void {
-    if (sessionId !== this.currentSessionId || this.deliveredExternalUserMessageIds.has(messageId)) {
+    if (
+      sessionId !== this.currentSessionId ||
+      this.deliveredExternalUserMessageIds.has(messageId)
+    ) {
       return;
     }
 
@@ -1947,7 +1952,9 @@ class SummaryAggregator {
       const filePathFromTitle = title ? extractFirstUpdatedFileFromTitle(title) : "";
 
       const filePath =
-        (typeof filediff?.file === "string" && filediff.file && normalizePathForDisplay(filediff.file)) ||
+        (typeof filediff?.file === "string" &&
+          filediff.file &&
+          normalizePathForDisplay(filediff.file)) ||
         filePathFromInput ||
         normalizePathForDisplay(filePathFromTitle);
       const diffText =

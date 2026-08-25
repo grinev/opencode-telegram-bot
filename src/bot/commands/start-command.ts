@@ -1,4 +1,5 @@
 import { Context } from "grammy";
+import { config } from "../../config.js";
 import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
 import { getStoredAgent } from "../../app/services/agent-selection-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
@@ -14,7 +15,11 @@ import { assistantRunState } from "../../app/managers/assistant-run-state-manage
 import { detachAttachedSession } from "../../app/services/attach-service.js";
 
 export async function startCommand(ctx: Context): Promise<void> {
-  if (ctx.chat) {
+  // The pinned card + reply keyboard are single-slot globals: in multi-operator
+  // mode they must not re-arm inside whichever operator ran this command first
+  // (attach-presentation suppresses them there for the same reason).
+  const soloOperator = config.telegram.allowedUserIds.length <= 1;
+  if (ctx.chat && soloOperator) {
     if (!pinnedMessageManager.isInitialized()) {
       pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
     }

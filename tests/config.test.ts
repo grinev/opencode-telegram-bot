@@ -454,4 +454,36 @@ describe("config multi-operator allowlist parsing", () => {
 
     expect(telegram.allowedUserIds).toEqual([1234, 2250]);
   });
+
+  it("warns with a segment count when junk segments are ignored", async () => {
+    const { parseAllowedUserIds } = await loadConfigModule();
+    const { logger } = await import("../src/utils/logger.js");
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+    try {
+      expect(parseAllowedUserIds("1234, oops ,2250")).toEqual([1234, 2250]);
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const message = String(warnSpy.mock.calls[0]?.[0]);
+      expect(message).toMatch(/1 segment/);
+      // The typo itself must never be logged.
+      expect(message).not.toContain("oops");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("stays silent when every allowlist segment parses", async () => {
+    const { parseAllowedUserIds } = await loadConfigModule();
+    const { logger } = await import("../src/utils/logger.js");
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+    try {
+      expect(parseAllowedUserIds("1234,2250")).toEqual([1234, 2250]);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

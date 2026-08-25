@@ -324,3 +324,81 @@ describe("BackgroundSessionTracker", () => {
     expect(onNotification).toHaveBeenCalledTimes(2);
   });
 });
+
+// Synthetic ids only - never real Telegram uids.
+const MULTI_OP_PRIMARY_USER_ID = 111;
+const MULTI_OP_SECONDARY_USER_ID = 222;
+
+describe("BackgroundSessionTracker multi-operator ownership", () => {
+  /**
+   * Fresh module registry so the frozen `config.telegram` allowlist matches
+   * the env stubbed here (the file-level import above keeps its solo default).
+   */
+  async function loadScopedModules() {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-telegram-token");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", String(MULTI_OP_PRIMARY_USER_ID));
+    vi.stubEnv(
+      "TELEGRAM_ALLOWED_USER_IDS",
+      `${MULTI_OP_PRIMARY_USER_ID},${MULTI_OP_SECONDARY_USER_ID}`,
+    );
+    vi.resetModules();
+    const [{ BackgroundSessionTracker }, { userScope }, settingsStore] = await Promise.all([
+      import("../../../src/app/managers/background-session-manager.js"),
+      import("../../../src/app/stores/user-scope.js"),
+      import("../../../src/app/stores/settings-store.js"),
+    ]);
+    return { BackgroundSessionTracker, userScope, settingsStore };
+  }
+
+  it("ignores sessions bound to an operator instead of demoting them to notifications", async () => {
+    const { BackgroundSessionTracker, userScope, settingsStore } = await loadScopedModules();
+
+    // Operator 222 owns their foreground tape.
+    await userScope.run({ userId: MULTI_OP_SECONDARY_USER_ID }, async () => {
+      settingsStore.setCurrentSession({
+        id: "bound-session-1",
+        title: "Operator 222 tape",
+        directory: "D:/repo",
+      });
+    });
+
+    const tracker = new BackgroundSessionTracker();
+    const onNotification = vi.fn();
+    tracker.setOnNotification(onNotification);
+
+    tracker.processEvent(
+      event({
+        type: "permission.asked",
+        properties: { id: "req-bound", sessionID: "bound-session-1" },
+      }),
+      null,
+    );
+    await flushNotifications();
+
+    expect(onNotification).not.toHaveBeenCalled();
+  });
+
+  it("still notifies for genuinely unowned sessions", async () => {
+    const { BackgroundSessionTracker } = await loadScopedModules();
+
+    const tracker = new BackgroundSessionTracker();
+    const onNotification = vi.fn();
+    tracker.setOnNotification(onNotification);
+
+    tracker.processEvent(
+      event({
+        type: "permission.asked",
+        properties: { id: "req-unbound", sessionID: "unbound-session-1" },
+      }),
+      null,
+    );
+    await flushNotifications();
+
+    expect(onNotification).toHaveBeenCalledWith({
+      kind: "permission_asked",
+      sessionId: "unbound-session-1",
+      sessionTitle: undefined,
+      requestId: "req-unbound",
+    });
+  });
+});

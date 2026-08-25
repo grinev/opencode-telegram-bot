@@ -6,15 +6,17 @@ import { showCurrentQuestion } from "../menus/question-menu.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 
 export function createAttachPresentation(): AttachPresentationDeps {
+  // The pinned status card and the reply keyboard are single-slot legacy
+  // affordances: with multiple operators they would pin into ONE human's chat
+  // (whichever operator initialized them first - /start and /status arm them
+  // directly) and every operator's activity would tick there. Multi-operator
+  // mode therefore never uses them, regardless of initialization state; each
+  // bound chat gets its own streamers instead.
+  const isMultiOperator = config.telegram.allowedUserIds.length > 1;
+
   return {
     async ensurePinnedSession({ api, chatId, session, forceFullRestore = false }) {
-      // The pinned status card is a single-slot legacy affordance: with multiple
-      // operators it would pin into ONE human's chat and every operator's
-      // activity would tick there - misrouting by construction. Multi-operator
-      // mode therefore never starts the global pin pump; each bound chat gets
-      // its own streamers instead.
-      const multiOperator = config.telegram.allowedUserIds.length > 1;
-      if (multiOperator && !pinnedMessageManager.isInitialized()) {
+      if (isMultiOperator) {
         return;
       }
 
@@ -46,7 +48,7 @@ export function createAttachPresentation(): AttachPresentationDeps {
       }
     },
     async syncAttachState(attached, busy) {
-      if (!pinnedMessageManager.isInitialized()) {
+      if (isMultiOperator || !pinnedMessageManager.isInitialized()) {
         return;
       }
 
