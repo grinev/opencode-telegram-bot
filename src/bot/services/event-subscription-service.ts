@@ -1322,7 +1322,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       await this.botInstance.api
         .sendMessage(
-          this.chatIdForSession(sessionId) ?? this.chatIdInstance,
+          // targetChatId was resolved and null-checked above; no primary
+          // fallback may hide here.
+          targetChatId,
           t("bot.session_error", { message: truncatedMessage }),
         )
         .catch((err) => {
@@ -1816,13 +1818,21 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   private deliverBackgroundSessionNotification = async (
     notification: BackgroundSessionNotification,
   ): Promise<void> => {
-    if (!this.botInstance || !this.chatIdInstance) {
+    if (!this.botInstance) {
       return;
     }
 
-    // Background prompts (permissions/questions) belong to a specific operator's
-    // session - notify the bound chat, falling back to the primary.
-    const chatId = this.chatIdForSession(notification.sessionId) ?? this.chatIdInstance;
+    // Background notifications belong to a specific operator's session -
+    // resolve the bound chat first. Solo keeps the legacy primary-chat target;
+    // multi-operator drops unresolvable sessions instead of misrouting them to
+    // the primary chat (fail-closed, same as every other session-routed send).
+    const chatId = this.sendTarget(this.chatIdForSession(notification.sessionId));
+    if (chatId == null) {
+      logger.debug(
+        `[Bot] Dropping background ${notification.kind} notification for unbound session ${notification.sessionId}`,
+      );
+      return;
+    }
 
     await this.botInstance.api.sendMessage(
       chatId,

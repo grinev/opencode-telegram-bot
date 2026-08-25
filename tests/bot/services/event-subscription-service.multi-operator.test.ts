@@ -301,4 +301,128 @@ describe("bot/services/event-subscription-service multi-operator routing", () =>
     const targetChatIds = collectTargetChatIds(api);
     expect(targetChatIds).toContain(PRIMARY_USER_ID);
   });
+
+  function emitBackgroundCompletion(
+    tracker: { processEvent(event: Event, currentSessionId: string | null): void },
+    messageId: string,
+    sessionId: string,
+  ): void {
+    // currentSessionId=null mirrors the post-restart state: nothing is
+    // attached, yet the finished session's events still reach the bot.
+    tracker.processEvent(
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: messageId,
+            sessionID: sessionId,
+            role: "assistant",
+            time: { completed: Date.now() },
+          },
+        },
+      } as unknown as Event,
+      null,
+    );
+    tracker.processEvent(
+      { type: "session.idle", properties: { sessionID: sessionId } } as unknown as Event,
+      null,
+    );
+  }
+
+  async function importBackgroundTracker(): Promise<{
+    processEvent(event: Event, currentSessionId: string | null): void;
+  }> {
+    const { backgroundSessionTracker } = await import(
+      "../../../src/app/managers/background-session-manager.js"
+    );
+    return backgroundSessionTracker;
+  }
+
+  async function importLogger(): Promise<typeof import("../../../src/utils/logger.js")> {
+    return import("../../../src/utils/logger.js");
+  }
+
+  it("delivers a background completion for a bound session to the owning operator's chat", async () => {
+    const { api } = await setupService({
+      allowUserIds: `${PRIMARY_USER_ID},${SECONDARY_USER_ID}`,
+      boundSessions: [{ userId: SECONDARY_USER_ID, sessionId: ROOT_SESSION_ID }],
+    });
+
+    // The delivery delegate is exactly what the background-session manager
+    // calls into; drive it directly so the target resolution is under test
+    // independent of the tracker's ignore-gate for live lanes.
+    const service = activeService as unknown as {
+      deliverBackgroundSessionNotification(notification: {
+        kind: "assistant_response";
+        sessionId: string;
+        sessionTitle?: string;
+      }): Promise<void>;
+    };
+    await service.deliverBackgroundSessionNotification({
+      kind: "assistant_response",
+      sessionId: ROOT_SESSION_ID,
+      sessionTitle: `Tape ${ROOT_SESSION_ID}`,
+    });
+    await flushPendingDispatch();
+
+    expect(api.sendMessage).toHaveBeenCalledTimes(1);
+    expect(api.sendMessage.mock.calls[0]?.[0]).toBe(SECONDARY_USER_ID);
+    expect(api.sendMessage.mock.calls[0]?.[0]).not.toBe(PRIMARY_USER_ID);
+  });
+
+  it("delivers a background permission prompt for a bound session to the owning operator's chat", async () => {
+    const { api } = await setupService({
+      allowUserIds: `${PRIMARY_USER_ID},${SECONDARY_USER_ID}`,
+      boundSessions: [{ userId: SECONDARY_USER_ID, sessionId: ROOT_SESSION_ID }],
+    });
+
+    const service = activeService as unknown as {
+      deliverBackgroundSessionNotification(notification: {
+        kind: "permission_asked";
+        sessionId: string;
+        requestId?: string;
+      }): Promise<void>;
+    };
+    await service.deliverBackgroundSessionNotification({
+      kind: "permission_asked",
+      sessionId: ROOT_SESSION_ID,
+      requestId: "req-bg-1",
+    });
+    await flushPendingDispatch();
+
+    expect(api.sendMessage).toHaveBeenCalledTimes(1);
+    expect(api.sendMessage.mock.calls[0]?.[0]).toBe(SECONDARY_USER_ID);
+  });
+
+  it("drops a post-restart background completion for an unbound session instead of notifying the primary chat", async () => {
+    const { api } = await setupService({
+      allowUserIds: `${PRIMARY_USER_ID},${SECONDARY_USER_ID}`,
+    });
+    const loggerModule = await importLogger();
+    const debugSpy = vi.spyOn(loggerModule.logger, "debug").mockImplementation(() => {});
+
+    const tracker = await importBackgroundTracker();
+    emitBackgroundCompletion(tracker, "message-ghost-1", GHOST_SESSION_ID);
+    await flushPendingDispatch();
+
+    expect(api.sendMessage).not.toHaveBeenCalled();
+    expect(api.editMessageText).not.toHaveBeenCalled();
+    const dropLogged = debugSpy.mock.calls.some((call) =>
+      String(call[0]).includes(GHOST_SESSION_ID),
+    );
+    expect(dropLogged).toBe(true);
+  });
+
+  it("keeps solo background completions on the legacy primary chat", async () => {
+    const { api } = await setupService({
+      allowUserIds: "",
+    });
+
+    const tracker = await importBackgroundTracker();
+    emitBackgroundCompletion(tracker, "message-solo-1", GHOST_SESSION_ID);
+    await flushPendingDispatch();
+
+    expect(api.sendMessage).toHaveBeenCalledTimes(1);
+    expect(api.sendMessage.mock.calls[0]?.[0]).toBe(PRIMARY_USER_ID);
+  });
 });
