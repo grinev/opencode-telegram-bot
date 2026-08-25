@@ -13,6 +13,8 @@ export interface ScheduledTaskSessionIgnoreInfo {
 export interface Settings {
   currentProject?: ProjectInfo | undefined;
   currentSession?: SessionInfo | undefined;
+  // Per-operator session tapes, keyed by the stringified Telegram user id.
+  userSessions?: Record<string, SessionInfo> | undefined;
   currentAgent?: string | undefined;
   currentModel?: ModelInfo | undefined;
   pinnedMessageId?: number | undefined;

@@ -210,7 +210,8 @@ Configuration can be provided through process environment variables or an `.env`
 | Variable                                   | Description                                                                                                           | Required | Default                  |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | :------: | ------------------------ |
 | `TELEGRAM_BOT_TOKEN`                       | Bot token from @BotFather                                                                                             |   Yes    | —                        |
-| `TELEGRAM_ALLOWED_USER_ID`                 | Your numeric Telegram user ID                                                                                         |   Yes    | —                        |
+| `TELEGRAM_ALLOWED_USER_ID`                 | Your numeric Telegram user ID (also the primary delivery chat)                                                        |   Yes    | —                        |
+| `TELEGRAM_ALLOWED_USER_IDS`                | Comma-separated list of authorized Telegram user IDs; absorbs `TELEGRAM_ALLOWED_USER_ID` (multi-operator sessions)     |    No    | —                        |
 | `TELEGRAM_PROXY_URL`                       | Proxy URL for Telegram API (SOCKS5/HTTP)                                                                              |    No    | —                        |
 | `TELEGRAM_API_ROOT`                        | Custom Telegram Bot API root URL (e.g. nginx reverse-proxying `api.telegram.org`); applied to API calls and file downloads | No | `https://api.telegram.org` |
 | `TELEGRAM_PROXY_SECRET`                    | Shared secret sent as `X-Proxy-Secret` header on every Bot API request and file download (used with `TELEGRAM_API_ROOT`) | No | —                        |
@@ -413,7 +414,9 @@ To pick a model that is neither a favorite nor recent, tap **🗂 Providers** in
 
 ## Security
 
-The bot enforces a strict **user ID whitelist**. Only the Telegram user whose numeric ID matches `TELEGRAM_ALLOWED_USER_ID` can interact with the bot. Messages from any other user are silently ignored and logged as unauthorized access attempts.
+The bot enforces a strict **user ID whitelist**. Only a Telegram user whose numeric ID is listed in `TELEGRAM_ALLOWED_USER_IDS` (comma-separated, e.g. `1234,5678`) or matches the single `TELEGRAM_ALLOWED_USER_ID` can interact with the bot. Messages from any other user are silently ignored and logged as unauthorized access attempts.
+
+With multiple allowed users, each operator gets an **independent session tape** - its own `/new`, context, and notification stream. The first listed user (`TELEGRAM_ALLOWED_USER_ID`) remains the primary chat for scheduled-task notifications and startup messages.
 
 Since the bot runs locally on your machine and connects to your local OpenCode server, there is no external attack surface beyond the Telegram Bot API itself.
 

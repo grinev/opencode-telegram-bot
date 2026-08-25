@@ -1,5 +1,6 @@
 import type { AttachPresentationDeps } from "../../app/services/attach-service.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
+import { config } from "../../config.js";
 import { showPermissionRequest } from "../menus/permission-menu.js";
 import { showCurrentQuestion } from "../menus/question-menu.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
@@ -7,6 +8,16 @@ import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 export function createAttachPresentation(): AttachPresentationDeps {
   return {
     async ensurePinnedSession({ api, chatId, session, forceFullRestore = false }) {
+      // The pinned status card is a single-slot legacy affordance: with multiple
+      // operators it would pin into ONE human's chat and every operator's
+      // activity would tick there - misrouting by construction. Multi-operator
+      // mode therefore never starts the global pin pump; each bound chat gets
+      // its own streamers instead.
+      const multiOperator = config.telegram.allowedUserIds.length > 1;
+      if (multiOperator && !pinnedMessageManager.isInitialized()) {
+        return;
+      }
+
       if (!pinnedMessageManager.isInitialized()) {
         pinnedMessageManager.initialize(api, chatId);
       }

@@ -405,3 +405,53 @@ describe("config telegram reverse-proxy", () => {
     expect(() => buildTelegramConfig()).toThrow(/TELEGRAM_PROXY_SECRET requires TELEGRAM_API_ROOT/);
   });
 });
+
+describe("config multi-operator allowlist parsing", () => {
+  beforeEach(() => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-telegram-token");
+    vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
+    vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_IDS", "");
+  });
+
+  async function loadTelegramConfig() {
+    vi.resetModules();
+    const module = await import("../src/config.js");
+    return module.config.telegram;
+  }
+
+  it("absorbs the legacy single-user variable into the allowlist", async () => {
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "1234");
+
+    const telegram = await loadTelegramConfig();
+
+    expect(telegram.allowedUserIds).toEqual([1234]);
+  });
+
+  it("parses a comma-separated list of user ids", async () => {
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "1234");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_IDS", "1234,5678");
+
+    const telegram = await loadTelegramConfig();
+
+    expect(telegram.allowedUserIds).toEqual([1234, 5678]);
+  });
+
+  it("merges both variables and drops duplicates, first occurrence wins", async () => {
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "1234");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_IDS", "5678,1234");
+
+    const telegram = await loadTelegramConfig();
+
+    expect(telegram.allowedUserIds).toEqual([5678, 1234]);
+  });
+
+  it("tolerates whitespace and junk segments between ids", async () => {
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "1234");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_IDS", " 1234 , not-a-number , , 2250 ");
+
+    const telegram = await loadTelegramConfig();
+
+    expect(telegram.allowedUserIds).toEqual([1234, 2250]);
+  });
+});

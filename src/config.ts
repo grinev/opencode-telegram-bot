@@ -151,9 +151,27 @@ function getOptionalSttRequestFormatEnvVar(
   return defaultValue;
 }
 
+// Multi-operator allowlist: comma-separated TELEGRAM_ALLOWED_USER_IDS entries plus
+// the legacy single-user TELEGRAM_ALLOWED_USER_ID variable, deduplicated in
+// first-seen order. Junk segments are ignored rather than fatal, so a partially
+// derived list still admits the operators it did parse.
+export function parseAllowedUserIds(...rawLists: string[]): number[] {
+  const ids = new Set<number>();
+  for (const rawList of rawLists) {
+    for (const part of rawList.split(",")) {
+      const parsed = Number.parseInt(part.trim(), 10);
+      if (Number.isFinite(parsed)) {
+        ids.add(parsed);
+      }
+    }
+  }
+  return [...ids];
+}
+
 export function buildTelegramConfig(): {
   token: string;
   allowedUserId: number;
+  allowedUserIds: number[];
   proxyUrl: string;
   apiRoot: string;
   proxySecret: string;
@@ -183,6 +201,10 @@ export function buildTelegramConfig(): {
   return {
     token: getEnvVar("TELEGRAM_BOT_TOKEN"),
     allowedUserId: parseInt(getEnvVar("TELEGRAM_ALLOWED_USER_ID"), 10),
+    allowedUserIds: parseAllowedUserIds(
+      getEnvVar("TELEGRAM_ALLOWED_USER_IDS", false),
+      getEnvVar("TELEGRAM_ALLOWED_USER_ID", false),
+    ),
     proxyUrl,
     apiRoot,
     proxySecret,

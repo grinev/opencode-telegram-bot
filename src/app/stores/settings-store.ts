@@ -10,6 +10,7 @@ import type {
 } from "../types/settings.js";
 import { config } from "../../config.js";
 import { getRuntimePaths } from "../../runtime/paths.js";
+import { scopedUserId } from "./user-scope.js";
 import { logger } from "../../utils/logger.js";
 
 function cloneScheduledTasks(tasks: ScheduledTask[] | undefined): ScheduledTask[] | undefined {
@@ -158,18 +159,76 @@ export function clearProject(): void {
   void writeSettingsFile(currentSettings);
 }
 
+// Inside a user scope (Telegram update), sessions resolve per operator via the
+// persisted userSessions map; outside any scope (server event pumps, boot), the
+// legacy single pointer applies unchanged.
 export function getCurrentSession(): SessionInfo | undefined {
+  const userId = scopedUserId();
+  if (userId != null) {
+    const key = String(userId);
+    const scopedSession = currentSettings.userSessions?.[key];
+    if (scopedSession) {
+      return scopedSession;
+    }
+
+    // Backward-compat seed: a solo operator adopts the legacy tape on first
+    // contact, so upgrading never orphans an existing conversation. With two or
+    // more operators nobody inherits anything - clean start per human, by design.
+    if (currentSettings.currentSession && config.telegram.allowedUserIds.length === 1) {
+      currentSettings.userSessions ??= {};
+      currentSettings.userSessions[key] = currentSettings.currentSession;
+      void writeSettingsFile(currentSettings);
+      return currentSettings.currentSession;
+    }
+
+    return undefined;
+  }
+
   return currentSettings.currentSession;
 }
 
 export function setCurrentSession(sessionInfo: SessionInfo): void {
-  currentSettings.currentSession = sessionInfo;
+  const userId = scopedUserId();
+  if (userId != null) {
+    currentSettings.userSessions ??= {};
+    currentSettings.userSessions[String(userId)] = sessionInfo;
+  } else {
+    currentSettings.currentSession = sessionInfo;
+  }
   void writeSettingsFile(currentSettings);
 }
 
 export function clearSession(): void {
-  currentSettings.currentSession = undefined;
+  const userId = scopedUserId();
+  if (userId != null) {
+    if (currentSettings.userSessions) {
+      delete currentSettings.userSessions[String(userId)];
+    }
+  } else {
+    currentSettings.currentSession = undefined;
+  }
   void writeSettingsFile(currentSettings);
+}
+
+// Unscoped accessor for server-event routing: the legacy pointer, whatever the
+// active AsyncLocalStorage scope says.
+export function getRawCurrentSession(): SessionInfo | undefined {
+  return currentSettings.currentSession;
+}
+
+export function getAllUserSessions(): Record<string, SessionInfo> {
+  return currentSettings.userSessions ?? {};
+}
+
+// Which operator's chat receives events for this session? Resolved from the
+// persisted per-user map; null when no operator owns it.
+export function getSessionChatBinding(sessionId: string): number | null {
+  for (const [userId, session] of Object.entries(getAllUserSessions())) {
+    if (session?.id === sessionId) {
+      return Number(userId);
+    }
+  }
+  return null;
 }
 
 export type TtsMode = "off" | "all" | "auto";

@@ -1,5 +1,6 @@
 import type { Event, Message, Session } from "@opencode-ai/sdk/v2";
 import { isScheduledTaskSessionIgnored } from "../services/scheduled-task-session-ignore-service.js";
+import { getSessionChatBinding } from "../stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 
 export type BackgroundSessionNotificationKind =
@@ -171,6 +172,10 @@ class BackgroundSessionTracker {
   private shouldIgnoreSession(sessionId: string, currentSessionId: string | null): boolean {
     return (
       sessionId === currentSessionId ||
+      // A session bound to any operator's lane is a live lane, never
+      // "background" - otherwise scoped sessions get demoted to notification
+      // cards instead of streaming inline.
+      getSessionChatBinding(sessionId) != null ||
       this.childSessionIds.has(sessionId) ||
       isScheduledTaskSessionIgnored(sessionId)
     );

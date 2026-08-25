@@ -33,7 +33,7 @@ interface CommandRouterDeps {
 let commandsInitialized = false;
 
 export async function ensureCommandsInitialized(ctx: Context, next: NextFunction): Promise<void> {
-  if (commandsInitialized || !ctx.from || ctx.from.id !== config.telegram.allowedUserId) {
+  if (commandsInitialized || !ctx.from || !config.telegram.allowedUserIds.includes(ctx.from.id)) {
     await next();
     return;
   }

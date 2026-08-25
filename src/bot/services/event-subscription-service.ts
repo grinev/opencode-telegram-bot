@@ -25,6 +25,9 @@ import {
   getSendDiffFileAttachments,
   getShowAssistantRunFooter,
   getShowThinkingContent,
+  getAllUserSessions,
+  getSessionChatBinding,
+  getRawCurrentSession,
   type ResponseStreamingMode,
 } from "../../app/stores/settings-store.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
@@ -165,14 +168,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           return;
         }
 
-        const currentSession = getCurrentSession();
-        if (!currentSession || currentSession.id !== sessionId) {
+        const targetChatId = this.sendTarget(this.chatIdForSession(sessionId));
+        if (targetChatId == null) {
           return;
         }
 
         const keyboard = this.getCurrentReplyKeyboard();
 
-        await this.botInstance.api.sendMessage(this.chatIdInstance, text, {
+        await this.botInstance.api.sendMessage(targetChatId, text, {
           disable_notification: true,
           ...(keyboard ? { reply_markup: keyboard } : {}),
         });
@@ -182,8 +185,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           return;
         }
 
-        const currentSession = getCurrentSession();
-        if (!currentSession || currentSession.id !== sessionId) {
+        const targetChatId = this.sendTarget(this.chatIdForSession(sessionId));
+        if (targetChatId == null) {
           return;
         }
 
@@ -200,7 +203,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           const keyboard = this.getCurrentReplyKeyboard();
 
           await this.botInstance.api.sendDocument(
-            this.chatIdInstance,
+            targetChatId,
             new InputFile(tempFilePath),
             {
               caption: fileData.caption,
@@ -225,16 +228,22 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     this.compactProgressStreamer = new CompactProgressStreamer({
       throttleMs: getSessionStreamThrottleMs,
       sendText: async (sessionId, text) => {
-        if (!this.botInstance || !this.chatIdInstance || this.chatIdInstance <= 0) {
+        // Multi-operator mode routes by session binding, so the primary chat id
+        // is not required here - solo mode keeps the legacy requirement.
+        if (!this.botInstance || (!this.chatIdInstance && this.isSoloOperator())) {
           throw new Error("Bot context missing for compact progress send");
         }
 
-        const currentSession = getCurrentSession();
-        if (!currentSession || currentSession.id !== sessionId) {
+        if (!this.ownsSession(sessionId)) {
           throw new Error(`Compact progress session mismatch for send: ${sessionId}`);
         }
 
-        const sentMessage = await this.botInstance.api.sendMessage(this.chatIdInstance, text, {
+        const targetChatId = this.sendTarget(this.chatIdForSession(sessionId));
+        if (targetChatId == null) {
+          throw new Error(`Compact progress delivery target missing for send: ${sessionId}`);
+        }
+
+        const sentMessage = await this.botInstance.api.sendMessage(targetChatId, text, {
           disable_notification: true,
         });
 
@@ -245,13 +254,17 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           throw new Error("Bot context missing for compact progress edit");
         }
 
-        const currentSession = getCurrentSession();
-        if (!currentSession || currentSession.id !== sessionId) {
+        if (!this.ownsSession(sessionId)) {
           throw new Error(`Compact progress session mismatch for edit: ${sessionId}`);
         }
 
+        const targetChatId = this.sendTarget(this.chatIdForSession(sessionId));
+        if (targetChatId == null) {
+          throw new Error(`Compact progress delivery target missing for edit: ${sessionId}`);
+        }
+
         try {
-          await this.botInstance.api.editMessageText(this.chatIdInstance, messageId, text);
+          await this.botInstance.api.editMessageText(targetChatId, messageId, text);
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
@@ -271,12 +284,16 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           throw new Error("Bot context missing for tool stream send");
         }
 
-        const currentSession = getCurrentSession();
-        if (!currentSession || currentSession.id !== sessionId) {
+        if (!this.ownsSession(sessionId)) {
           throw new Error(`Tool stream session mismatch for send: ${sessionId}`);
         }
 
-        const sentMessage = await this.botInstance.api.sendMessage(this.chatIdInstance, text, {
+        const targetChatId = this.sendTarget(this.chatIdForSession(sessionId));
+        if (targetChatId == null) {
+          throw new Error(`Tool stream delivery target missing for send: ${sessionId}`);
+        }
+
+        const sentMessage = await this.botInstance.api.sendMessage(targetChatId, text, {
           disable_notification: true,
         });
 
@@ -287,13 +304,17 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           throw new Error("Bot context missing for tool stream edit");
         }
 
-        const currentSession = getCurrentSession();
-        if (!currentSession || currentSession.id !== sessionId) {
+        if (!this.ownsSession(sessionId)) {
           throw new Error(`Tool stream session mismatch for edit: ${sessionId}`);
         }
 
+        const targetChatId = this.sendTarget(this.chatIdForSession(sessionId));
+        if (targetChatId == null) {
+          throw new Error(`Tool stream delivery target missing for edit: ${sessionId}`);
+        }
+
         try {
-          await this.botInstance.api.editMessageText(this.chatIdInstance, messageId, text);
+          await this.botInstance.api.editMessageText(targetChatId, messageId, text);
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
@@ -309,12 +330,16 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           throw new Error("Bot context missing for tool stream delete");
         }
 
-        const currentSession = getCurrentSession();
-        if (!currentSession || currentSession.id !== sessionId) {
+        if (!this.ownsSession(sessionId)) {
           throw new Error(`Tool stream session mismatch for delete: ${sessionId}`);
         }
 
-        await this.botInstance.api.deleteMessage(this.chatIdInstance, messageId).catch((error) => {
+        const targetChatId = this.sendTarget(this.chatIdForSession(sessionId));
+        if (targetChatId == null) {
+          throw new Error(`Tool stream delivery target missing for delete: ${sessionId}`);
+        }
+
+        await this.botInstance.api.deleteMessage(targetChatId, messageId).catch((error) => {
           const errorMessage =
             error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
           if (
@@ -335,13 +360,54 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     this.chatIdInstance = chatId;
   }
 
+  // Which chat should receive events for this session? Prefer the operator
+  // bound via userSessions; fall back to the legacy followed session.
+  private chatIdForSession(sessionId: string): number | null {
+    const bound = getSessionChatBinding(sessionId);
+    if (bound != null && Number.isFinite(bound)) {
+      return bound;
+    }
+
+    const rawCurrent = getRawCurrentSession();
+    if (rawCurrent?.id === sessionId) {
+      return this.chatIdInstance;
+    }
+
+    return null;
+  }
+
+  private ownsSession(sessionId: string): boolean {
+    if (getSessionChatBinding(sessionId) != null) {
+      return true;
+    }
+    const rawCurrent = getRawCurrentSession();
+    return rawCurrent != null && rawCurrent.id === sessionId;
+  }
+
+  // Never misroute to a default chat in multi-operator mode: solo operators
+  // keep the legacy default, multi-user deployments drop unbound events.
+  private sendTarget(chatId: number | null): number | null {
+    if (chatId != null && Number.isFinite(chatId)) {
+      return chatId;
+    }
+
+    if (config.telegram.allowedUserIds.length <= 1) {
+      return this.chatIdInstance;
+    }
+
+    return null;
+  }
+
+  private isSoloOperator(): boolean {
+    return config.telegram.allowedUserIds.length <= 1;
+  }
+
   private getLiveToolPrefix(callId: string): string {
     return `${RUNNING_ICON}${callId}`;
   }
 
   private handleRunningToolTick(tick: RunningToolTick): void {
-    const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== tick.sessionId) {
+    if (!this.ownsSession(tick.sessionId)) {
       return;
     }
 
@@ -414,8 +480,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       return;
     }
 
-    const currentSession = getCurrentSession();
-    if (!currentSession || currentSession.id !== sessionId) {
+    if (this.chatIdForSession(sessionId) == null) {
       return;
     }
 
@@ -531,16 +596,15 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
+      const targetChatId = this.chatIdForSession(sessionId);
+      if (targetChatId == null) {
         return;
       }
 
       if (isCompactProgressMode()) {
         void this.finalizeCompactProgress(sessionId)
           .then(() => {
-            const activeSession = getCurrentSession();
-            if (!activeSession || activeSession.id !== sessionId) {
+            if (!this.ownsSession(sessionId)) {
               return;
             }
 
@@ -586,8 +650,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           return;
         }
 
-        const currentSession = getCurrentSession();
-        if (currentSession?.id !== sessionId) {
+        const boundChatId = this.chatIdForSession(sessionId);
+        const chatId = boundChatId != null ? this.sendTarget(boundChatId) : null;
+        if (chatId == null) {
           clearPromptResponseMode(sessionId);
           this.clearAssistantResponseStream(sessionId, messageId, "session_mismatch");
           this.clearThinkingStream(sessionId, messageId, "session_mismatch");
@@ -601,7 +666,6 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         }
 
         const botApi = this.botInstance.api;
-        const chatId = this.chatIdInstance;
 
         try {
           assistantRunState.markResponseCompleted(sessionId, {
@@ -677,15 +741,24 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
     summaryAggregator.setOnExternalUserInput(async (sessionId, _messageId, messageText) => {
       void this.enqueueSessionCompletionTask(sessionId, async () => {
-        if (!this.botInstance || !this.chatIdInstance) {
+        if (!this.botInstance) {
+          return;
+        }
+
+        // Route external-input notices to the session's bound chat; the legacy
+        // primary chat only for solo operators (fail-closed in multi-op).
+        const notificationChatId =
+          this.chatIdForSession(sessionId) ?? (this.isSoloOperator() ? this.chatIdInstance : null);
+        if (notificationChatId == null) {
           return;
         }
 
         try {
           await deliverExternalUserInputNotification({
             api: this.botInstance.api,
-            chatId: this.chatIdInstance,
-            currentSessionId: getCurrentSession()?.id ?? null,
+            chatId: notificationChatId,
+            currentSessionId:
+              this.ownsSession(sessionId) ? sessionId : (getCurrentSession()?.id ?? null),
             sessionId,
             text: messageText,
             consumeSuppressedInput: (incomingSessionId, incomingText) =>
@@ -698,8 +771,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     });
 
     summaryAggregator.setOnRootToolUpdate((toolInfo) => {
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== toolInfo.sessionId) {
+      if (!this.ownsSession(toolInfo.sessionId)) {
         return;
       }
 
@@ -766,8 +838,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== toolInfo.sessionId) {
+      if (!this.ownsSession(toolInfo.sessionId)) {
         return;
       }
 
@@ -807,8 +878,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
+      const targetChatId = this.chatIdForSession(sessionId);
+      if (targetChatId == null) {
         return;
       }
 
@@ -838,8 +909,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== fileInfo.sessionId) {
+      if (!this.ownsSession(fileInfo.sessionId)) {
         return;
       }
 
@@ -875,8 +945,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
+      const targetChatId = this.chatIdForSession(sessionId);
+      if (targetChatId == null) {
         return;
       }
 
@@ -885,16 +955,19 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
 
       await Promise.all([
-        this.toolMessageBatcher.flushSession(currentSession.id, "question_asked"),
-        this.toolCallStreamer.flushSession(currentSession.id, "question_asked"),
+        this.toolMessageBatcher.flushSession(sessionId, "question_asked"),
+        this.toolCallStreamer.flushSession(sessionId, "question_asked"),
       ]);
 
       if (questionManager.isActive()) {
         logger.warn("[Bot] Replacing active poll with a new one");
 
         const previousMessageIds = questionManager.getMessageIds();
+        const pollChatId = this.sendTarget(targetChatId);
         for (const messageId of previousMessageIds) {
-          await this.botInstance.api.deleteMessage(this.chatIdInstance, messageId).catch(() => {});
+          if (pollChatId != null) {
+            await this.botInstance.api.deleteMessage(pollChatId, messageId).catch(() => {});
+          }
         }
 
         clearAllInteractionState("question_replaced_by_new_poll");
@@ -928,15 +1001,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      const isCurrent = currentSession?.id === request.sessionID;
+      const isCurrent = this.ownsSession(request.sessionID);
       const isSubagent = summaryAggregator.isSubagentSession(request.sessionID);
-      if (!currentSession || (!isCurrent && !isSubagent)) {
+      if (!isCurrent && !isSubagent) {
         return;
       }
 
       if (isCompactProgressMode()) {
-        this.compactProgressStreamer.updateWaitingForPermission(currentSession.id);
+        this.compactProgressStreamer.updateWaitingForPermission(request.sessionID);
       }
 
       await Promise.all([
@@ -947,10 +1019,15 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       logger.info(
         `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}, subagent=${isSubagent}`,
       );
-      await showPermissionRequest(this.botInstance.api, this.chatIdInstance, request, generation);
+      await showPermissionRequest(
+        this.botInstance.api,
+        this.chatIdForSession(request.sessionID) ?? this.chatIdInstance,
+        request,
+        generation,
+      );
     });
 
-    summaryAggregator.setOnPermissionReplied(async (_sessionId, requestID) => {
+    summaryAggregator.setOnPermissionReplied(async (sessionId, requestID) => {
       const messageIds = permissionManager.resolveRequest(requestID);
       const interaction = interactionManager.getSnapshot();
       if (!permissionManager.isActive() || !interaction || interaction.kind === "permission") {
@@ -959,7 +1036,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       if (this.botInstance && this.chatIdInstance) {
         const api = this.botInstance.api;
-        const chatId = this.chatIdInstance;
+        const chatId = this.chatIdForSession(sessionId) ?? this.chatIdInstance;
         await Promise.all(
           messageIds.map((messageId) =>
             api.deleteMessage(chatId, messageId).catch((err) => {
@@ -981,8 +1058,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== update.sessionId) {
+      if (!this.ownsSession(update.sessionId)) {
         return;
       }
 
@@ -1039,8 +1115,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
+      const targetChatId = this.chatIdForSession(sessionId);
+      if (targetChatId == null) {
         return;
       }
 
@@ -1125,8 +1201,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
+      const targetChatId = this.chatIdForSession(sessionId);
+      if (targetChatId == null) {
         foregroundSessionState.markIdle(sessionId);
         await scheduledTaskRuntime.flushDeferredDeliveries();
         return;
@@ -1144,19 +1220,22 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           const modelID = completedRun.actualModelID || completedRun.configuredModelID;
 
           if (agent && providerID && modelID) {
-            const keyboard = this.getCurrentReplyKeyboard();
-            await this.botInstance.api.sendMessage(
-              this.chatIdInstance,
-              formatAssistantRunFooter({
-                agent,
-                providerID,
-                modelID,
-                elapsedMs: Date.now() - completedRun.startedAt,
-              }),
-              {
-                ...(keyboard ? { reply_markup: keyboard } : {}),
-              },
-            );
+            const footerChatId = this.sendTarget(targetChatId);
+            if (footerChatId != null) {
+              const keyboard = this.getCurrentReplyKeyboard();
+              await this.botInstance.api.sendMessage(
+                footerChatId,
+                formatAssistantRunFooter({
+                  agent,
+                  providerID,
+                  modelID,
+                  elapsedMs: Date.now() - completedRun.startedAt,
+                }),
+                {
+                  ...(keyboard ? { reply_markup: keyboard } : {}),
+                },
+              );
+            }
           }
         }
       } catch (err) {
@@ -1180,10 +1259,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
+      const targetChatId = this.chatIdForSession(sessionId);
+      if (targetChatId == null) {
         clearPromptResponseMode(sessionId);
-          this.clearAssistantResponseSession(sessionId, "session_error_not_current");
+        this.clearAssistantResponseSession(sessionId, "session_error_not_current");
         this.toolCallStreamer.clearSession(sessionId, "session_error_not_current");
         this.compactProgressStreamer.clearSession(sessionId, "session_error_not_current");
         assistantRunState.clearRun(sessionId, "session_error_not_current");
@@ -1215,7 +1294,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           : normalizedMessage;
 
       await this.botInstance.api
-        .sendMessage(this.chatIdInstance, t("bot.session_error", { message: truncatedMessage }))
+        .sendMessage(
+          this.chatIdForSession(sessionId) ?? this.chatIdInstance,
+          t("bot.session_error", { message: truncatedMessage }),
+        )
         .catch((err) => {
           logger.error("[Bot] Failed to send session.error message:", err);
         });
@@ -1230,8 +1312,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         return;
       }
 
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
+      const targetChatId = this.chatIdForSession(sessionId);
+      if (targetChatId == null) {
         return;
       }
 
@@ -1270,9 +1352,20 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
     summaryAggregator.setOnFileChange((change) => {
       if (isCompactProgressMode()) {
-        const currentSession = getCurrentSession();
-        if (currentSession) {
-          this.compactProgressStreamer.addFileChange(currentSession.id, change.file);
+        // Compact activity has a single slot: route it to whichever operator
+        // actually owns an active turn, legacy pointer first. When the
+        // aggregator grows a per-session active-turn probe it wins; until then
+        // the first known session is used.
+        const activeTurnProbe = summaryAggregator as {
+          hasActiveTurn?: (sessionId: string) => boolean;
+        };
+        const ownerSessionId = [
+          getRawCurrentSession()?.id,
+          ...Object.values(getAllUserSessions()).map((session) => session?.id),
+        ].find((id) => id !== undefined && activeTurnProbe.hasActiveTurn?.(id) !== false);
+
+        if (ownerSessionId !== undefined) {
+          this.compactProgressStreamer.addFileChange(ownerSessionId, change.file);
         }
       }
 
@@ -1683,8 +1776,12 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       return;
     }
 
+    // Background prompts (permissions/questions) belong to a specific operator's
+    // session - notify the bound chat, falling back to the primary.
+    const chatId = this.chatIdForSession(notification.sessionId) ?? this.chatIdInstance;
+
     await this.botInstance.api.sendMessage(
-      this.chatIdInstance,
+      chatId,
       this.formatBackgroundSessionNotification(notification),
       {
         reply_markup: buildBackgroundSessionOpenKeyboard(notification.sessionId, notification.kind),
