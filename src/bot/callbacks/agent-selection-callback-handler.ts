@@ -1,4 +1,5 @@
 import { Context } from "grammy";
+import { config } from "../../config.js";
 import { selectAgent } from "../../app/services/agent-selection-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
@@ -31,7 +32,10 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
   logger.debug(`[AgentHandler] Received callback: ${callbackQuery.data}`);
 
   try {
-    if (ctx.chat) {
+    // Single-slot reply keyboard: never re-arm it from one operator's callback
+    // in multi-operator mode (same suppression as /start and /status).
+    const soloOperator = config.telegram.allowedUserIds.length <= 1;
+    if (ctx.chat && soloOperator) {
       keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
 

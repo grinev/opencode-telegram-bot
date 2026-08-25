@@ -1,4 +1,5 @@
 import { CommandContext, Context } from "grammy";
+import { config } from "../../config.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { clearSession, getCurrentSession } from "../../app/services/session-service.js";
 import { detachAttachedSession } from "../../app/services/attach-service.js";
@@ -40,7 +41,10 @@ export async function detachCommand(ctx: CommandContext<Context>): Promise<void>
       }
     }
 
-    if (ctx.chat) {
+    // Single-slot reply keyboard: never re-arm it from one operator's /detach
+    // in multi-operator mode (same suppression as /start and /status).
+    const soloOperator = config.telegram.allowedUserIds.length <= 1;
+    if (ctx.chat && soloOperator) {
       keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
 

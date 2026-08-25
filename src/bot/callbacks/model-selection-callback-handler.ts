@@ -1,4 +1,5 @@
 import { Context, InlineKeyboard } from "grammy";
+import { config } from "../../config.js";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
 import {
   fetchCurrentModel,
@@ -290,7 +291,10 @@ async function showProvidersScreen(ctx: Context, page: number): Promise<void> {
  * Used by both the regular inline menu flow and the search results flow.
  */
 async function applyModelSelectionAndNotify(ctx: Context, modelInfo: ModelInfo): Promise<void> {
-  if (ctx.chat) {
+  // Single-slot reply keyboard: never re-arm it from one operator's callback
+  // in multi-operator mode (same suppression as /start and /status).
+  const soloOperator = config.telegram.allowedUserIds.length <= 1;
+  if (ctx.chat && soloOperator) {
     keyboardManager.initialize(ctx.api, ctx.chat.id);
   }
 
