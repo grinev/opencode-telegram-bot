@@ -534,6 +534,8 @@ export const it: I18nDictionary = {
   "tasklist.details.cron": "Cron: {cron}",
   "tasklist.button.delete": "🗑 Elimina",
   "tasklist.button.cancel": "❌ Annulla",
+  "tasklist.button.show_prompt": "📄 Mostra il prompt completo",
+  "tasklist.full_prompt_header": "📝 Prompt completo:",
   "tasklist.deleted_callback": "Eliminato",
   "tasklist.inactive_callback": "Questo menu delle attività pianificate non è attivo",
   "tasklist.load_error": "🔴 Caricamento delle attività pianificate non riuscito.",
