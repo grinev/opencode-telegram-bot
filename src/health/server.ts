@@ -7,12 +7,12 @@ let startTimeMs: number | null = null;
 let botVersion = "unknown";
 
 interface HealthPayload {
-  status: "healthy" | "degraded" | "unhealthy";
+  status: "healthy" | "degraded";
   version: string;
   uptimeSeconds: number;
   timestamp: string;
   checks: {
-    eventLoop: { healthy: boolean };
+    process: { healthy: boolean };
     opencode: { healthy: boolean; latencyMs: number | null; error?: string };
   };
 }
@@ -38,8 +38,6 @@ async function checkOpencodeWithTimeout(timeoutMs = 3000): Promise<{ healthy: bo
 
 async function buildHealthPayload(): Promise<HealthPayload> {
   const opencode = await checkOpencodeWithTimeout(3000);
-  // Event loop is healthy if we are able to respond at all.
-  const eventLoopHealthy = true;
 
   let status: HealthPayload["status"] = "healthy";
   if (!opencode.healthy) {
@@ -53,7 +51,7 @@ async function buildHealthPayload(): Promise<HealthPayload> {
     uptimeSeconds: getUptimeSeconds(),
     timestamp: new Date().toISOString(),
     checks: {
-      eventLoop: { healthy: eventLoopHealthy },
+      process: { healthy: true },
       opencode,
     },
   };
@@ -102,24 +100,17 @@ export async function startHealthServer(port: number, version: string): Promise<
       return;
     }
 
-    if (path === "/health/ready" || path === "/health") {
+    if (path === "/health/ready") {
+      // Readiness: 200 if healthy, 503 if degraded
       const payload = await buildHealthPayload();
-      // /health/ready returns 503 when degraded/unhealthy (k8s convention)
-      // /health always returns 200 with status field (docker healthcheck convention)
-      if (path === "/health/ready" && payload.status !== "healthy") {
-        sendJson(res, 503, payload);
-        return;
-      }
-      // For /health, return 200 with status field; docker healthcheck checks status field via node fetch, not http code
-      // But also support 503 for strict checks: if degraded, return 503 so curl --fail catches it
-      const httpCode = payload.status === "healthy" ? 200 : 503;
-      // For backward compat, /health returns 200 even when degraded if caller checks JSON; send 200 to avoid breaking existing A checks during transition
-      // We send 200 for /health, 503 for /health/ready
-      if (path === "/health") {
-        sendJson(res, 200, payload);
-      } else {
-        sendJson(res, httpCode, payload);
-      }
+      sendJson(res, payload.status === "healthy" ? 200 : 503, payload);
+      return;
+    }
+
+    if (path === "/health") {
+      // Full health: always 200 with status field (Docker healthcheck convention)
+      const payload = await buildHealthPayload();
+      sendJson(res, 200, payload);
       return;
     }
 
@@ -146,7 +137,6 @@ export async function stopHealthServer(): Promise<void> {
   startTimeMs = null;
   await new Promise<void>((resolve) => {
     s.close(() => resolve());
-    // Force close after 2s
     setTimeout(() => {
       s.closeAllConnections?.();
       resolve();
