@@ -11,6 +11,7 @@ services:
       - OPENCODE_API_URL=${OPENCODE_API_URL:-http://127.0.0.1:4096}
       - OPENCODE_TELEGRAM_HOME=/app/data
       - OPENCODE_TELEGRAM_CONTAINER=1
+      - BOT_HEALTH_PORT=${BOT_HEALTH_PORT:-3100}
     env_file:
       - .env
     volumes:
@@ -20,6 +21,14 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3100/health').then(r=>r.json()).then(j=>process.exit(j.status==='healthy'?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
 
 volumes:
   opencode-bot-data:
+YAL
+echo "done"

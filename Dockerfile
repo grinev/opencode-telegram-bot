@@ -48,6 +48,9 @@ ENV OPENCODE_TELEGRAM_HOME=/app/data
 RUN mkdir -p /app/data/logs /app/data/run && \
     chown -R node:node /app
 
+# Health server port (internal, loopback only)
+EXPOSE 3100
+
 # Copy built application and production dependencies from builder
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules

@@ -206,6 +206,9 @@ export const config = {
   server: {
     logLevel: getEnvVar("LOG_LEVEL", false) || "info",
   },
+  health: {
+    port: getOptionalNonNegativeIntEnvVar("BOT_HEALTH_PORT", 3100),
+  },
   bot: {
     sessionsListLimit: getOptionalPositiveIntEnvVar("SESSIONS_LIST_LIMIT", 10),
     messagesListLimit: getOptionalPositiveIntEnvVar("MESSAGES_LIST_LIMIT", 10),
