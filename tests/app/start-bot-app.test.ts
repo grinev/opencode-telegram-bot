@@ -25,6 +25,8 @@ const mocked = vi.hoisted(() => ({
   initializeLoggerMock: vi.fn(),
   getLogFilePathMock: vi.fn(),
   flushLoggerMock: vi.fn(),
+  startHealthServerMock: vi.fn(),
+  stopHealthServerMock: vi.fn(),
   config: {
     opencode: {
       apiUrl: "http://localhost:4096",
@@ -41,7 +43,12 @@ vi.mock("../../src/bot/index.js", () => ({
 }));
 
 vi.mock("../../src/config.js", () => ({
-  config: mocked.config,
+  config: {
+    ...mocked.config,
+    health: {
+      port: 0,
+    },
+  },
 }));
 
 vi.mock("../../src/opencode/auto-restart.js", () => ({
@@ -99,6 +106,11 @@ vi.mock("../../src/utils/logger.js", () => ({
     warn: mocked.loggerWarnMock,
     error: mocked.loggerErrorMock,
   },
+}));
+
+vi.mock("../../src/health/server.js", () => ({
+  startHealthServer: mocked.startHealthServerMock,
+  stopHealthServer: mocked.stopHealthServerMock,
 }));
 
 import { startBotApp } from "../../src/app/bootstrap/start-bot-app.js";
