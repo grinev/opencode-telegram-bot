@@ -44,6 +44,7 @@ No public inbound ports are required for normal usage.
 
 - Fetch last N sessions (name + date)
 - Select an existing session and automatically follow its live updates
+- Switching to an existing session adopts the agent, model, and variant it last ran with
 - Create a new session
 - Use OpenCode-generated session title (based on conversation)
 

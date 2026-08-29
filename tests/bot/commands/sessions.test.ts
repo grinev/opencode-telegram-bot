@@ -26,7 +26,14 @@ const mocked = vi.hoisted(() => ({
   keyboardInitializeMock: vi.fn(),
   keyboardGetKeyboardMock: vi.fn(() => ({ inline_keyboard: [] })),
   keyboardUpdateAgentMock: vi.fn(),
+  keyboardUpdateModelMock: vi.fn(),
   keyboardUpdateContextMock: vi.fn(),
+  applySessionSettingsMock: vi.fn(),
+  getStoredModelMock: vi.fn(() => ({
+    providerID: "opencode-go",
+    modelID: "deepseek-v4-flash",
+    variant: "default",
+  })),
   keyboardGetContextInfoMock: vi.fn(() => null),
   pinnedIsInitializedMock: vi.fn(() => false),
   pinnedInitializeMock: vi.fn(),
@@ -77,12 +84,21 @@ vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
     getKeyboard: mocked.keyboardGetKeyboardMock,
     getContextInfo: mocked.keyboardGetContextInfoMock,
     updateAgent: mocked.keyboardUpdateAgentMock,
+    updateModel: mocked.keyboardUpdateModelMock,
     updateContext: mocked.keyboardUpdateContextMock,
   },
 }));
 
 vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   resolveProjectAgent: mocked.resolveProjectAgentMock,
+}));
+
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
+  getStoredModel: mocked.getStoredModelMock,
+}));
+
+vi.mock("../../../src/app/services/session-settings-service.js", () => ({
+  applySessionSettings: mocked.applySessionSettingsMock,
 }));
 
 vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
@@ -229,7 +245,9 @@ describe("bot/commands/sessions", () => {
     mocked.keyboardGetContextInfoMock.mockReset();
     mocked.keyboardGetContextInfoMock.mockReturnValue(null);
     mocked.keyboardUpdateAgentMock.mockReset();
+    mocked.keyboardUpdateModelMock.mockReset();
     mocked.keyboardUpdateContextMock.mockReset();
+    mocked.applySessionSettingsMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReturnValue(false);
     mocked.pinnedInitializeMock.mockReset();
@@ -436,6 +454,64 @@ describe("bot/commands/sessions", () => {
         taskName: "sessions.sendPreview",
       }),
     );
+  });
+
+  it("pulls the settings of the selected session before attaching to it", async () => {
+    const session = createSession(0);
+    mocked.sessionGetMock.mockResolvedValueOnce({ data: session, error: null });
+
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    await handleSessionSelect(createCallbackContext("session:session-1", 456), createDeps());
+
+    expect(mocked.applySessionSettingsMock).toHaveBeenCalledWith(session);
+    expect(defined(mocked.applySessionSettingsMock.mock.invocationCallOrder[0])).toBeLessThan(
+      defined(mocked.attachToSessionMock.mock.invocationCallOrder[0]),
+    );
+  });
+
+  it("puts the pulled model on the keyboard sent with the selection message", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    await handleSessionSelect(createCallbackContext("session:session-1", 456), createDeps());
+
+    expect(mocked.keyboardUpdateModelMock).toHaveBeenCalledWith({
+      providerID: "opencode-go",
+      modelID: "deepseek-v4-flash",
+      variant: "default",
+    });
+    expect(defined(mocked.keyboardUpdateModelMock.mock.invocationCallOrder[0])).toBeLessThan(
+      defined(mocked.keyboardGetKeyboardMock.mock.invocationCallOrder[0]),
+    );
+  });
+
+  it("pulls the settings when a background session notification is opened", async () => {
+    const session = createSession(0);
+    mocked.sessionGetMock.mockResolvedValueOnce({ data: session, error: null });
+
+    const handled = await handleBackgroundSessionOpen(
+      createCallbackContext("background-session:session-1", 456),
+      createDeps(),
+    );
+
+    expect(handled).toBe(true);
+    expect(mocked.applySessionSettingsMock).toHaveBeenCalledWith(session);
   });
 
   it("blocks session selection callback while foreground session is busy", async () => {

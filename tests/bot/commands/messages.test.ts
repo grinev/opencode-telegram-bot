@@ -30,6 +30,15 @@ const mocked = vi.hoisted(() => ({
   attachToSessionMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
   ingestSessionInfoForCacheMock: vi.fn(),
+  applySessionSettingsMock: vi.fn(),
+  getStoredAgentMock: vi.fn(() => "build"),
+  getStoredModelMock: vi.fn(() => ({
+    providerID: "opencode-go",
+    modelID: "deepseek-v4-flash",
+    variant: "default",
+  })),
+  keyboardUpdateAgentMock: vi.fn(),
+  keyboardUpdateModelMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -43,6 +52,25 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
 
 vi.mock("../../../src/app/services/attach-service.js", () => ({
   attachToSession: mocked.attachToSessionMock,
+}));
+
+vi.mock("../../../src/app/services/session-settings-service.js", () => ({
+  applySessionSettings: mocked.applySessionSettingsMock,
+}));
+
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
+  getStoredAgent: mocked.getStoredAgentMock,
+}));
+
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
+  getStoredModel: mocked.getStoredModelMock,
+}));
+
+vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
+  keyboardManager: {
+    updateAgent: mocked.keyboardUpdateAgentMock,
+    updateModel: mocked.keyboardUpdateModelMock,
+  },
 }));
 
 vi.mock("../../../src/app/services/session-cache-service.js", () => ({
@@ -128,6 +156,9 @@ describe("bot/commands/messages", () => {
     mocked.attachToSessionMock.mockReset();
     mocked.setCurrentSessionMock.mockReset();
     mocked.ingestSessionInfoForCacheMock.mockReset();
+    mocked.applySessionSettingsMock.mockReset();
+    mocked.keyboardUpdateAgentMock.mockReset();
+    mocked.keyboardUpdateModelMock.mockReset();
 
     // Default: session without revert
     mocked.sessionGetMock.mockResolvedValue({
@@ -575,6 +606,53 @@ describe("bot/commands/messages", () => {
       t("messages.fork_success", { text: "test prompt" }),
     );
     expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("pulls the forked session settings before attaching and syncs the keyboard state", async () => {
+    const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "messages",
+        stage: "detail",
+        messageId: 600,
+        projectDirectory: "D:\\Projects\\Repo",
+        sessionId: "session-1",
+        messages,
+        page: 0,
+        selectedIndex: 0,
+      },
+    });
+
+    const forkedSession = {
+      id: "session-2",
+      title: "Forked Session",
+      directory: "D:\\Projects\\Repo",
+      agent: "plan",
+      model: { providerID: "opencode-go", id: "deepseek-v4-flash", variant: "high" },
+    };
+    mocked.sessionForkMock.mockResolvedValue({ data: forkedSession, error: null });
+    mocked.attachToSessionMock.mockResolvedValue({
+      busy: false,
+      alreadyAttached: false,
+      restoredQuestion: false,
+      restoredPermissions: 0,
+    });
+    mocked.ingestSessionInfoForCacheMock.mockResolvedValue(undefined);
+
+    await handleMessagesCallback(createCallbackContext("messages:fork", 600), testDeps);
+
+    expect(mocked.applySessionSettingsMock).toHaveBeenCalledWith(forkedSession);
+    expect(defined(mocked.applySessionSettingsMock.mock.invocationCallOrder[0])).toBeLessThan(
+      defined(mocked.attachToSessionMock.mock.invocationCallOrder[0]),
+    );
+    expect(mocked.keyboardUpdateAgentMock).toHaveBeenCalledWith("build");
+    expect(mocked.keyboardUpdateModelMock).toHaveBeenCalledWith({
+      providerID: "opencode-go",
+      modelID: "deepseek-v4-flash",
+      variant: "default",
+    });
   });
 
   it("handles fork error", async () => {

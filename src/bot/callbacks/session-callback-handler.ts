@@ -1,7 +1,9 @@
 import type { Bot, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { resolveProjectAgent } from "../../app/services/agent-selection-service.js";
+import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { setCurrentSession } from "../../app/services/session-service.js";
+import { applySessionSettings } from "../../app/services/session-settings-service.js";
 import type { SessionInfo } from "../../app/types/session.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { clearAllInteractionState, interactionManager } from "../../app/managers/interaction-manager.js";
@@ -101,6 +103,9 @@ async function selectSessionById(
     directory: currentProject.worktree,
   };
   setCurrentSession(sessionInfo);
+  // Pull before attaching: the pinned message is rendered inside attachToSession
+  // and reads the stored model, so its Model line comes out already pulled.
+  applySessionSettings(session);
   clearAllInteractionState("session_switched");
 
   await ctx.answerCallbackQuery();
@@ -139,6 +144,7 @@ async function selectSessionById(
     const currentAgent = await resolveProjectAgent();
 
     keyboardManager.updateAgent(currentAgent);
+    keyboardManager.updateModel(getStoredModel());
 
     const contextInfo = keyboardManager.getContextInfo();
     if (contextInfo) {
