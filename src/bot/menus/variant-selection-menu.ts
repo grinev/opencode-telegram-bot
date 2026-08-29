@@ -5,6 +5,7 @@ import {
   getAvailableVariants,
   getCurrentVariant,
 } from "../../app/services/variant-selection-service.js";
+import type { ModelInfo } from "../../app/types/model.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { replyWithInlineMenu } from "./inline-menu.js";
@@ -87,5 +88,47 @@ export async function showVariantSelectionMenu(ctx: Context): Promise<void> {
   } catch (err) {
     logger.error("[VariantHandler] Error showing variant menu:", err);
     await ctx.reply(t("variant.menu.error"));
+  }
+}
+
+/**
+ * Show the variant selection menu right after a model was picked.
+ * Opens only when the model offers more than one selectable variant; any failure
+ * leaves the flow at the model confirmation instead of surfacing an error.
+ * @param ctx grammY context
+ * @param model Model that was just applied
+ */
+export async function showVariantSelectionMenuAfterModelChange(
+  ctx: Context,
+  model: ModelInfo,
+): Promise<void> {
+  try {
+    const currentVariant = model.variant || "default";
+    const keyboard = await buildVariantSelectionMenu(
+      currentVariant,
+      model.providerID,
+      model.modelID,
+    );
+
+    // The builder leaves a trailing empty row, so count the rows that carry a button
+    const drawnVariants = keyboard.inline_keyboard.filter((row) => row.length > 0).length;
+
+    if (drawnVariants < 2) {
+      logger.debug(
+        `[VariantHandler] No variant choice for ${model.providerID}/${model.modelID}, menu skipped`,
+      );
+      return;
+    }
+
+    const displayName = formatVariantForDisplay(currentVariant);
+    const text = t("variant.menu.current", { name: displayName });
+
+    await replyWithInlineMenu(ctx, {
+      menuKind: "variant",
+      text,
+      keyboard,
+    });
+  } catch (err) {
+    logger.error("[VariantHandler] Error showing variant menu after model change:", err);
   }
 }

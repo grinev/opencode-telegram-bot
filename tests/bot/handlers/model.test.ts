@@ -24,6 +24,7 @@ const mocked = vi.hoisted(() => ({
   pinnedGetContextLimitMock: vi.fn(),
   createMainKeyboardMock: vi.fn(),
   replyWithInlineMenuMock: vi.fn(),
+  showVariantMenuAfterModelChangeMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/services/model-selection-service.js", () => ({
@@ -75,6 +76,10 @@ vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
   clearActiveInlineMenu: vi.fn(),
   replyWithInlineMenu: mocked.replyWithInlineMenuMock,
   appendInlineMenuCancelButton: (keyboard: InlineKeyboard) => keyboard,
+}));
+
+vi.mock("../../../src/bot/menus/variant-selection-menu.js", () => ({
+  showVariantSelectionMenuAfterModelChange: mocked.showVariantMenuAfterModelChangeMock,
 }));
 
 import {
@@ -144,6 +149,7 @@ describe("bot model selection", () => {
     mocked.pinnedGetContextLimitMock.mockReset().mockReturnValue(0);
     mocked.createMainKeyboardMock.mockReset().mockReturnValue({ keyboard: [["main"]] });
     mocked.replyWithInlineMenuMock.mockReset().mockResolvedValue(999);
+    mocked.showVariantMenuAfterModelChangeMock.mockReset().mockResolvedValue(undefined);
   });
 
   describe("buildModelSelectionMenu", () => {
@@ -249,6 +255,22 @@ describe("bot model selection", () => {
         variant: "default",
       });
       expect(mocked.getModelSelectionListsMock).not.toHaveBeenCalled();
+      expect(mocked.showVariantMenuAfterModelChangeMock).toHaveBeenCalledWith(ctx, {
+        providerID: "fireworks",
+        modelID: longModelID,
+        variant: "default",
+      });
+
+      const replyOrder = defined(
+        (ctx.reply as unknown as { mock: { invocationCallOrder: number[] } }).mock
+          .invocationCallOrder[0],
+        "confirmation reply order",
+      );
+      const variantMenuOrder = defined(
+        mocked.showVariantMenuAfterModelChangeMock.mock.invocationCallOrder[0],
+        "variant menu order",
+      );
+      expect(replyOrder).toBeLessThan(variantMenuOrder);
     });
 
     it("rejects stale search result callbacks instead of parsing them as legacy models", async () => {
@@ -519,6 +541,11 @@ describe("bot model selection", () => {
         modelID: longModelID,
         variant: "default",
       });
+      expect(mocked.showVariantMenuAfterModelChangeMock).toHaveBeenCalledWith(ctx, {
+        providerID: "fireworks",
+        modelID: longModelID,
+        variant: "default",
+      });
     });
 
     it("rejects stale short list callbacks instead of parsing them as legacy models", async () => {
@@ -754,6 +781,11 @@ describe("bot model selection", () => {
 
       expect(result).toBe(true);
       expect(mocked.selectModelMock).toHaveBeenCalledWith({
+        providerID: "openai",
+        modelID: "gpt-5",
+        variant: "default",
+      });
+      expect(mocked.showVariantMenuAfterModelChangeMock).toHaveBeenCalledWith(ctx, {
         providerID: "openai",
         modelID: "gpt-5",
         variant: "default",

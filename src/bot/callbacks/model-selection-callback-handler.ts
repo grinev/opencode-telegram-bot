@@ -23,6 +23,7 @@ import {
   clearActiveInlineMenu,
   ensureActiveInlineMenu,
 } from "../menus/inline-menu.js";
+import { showVariantSelectionMenuAfterModelChange } from "../menus/variant-selection-menu.js";
 import {
   buildModelRootMenuView,
   buildProviderModelsMenuView,
@@ -321,6 +322,7 @@ async function applyModelSelectionAndNotify(ctx: Context, modelInfo: ModelInfo):
   const displayName = formatModelForDisplay(modelInfo.providerID, modelInfo.modelID);
 
   await switched(ctx, t("model.changed_message", { name: displayName }), keyboard);
+  await showVariantSelectionMenuAfterModelChange(ctx, modelInfo);
 }
 
 /**

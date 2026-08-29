@@ -145,6 +145,8 @@ Model picker behavior:
 - Default configured model (`OPENCODE_MODEL_PROVIDER` + `OPENCODE_MODEL_ID`) is treated as favorite
 - Models can be browsed by provider: the picker offers a providers list and a paginated model
   list per provider, with a back button on each screen (page size: `MODELS_LIST_LIMIT`)
+- Picking a model opens the variant picker right after the confirmation when the model offers
+  more than one selectable variant; a model with only `Default` ends at the confirmation
 
 ### Main features already implemented
 
