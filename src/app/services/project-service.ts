@@ -69,8 +69,9 @@ async function getResolvedProjects(options?: {
   const hiddenLinkedWorktrees = projectList.length - visibleProjects.length;
 
   const excludedPaths = config.bot.excludedProjectPaths;
-  const filteredProjects = excludedPaths.length > 0
-    ? visibleProjects.filter((p) => !excludedPaths.some((excluded) => p.worktree === excluded))
+  const excludedKeys = new Set(excludedPaths.map((excluded) => worktreeKey(excluded)));
+  const filteredProjects = excludedKeys.size > 0
+    ? visibleProjects.filter((p) => !excludedKeys.has(worktreeKey(p.worktree)))
     : visibleProjects;
   const hiddenExcluded = visibleProjects.length - filteredProjects.length;
 

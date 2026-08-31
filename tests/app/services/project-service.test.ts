@@ -195,6 +195,91 @@ describe("project/manager", () => {
     expect(projects).toEqual([{ id: "main", worktree: mainWorktree, name: "Main" }]);
   });
 
+  it("filters out projects when excluded path has trailing separator", async () => {
+    configMock.bot.excludedProjectPaths = ["/home/user/repo-b/"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p1", worktree: "/home/user/repo-a", name: "Repo A" }]);
+  });
+
+  it("filters out projects when worktree has trailing separator but excluded does not", async () => {
+    configMock.bot.excludedProjectPaths = ["/home/user/repo-b"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a/", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b/", name: "Repo B" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p1", worktree: "/home/user/repo-a/", name: "Repo A" }]);
+  });
+
+  it("filters out projects with Windows casing differences", async () => {
+    configMock.bot.excludedProjectPaths = ["c:\\users\\dev\\repo"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "C:\\Users\\Dev\\Repo", name: "Repo A" },
+        { id: "p2", worktree: "C:\\Users\\Dev\\Other", name: "Other" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p2", worktree: "C:\\Users\\Dev\\Other", name: "Other" }]);
+  });
+
+  it("filters out projects with Windows mixed separators", async () => {
+    configMock.bot.excludedProjectPaths = ["C:/Users/Dev/Repo"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "C:\\Users\\Dev\\Repo", name: "Repo A" },
+        { id: "p2", worktree: "C:\\Users\\Dev\\Other", name: "Other" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p2", worktree: "C:\\Users\\Dev\\Other", name: "Other" }]);
+  });
+
+  it("filters out projects with Windows trailing separator and casing", async () => {
+    configMock.bot.excludedProjectPaths = ["C:\\Users\\Dev\\Repo\\"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "c:/users/dev/repo", name: "Repo A" },
+        { id: "p2", worktree: "C:/Users/Dev/Other/", name: "Other" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p2", worktree: "C:/Users/Dev/Other/", name: "Other" }]);
+  });
+
   describe("getProjectByWorktree", () => {
     it("should find project by exact worktree path", async () => {
       projectListMock.mockResolvedValueOnce({
