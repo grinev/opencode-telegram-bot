@@ -349,6 +349,22 @@ describe("bot/messages/summary-message-formatter", () => {
     expect(oversized).toBeNull();
   });
 
+  it("starts file payloads with a UTF-8 BOM so readers do not guess the system code page", () => {
+    const writeFile = prepareCodeFile("const x = 1;", "src/app.ts", "write");
+    expect(writeFile?.buffer.subarray(0, 3).toString("hex")).toBe("efbbbf");
+    expect(writeFile?.buffer.subarray(3).toString("utf8")).toBe(
+      "Write File/Path: src/app.ts\n============================================================\n\nconst x = 1;",
+    );
+
+    const editFile = prepareCodeFile("@@ -1,1 +1,1 @@\n-line1\n+line2", "src/app.ts", "edit");
+    expect(editFile?.buffer.subarray(0, 3).toString("hex")).toBe("efbbbf");
+    expect(editFile?.buffer.subarray(3).toString("utf8")).toContain("Edit File/Path: src/app.ts");
+
+    const cyrillic = prepareCodeFile('const привет = "мир";', "src/app.ts", "write");
+    expect(cyrillic?.buffer.subarray(0, 3).toString("hex")).toBe("efbbbf");
+    expect(cyrillic?.buffer.subarray(3).toString("utf8")).toContain('const привет = "мир";');
+  });
+
   it("normalizes absolute paths to project-relative form", () => {
     const writeText = formatToolInfo({
       sessionId: "s1",
