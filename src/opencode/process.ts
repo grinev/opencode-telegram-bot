@@ -53,7 +53,7 @@ function resolveWindowsOpencodeExe(): string {
   // Covers non-npm installations (install script, scoop, choco, manual download, etc.).
   for (const entry of pathEntries) {
     const candidateExe = path.join(entry, "opencode.exe");
-    if (existsSync(candidateExe)) {
+    if (fileExistsSync(candidateExe)) {
       return candidateExe;
     }
   }
@@ -132,7 +132,11 @@ function parseSocketPort(value: string): number | null {
     return null;
   }
 
-  const port = Number.parseInt(match[1], 10);
+  const portText = match[1];
+  if (!portText) {
+    return null;
+  }
+  const port = Number.parseInt(portText, 10);
   return Number.isInteger(port) && port > 0 ? port : null;
 }
 
@@ -174,7 +178,8 @@ export function findUnixListeningPidInSs(stdout: string, port: number): number |
     }
 
     const pidMatch = trimmedLine.match(/pid=(\d+)/);
-    const pid = pidMatch ? parsePid(pidMatch[1]) : null;
+    const pidText = pidMatch?.[1];
+    const pid = pidText ? parsePid(pidText) : null;
     if (pid !== null) {
       return pid;
     }

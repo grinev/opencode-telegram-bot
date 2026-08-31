@@ -107,6 +107,18 @@ describe("bot/commands/opencode-start-command", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("warns when running in a container even if the API URL is local", async () => {
+    const ctx = createContext();
+    vi.stubEnv("OPENCODE_TELEGRAM_CONTAINER", "1");
+
+    await opencodeStartCommand(ctx as never);
+
+    expect(ctx.reply).toHaveBeenCalledWith(t("runtime.container.command_unavailable"));
+    expect(mocked.resolveLocalOpencodeTargetMock).not.toHaveBeenCalled();
+    expect(mocked.startLocalOpencodeServerMock).not.toHaveBeenCalled();
   });
 
   it("warns when OPENCODE_API_URL points to a remote server", async () => {

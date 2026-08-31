@@ -162,18 +162,28 @@ export async function startBotApp(): Promise<void> {
   process.on("SIGINT", handleSigint);
   process.on("SIGTERM", handleSigterm);
 
-  const webhookInfo = await bot.api.getWebhookInfo();
-  if (webhookInfo.pending_update_count > 0) {
-    // Approximate: more updates can arrive before long polling actually drops
-    // the queue, and Telegram does not report how many were discarded.
-    logger.info(
-      `[Bot] Dropping ~${webhookInfo.pending_update_count} update(s) queued while the bot was offline`,
+  try {
+    const webhookInfo = await bot.api.getWebhookInfo();
+    if (webhookInfo.pending_update_count > 0) {
+      // Approximate: more updates can arrive before long polling actually drops
+      // the queue, and Telegram does not report how many were discarded.
+      logger.info(
+        `[Bot] Dropping ~${webhookInfo.pending_update_count} update(s) queued while the bot was offline`,
+      );
+    }
+    if (webhookInfo.url) {
+      logger.info(`[Bot] Webhook detected: ${webhookInfo.url}, removing...`);
+      await bot.api.deleteWebhook();
+      logger.info("[Bot] Webhook removed, switching to long polling");
+    }
+  } catch (error) {
+    // A network blip at boot must not prevent long polling from starting:
+    // without this, bot.start() is skipped and the process stays alive but
+    // deaf (heartbeat keeps the event loop alive) until the service restarts.
+    logger.warn(
+      "[Bot] Could not inspect webhook state at startup; continuing with polling:",
+      error,
     );
-  }
-  if (webhookInfo.url) {
-    logger.info(`[Bot] Webhook detected: ${webhookInfo.url}, removing...`);
-    await bot.api.deleteWebhook();
-    logger.info("[Bot] Webhook removed, switching to long polling");
   }
 
   try {

@@ -89,8 +89,12 @@ function renderBlock(block: TelegramBlock): string {
       if (block.rows.length === 0) {
         return "";
       }
-      const header = `\\| ${block.rows[0].map(escapeMarkdownV2).join(" \\| ")} \\|`;
-      const separator = `\\| ${block.rows[0].map(() => "\\-\\-\\-").join(" \\| ")} \\|`;
+      const headerRow = block.rows[0];
+      if (!headerRow) {
+        return "";
+      }
+      const header = `\\| ${headerRow.map(escapeMarkdownV2).join(" \\| ")} \\|`;
+      const separator = `\\| ${headerRow.map(() => "\\-\\-\\-").join(" \\| ")} \\|`;
       const body = block.rows
         .slice(1)
         .map((row) => `\\| ${row.map(escapeMarkdownV2).join(" \\| ")} \\|`);

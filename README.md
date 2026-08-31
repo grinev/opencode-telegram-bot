@@ -16,7 +16,7 @@ Platforms: macOS, Windows, Linux
 
 ## What changed vs. the upstream Node port
 
-Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`), Français (`fr`), Italiano (`it`), Português (Brasil) (`pt`), Русский (`ru`), 简体中文 (`zh`)
+Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`), Français (`fr`), Italiano (`it`), 한국어 (`ko`), Português (Brasil) (`pt`), Русский (`ru`), 简体中文 (`zh`)
 
 - **Runtime**: Node.js 20+ → **Bun ≥ 1.4.0** (`bun run` everywhere; the bin entry is `#!/usr/bin/env bun`)
 - **Package manager**: npm → **bun install** (no `package-lock.json`, just `bun.lock`)
@@ -481,6 +481,66 @@ bunx vitest watch ...      # if you ever need vitest — but the shim is now the
 
 The lint, format, and TypeScript configs are unchanged from upstream (ESLint + Prettier) — they run on `bunx`, no Node involved.
 
+### Docker Deployment
+
+The bot can also be run as a container using Docker and Docker Compose. The image contains **only the Telegram bot**. OpenCode stays on the host and must already be running before you start the container (`opencode serve --port 4096`). `/opencode_start` and `/opencode_stop` do not work from inside the container.
+
+```bash
+git clone https://github.com/primigenum/opencode-telegram-bot.git
+cd opencode-telegram-bot
+cp .env.example .env
+# Edit .env with your bot token, user ID, and model settings
+```
+
+`.env` stays on the host. It is injected at runtime and is not copied into the image.
+
+**Linux** (OpenCode on the host at `127.0.0.1:4096`):
+
+```bash
+docker compose up -d --build
+```
+
+**macOS / Windows (Docker Desktop):** host networking does not reach OpenCode on the Windows/macOS localhost. Use the Desktop override, which talks to the host via `host.docker.internal`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.desktop.yml up -d --build
+```
+
+Follow logs:
+
+```bash
+docker compose logs -f opencode-bot
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
+#### Persistence
+
+Runtime state (settings, logs, SQLite databases) is stored in a Docker named volume `opencode-bot-data` mapped to `/app/data` inside the container. The volume is created automatically on first run. It is the bot's own state, not your project files. OpenCode on the host continues to edit projects on the host disk.
+
+#### Configuration
+
+All configuration is provided through environment variables in the `.env` file. Compose also sets `OPENCODE_TELEGRAM_CONTAINER=1` so the bot can warn about commands that need the host filesystem or a local OpenCode process.
+
+- `OPENCODE_API_URL` — URL of the OpenCode server. On Linux with the default compose file this is `http://127.0.0.1:4096` via `network_mode: host`. The Desktop override sets `http://host.docker.internal:4096`.
+
+#### Commands that are not available in Docker
+
+These need the bot process to see host project paths or to spawn/stop `opencode` in the same machine namespace. The default image does neither, so the bot replies with a warning instead of a generic error:
+
+- `/open` — directory browser to add a project
+- `/ls` — project file browser / download / attach
+- `/opencode_start` and `/opencode_stop`
+- `/worktree`
+
+`/projects`, `/sessions`, prompts, and live updates still go through the OpenCode HTTP API and work as usual.
+
+Port 4096 is **not** exposed by the bot image; it belongs to the OpenCode server, which runs separately.
+
 ## Test status
 
 The test suite runs on **`bun test`** through a thin vitest-compatible shim at `tests/helpers/vitest-shim.ts` — most test files are unchanged apart from `import { ... } from "vitest"` → `import { ... } from "#vitest"` (subpath alias in `package.json` `imports`).
@@ -491,14 +551,6 @@ This is a partial port. Two vitest patterns have **no equivalent in bun's test r
 2. **`vi.resetModules()` + `await import(...)`** — bun has no public module cache reset API.
 
 Lint, build, and runtime are green. Tests that don't use the two patterns above pass. For the full breakdown of what the shim covers, the bun limitations, the affected test files, and the open follow-ups, see **[`docs/BUN_PORT.md`](./docs/BUN_PORT.md)** — that doc is the canonical reference for the port.
-
-## Support
-
-This project is free and open source. Development and testing run on paid AI model subscriptions, and donations go directly toward those.
-
-If you find this bot useful, you can support it here: [Donate](https://donate.trybit.com/D9J1UVKT)
-
-Any amount helps — thank you!
 
 ## Support
 

@@ -219,6 +219,7 @@ function createCallbackContext(data: string, messageId: number): Context {
     reply: vi.fn().mockResolvedValue(undefined),
     api: {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 888 }),
+      sendRichMessage: vi.fn().mockResolvedValue({ message_id: 889 }),
       deleteMessage: vi.fn().mockResolvedValue(true),
       editMessageText: vi.fn().mockResolvedValue(true),
     },
@@ -574,8 +575,8 @@ describe("bot/commands/sessions", () => {
       throw new Error("Expected latest assistant response background task");
     }
 
-    const sendMessageMock = ctx.api.sendMessage as ReturnType<typeof vi.fn>;
-    const previousSendCount = sendMessageMock.mock.calls.length;
+    const sendRichMessageMock = ctx.api.sendRichMessage as ReturnType<typeof vi.fn>;
+    const previousRichCount = sendRichMessageMock.mock.calls.length;
     await taskOptions.task();
 
     expect(mocked.sessionMessagesMock).toHaveBeenCalledWith({
@@ -584,12 +585,18 @@ describe("bot/commands/sessions", () => {
       limit: 20,
     });
 
-    const assistantResponseCalls = sendMessageMock.mock.calls.slice(previousSendCount);
-    expect(assistantResponseCalls.length).toBeGreaterThan(1);
-    expect(assistantResponseCalls.map((call) => call[1]).join("")).toBe(latestResponse);
-    expect(assistantResponseCalls.map((call) => call[1]).join("")).not.toContain(
-      "User prompt should not be forwarded",
-    );
+    const assistantResponseCalls = sendRichMessageMock.mock.calls.slice(previousRichCount);
+    expect(assistantResponseCalls.length).toBeGreaterThan(0);
+    const sentText = assistantResponseCalls
+      .map(
+        (call) =>
+          (call[1] as { blocks?: Array<{ text?: string; plainText?: string }> }).blocks
+            ?.map((b) => b.text ?? b.plainText ?? "")
+            .join("") ?? "",
+      )
+      .join("");
+    expect(sentText).toBe(latestResponse);
+    expect(sentText).not.toContain("User prompt should not be forwarded");
   });
 
   it("does not send preview or latest assistant response for background question notifications", async () => {

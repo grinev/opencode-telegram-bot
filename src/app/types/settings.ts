@@ -11,21 +11,21 @@ export interface ScheduledTaskSessionIgnoreInfo {
 }
 
 export interface Settings {
-  currentProject?: ProjectInfo;
-  currentSession?: SessionInfo;
-  currentAgent?: string;
-  currentModel?: ModelInfo;
-  pinnedMessageId?: number;
-  ttsMode?: "off" | "all" | "auto";
-  compactOutputMode?: boolean;
-  showThinkingContent?: boolean;
-  showAssistantRunFooter?: boolean;
-  responseStreamingMode?: ResponseStreamingMode;
-  sendDiffFileAttachments?: boolean;
-  promptQueueEnabled?: boolean;
-  sessionDirectoryCache?: SessionDirectoryCacheInfo;
-  scheduledTasks?: ScheduledTask[];
-  scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[];
+  currentProject?: ProjectInfo | undefined;
+  currentSession?: SessionInfo | undefined;
+  currentAgent?: string | undefined;
+  currentModel?: ModelInfo | undefined;
+  pinnedMessageId?: number | undefined;
+  ttsMode?: "off" | "all" | "auto" | undefined;
+  compactOutputMode?: boolean | undefined;
+  showThinkingContent?: boolean | undefined;
+  showAssistantRunFooter?: boolean | undefined;
+  responseStreamingMode?: ResponseStreamingMode | undefined;
+  sendDiffFileAttachments?: boolean | undefined;
+  promptQueueEnabled?: boolean | undefined;
+  sessionDirectoryCache?: SessionDirectoryCacheInfo | undefined;
+  scheduledTasks?: ScheduledTask[] | undefined;
+  scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[] | undefined;
   /** If set, only projects whose folder name matches one of these entries are shown in /projects */
-  visibleProjects?: string[];
+  visibleProjects?: string[] | undefined;
 }

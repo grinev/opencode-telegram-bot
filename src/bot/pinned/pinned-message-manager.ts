@@ -22,6 +22,7 @@ import {
   formatCostLine,
   formatModelDisplayName,
 } from "./pinned-message-format.js";
+import { getSessionStreamThrottleMs } from "../streaming/stream-throttle.js";
 
 class PinnedMessageManager {
   private api: Api | null = null;
@@ -43,7 +44,9 @@ class PinnedMessageManager {
     cost: 0,
   };
   private contextLimit: number | null = null;
-  private onKeyboardUpdateCallback?: (tokensUsed: number, tokensLimit: number) => void;
+  private onKeyboardUpdateCallback?:
+    | ((tokensUsed: number, tokensLimit: number) => void)
+    | undefined;
   private updateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private updateTask: Promise<void> | null = null;
   private pendingUpdate = false;
@@ -371,7 +374,7 @@ class PinnedMessageManager {
 
     this.state.changedFiles = diffs;
     logger.debug(`[PinnedManager] Session diff updated: ${diffs.length} files`);
-    await this.updatePinnedMessage();
+    this.scheduleDebouncedUpdate();
   }
 
   /**
@@ -397,10 +400,12 @@ class PinnedMessageManager {
     if (this.updateDebounceTimer) {
       clearTimeout(this.updateDebounceTimer);
     }
+
+    const delayMs = getSessionStreamThrottleMs(this.state.sessionId ?? "");
     this.updateDebounceTimer = setTimeout(() => {
       this.updateDebounceTimer = null;
       void this.updatePinnedMessage();
-    }, 1000);
+    }, delayMs);
   }
 
   /**
@@ -667,6 +672,8 @@ class PinnedMessageManager {
       const left = current[index];
       const right = next[index];
       if (
+        !left ||
+        !right ||
         left.file !== right.file ||
         left.additions !== right.additions ||
         left.deletions !== right.deletions

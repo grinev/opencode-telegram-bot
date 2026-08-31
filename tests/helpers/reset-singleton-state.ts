@@ -40,6 +40,7 @@ export async function resetSingletonState(): Promise<void> {
     { promptQueue },
     { __resetPromptQueueDispatchForTests },
     { promptAttachment },
+    { __resetStreamThrottleForTests },
     loggerModule,
   ] = await Promise.all([
     import("../../src/app/managers/question-manager.js"),
@@ -55,10 +56,12 @@ export async function resetSingletonState(): Promise<void> {
     import("../../src/app/managers/prompt-queue-manager.js"),
     import("../../src/bot/handlers/prompt-queue-dispatch.js"),
     import("../../src/app/managers/prompt-attachment-manager.js"),
+    import("../../src/bot/streaming/stream-throttle.js"),
     import("../../src/utils/logger.js"),
   ]);
 
   stopEventListening();
+  __resetStreamThrottleForTests();
   questionManager.clear();
   permissionManager.clear();
   renameManager.clear();

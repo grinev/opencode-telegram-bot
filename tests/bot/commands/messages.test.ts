@@ -469,7 +469,6 @@ describe("bot/commands/messages", () => {
     });
     expect(ctx.editMessageText).toHaveBeenCalledWith(
       t("messages.revert_success", { text: "test prompt" }),
-      { reply_markup: undefined },
     );
     expect(interactionManager.getSnapshot()).toBeNull();
   });
@@ -503,9 +502,7 @@ describe("bot/commands/messages", () => {
       directory: "D:\\Projects\\Repo",
       messageID: "msg-1",
     });
-    expect(ctx.editMessageText).toHaveBeenCalledWith(t("messages.revert_error"), {
-      reply_markup: undefined,
-    });
+    expect(ctx.editMessageText).toHaveBeenCalledWith(t("messages.revert_error"));
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 
@@ -586,7 +583,6 @@ describe("bot/commands/messages", () => {
     expect(mocked.attachToSessionMock).toHaveBeenCalled();
     expect(ctx.editMessageText).toHaveBeenCalledWith(
       t("messages.fork_success", { text: "test prompt" }),
-      { reply_markup: undefined },
     );
     expect(interactionManager.getSnapshot()).toBeNull();
   });
@@ -620,9 +616,7 @@ describe("bot/commands/messages", () => {
       messageID: "msg-1",
       directory: "D:\\Projects\\Repo",
     });
-    expect(ctx.editMessageText).toHaveBeenCalledWith(t("messages.fork_error"), {
-      reply_markup: undefined,
-    });
+    expect(ctx.editMessageText).toHaveBeenCalledWith(t("messages.fork_error"));
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 

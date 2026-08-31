@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "#vitest";
 import { ResponseStreamer } from "../../../src/bot/streaming/response-streamer.js";
 import { getTelegramRenderedPartSignature } from "../../../src/bot/render/part-signature.js";
 import type { TelegramRenderedPart } from "../../../src/bot/render/types.js";
+import { defined } from "../../helpers/defined.js";
 
 function plainPart(text: string): TelegramRenderedPart {
   return {
@@ -36,7 +37,7 @@ describe("bot/streaming/response-streamer", () => {
       messageId: nextMessageId++,
       deliveredSignature: signature(part),
     }));
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 500,
@@ -64,7 +65,7 @@ describe("bot/streaming/response-streamer", () => {
       messageId: nextMessageId++,
       deliveredSignature: signature(part),
     }));
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 0,
@@ -100,7 +101,7 @@ describe("bot/streaming/response-streamer", () => {
       messageId: nextMessageId++,
       deliveredSignature: signature(part),
     }));
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 500,
@@ -130,7 +131,7 @@ describe("bot/streaming/response-streamer", () => {
       messageId: nextMessageId++,
       deliveredSignature: signature(part),
     }));
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 0,
@@ -162,7 +163,7 @@ describe("bot/streaming/response-streamer", () => {
         messageId: 1,
         deliveredSignature: signature(part),
       }));
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 0,
@@ -228,7 +229,7 @@ describe("bot/streaming/response-streamer", () => {
     const sendPart = vi
       .fn()
       .mockRejectedValue(new Error("403: Forbidden: bot was blocked by the user"));
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 0,
@@ -264,7 +265,7 @@ describe("bot/streaming/response-streamer", () => {
             resolve({ messageId, deliveredSignature: signature(plainPart("short reply")) });
         }),
     );
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 0,
@@ -304,7 +305,7 @@ describe("bot/streaming/response-streamer", () => {
       messageId: nextMessageId++,
       deliveredSignature: signature(part),
     }));
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 0,
@@ -344,7 +345,7 @@ describe("bot/streaming/response-streamer", () => {
       messageId: nextMessageId++,
       deliveredSignature: signature(part),
     }));
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 0,
@@ -379,7 +380,7 @@ describe("bot/streaming/response-streamer", () => {
       messageId: nextMessageId++,
       deliveredSignature: signature(part),
     }));
-    const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ResponseStreamer({
       throttleMs: 500,
@@ -423,7 +424,7 @@ describe("bot/streaming/response-streamer", () => {
         messageId: 700,
         deliveredSignature: signature(part),
       }));
-      const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+      const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
       const deleteText = vi.fn().mockResolvedValue(undefined);
       const streamer = new ResponseStreamer({ throttleMs: 0, sendPart, editPart, deleteText });
 
@@ -432,7 +433,7 @@ describe("bot/streaming/response-streamer", () => {
         expect(sendPart).toHaveBeenCalledTimes(1);
       });
 
-      expect(sendPart.mock.calls[0][0]).toEqual(quotedPart("reasoning", false));
+      expect(defined(sendPart.mock.calls[0]?.[0])).toEqual(quotedPart("reasoning", false));
 
       // The text is identical; only the quote collapses. Without the entity in
       // the signature this would be skipped as unchanged.
@@ -452,7 +453,7 @@ describe("bot/streaming/response-streamer", () => {
         deliveredSignature: signature(plainPart(part.fallbackText)),
         degradedToPlain: true,
       }));
-      const editPart = vi.fn(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+      const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
       const deleteText = vi.fn().mockResolvedValue(undefined);
       const streamer = new ResponseStreamer({
         throttleMs: 0,
@@ -484,7 +485,7 @@ describe("bot/streaming/response-streamer", () => {
       const editPart = vi
         .fn()
         .mockRejectedValueOnce(new Error("Bad Request: RICH_BLOCK_INVALID"))
-        .mockImplementation(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+        .mockImplementation(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
       const deleteText = vi.fn().mockResolvedValue(undefined);
       const streamer = new ResponseStreamer({
         throttleMs: 0,
@@ -517,7 +518,7 @@ describe("bot/streaming/response-streamer", () => {
       const editPart = vi
         .fn()
         .mockRejectedValueOnce(new Error("Bad Request: RICH_BLOCK_INVALID"))
-        .mockImplementation(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+        .mockImplementation(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
       const deleteText = vi.fn().mockResolvedValue(undefined);
       const streamer = new ResponseStreamer({
         throttleMs: 0,
@@ -591,7 +592,7 @@ describe("bot/streaming/response-streamer", () => {
       const editPart = vi
         .fn()
         .mockRejectedValueOnce(new Error("Bad Request: RICH_BLOCK_INVALID"))
-        .mockImplementation(async (messageId, part) => ({ deliveredSignature: signature(part) }));
+        .mockImplementation(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
       const deleteText = vi.fn().mockResolvedValue(undefined);
       const streamer = new ResponseStreamer({
         throttleMs: 0,
@@ -845,5 +846,37 @@ describe("bot/streaming/response-streamer", () => {
       expect(result.streamed).toBe(true);
       expect(completePart).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("reads throttleMs again for the next flush cycle", async () => {
+    vi.useFakeTimers();
+
+    let throttleMs = 200;
+    let nextMessageId = 1;
+    const sendPart = vi.fn(async (part) => ({
+      messageId: nextMessageId++,
+      deliveredSignature: signature(part),
+    }));
+    const editPart = vi.fn(async (_messageId, part) => ({ deliveredSignature: signature(part) }));
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ResponseStreamer({
+      throttleMs: () => throttleMs,
+      sendPart,
+      editPart,
+      deleteText,
+    });
+
+    streamer.enqueue("s1", "m1", { parts: [plainPart("first")] });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(sendPart).toHaveBeenCalledTimes(1);
+
+    throttleMs = 2000;
+    streamer.enqueue("s1", "m1", { parts: [plainPart("second")] });
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(editPart).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(editPart).toHaveBeenCalledTimes(1);
+    expect(editPart).toHaveBeenCalledWith(1, plainPart("second"), undefined);
   });
 });

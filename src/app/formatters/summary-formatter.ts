@@ -140,6 +140,9 @@ function formatTodos(todos: Array<{ content: string; status: string }>): string 
 
   for (let i = 0; i < Math.min(todos.length, MAX_TODOS); i++) {
     const todo = todos[i];
+    if (!todo) {
+      continue;
+    }
     const marker = statusToMarker[todo.status] ?? "🔲";
     formattedTodos.push(`${marker} ${todo.content}`);
   }
@@ -153,7 +156,10 @@ function formatTodos(todos: Array<{ content: string; status: string }>): string 
   return result;
 }
 
-function formatDiffLineInfo(filediff: { additions?: number; deletions?: number }): string {
+function formatDiffLineInfo(filediff: {
+  additions?: number | undefined;
+  deletions?: number | undefined;
+}): string {
   const parts = [];
   if (filediff.additions && filediff.additions > 0) parts.push(`+${filediff.additions}`);
   if (filediff.deletions && filediff.deletions > 0) parts.push(`-${filediff.deletions}`);
@@ -181,7 +187,8 @@ function countDiffChangesFromText(text: string): { additions: number; deletions:
 function extractFirstUpdatedFileFromTitle(title: string): string {
   for (const rawLine of title.split("\n")) {
     const line = rawLine.trim();
-    if (line.length >= 3 && line[1] === " " && /[AMDURC]/.test(line[0])) {
+    const status = line[0];
+    if (line.length >= 3 && line[1] === " " && status !== undefined && /[AMDURC]/.test(status)) {
       return line.slice(2).trim();
     }
   }

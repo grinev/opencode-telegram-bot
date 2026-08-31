@@ -5,7 +5,6 @@ import { normalizeMarkdownForTelegramRendering } from "../render/markdown-normal
 import { convertToTelegramMarkdownV2 } from "../render/markdown-to-telegram-v2.js";
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
-const MARKDOWN_V2_RESERVED_CHARS = /([_\*\[\]\(\)~`>#+\-=|{}.!\\])/g;
 
 interface SplitTextOptions {
   avoidTrailingMarkdownEscape?: boolean;
@@ -75,10 +74,6 @@ function splitText(text: string, maxLength: number, options?: SplitTextOptions):
 
 export function formatSummary(text: string): string[] {
   return formatSummaryWithMode(text, config.bot.messageFormatMode);
-}
-
-export function escapePlainTextForTelegramMarkdownV2(text: string): string {
-  return text.replace(MARKDOWN_V2_RESERVED_CHARS, "\\$1");
 }
 
 function formatMarkdownForTelegram(text: string): string {

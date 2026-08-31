@@ -3,6 +3,7 @@ import type { MessageEntity } from "grammy/types";
 import { logger } from "../../utils/logger.js";
 import {
   editMessageWithMarkdownFallback,
+  isTelegramBadRequestError,
   sendMessageWithMarkdownFallback,
 } from "./send-with-markdown-fallback.js";
 import { chunkPlainText } from "../render/chunker.js";
@@ -24,9 +25,9 @@ interface SendBotTextParams {
   api: Pick<Api<RawApi>, "sendMessage">;
   chatId: Parameters<SendMessageApi["sendMessage"]>[0];
   text: string;
-  rawFallbackText?: string;
-  options?: TelegramSendMessageOptions;
-  format?: TelegramTextFormat;
+  rawFallbackText?: string | undefined;
+  options?: TelegramSendMessageOptions | undefined;
+  format?: TelegramTextFormat | undefined;
 }
 
 interface EditBotTextParams {
@@ -34,9 +35,9 @@ interface EditBotTextParams {
   chatId: Parameters<EditMessageApi["editMessageText"]>[0];
   messageId: Parameters<EditMessageApi["editMessageText"]>[1];
   text: string;
-  rawFallbackText?: string;
-  options?: TelegramEditMessageOptions;
-  format?: TelegramTextFormat;
+  rawFallbackText?: string | undefined;
+  options?: TelegramEditMessageOptions | undefined;
+  format?: TelegramTextFormat | undefined;
 }
 
 interface SendRenderedBotPartParams {
@@ -174,7 +175,7 @@ export async function sendRenderedBotPart({
       deliveredSignature: getTelegramRenderedPartSignature(part),
     };
   } catch (error) {
-    if (!allowPlainFallback) {
+    if (!allowPlainFallback || !isTelegramBadRequestError(error)) {
       throw error;
     }
 
@@ -242,7 +243,11 @@ export async function editRenderedBotPart({
   } catch (error) {
     // An edit targets exactly one message, so there is nothing to split it
     // across; a plain retry is only possible when the text fits a message.
-    if (!allowPlainFallback || part.fallbackText.length > TELEGRAM_TEXT_MESSAGE_LIMIT) {
+    if (
+      !allowPlainFallback ||
+      !isTelegramBadRequestError(error) ||
+      part.fallbackText.length > TELEGRAM_TEXT_MESSAGE_LIMIT
+    ) {
       throw error;
     }
 

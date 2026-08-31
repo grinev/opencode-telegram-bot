@@ -378,10 +378,10 @@ describe("interactionGuardMiddleware", () => {
     });
   });
 
-  it("allows abort, detach, status, and help while busy", async () => {
+  it("allows abort, detach, status, help, and opencode_stop while busy", async () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
-    for (const command of ["/abort", "/detach", "/status", "/help"]) {
+    for (const command of ["/abort", "/detach", "/status", "/help", "/opencode_stop"]) {
       const ctx = createTextContext(command);
       const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 

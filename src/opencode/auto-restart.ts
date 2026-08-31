@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { isContainerRuntime } from "../runtime/container.js";
 import { logger } from "../utils/logger.js";
 import { opencodeClient } from "./client.js";
 import { opencodeReadyLifecycle } from "./ready-lifecycle.js";
@@ -91,9 +92,15 @@ export class OpencodeAutoRestartService {
     this.started = true;
     this.localTarget = localTarget;
 
-    logger.info(
-      `[OpenCodeAutoRestart] Enabled: port=${localTarget.port}, intervalSec=${config.opencode.monitorIntervalSec}`,
-    );
+    if (isContainerRuntime()) {
+      logger.info(
+        `[OpenCodeAutoRestart] Enabled without local spawn: port=${localTarget.port}, intervalSec=${config.opencode.monitorIntervalSec}`,
+      );
+    } else {
+      logger.info(
+        `[OpenCodeAutoRestart] Enabled: port=${localTarget.port}, intervalSec=${config.opencode.monitorIntervalSec}`,
+      );
+    }
 
     await this.checkAndRestart("startup");
 
@@ -135,6 +142,13 @@ export class OpencodeAutoRestartService {
 
       this.serverWasHealthy = false;
       opencodeReadyLifecycle.notifyUnavailable(`auto_restart_${reason}`);
+
+      if (isContainerRuntime()) {
+        logger.warn(
+          `[OpenCodeAutoRestart] OpenCode server is unavailable; not starting a local process in container: reason=${reason}`,
+        );
+        return;
+      }
 
       logger.warn(
         `[OpenCodeAutoRestart] OpenCode server is unavailable, starting local server: reason=${reason}, port=${this.localTarget.port}`,

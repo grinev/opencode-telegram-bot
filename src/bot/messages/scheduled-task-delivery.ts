@@ -4,10 +4,8 @@ import type {
   QueuedScheduledTaskDelivery,
 } from "../../app/types/scheduled-task.js";
 import type { ScheduledTaskDeliverySender } from "../../app/services/scheduled-task-runtime-service.js";
-import {
-  escapePlainTextForTelegramMarkdownV2,
-  formatSummaryWithMode,
-} from "./summary-message-formatter.js";
+import { formatSummaryWithMode } from "./summary-message-formatter.js";
+import { escapePlainTextForTelegramMarkdownV2 } from "../../utils/telegram-markdown.js";
 import { sendBotText } from "./telegram-text.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;

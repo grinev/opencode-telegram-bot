@@ -104,7 +104,12 @@ export async function fetchCurrentAgent(): Promise<string> {
       return resolveProjectAgent(storedAgent ?? DEFAULT_AGENT);
     }
 
-    const lastAgent = messages[0].info.agent;
+    const lastMessage = messages[0];
+    if (!lastMessage) {
+      logger.debug("[AgentManager] No messages found, using stored agent");
+      return resolveProjectAgent(storedAgent ?? DEFAULT_AGENT);
+    }
+    const lastAgent = lastMessage.info.agent;
     logger.debug(`[AgentManager] Current agent from session: ${lastAgent}`);
 
     // If user explicitly selected an agent in bot settings, prefer it.

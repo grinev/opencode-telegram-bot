@@ -483,6 +483,8 @@ export const pt: I18nDictionary = {
     "O aplicativo ainda não foi configurado. Iniciando o assistente...\n",
   "runtime.wizard.tty_required":
     "O assistente interativo requer um terminal TTY. Execute `opencode-telegram config` em um shell interativo.",
+  "runtime.container.command_unavailable":
+    "⚠️ Este comando não está disponível na imagem Docker.",
 
   "rename.no_session": "⚠️ Nenhuma sessão ativa. Crie ou selecione uma sessão primeiro.",
   "rename.prompt": "📝 Digite o novo título da sessão:\n\nAtual: {title}",
@@ -622,7 +624,7 @@ export const pt: I18nDictionary = {
   "legacy.models.error": "🔴 Ocorreu um erro ao carregar a lista de modelos.",
 
   "stt.recognizing": "🎤 Reconhecendo áudio...",
-  "stt.recognized": "🎤 Reconhecido:\n{text}",
+  "stt.recognized": "🎤 Reconhecido:",
   "stt.not_configured":
     "🎤 O reconhecimento de voz não está configurado.\n\nDefina STT_API_URL e STT_API_KEY no .env para ativá-lo.",
   "stt.error": "🔴 Não foi possível reconhecer o áudio: {error}",

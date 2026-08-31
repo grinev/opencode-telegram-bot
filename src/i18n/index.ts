@@ -4,6 +4,7 @@ import { de } from "./de.js";
 import { es } from "./es.js";
 import { fr } from "./fr.js";
 import { it } from "./it.js";
+import { ko } from "./ko.js";
 import { pt } from "./pt.js";
 import { ru } from "./ru.js";
 import { zh } from "./zh.js";
@@ -51,6 +52,12 @@ const LOCALE_DEFINITIONS = [
     label: "Italiano",
     dateLocale: "it-IT",
     dictionary: it,
+  },
+  {
+    code: "ko",
+    label: "한국어",
+    dateLocale: "ko-KR",
+    dictionary: ko,
   },
   {
     code: "pt",
@@ -104,7 +111,7 @@ export function resolveSupportedLocale(locale: string | null | undefined): Local
   }
 
   const baseLocale = normalized.split("-")[0];
-  if (Object.hasOwn(localeDefinitionByCode, baseLocale)) {
+  if (baseLocale && Object.hasOwn(localeDefinitionByCode, baseLocale)) {
     return baseLocale as Locale;
   }
 

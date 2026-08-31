@@ -103,6 +103,9 @@ function splitTableBlock(
   limits: BlockSplitLimits,
 ): TelegramBlock[] {
   const [header, ...bodyRows] = rows;
+  if (!header) {
+    return [];
+  }
   const measureRow = (row: string[]): number => row.reduce((total, cell) => total + cell.length, 0);
   const groups = groupItems(
     bodyRows,

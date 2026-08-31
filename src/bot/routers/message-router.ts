@@ -65,14 +65,16 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
 
     if (queuedPrompt) {
       promptQueue.removeById(queuedPrompt.id);
-      await ctx.reply(t("queue.removed"), { reply_markup: keyboardManager.getKeyboard() });
+      const keyboard = keyboardManager.getKeyboard();
+      await ctx.reply(t("queue.removed"), keyboard ? { reply_markup: keyboard } : {});
       return;
     }
 
     // The queue was drained or cleared after Telegram rendered the keyboard the
     // user pressed. Never fall through to the prompt handler: that would send
     // the button label itself to OpenCode as a prompt.
-    await ctx.reply(t("queue.not_found"), { reply_markup: keyboardManager.getKeyboard() });
+    const keyboard = keyboardManager.getKeyboard();
+    await ctx.reply(t("queue.not_found"), keyboard ? { reply_markup: keyboard } : {});
   });
 
   bot.hears(AGENT_MODE_BUTTON_TEXT_PATTERN, async (ctx) => {

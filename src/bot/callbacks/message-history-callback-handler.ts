@@ -229,13 +229,11 @@ export async function handleMessagesCallback(
         });
 
         const successText = t("messages.revert_success", { text: selectedMessage.text });
-        await ctx.editMessageText(truncateMessageHistoryText(successText, TELEGRAM_MESSAGE_LIMIT), {
-          reply_markup: undefined,
-        });
+        await ctx.editMessageText(truncateMessageHistoryText(successText, TELEGRAM_MESSAGE_LIMIT));
         clearMessagesInteraction("messages_revert_success");
       } catch (error) {
         logger.error("[Messages] Error reverting message:", error);
-        await ctx.editMessageText(t("messages.revert_error"), { reply_markup: undefined });
+        await ctx.editMessageText(t("messages.revert_error"));
         clearMessagesInteraction("messages_revert_error");
       }
 
@@ -289,9 +287,7 @@ export async function handleMessagesCallback(
         });
 
         const successText = t("messages.fork_success", { text: selectedMessage.text });
-        await ctx.editMessageText(truncateMessageHistoryText(successText, TELEGRAM_MESSAGE_LIMIT), {
-          reply_markup: undefined,
-        });
+        await ctx.editMessageText(truncateMessageHistoryText(successText, TELEGRAM_MESSAGE_LIMIT));
         clearMessagesInteraction("messages_fork_success");
 
         safeBackgroundTask({
@@ -306,7 +302,7 @@ export async function handleMessagesCallback(
         });
       } catch (error) {
         logger.error("[Messages] Error forking session:", error);
-        await ctx.editMessageText(t("messages.fork_error"), { reply_markup: undefined });
+        await ctx.editMessageText(t("messages.fork_error"));
         clearMessagesInteraction("messages_fork_error");
       }
 

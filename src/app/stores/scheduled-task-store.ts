@@ -77,7 +77,12 @@ export async function updateScheduledTask(
       return { tasks, result: null };
     }
 
-    const nextTask = cloneScheduledTask(updater(cloneScheduledTask(tasks[index])));
+    const current = tasks[index];
+    if (!current) {
+      return { tasks, result: null };
+    }
+
+    const nextTask = cloneScheduledTask(updater(cloneScheduledTask(current)));
     const nextTasks = [...tasks];
     nextTasks[index] = nextTask;
 

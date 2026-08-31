@@ -18,11 +18,11 @@ export interface SummaryInfo {
 }
 
 export interface MessageCompletionInfo {
-  agent?: string;
-  providerID?: string;
-  modelID?: string;
-  createdAt?: number;
-  completedAt?: number;
+  agent?: string | undefined;
+  providerID?: string | undefined;
+  modelID?: string | undefined;
+  createdAt?: number | undefined;
+  completedAt?: number | undefined;
 }
 
 type MessageCompleteCallback = (
@@ -36,7 +36,7 @@ type MessagePartialCallback = (sessionId: string, messageId: string, messageText
 
 export interface ThinkingSection {
   id: string;
-  title?: string;
+  title?: string | undefined;
   text: string;
 }
 
@@ -82,10 +82,10 @@ export interface ToolInfo {
   callId: string;
   tool: string;
   state: ToolState;
-  input?: { [key: string]: unknown };
-  title?: string;
-  metadata?: { [key: string]: unknown };
-  hasFileAttachment?: boolean;
+  input?: { [key: string]: unknown } | undefined;
+  title?: string | undefined;
+  metadata?: { [key: string]: unknown } | undefined;
+  hasFileAttachment?: boolean | undefined;
 }
 
 export interface ToolFileInfo extends ToolInfo {
@@ -128,20 +128,20 @@ export interface SubagentInfo {
   agent: string;
   description: string;
   prompt: string;
-  command?: string;
+  command?: string | undefined;
   status: SubagentStatus;
-  providerID?: string;
-  modelID?: string;
+  providerID?: string | undefined;
+  modelID?: string | undefined;
   tokens: TokensInfo;
   cost: number;
-  currentTool?: string;
-  currentToolInput?: { [key: string]: unknown };
-  currentToolTitle?: string;
-  currentToolCallId?: string;
-  currentToolStartedAt?: number;
-  terminalMessage?: string;
+  currentTool?: string | undefined;
+  currentToolInput?: { [key: string]: unknown } | undefined;
+  currentToolTitle?: string | undefined;
+  currentToolCallId?: string | undefined;
+  currentToolStartedAt?: number | undefined;
+  terminalMessage?: string | undefined;
   createdAt: number;
-  finishedAt?: number;
+  finishedAt?: number | undefined;
   updatedAt: number;
 }
 
@@ -239,7 +239,8 @@ function isUpstreamEmptyResponseText(text: string, isFinal: boolean): boolean {
 function extractFirstUpdatedFileFromTitle(title: string): string {
   for (const rawLine of title.split("\n")) {
     const line = rawLine.trim();
-    if (line.length >= 3 && line[1] === " " && /[AMDURC]/.test(line[0])) {
+    const status = line[0];
+    if (line.length >= 3 && line[1] === " " && status !== undefined && /[AMDURC]/.test(status)) {
       return line.slice(2).trim();
     }
   }
@@ -286,7 +287,6 @@ class SummaryAggregator {
   private thinkingMessageStates: Map<string, ThinkingMessageState> = new Map();
   private messages: Map<string, { role: string }> = new Map();
   private messageCount = 0;
-  private lastUpdated = 0;
   private onCompleteCallback: MessageCompleteCallback | null = null;
   private onPartialCallback: MessagePartialCallback | null = null;
   private onExternalUserInputCallback: ExternalUserInputCallback | null = null;
@@ -570,7 +570,6 @@ class SummaryAggregator {
     this.lastSubagentSnapshot = "";
     this.permissionQueue = Promise.resolve();
     this.messageCount = 0;
-    this.lastUpdated = 0;
 
     if (this.onClearedCallback) {
       try {
@@ -741,7 +740,12 @@ class SummaryAggregator {
 
   private enrichSubagentFromSubtask(
     state: SubagentState,
-    details: { agent: string; description: string; prompt: string; command?: string },
+    details: {
+      agent: string;
+      description: string;
+      prompt: string;
+      command?: string | undefined;
+    },
   ): void {
     state.agent = details.agent || state.agent;
     state.description = details.description || details.prompt || state.description;
@@ -754,10 +758,10 @@ class SummaryAggregator {
   private enrichSubagentFromTaskTool(
     state: SubagentState,
     details: {
-      agent?: string;
-      description?: string;
-      prompt?: string;
-      command?: string;
+      agent?: string | undefined;
+      description?: string | undefined;
+      prompt?: string | undefined;
+      command?: string | undefined;
     },
   ): void {
     const nextDescription = details.description?.trim() || details.prompt?.trim();
@@ -1226,7 +1230,6 @@ class SummaryAggregator {
           );
         }
 
-      this.lastUpdated = Date.now();
     }
   }
 
@@ -1261,7 +1264,6 @@ class SummaryAggregator {
         part.prompt,
         part.command,
       );
-      this.lastUpdated = Date.now();
       return;
     }
 
@@ -1281,7 +1283,6 @@ class SummaryAggregator {
         this.updateSubagentStepFinish(part.sessionID, part.tokens, part.cost, part.snapshot);
       }
 
-      this.lastUpdated = Date.now();
       return;
     }
 
@@ -1293,7 +1294,6 @@ class SummaryAggregator {
     // for the user - rendering them would echo a whole attached file back into the chat.
     if (part.type === "text" && "synthetic" in part && part.synthetic === true) {
       this.registerSyntheticPart(messageID, part.id);
-      this.lastUpdated = Date.now();
       return;
     }
 
@@ -1318,7 +1318,6 @@ class SummaryAggregator {
     ) {
       this.emitThinkingFinishedOnce(part.sessionID, messageID);
       this.applyTextDelta(part.sessionID, messageID, part.id, deltaFromUpdated, part.text);
-      this.lastUpdated = Date.now();
       return;
     }
 
@@ -1336,7 +1335,6 @@ class SummaryAggregator {
         partText,
         this.extractReasoningTitle(part),
       );
-      this.lastUpdated = Date.now();
       return;
     }
 
@@ -1488,8 +1486,6 @@ class SummaryAggregator {
         }
       }
     }
-
-    this.lastUpdated = Date.now();
   }
 
   private handleMessagePartDelta(event: MessagePartDeltaEventRaw): void {

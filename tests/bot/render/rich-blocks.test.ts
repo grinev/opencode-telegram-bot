@@ -8,11 +8,12 @@ import {
 } from "../../../src/bot/render/rich-blocks.js";
 import { parseTelegramBlocks } from "../../../src/bot/render/block-parser.js";
 import type { TelegramBlock } from "../../../src/bot/render/types.js";
+import { defined } from "../../helpers/defined.js";
 
 function parseSingleBlock(markdown: string): TelegramBlock {
   const blocks = parseTelegramBlocks(markdown);
   expect(blocks).toHaveLength(1);
-  return blocks[0];
+  return defined(blocks[0]);
 }
 
 describe("bot/render/rich-blocks", () => {

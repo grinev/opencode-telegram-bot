@@ -309,18 +309,39 @@ describe("interaction guard", () => {
     expect(decision.inputType).toBe("other");
   });
 
-  it("allows only abort, detach, status, and help commands while busy without interaction", () => {
+  it("allows abort, detach, status, help, and opencode_stop while busy without interaction", () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     expect(resolveInteractionGuardDecision(createContext({ text: "/abort" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/detach" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/status" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/help" })).allow).toBe(true);
+    expect(resolveInteractionGuardDecision(createContext({ text: "/opencode_stop" })).allow).toBe(
+      true,
+    );
+
+    const startDecision = resolveInteractionGuardDecision(createContext({ text: "/opencode_start" }));
+    expect(startDecision.allow).toBe(false);
+    expect(startDecision.reason).toBe("command_not_allowed");
+    expect(startDecision.busy).toBe(true);
 
     const blockedDecision = resolveInteractionGuardDecision(createContext({ text: "/new" }));
     expect(blockedDecision.allow).toBe(false);
     expect(blockedDecision.reason).toBe("command_not_allowed");
     expect(blockedDecision.busy).toBe(true);
+  });
+
+  it("allows opencode_stop during an active interaction without busy", () => {
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+    });
+
+    const decision = resolveInteractionGuardDecision(createContext({ text: "/opencode_stop" }));
+
+    expect(decision.allow).toBe(true);
+    expect(decision.command).toBe("/opencode_stop");
+    expect(decision.state?.kind).toBe("inline");
   });
 
   it("blocks start, plain text, and media while busy without interaction", () => {

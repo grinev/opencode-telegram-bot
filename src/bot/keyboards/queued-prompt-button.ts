@@ -31,5 +31,5 @@ export function findQueuedPromptByButtonLabel(label: string): QueuedPrompt | nul
     (item, itemIndex) => formatQueuedPromptButtonLabel(itemIndex + 1, item.text) === label,
   );
 
-  return index < 0 ? null : items[index];
+  return index < 0 ? null : (items[index] ?? null);
 }

@@ -10,6 +10,7 @@ import {
 } from "../../../src/bot/callbacks/feedback.js";
 import { t } from "../../../src/i18n/index.js";
 import { logger } from "../../../src/utils/logger.js";
+import { defined } from "../../helpers/defined.js";
 
 function createContext(): Context {
   return {
@@ -140,7 +141,8 @@ describe("callback feedback helpers", () => {
 
     await notify(ctx, "model.changed_message", { name: longName });
 
-    const [[payload]] = vi.mocked(ctx.answerCallbackQuery).mock.calls;
+    const call = defined(vi.mocked(ctx.answerCallbackQuery).mock.calls[0]);
+    const [payload] = call;
     expect((payload as { text: string }).text).toHaveLength(200);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("model.changed_message"));
   });

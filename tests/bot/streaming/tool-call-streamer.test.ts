@@ -423,4 +423,33 @@ describe("bot/streaming/tool-call-streamer", () => {
 
     expect(sendText).toHaveBeenNthCalledWith(2, "s1", "after break");
   });
+
+  it("reads throttleMs again for the next flush cycle", async () => {
+    vi.useFakeTimers();
+
+    let throttleMs = 200;
+    let nextMessageId = 1;
+    const sendText = vi.fn(async () => nextMessageId++);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ToolCallStreamer({
+      throttleMs: () => throttleMs,
+      sendText,
+      editText,
+      deleteText,
+    });
+
+    streamer.append("s1", "first");
+    await vi.advanceTimersByTimeAsync(200);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    throttleMs = 2000;
+    streamer.append("s1", "second");
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(editText).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(editText).toHaveBeenCalledTimes(1);
+    expect(editText).toHaveBeenCalledWith("s1", 1, "first\n\nsecond");
+  });
 });

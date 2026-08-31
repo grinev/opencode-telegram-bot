@@ -7,6 +7,7 @@ import type { Bot, Context } from "grammy";
 import type { Event } from "@opencode-ai/sdk/v2";
 import { setRuntimeMode } from "../../../src/runtime/mode.js";
 import { resetSingletonState } from "../../helpers/reset-singleton-state.js";
+import { defined } from "../../helpers/defined.js";
 
 // The fork mocks events.js via mockDep (absolute path) — bun's mock.module
 // matches on the resolved path, so `vi.mock("../../../src/...")` with a
@@ -24,6 +25,7 @@ mockDep("#src/opencode/events.ts", () => ({
 
 type FakeBotApi = {
   sendMessage: ReturnType<typeof vi.fn>;
+  sendRichMessage: ReturnType<typeof vi.fn>;
   sendMessageDraft: ReturnType<typeof vi.fn>;
   editMessageText: ReturnType<typeof vi.fn>;
   deleteMessage: ReturnType<typeof vi.fn>;
@@ -33,6 +35,9 @@ type FakeBotApi = {
 function createFakeBot(): { bot: Bot<Context>; api: FakeBotApi } {
   const api: FakeBotApi = {
     sendMessage: vi.fn().mockResolvedValue({ message_id: 100 }),
+    sendRichMessage: vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("Bad Request: rich message unavailable"), { error_code: 400 })),
     sendMessageDraft: vi.fn().mockResolvedValue(undefined),
     editMessageText: vi.fn().mockResolvedValue(undefined),
     deleteMessage: vi.fn().mockResolvedValue(undefined),
@@ -264,10 +269,8 @@ function emitSubagentTool(summaryAggregator: { processEvent(event: Event): void 
 }
 
 /**
- * The stream throttle comes from RESPONSE_STREAM_THROTTLE_MS, which the service
- * reads at module load - before beforeEach can stub it. A developer whose shell
- * carries a project .env therefore runs with a different throttle, so these
- * numbers stay well above any realistic value instead of assuming the default.
+ * Stream flushes start at 1s and can grow during a run. These numbers stay well
+ * above the first throttle step so fake-timer helpers do not race the flush.
  *
  * ELAPSED_SETTLE_MS keeps the fake clock inside the same 20-30s display bucket,
  * so the asserted text stays "20s" no matter how long the flush took.
@@ -327,7 +330,6 @@ describe("bot/services/event-subscription-service", () => {
     vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
     vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
     vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
-    vi.stubEnv("RESPONSE_STREAM_THROTTLE_MS", "1");
     vi.stubEnv("OPENCODE_TELEGRAM_HOME", await mkdtemp(path.join(os.tmpdir(), "event-service-")));
     tempHome = process.env.OPENCODE_TELEGRAM_HOME!;
     setRuntimeMode("installed");
@@ -437,7 +439,7 @@ describe("bot/services/event-subscription-service", () => {
       },
       { timeout: 3000 },
     );
-    expect(api.sendMessage.mock.calls[0][1]).toContain("write");
+    expect(defined(api.sendMessage.mock.calls[0]?.[1])).toContain("write");
     expect(api.sendDocument).not.toHaveBeenCalled();
   });
 
@@ -482,6 +484,20 @@ describe("bot/services/event-subscription-service", () => {
       expect(texts.some((text) => text.includes("npm test"))).toBe(true);
       expect(texts.some((text) => text.includes("⏳"))).toBe(false);
       expect(texts.some((text) => text.includes("🕒"))).toBe(false);
+    });
+
+    it("does not send compact progress after the session goes idle", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      settingsStore.setCompactOutputMode(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      useTrackerFakeTimers();
+      emitBashTool(summaryAggregator, "running");
+      emitSessionIdle(summaryAggregator);
+      await flushPendingDispatch();
+
+      expect(collectSentTexts(api).some((text) => text.includes("⏳ Working"))).toBe(false);
     });
 
     it("adds the duration to the compact progress line", async () => {
@@ -600,9 +616,7 @@ describe("bot/services/event-subscription-service", () => {
 
     emitThinkingPart(summaryAggregator, "First thought");
 
-    // The timeout must stay above RESPONSE_STREAM_THROTTLE_MS, which the service
-    // reads at module load and beforeEach cannot stub: an ambient value equal to
-    // the timeout makes the first flush race the wait.
+    // First stream flush is 1s; keep the wait well above that.
     await vi.waitFor(
       () => {
         expect(api.sendMessage).toHaveBeenCalledTimes(1);
@@ -629,12 +643,15 @@ describe("bot/services/event-subscription-service", () => {
 
     emitThinkingPart(summaryAggregator, "Hidden thought");
 
-    await vi.waitFor(() => {
-      expect(api.sendMessage).toHaveBeenCalledTimes(1);
-    });
+    await vi.waitFor(
+      () => {
+        expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 10_000 },
+    );
     expect(api.editMessageText).not.toHaveBeenCalled();
     expect(api.sendMessageDraft).not.toHaveBeenCalled();
-  });
+  }, 30_000);
 
   it("does not send assistant run footer when it is disabled", async () => {
     const { api, summaryAggregator } = await setupService(true, {
@@ -653,7 +670,7 @@ describe("bot/services/event-subscription-service", () => {
       },
       { timeout: 3000 },
     );
-    expect(api.sendMessage.mock.calls[0][1]).toBe("Final answer");
+    expect(defined(api.sendMessage.mock.calls[0]?.[1])).toBe("Final answer");
   });
 
   it("notifies the final draft response when assistant run footer is disabled", async () => {
@@ -673,8 +690,8 @@ describe("bot/services/event-subscription-service", () => {
       },
       { timeout: 3000 },
     );
-    expect(api.sendMessage.mock.calls[0][1]).toBe("Final answer");
-    expect(api.sendMessage.mock.calls[0][2]?.disable_notification).toBeUndefined();
+    expect(defined(api.sendMessage.mock.calls[0]?.[1])).toBe("Final answer");
+    expect(defined(api.sendMessage.mock.calls[0])[2]?.disable_notification).toBeUndefined();
     expect(api.sendMessageDraft).not.toHaveBeenCalled();
   });
 
@@ -695,9 +712,9 @@ describe("bot/services/event-subscription-service", () => {
       },
       { timeout: 3000 },
     );
-    expect(api.sendMessage.mock.calls[0][1]).toBe("Final answer");
-    expect(api.sendMessage.mock.calls[0][2]).toEqual({ disable_notification: true });
-    expect(api.sendMessage.mock.calls[1][1]).toContain("test-provider/test-model");
+    expect(defined(api.sendMessage.mock.calls[0]?.[1])).toBe("Final answer");
+    expect(defined(api.sendMessage.mock.calls[0])[2]).toEqual({ disable_notification: true });
+    expect(defined(api.sendMessage.mock.calls[1]?.[1])).toContain("test-provider/test-model");
     expect(api.sendMessageDraft).not.toHaveBeenCalled();
   });
 

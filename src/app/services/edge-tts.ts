@@ -145,7 +145,11 @@ export function splitTextByByteLength(text: string, byteLength: number): string[
       splitAt = byteLength;
       // Back up while the byte at the split is a UTF-8 continuation byte
       // (10xxxxxx) so the cut never lands inside a multi-byte character.
-      while (splitAt > 0 && (rest[splitAt] & 0xc0) === 0x80) {
+      while (splitAt > 0) {
+        const byte = rest[splitAt];
+        if (byte === undefined || (byte & 0xc0) !== 0x80) {
+          break;
+        }
         splitAt--;
       }
     }

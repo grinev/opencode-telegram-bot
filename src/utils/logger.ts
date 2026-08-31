@@ -7,6 +7,8 @@ type LogLevel = "debug" | "info" | "warn" | "error";
 const DEFAULT_LOG_LEVEL: LogLevel = "info";
 const DEFAULT_LOG_RETENTION = 10;
 const LOGGER_ERROR_PREFIX = "[LOGGER]";
+const CONSOLE_BROKEN_KEY = "__opencodeTelegramBotConsoleOutputBroken";
+const CONSOLE_PIPE_GUARD_KEY = "__opencodeTelegramBotConsolePipeGuardInstalled";
 
 const LOG_LEVELS: Record<LogLevel, number> = {
   debug: 0,
@@ -79,6 +81,7 @@ function formatArgForFile(arg: unknown): string {
     colors: false,
     compact: true,
     depth: 8,
+    breakLength: Infinity,
   });
 }
 
@@ -149,6 +152,54 @@ function reportLoggerInternalError(message: string, error?: unknown): void {
       : String(error ?? "");
   const suffix = details && details !== "undefined" ? ` ${details}` : "";
   process.stderr.write(`${formatPrefix("error")} ${LOGGER_ERROR_PREFIX} ${message}${suffix}\n`);
+}
+
+function isConsoleOutputBroken(): boolean {
+  return (globalThis as Record<string, unknown>)[CONSOLE_BROKEN_KEY] === true;
+}
+
+// A closed console pipe makes each console write raise EPIPE. Without an
+// "error" listener, Node escalates that to an uncaught exception, whose
+// handler logs through this same console — an unbounded loop that grew a
+// log file to 2 GB once. Swallow EPIPE and stop console logging instead.
+function installConsolePipeGuard(): void {
+  if ((globalThis as Record<string, unknown>)[CONSOLE_PIPE_GUARD_KEY]) {
+    return;
+  }
+  (globalThis as Record<string, unknown>)[CONSOLE_PIPE_GUARD_KEY] = true;
+
+  const handleStreamError = (error: unknown): void => {
+    if (
+      error instanceof Error &&
+      (error as { code?: unknown }).code === "EPIPE"
+    ) {
+      (globalThis as Record<string, unknown>)[CONSOLE_BROKEN_KEY] = true;
+      return;
+    }
+
+    // Re-throw non-EPIPE errors to preserve fatal EventEmitter semantics
+    throw error;
+  };
+
+  process.stdout.on("error", handleStreamError);
+  process.stderr.on("error", handleStreamError);
+}
+
+installConsolePipeGuard();
+
+function writeToConsole(level: LogLevel, args: unknown[]): void {
+  if (isConsoleOutputBroken()) {
+    return;
+  }
+
+  const prefixedArgs = withPrefix(level, args);
+  if (level === "warn") {
+    console.warn(...prefixedArgs);
+  } else if (level === "error") {
+    console.error(...prefixedArgs);
+  } else {
+    console.log(...prefixedArgs);
+  }
 }
 
 function createAppendWriter(filePath: string): LogFileWriter {
@@ -384,34 +435,35 @@ export function __resetLoggerForTests(): void {
   cleanupPromise = null;
   logFilePath = null;
   streamErrorReported = false;
+  (globalThis as Record<string, unknown>)[CONSOLE_BROKEN_KEY] = false;
   closeLogStream();
 }
 
 export const logger = {
   debug: (...args: unknown[]): void => {
     if (shouldLog("debug")) {
-      console.log(...withPrefix("debug", args));
+      writeToConsole("debug", args);
       writeToFile(formatLine("debug", args));
     }
   },
 
   info: (...args: unknown[]): void => {
     if (shouldLog("info")) {
-      console.log(...withPrefix("info", args));
+      writeToConsole("info", args);
       writeToFile(formatLine("info", args));
     }
   },
 
   warn: (...args: unknown[]): void => {
     if (shouldLog("warn")) {
-      console.warn(...withPrefix("warn", args));
+      writeToConsole("warn", args);
       writeToFile(formatLine("warn", args));
     }
   },
 
   error: (...args: unknown[]): void => {
     if (shouldLog("error")) {
-      console.error(...withPrefix("error", args));
+      writeToConsole("error", args);
       writeToFile(formatLine("error", args));
     }
   },

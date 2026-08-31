@@ -452,6 +452,8 @@ export const ar: I18nDictionary = {
     "لم يتم إعداد التطبيق بعد. جارٍ تشغيل معالج الإعداد...\n",
   "runtime.wizard.tty_required":
     "يتطلب معالج الإعداد التفاعلي طرفية TTY. شغّل `opencode-telegram config` في shell تفاعلية.",
+  "runtime.container.command_unavailable":
+    "⚠️ هذا الأمر غير متاح في صورة Docker.",
 
   "rename.no_session": "⚠️ لا توجد جلسة نشطة. أنشئ جلسة أو اختر واحدة أولًا.",
   "rename.prompt": "📝 أدخل عنوانًا جديدًا للجلسة:\n\nالحالي: {title}",
@@ -580,7 +582,7 @@ export const ar: I18nDictionary = {
   "legacy.models.error": "🔴 حدث خطأ أثناء تحميل قائمة النماذج.",
 
   "stt.recognizing": "🎤 جارٍ تحويل الصوت إلى نص...",
-  "stt.recognized": "🎤 النص المستخرج من الرسالة الصوتية:\n{text}",
+  "stt.recognized": "🎤 النص المستخرج من الرسالة الصوتية:",
   "stt.not_configured":
     "🎤 ميزة تحويل الصوت إلى نص غير مهيأة بعد.\n\nاضبط STT_API_URL وSTT_API_KEY داخل ملف .env لتفعيلها.",
   "stt.error": "🔴 تعذر تحويل الصوت إلى نص: {error}",

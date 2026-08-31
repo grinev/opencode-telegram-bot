@@ -1,23 +1,24 @@
+import { resetAllStreamThrottles, resetStreamThrottle } from "../../bot/streaming/stream-throttle.js";
 import { logger } from "../../utils/logger.js";
 
 export interface AssistantRunStartInfo {
   startedAt: number;
-  configuredAgent?: string;
-  configuredProviderID?: string;
-  configuredModelID?: string;
+  configuredAgent?: string | undefined;
+  configuredProviderID?: string | undefined;
+  configuredModelID?: string | undefined;
 }
 
 export interface AssistantRunResolvedInfo {
-  agent?: string;
-  providerID?: string;
-  modelID?: string;
+  agent?: string | undefined;
+  providerID?: string | undefined;
+  modelID?: string | undefined;
 }
 
 export interface AssistantRunInfo extends AssistantRunStartInfo {
   sessionId: string;
-  actualAgent?: string;
-  actualProviderID?: string;
-  actualModelID?: string;
+  actualAgent?: string | undefined;
+  actualProviderID?: string | undefined;
+  actualModelID?: string | undefined;
   hasCompletedResponse: boolean;
 }
 
@@ -29,6 +30,7 @@ class AssistantRunState {
       return;
     }
 
+    resetStreamThrottle(sessionId);
     this.runs.set(sessionId, {
       sessionId,
       startedAt: info.startedAt,
@@ -62,6 +64,7 @@ class AssistantRunState {
   }
 
   finishRun(sessionId: string, reason: string): AssistantRunInfo | null {
+    resetStreamThrottle(sessionId);
     const run = this.runs.get(sessionId) ?? null;
     if (!run) {
       return null;
@@ -73,6 +76,7 @@ class AssistantRunState {
   }
 
   clearRun(sessionId: string, reason: string): void {
+    resetStreamThrottle(sessionId);
     if (!this.runs.delete(sessionId)) {
       return;
     }
@@ -81,6 +85,7 @@ class AssistantRunState {
   }
 
   clearAll(reason: string): void {
+    resetAllStreamThrottles();
     if (this.runs.size === 0) {
       return;
     }
@@ -90,6 +95,7 @@ class AssistantRunState {
   }
 
   __resetForTests(): void {
+    resetAllStreamThrottles();
     this.runs.clear();
   }
 }

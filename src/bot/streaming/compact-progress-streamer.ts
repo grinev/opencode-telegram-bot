@@ -1,5 +1,9 @@
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
+import {
+  resolveStreamThrottleMs,
+  type StreamThrottleMs,
+} from "./stream-throttle.js";
 
 interface CompactProgressState {
   sessionId: string;
@@ -13,7 +17,7 @@ interface CompactProgressState {
 }
 
 export interface CompactProgressStreamerOptions {
-  throttleMs: number;
+  throttleMs: StreamThrottleMs;
   sendText: (sessionId: string, text: string) => Promise<number>;
   editText: (sessionId: string, messageId: number, text: string) => Promise<void>;
 }
@@ -37,7 +41,7 @@ function createInitialState(sessionId: string): CompactProgressState {
 
 export class CompactProgressStreamer {
   private readonly states = new Map<string, CompactProgressState>();
-  private readonly throttleMs: number;
+  private readonly throttleMs: StreamThrottleMs;
   private readonly sendText: CompactProgressStreamerOptions["sendText"];
   private readonly editText: CompactProgressStreamerOptions["editText"];
 
@@ -45,6 +49,10 @@ export class CompactProgressStreamer {
     this.throttleMs = throttleMs;
     this.sendText = sendText;
     this.editText = editText;
+  }
+
+  private resolveThrottleMs(sessionId: string): number {
+    return resolveStreamThrottleMs(this.throttleMs, sessionId);
   }
 
   updateActivity(sessionId: string, activity: string): void {
@@ -158,7 +166,8 @@ export class CompactProgressStreamer {
       return;
     }
 
-    if (this.throttleMs <= 0) {
+    const throttleMs = this.resolveThrottleMs(state.sessionId);
+    if (throttleMs <= 0) {
       state.task = this.enqueueTask(state, () => this.syncState(state, "immediate"));
       return;
     }
@@ -166,7 +175,7 @@ export class CompactProgressStreamer {
     state.timer = setTimeout(() => {
       state.timer = null;
       state.task = this.enqueueTask(state, () => this.syncState(state, "throttle"));
-    }, this.throttleMs);
+    }, throttleMs);
   }
 
   private enqueueTask(

@@ -56,7 +56,7 @@ function formatToolStep(subagent: SubagentInfo): string {
     state: {
       status: "running",
       input: subagent.currentToolInput ?? {},
-      title: toolTitle,
+      ...(toolTitle !== undefined ? { title: toolTitle } : {}),
       metadata: {},
       time: { start: subagent.updatedAt },
     },

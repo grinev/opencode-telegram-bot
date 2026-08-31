@@ -44,7 +44,7 @@ export async function handleQuestionCallback(ctx: Context): Promise<boolean> {
 
   const parts = data.split(":");
   const action = parts[1];
-  const questionIndex = parseInt(parts[2], 10);
+  const questionIndex = parseInt(parts[2] ?? "", 10);
 
   if (Number.isNaN(questionIndex) || questionIndex !== questionManager.getCurrentIndex()) {
     await ctx.answerCallbackQuery({ text: t("question.inactive_callback"), show_alert: true });
@@ -55,7 +55,7 @@ export async function handleQuestionCallback(ctx: Context): Promise<boolean> {
     switch (action) {
       case "select":
         {
-          const optionIndex = parseInt(parts[3], 10);
+          const optionIndex = parseInt(parts[3] ?? "", 10);
           if (Number.isNaN(optionIndex)) {
             await ctx.answerCallbackQuery({
               text: t("question.processing_error_callback"),

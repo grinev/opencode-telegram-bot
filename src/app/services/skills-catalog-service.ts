@@ -2,7 +2,7 @@ import { opencodeClient } from "../../opencode/client.js";
 
 export interface SkillCatalogItem {
   name: string;
-  description?: string;
+  description?: string | undefined;
 }
 
 function normalizeDirectoryForCommandApi(directory: string): string {

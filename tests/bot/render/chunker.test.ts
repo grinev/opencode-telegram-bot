@@ -3,6 +3,7 @@ import { describe, expect, it } from "#vitest";
 import { chunkPlainText, chunkTelegramRenderedBlocks } from "../../../src/bot/render/chunker.js";
 import { PLAIN_MAX_PART_CHARS } from "../../../src/bot/render/limits.js";
 import type { TelegramRenderedBlock } from "../../../src/bot/render/types.js";
+import { defined } from "../../helpers/defined.js";
 
 function paragraph(text: string): TelegramRenderedBlock {
   return { block: { type: "paragraph", text }, plainText: text };
@@ -45,14 +46,14 @@ describe("bot/render/chunker", () => {
         expect(part.blocks).toEqual([]);
       }
       expect(parts.map((part) => part.fallbackText).join("")).toBe(text);
-      expect(parts[0].fallbackText.endsWith("\n")).toBe(true);
+      expect(defined(parts[0]).fallbackText.endsWith("\n")).toBe(true);
     });
 
     it("uses the plain budget by default", () => {
       const parts = chunkPlainText("x".repeat(PLAIN_MAX_PART_CHARS * 2 + 5));
 
       expect(parts.length).toBe(3);
-      expect(parts[0].fallbackText.length).toBe(PLAIN_MAX_PART_CHARS);
+      expect(defined(parts[0]).fallbackText.length).toBe(PLAIN_MAX_PART_CHARS);
     });
 
     it("never splits inside a surrogate pair", () => {
@@ -70,9 +71,9 @@ describe("bot/render/chunker", () => {
       const parts = chunkTelegramRenderedBlocks([paragraph("one"), paragraph("two")]);
 
       expect(parts).toHaveLength(1);
-      expect(parts[0].source).toBe("blocks");
-      expect(parts[0].blocks).toHaveLength(2);
-      expect(parts[0].fallbackText).toBe("one\n\ntwo");
+      expect(defined(parts[0]).source).toBe("blocks");
+      expect(defined(parts[0]).blocks).toHaveLength(2);
+      expect(defined(parts[0]).fallbackText).toBe("one\n\ntwo");
     });
 
     it("returns no parts for no blocks", () => {
@@ -86,8 +87,8 @@ describe("bot/render/chunker", () => {
       );
 
       expect(parts).toHaveLength(2);
-      expect(parts[0].fallbackText).toBe("a".repeat(60));
-      expect(parts[1].fallbackText).toBe("b".repeat(60));
+      expect(defined(parts[0]).fallbackText).toBe("a".repeat(60));
+      expect(defined(parts[1]).fallbackText).toBe("b".repeat(60));
     });
 
     it("starts a new part when the block budget would overflow", () => {
@@ -107,7 +108,7 @@ describe("bot/render/chunker", () => {
       });
 
       expect(parts).toHaveLength(2);
-      expect(parts[1].fallbackText).toBe("tail");
+      expect(defined(parts[1]).fallbackText).toBe("tail");
     });
 
     it("keeps an oversized block in a part of its own instead of dropping it", () => {
@@ -116,8 +117,8 @@ describe("bot/render/chunker", () => {
       });
 
       expect(parts).toHaveLength(2);
-      expect(parts[0].fallbackText).toBe("a".repeat(500));
-      expect(parts[1].fallbackText).toBe("b");
+      expect(defined(parts[0]).fallbackText).toBe("a".repeat(500));
+      expect(defined(parts[1]).fallbackText).toBe("b");
     });
 
     it("skips empty plain projections when joining fallback text", () => {
@@ -127,8 +128,8 @@ describe("bot/render/chunker", () => {
         paragraph("two"),
       ]);
 
-      expect(parts[0].blocks).toHaveLength(3);
-      expect(parts[0].fallbackText).toBe("one\n\ntwo");
+      expect(defined(parts[0]).blocks).toHaveLength(3);
+      expect(defined(parts[0]).fallbackText).toBe("one\n\ntwo");
     });
   });
 });

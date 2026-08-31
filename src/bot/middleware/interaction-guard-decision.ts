@@ -12,7 +12,7 @@ import { foregroundSessionState } from "../../app/managers/foreground-session-st
 import { attachManager } from "../../app/managers/attach-manager.js";
 import { QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../message-patterns.js";
 
-const BUSY_ALLOWED_COMMANDS = ["/abort", "/detach", "/status", "/help"] as const;
+const BUSY_ALLOWED_COMMANDS = ["/abort", "/detach", "/status", "/help", "/opencode_stop"] as const;
 const BUSY_ALLOWED_COMMAND_SET = new Set<string>(BUSY_ALLOWED_COMMANDS);
 
 function isBusyAllowedCommand(command?: string): boolean {
@@ -37,9 +37,12 @@ function normalizeIncomingCommand(text: string): string | null {
   }
 
   const token = trimmed.split(/\s+/)[0];
-  const withoutMention = token.split("@")[0].toLowerCase();
+  if (!token) {
+    return null;
+  }
+  const withoutMention = token.split("@")[0]?.toLowerCase();
 
-  if (withoutMention.length <= 1) {
+  if (!withoutMention || withoutMention.length <= 1) {
     return null;
   }
 

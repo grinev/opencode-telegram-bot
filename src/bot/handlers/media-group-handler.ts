@@ -242,6 +242,9 @@ export class MediaGroupAttachmentHandler {
       if (item.kind === "photo") {
         needsImageSupport = true;
         const largestPhoto = item.photos[item.photos.length - 1];
+        if (!largestPhoto) {
+          return { reason: "unsupported_media_kind" };
+        }
         validItems.push({
           kind: "file",
           ctx: item.ctx,

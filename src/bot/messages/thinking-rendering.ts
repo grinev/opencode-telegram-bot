@@ -8,7 +8,7 @@ import type { StreamingMessagePayload } from "../streaming/response-streamer.js"
 
 export interface ThinkingSection {
   id: string;
-  title?: string;
+  title?: string | undefined;
   text: string;
 }
 

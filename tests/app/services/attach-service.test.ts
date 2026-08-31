@@ -141,7 +141,11 @@ function createBot(): Bot<Context> {
 }
 
 describe("attach/service", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    const { __resetStreamThrottleForTests } = await import(
+      "../../../src/bot/streaming/stream-throttle.js"
+    );
+    __resetStreamThrottleForTests();
     attachManager.__resetForTests();
     configureAttachPresentation(createAttachPresentation());
     questionManager.clear();
@@ -459,12 +463,18 @@ describe("attach/service", () => {
     expect(mocked.questionListMock).toHaveBeenCalledTimes(2);
   });
 
-  it("detaches locally without stopping the directory event listener", () => {
+  it("detaches locally without stopping the directory event listener", async () => {
+    const { noteStreamActivity, getStreamThrottleMs } = await import(
+      "../../../src/bot/streaming/stream-throttle.js"
+    );
     attachManager.attach("session-1", "D:\\Projects\\Repo");
+    noteStreamActivity("session-1", Date.now() - 10 * 60_000);
+    expect(getStreamThrottleMs("session-1")).toBe(5_000);
 
     detachAttachedSession("detach_command");
 
     expect(mocked.stopEventListeningMock).not.toHaveBeenCalled();
     expect(attachManager.getSnapshot()).toBeNull();
+    expect(getStreamThrottleMs("session-1")).toBe(1_000);
   });
 });

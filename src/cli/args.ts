@@ -13,10 +13,10 @@ const CLI_MESSAGES = {
 
 export interface ParsedCliArgs {
   command: CliCommand;
-  mode?: RuntimeMode;
+  mode?: RuntimeMode | undefined;
   daemon: boolean;
   showHelp: boolean;
-  error?: string;
+  error?: string | undefined;
 }
 
 const SUPPORTED_COMMANDS: readonly CliCommand[] = ["start", "status", "stop", "config"];
@@ -62,6 +62,9 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
 
   while (currentIndex < args.length) {
     const token = args[currentIndex];
+    if (!token) {
+      break;
+    }
 
     if (token === "--help" || token === "-h") {
       showHelp = true;

@@ -40,11 +40,11 @@ export function buildAlignedTableText(rows: string[][]): string {
     Array.from({ length: columnCount }, (_, index) => row[index] ?? ""),
   );
   const columnWidths = Array.from({ length: columnCount }, (_, index) =>
-    Math.max(...normalizedRows.map((row) => row[index].length)),
+    Math.max(...normalizedRows.map((row) => row[index]?.length ?? 0)),
   );
 
   const formatRow = (row: string[]): string =>
-    row.map((cell, index) => cell.padEnd(columnWidths[index], " ")).join(" | ");
+    row.map((cell, index) => cell.padEnd(columnWidths[index] ?? 0, " ")).join(" | ");
 
   const divider = columnWidths.map((width) => "-".repeat(width)).join("-|-");
   const formattedRows = normalizedRows.map(formatRow);

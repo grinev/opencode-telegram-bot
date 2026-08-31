@@ -81,7 +81,9 @@ function logModelCatalogRefreshFailure(error: unknown, type: "error" | "exceptio
   logger.warn("[ModelManager] Error refreshing model catalog:", error);
 }
 
-async function getValidModelKeys(options?: { force?: boolean }): Promise<Set<string> | null> {
+async function getValidModelKeys(options?: {
+  force?: boolean | undefined;
+}): Promise<Set<string> | null> {
   if (!options?.force && cachedValidModelKeys && Date.now() < modelCatalogCacheExpiresAt) {
     logger.debug(
       `[ModelManager] Model catalog cache hit: models=${cachedValidModelKeys.size}, ttlMs=${modelCatalogCacheExpiresAt - Date.now()}`,

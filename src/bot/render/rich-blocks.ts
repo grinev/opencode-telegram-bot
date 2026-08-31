@@ -67,7 +67,10 @@ export function toRichText(nodes: InlineNode[]): RichText {
     return "";
   }
 
-  return parts.length === 1 ? parts[0] : parts;
+  if (parts.length === 1) {
+    return parts[0] ?? "";
+  }
+  return parts;
 }
 
 function taskMarker(checked: boolean | undefined): string {

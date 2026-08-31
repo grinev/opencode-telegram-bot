@@ -5,6 +5,7 @@ import { resolveLocalOpencodeTarget, startLocalOpencodeServer } from "../../open
 import { opencodeReadyLifecycle } from "../../opencode/ready-lifecycle.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { isContainerRuntime } from "../../runtime/container.js";
 import { editBotText } from "../messages/telegram-text.js";
 
 const SERVER_READY_TIMEOUT_MS = 10_000;
@@ -77,6 +78,11 @@ async function waitForServerReady(maxWaitMs: number = 10000): Promise<boolean> {
  */
 export async function opencodeStartCommand(ctx: CommandContext<Context>) {
   try {
+    if (isContainerRuntime()) {
+      await ctx.reply(t("runtime.container.command_unavailable"));
+      return;
+    }
+
     const localTarget = resolveLocalOpencodeTarget(config.opencode.apiUrl);
     if (!localTarget) {
       await ctx.reply(t("opencode_start.remote_configured"));

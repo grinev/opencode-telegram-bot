@@ -81,9 +81,8 @@ describe("app/stores/scheduled-task-store", () => {
   });
 
   it("backfills the agent for legacy tasks persisted without it", async () => {
-    const legacyTask = createScheduledTask({
-      agent: undefined,
-    }) as ScheduledTask;
+    const legacyTask = createScheduledTask();
+    Reflect.deleteProperty(legacyTask, "agent");
 
     await addScheduledTask(legacyTask);
 

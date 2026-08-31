@@ -46,7 +46,7 @@ export interface ProjectSwitchPresentation {
 }
 
 interface SwitchToProjectOptions {
-  ensureEventSubscription?: (directory: string) => Promise<void>;
+  ensureEventSubscription?: ((directory: string) => Promise<void>) | undefined;
   presentation: ProjectSwitchPresentation;
 }
 

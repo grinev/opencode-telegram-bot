@@ -3,6 +3,10 @@ import { logger } from "../../utils/logger.js";
 import { chunkPlainText } from "../render/chunker.js";
 import { getTelegramRenderedPartSignature } from "../render/part-signature.js";
 import type { TelegramRenderedPart } from "../render/types.js";
+import {
+  resolveStreamThrottleMs,
+  type StreamThrottleMs,
+} from "./stream-throttle.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
 type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
@@ -27,7 +31,7 @@ interface ResponseStreamerCompleteOptions {
 }
 
 interface ResponseStreamerOptions {
-  throttleMs: number;
+  throttleMs: StreamThrottleMs;
   sendPart: (
     part: TelegramRenderedPart,
     options?: TelegramSendMessageOptions,
@@ -133,7 +137,11 @@ function getRetryAfterMs(error: unknown): number | null {
     return null;
   }
 
-  const seconds = Number.parseInt(retryMatch[1], 10);
+  const secondsText = retryMatch[1];
+  if (!secondsText) {
+    return null;
+  }
+  const seconds = Number.parseInt(secondsText, 10);
   if (!Number.isFinite(seconds) || seconds <= 0) {
     return null;
   }
@@ -163,7 +171,7 @@ function enableNotificationForOptions(
 }
 
 export class ResponseStreamer {
-  private readonly throttleMs: number;
+  private readonly throttleMs: StreamThrottleMs;
   private readonly sendPart: ResponseStreamerOptions["sendPart"];
   private readonly editPart: ResponseStreamerOptions["editPart"];
   private readonly deleteText: ResponseStreamerOptions["deleteText"];
@@ -171,11 +179,15 @@ export class ResponseStreamer {
   private readonly states: Map<string, StreamState> = new Map();
 
   constructor(options: ResponseStreamerOptions) {
-    this.throttleMs = Math.max(0, Math.floor(options.throttleMs));
+    this.throttleMs = options.throttleMs;
     this.sendPart = options.sendPart;
     this.editPart = options.editPart;
     this.deleteText = options.deleteText;
     this.completePart = options.completePart;
+  }
+
+  private resolveThrottleMs(sessionId: string): number {
+    return resolveStreamThrottleMs(this.throttleMs, sessionId);
   }
 
   enqueue(sessionId: string, messageId: string, payload: StreamingMessagePayload): void {
@@ -360,7 +372,8 @@ export class ResponseStreamer {
       return;
     }
 
-    if (this.throttleMs === 0) {
+    const throttleMs = this.resolveThrottleMs(state.sessionId);
+    if (throttleMs === 0) {
       void this.enqueueTask(state, () => this.flushState(state, "immediate")).catch((error) => {
         logger.error(
           `[ResponseStreamer] Immediate stream sync failed: session=${state.sessionId}, message=${state.messageId}`,
@@ -380,7 +393,7 @@ export class ResponseStreamer {
           );
         },
       );
-    }, this.throttleMs);
+    }, throttleMs);
   }
 
   private clearTimer(state: StreamState): void {
@@ -444,7 +457,7 @@ export class ResponseStreamer {
       } catch (error) {
         const retryAfterMs = getRetryAfterMs(error);
         if (retryAfterMs !== null) {
-          const delayMs = Math.max(this.throttleMs, retryAfterMs);
+          const delayMs = Math.max(this.resolveThrottleMs(state.sessionId), retryAfterMs);
           logger.warn(
             `[ResponseStreamer] Stream sync rate-limited, retrying in ${delayMs}ms: session=${state.sessionId}, message=${state.messageId}, reason=${reason}`,
             error,
@@ -531,6 +544,9 @@ export class ResponseStreamer {
   ): Promise<void> {
     for (let index = 0; index < payload.parts.length; index++) {
       const part = payload.parts[index];
+      if (!part) {
+        continue;
+      }
       const nextSignature = targetSignatures[index];
       const currentMessageId = state.telegramMessageIds[index];
 

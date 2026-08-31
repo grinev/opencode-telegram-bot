@@ -81,10 +81,11 @@ export function appendInlineMenuCancelButton(
   keyboard: InlineKeyboard,
   menuKind: InlineMenuKind,
 ): InlineKeyboard {
-  while (
-    keyboard.inline_keyboard.length > 0 &&
-    keyboard.inline_keyboard[keyboard.inline_keyboard.length - 1].length === 0
-  ) {
+  while (keyboard.inline_keyboard.length > 0) {
+    const lastRow = keyboard.inline_keyboard[keyboard.inline_keyboard.length - 1];
+    if (!lastRow || lastRow.length > 0) {
+      break;
+    }
     keyboard.inline_keyboard.pop();
   }
 

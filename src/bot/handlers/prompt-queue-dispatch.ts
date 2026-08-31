@@ -105,13 +105,14 @@ export async function dispatchNextQueuedPrompt(): Promise<void> {
     const notification = buildExternalUserInputNotification(item.text);
     if (notification && ctx.chat) {
       try {
+        const keyboard = keyboardManager.getKeyboard();
         await sendBotText({
           api: ctx.api,
           chatId: ctx.chat.id,
           text: notification.text,
           rawFallbackText: notification.rawFallbackText,
           format: "markdown_v2",
-          options: { reply_markup: keyboardManager.getKeyboard() },
+          options: keyboard ? { reply_markup: keyboard } : {},
         });
       } catch (err) {
         logger.error("[PromptQueue] Failed to echo queued prompt:", err);
@@ -136,7 +137,8 @@ export async function dispatchNextQueuedPrompt(): Promise<void> {
 }
 
 async function replyWithKeyboard(ctx: Context, text: string): Promise<void> {
-  await ctx.reply(text, { reply_markup: keyboardManager.getKeyboard() }).catch((err) => {
+  const keyboard = keyboardManager.getKeyboard();
+  await ctx.reply(text, keyboard ? { reply_markup: keyboard } : {}).catch((err) => {
     logger.error("[PromptQueue] Failed to send queue reply:", err);
   });
 }

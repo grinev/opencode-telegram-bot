@@ -64,6 +64,7 @@ No public inbound ports are required for normal usage.
 - Render assistant replies with native Telegram formatting: real tables with the column alignment declared in markdown, bullet lists with their nesting, block quotes that keep their nested content, headings, and syntax-highlighted code. Numbered lists and checklists keep literal markers (`1.`, ✅/🔲), because Telegram clients number a native ordered list from zero and do not draw the native checkbox at all
 - Deliver reasoning as a collapsed quote that expands on tap
 - Hide full model reasoning by default; optionally stream it in the thinking message when explicitly enabled
+- Stream intermediate assistant/tool/thinking edits and pinned file-change updates once per second for the first minute, then slow down to 2s / 5s / 10s so long runs stay under Telegram rate limits; the interval resets when the run stops
 - Split long responses into multiple Telegram messages, which is now rare: native messages hold 32768 characters instead of 4096
 - Send code updates as files (size-limited)
 
@@ -119,7 +120,7 @@ Current command set:
 - `/commands` - browse and run custom commands (plus built-ins like `init` and `review`)
 - `/skills` - browse and run OpenCode skills
 - `/opencode_start` - start local OpenCode server
-- `/opencode_stop` - stop local OpenCode server
+- `/opencode_stop` - stop local OpenCode server; available during an active request and kills the local process even if health is hung
 - `/help` - show command help
 - `/ls` - interactive file browser for the current project directory; a text file can be attached to the next prompt from its detail view
 
@@ -131,7 +132,7 @@ Interaction routing rules:
 
 - Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills, messages)
 - While an interaction is active, unrelated input is blocked with a contextual hint
-- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`
+- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`, `/opencode_stop`
 - Unknown slash commands return an explicit fallback message
 - Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/abort`, `/detach`, reset/cleanup)
 
@@ -186,5 +187,5 @@ Model picker behavior:
 Open tasks for upcoming iterations:
 
 - [ ] Model search in model switcher
-- [ ] Docker runtime support and deployment guide
+- [x] Docker runtime support and deployment guide
 - [x] Add a bot settings command with in-chat UI

@@ -86,8 +86,9 @@ function parseFieldValue(
 ): number {
   const normalized = rawValue.trim().toLowerCase();
 
-  if (aliases && normalized in aliases) {
-    return aliases[normalized];
+  const aliasValue = aliases?.[normalized];
+  if (aliasValue !== undefined) {
+    return aliasValue;
   }
 
   const parsed = Number.parseInt(normalized, 10);
@@ -110,6 +111,9 @@ function expandFieldBase(
 
   if (base.includes("-")) {
     const [startRaw, endRaw] = base.split("-");
+    if (startRaw === undefined || endRaw === undefined) {
+      throw new Error(`Invalid cron field range: ${base}`);
+    }
     const start = parseFieldValue(startRaw, min, max, aliases);
     const end = parseFieldValue(endRaw, min, max, aliases);
     if (start > end) {
@@ -129,6 +133,9 @@ function expandFieldToken(
   aliases?: Record<string, number>,
 ): number[] {
   const [baseRaw, stepRaw] = token.split("/");
+  if (baseRaw === undefined) {
+    throw new Error(`Invalid cron field: ${token}`);
+  }
   const baseValues = expandFieldBase(baseRaw, min, max, aliases);
 
   if (stepRaw === undefined) {
@@ -182,12 +189,16 @@ function parseCronExpression(cron: string): ParsedCronExpression {
     throw new Error(`Unsupported cron expression: ${cron}`);
   }
 
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  if (!minute || !hour || !dayOfMonth || !month || !dayOfWeek) {
+    throw new Error(`Unsupported cron expression: ${cron}`);
+  }
   return {
-    minute: parseCronField(parts[0], 0, 59),
-    hour: parseCronField(parts[1], 0, 23),
-    dayOfMonth: parseCronField(parts[2], 1, 31),
-    month: parseCronField(parts[3], 1, 12, MONTH_ALIASES),
-    dayOfWeek: parseCronField(parts[4], 0, 7, WEEKDAY_ALIASES, normalizeWeekday),
+    minute: parseCronField(minute, 0, 59),
+    hour: parseCronField(hour, 0, 23),
+    dayOfMonth: parseCronField(dayOfMonth, 1, 31),
+    month: parseCronField(month, 1, 12, MONTH_ALIASES),
+    dayOfWeek: parseCronField(dayOfWeek, 0, 7, WEEKDAY_ALIASES, normalizeWeekday),
   };
 }
 
@@ -210,9 +221,13 @@ function getZonedDateParts(date: Date, timezone: string): ZonedDateParts {
     !Number.isInteger(day) ||
     !Number.isInteger(hour) ||
     !Number.isInteger(minute) ||
-    !weekdayName ||
-    !(weekdayName in WEEKDAY_ALIASES)
+    !weekdayName
   ) {
+    throw new Error(`Failed to resolve zoned date parts for timezone: ${timezone}`);
+  }
+
+  const weekday = WEEKDAY_ALIASES[weekdayName];
+  if (weekday === undefined) {
     throw new Error(`Failed to resolve zoned date parts for timezone: ${timezone}`);
   }
 
@@ -222,7 +237,7 @@ function getZonedDateParts(date: Date, timezone: string): ZonedDateParts {
     day,
     hour,
     minute,
-    weekday: WEEKDAY_ALIASES[weekdayName],
+    weekday,
   };
 }
 

@@ -46,10 +46,7 @@ class QuestionManager {
   }
 
   getCurrentQuestion(): Question | null {
-    if (this.state.currentIndex >= this.state.questions.length) {
-      return null;
-    }
-    return this.state.questions[this.state.currentIndex];
+    return this.state.questions[this.state.currentIndex] ?? null;
   }
 
   selectOption(questionIndex: number, optionIndex: number): void {
@@ -93,10 +90,10 @@ class QuestionManager {
     }
 
     const selected = this.state.selectedOptions.get(questionIndex) || new Set();
-    const options = Array.from(selected)
-      .map((idx) => question.options[idx])
-      .filter((opt) => opt)
-      .map((opt) => `* ${opt.label}: ${opt.description}`);
+    const options = Array.from(selected).flatMap((idx) => {
+      const opt = question.options[idx];
+      return opt ? [`* ${opt.label}: ${opt.description}`] : [];
+    });
 
     return options.join("\n");
   }
@@ -211,6 +208,9 @@ class QuestionManager {
 
     for (let i = 0; i < this.state.questions.length; i++) {
       const question = this.state.questions[i];
+      if (!question) {
+        continue;
+      }
       const selectedAnswer = this.getSelectedAnswer(i);
       const customAnswer = this.getCustomAnswer(i);
 

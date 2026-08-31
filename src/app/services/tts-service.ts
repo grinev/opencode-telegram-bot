@@ -18,8 +18,8 @@ interface PrepareTtsResponseParams {
   sessionId: string;
   text: string;
   consumeResponseMode: (sessionId: string) => PromptResponseMode | null;
-  isTtsConfigured?: () => boolean;
-  synthesizeSpeech?: (text: string) => Promise<TtsResult>;
+  isTtsConfigured?: (() => boolean) | undefined;
+  synthesizeSpeech?: ((text: string) => Promise<TtsResult>) | undefined;
 }
 
 export type PreparedTtsResponse =
@@ -70,7 +70,7 @@ export function stripMarkdownForSpeech(text: string): string {
 /** Extracts "ll-CC" from Google voice names like "de-DE-Neural2-B". */
 export function extractLanguageCode(voiceName: string): string {
   const match = voiceName.match(/^([a-z]{2,3}-[A-Z]{2})/);
-  return match ? match[1] : "en-US";
+  return match?.[1] ?? "en-US";
 }
 
 // --- Provider implementations ---

@@ -96,6 +96,21 @@ describe("bot/streaming/compact-progress-streamer", () => {
     expect(editText).not.toHaveBeenCalled();
   });
 
+  it("cancels a pending throttle flush when the session is cleared", async () => {
+    vi.useFakeTimers();
+
+    const sendText = vi.fn().mockResolvedValue(30);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({ throttleMs: 2000, sendText, editText });
+
+    streamer.updateActivity("s1", "working");
+    streamer.clearSession("s1", "session_idle");
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(sendText).not.toHaveBeenCalled();
+    expect(editText).not.toHaveBeenCalled();
+  });
+
   it("throttles progress edits", async () => {
     vi.useFakeTimers();
 
@@ -112,5 +127,31 @@ describe("bot/streaming/compact-progress-streamer", () => {
 
     expect(sendText).toHaveBeenCalledTimes(1);
     expect(sendText).toHaveBeenCalledWith("s1", "⏳ Working\nsecond");
+  });
+
+  it("reads throttleMs again for the next flush cycle", async () => {
+    vi.useFakeTimers();
+
+    let throttleMs = 100;
+    const sendText = vi.fn().mockResolvedValue(30);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({
+      throttleMs: () => throttleMs,
+      sendText,
+      editText,
+    });
+
+    streamer.updateActivity("s1", "first");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    throttleMs = 2000;
+    streamer.updateActivity("s1", "second");
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(editText).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(editText).toHaveBeenCalledTimes(1);
+    expect(editText).toHaveBeenCalledWith("s1", 30, "⏳ Working\nsecond");
   });
 });

@@ -5,6 +5,7 @@ import {
   toRenderedBlocks,
 } from "../../../src/bot/render/pipeline.js";
 import { countRichBlocks, countRichChars } from "../../../src/bot/render/rich-blocks.js";
+import { defined } from "../../helpers/defined.js";
 
 describe("bot/render/pipeline", () => {
   it("renders markdown into native blocks paired with plain projections", () => {
@@ -115,15 +116,15 @@ describe("bot/render/pipeline", () => {
     const parts = renderTelegramParts(markdown);
 
     expect(parts).toHaveLength(1);
-    expect(parts[0].source).toBe("blocks");
-    expect(parts[0].blocks.map((block) => block.type)).toEqual([
+    expect(defined(parts[0]).source).toBe("blocks");
+    expect(defined(parts[0]).blocks.map((block) => block.type)).toEqual([
       "heading",
       "paragraph",
       "table",
       "blockquote",
       "list",
     ]);
-    expect(parts[0].fallbackText).toContain("Paragraph with bold");
+    expect(defined(parts[0]).fallbackText).toContain("Paragraph with bold");
   });
 
   it("keeps a reply longer than a plain text message in one part", () => {
@@ -175,7 +176,7 @@ describe("bot/render/pipeline", () => {
       for (const block of part.blocks) {
         expect(block.type).toBe("table");
         if (block.type === "table") {
-          expect(block.cells[0][0].text).toBe("Name");
+          expect(defined(block.cells[0]?.[0]).text).toBe("Name");
         }
       }
     }

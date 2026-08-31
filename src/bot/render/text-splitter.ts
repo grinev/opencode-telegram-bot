@@ -15,7 +15,8 @@ function isSafeUtf16Boundary(text: string, index: number): boolean {
 }
 
 function isWhitespaceBoundary(text: string, index: number): boolean {
-  return index > 0 && /\s/.test(text[index - 1]);
+  const previous = text[index - 1];
+  return index > 0 && previous !== undefined && /\s/.test(previous);
 }
 
 /**

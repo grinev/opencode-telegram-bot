@@ -6,6 +6,7 @@ import type { Bot, Context } from "grammy";
 import type { Event } from "@opencode-ai/sdk/v2";
 import { setRuntimeMode } from "../../../src/runtime/mode.js";
 import { resetSingletonState } from "../../helpers/reset-singleton-state.js";
+import { defined } from "../../helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
   subscribeToEvents: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock("#src/app/services/busy-reconciliation-service.ts", () => ({
 
 type FakeBotApi = {
   sendMessage: ReturnType<typeof vi.fn>;
+  sendRichMessage: ReturnType<typeof vi.fn>;
   sendMessageDraft: ReturnType<typeof vi.fn>;
   editMessageText: ReturnType<typeof vi.fn>;
   deleteMessage: ReturnType<typeof vi.fn>;
@@ -51,6 +53,9 @@ type Aggregator = { setSession(sessionId: string): void; processEvent(event: Eve
 function createFakeBot(): { bot: Bot<Context>; api: FakeBotApi } {
   const api: FakeBotApi = {
     sendMessage: vi.fn().mockResolvedValue({ message_id: 100 }),
+    sendRichMessage: vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("Bad Request: rich message unavailable"), { error_code: 400 })),
     sendMessageDraft: vi.fn().mockResolvedValue(undefined),
     editMessageText: vi.fn().mockResolvedValue(undefined),
     deleteMessage: vi.fn().mockResolvedValue(undefined),
@@ -159,8 +164,7 @@ function findFooterCalls(api: FakeBotApi): unknown[][] {
 /**
  * Lets the aggregator's setImmediate dispatch and the callbacks it triggers
  * run to completion. Anything that has to cross the stream throttle waits with
- * vi.waitFor instead: RESPONSE_STREAM_THROTTLE_MS is read at module load,
- * before beforeEach can stub it, so its value is not known here.
+ * vi.waitFor instead of assuming a 1s first flush.
  */
 async function settle(iterations = 4): Promise<void> {
   for (let attempt = 0; attempt < iterations; attempt++) {
@@ -227,7 +231,6 @@ describe("bot/services/event-subscription-service lifecycle", () => {
     vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
     vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
     vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
-    vi.stubEnv("RESPONSE_STREAM_THROTTLE_MS", "1");
     vi.stubEnv(
       "OPENCODE_TELEGRAM_HOME",
       await mkdtemp(path.join(os.tmpdir(), "event-service-lifecycle-")),
@@ -408,6 +411,21 @@ describe("bot/services/event-subscription-service lifecycle", () => {
   });
 
   describe("session idle ordering", () => {
+    it("resets stream throttle on idle even when no run was started", async () => {
+      const { summaryAggregator } = await setupService();
+      const { noteStreamActivity, getStreamThrottleMs } = await import(
+        "../../../src/bot/streaming/stream-throttle.js"
+      );
+
+      noteStreamActivity("session-1", Date.now() - 10 * 60_000);
+      expect(getStreamThrottleMs("session-1")).toBe(5_000);
+
+      emitSessionIdle(summaryAggregator);
+      await settle();
+
+      expect(getStreamThrottleMs("session-1")).toBe(1_000);
+    });
+
     it("holds the run footer until the pending completion task finishes", async () => {
       const { api, summaryAggregator } = await setupService({
         startAssistantRun: true,
@@ -532,7 +550,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
 
       // The draft is persisted with a real message, never edited in place.
       expect(api.editMessageText).not.toHaveBeenCalled();
-      expect(api.sendMessage.mock.calls[0][1]).toBe("Partial answer, now complete");
+      expect(defined(api.sendMessage.mock.calls[0]?.[1])).toBe("Partial answer, now complete");
     }, 30_000);
   });
 
@@ -547,6 +565,22 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       expect(hasActiveStream("session-1")).toBe(true);
 
       service.clearRuntimeState("test_clear");
+
+      expect(hasActiveStream("session-1")).toBe(false);
+      expect(assistantRunState.finishRun("session-1", "assertion")).toBeNull();
+    });
+
+    it("clearRuntimeState can be invoked without a method receiver", async () => {
+      const { summaryAggregator, service } = await setupService({ startAssistantRun: true });
+      const { assistantRunState } =
+        await import("../../../src/app/managers/assistant-run-state-manager.js");
+
+      emitAssistantTextPart(summaryAggregator, "Answer");
+      await settle();
+      expect(hasActiveStream("session-1")).toBe(true);
+
+      const clearRuntimeState = service.clearRuntimeState;
+      clearRuntimeState("test_unbound_clear");
 
       expect(hasActiveStream("session-1")).toBe(false);
       expect(assistantRunState.finishRun("session-1", "assertion")).toBeNull();
@@ -690,8 +724,8 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       await vi.waitFor(() => {
         expect(api.sendMessage).toHaveBeenCalledTimes(1);
       });
-      expect(api.sendMessage.mock.calls[0][1]).toContain("Background work");
-      expect(api.sendMessage.mock.calls[0][2]).toHaveProperty("reply_markup");
+      expect(defined(api.sendMessage.mock.calls[0]?.[1])).toContain("Background work");
+      expect(defined(api.sendMessage.mock.calls[0])[2]).toHaveProperty("reply_markup");
     });
 
     it("labels an untitled background session by its shortened id", async () => {
@@ -714,8 +748,8 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       await vi.waitFor(() => {
         expect(api.sendMessage).toHaveBeenCalledTimes(1);
       });
-      expect(api.sendMessage.mock.calls[0][1]).toContain("bg-sessi");
-      expect(api.sendMessage.mock.calls[0][1]).not.toContain("bg-session-123456");
+      expect(defined(api.sendMessage.mock.calls[0]?.[1])).toContain("bg-sessi");
+      expect(defined(api.sendMessage.mock.calls[0]?.[1])).not.toContain("bg-session-123456");
     });
   });
 
@@ -733,7 +767,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       await vi.waitFor(() => {
         expect(api.sendMessage).toHaveBeenCalledTimes(1);
       });
-      expect(api.sendMessage.mock.calls[0][1]).toContain("provider exploded");
+      expect(defined(api.sendMessage.mock.calls[0]?.[1])).toContain("provider exploded");
       expect(foregroundSessionState.isBusy()).toBe(false);
       expect(assistantRunState.finishRun("session-1", "assertion")).toBeNull();
     });
@@ -763,7 +797,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       await vi.waitFor(() => {
         expect(api.sendMessage).toHaveBeenCalledTimes(1);
       });
-      const text = String(api.sendMessage.mock.calls[0][1]);
+      const text = String(defined(api.sendMessage.mock.calls[0]?.[1]));
       expect(text).toContain("...");
       expect(text.length).toBeLessThan(3700);
     });
@@ -853,7 +887,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       await vi.waitFor(() => {
         expect(api.sendMessage).toHaveBeenCalledTimes(1);
       });
-      expect(String(api.sendMessage.mock.calls[0][1])).toContain("typed in the terminal");
+      expect(String(defined(api.sendMessage.mock.calls[0]?.[1]))).toContain("typed in the terminal");
     });
 
     it("stays silent about input the bot itself sent", async () => {

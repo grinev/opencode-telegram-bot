@@ -1,0 +1,42 @@
+# Environment files
+.env
+.env.*
+
+# Local data directories
+data/
+logs/
+backups/
+
+# OMO
+.omo/
+
+# Code editors/IDEs
+.vscode/
+.idea/
+.codex/
+.claude/
+*.swp
+*.swo
+
+# Git
+.git/
+
+# Build artifacts and dependencies (built in image, not copied from host)
+node_modules/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local settings and personal files
+settings.json
+settings.json.*
+*.host
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local systemd service file
+opencode-telegram-bot.service

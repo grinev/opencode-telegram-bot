@@ -112,7 +112,11 @@ function validateCronMinutesFrequency(cron: string): void {
     throw new Error("Invalid cron expression returned by parser");
   }
 
-  const minuteValues = expandCronMinuteField(cronParts[0]);
+  const minuteField = cronParts[0];
+  if (!minuteField) {
+    throw new Error("Invalid cron expression returned by parser");
+  }
+  const minuteValues = expandCronMinuteField(minuteField);
   if (minuteValues.length <= 1) {
     return;
   }
@@ -120,8 +124,15 @@ function validateCronMinutesFrequency(cron: string): void {
   let minGap = 60;
   for (let index = 0; index < minuteValues.length; index++) {
     const currentValue = minuteValues[index];
-    const nextValue =
-      index === minuteValues.length - 1 ? minuteValues[0] + 60 : minuteValues[index + 1];
+    if (currentValue === undefined) {
+      continue;
+    }
+    const wrapAround = index === minuteValues.length - 1;
+    const nextRaw = wrapAround ? minuteValues[0] : minuteValues[index + 1];
+    if (nextRaw === undefined) {
+      continue;
+    }
+    const nextValue = wrapAround ? nextRaw + 60 : nextRaw;
     minGap = Math.min(minGap, nextValue - currentValue);
   }
 
@@ -149,6 +160,9 @@ function expandCronMinuteField(field: string): number[] {
 
 function expandCronMinuteToken(token: string): number[] {
   const [rawBase, rawStep] = token.split("/");
+  if (rawBase === undefined) {
+    throw new Error("Invalid cron minute field returned by parser");
+  }
   if (rawStep !== undefined) {
     const step = Number.parseInt(rawStep, 10);
     if (!Number.isInteger(step) || step <= 0) {
@@ -156,7 +170,7 @@ function expandCronMinuteToken(token: string): number[] {
     }
 
     const baseValues = expandCronMinuteBase(rawBase);
-    return baseValues.filter((value, index) => {
+    return baseValues.filter((_value, index) => {
       if (baseValues.length === 0) {
         return false;
       }
@@ -175,6 +189,9 @@ function expandCronMinuteBase(base: string): number[] {
 
   if (base.includes("-")) {
     const [rawStart, rawEnd] = base.split("-");
+    if (rawStart === undefined || rawEnd === undefined) {
+      throw new Error("Invalid cron minute range returned by parser");
+    }
     const start = parseCronMinuteNumber(rawStart);
     const end = parseCronMinuteNumber(rawEnd);
     if (start > end) {

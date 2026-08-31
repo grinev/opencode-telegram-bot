@@ -24,7 +24,7 @@ export interface TelegramRenderedPart {
    * message with a collapsed quote, which rich blocks cannot express; ignored
    * for parts that carry blocks.
    */
-  entities?: MessageEntity[];
+  entities?: MessageEntity[] | undefined;
 }
 
 /** A single parsed block paired with its plain-text projection. */
@@ -51,7 +51,7 @@ export type TelegramBlock =
   | { type: "blockquote"; blocks: TelegramBlock[] }
   /** `start` continues the numbering when a list is written out in pieces. */
   | { type: "list"; ordered: boolean; items: TelegramListItem[]; start?: number }
-  | { type: "code"; language?: string; text: string }
+  | { type: "code"; language?: string | undefined; text: string }
   | { type: "table"; rows: string[][]; align?: TableColumnAlign[] }
   | { type: "rule" }
   | { type: "plain"; text: string };

@@ -12,6 +12,8 @@ import { flushPendingPrompt } from "./message-merger.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { buildTelegramFileUrl } from "../../app/services/file-download-service.js";
+import { buildQuotedNotification } from "../../app/services/quoted-notification.js";
+import { editBotText } from "../messages/telegram-text.js";
 
 const TELEGRAM_DOWNLOAD_TIMEOUT_MS = 30_000;
 
@@ -203,11 +205,17 @@ export async function handleVoiceMessage(ctx: Context, deps: VoiceMessageDeps): 
     // IMPORTANT: even if this edit fails (e.g. Telegram message length limits),
     // we still send the recognized text to OpenCode as a prompt.
     try {
-      await ctx.api.editMessageText(
-        ctx.chat!.id,
-        statusMessage.message_id,
-        t("stt.recognized", { text: recognizedText }),
-      );
+      const notification = buildQuotedNotification(t("stt.recognized"), recognizedText, {
+        blankLineAfterTitle: false,
+      });
+      await editBotText({
+        api: ctx.api,
+        chatId: ctx.chat!.id,
+        messageId: statusMessage.message_id,
+        text: notification.text,
+        rawFallbackText: notification.rawFallbackText,
+        format: "markdown_v2",
+      });
     } catch (editError) {
       logger.warn("[Voice] Failed to edit status message with recognized text:", editError);
     }

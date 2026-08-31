@@ -9,12 +9,15 @@ export function extractCommandName(text: string): string | null {
   }
 
   const token = trimmed.split(/\s+/)[0];
+  if (!token) {
+    return null;
+  }
   const withoutSlash = token.slice(1);
   if (!withoutSlash) {
     return null;
   }
 
-  const withoutMention = withoutSlash.split("@")[0].toLowerCase();
+  const withoutMention = withoutSlash.split("@")[0]?.toLowerCase();
   if (!withoutMention) {
     return null;
   }

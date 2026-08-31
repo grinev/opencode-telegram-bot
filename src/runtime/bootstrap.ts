@@ -28,18 +28,18 @@ interface WizardCollectedValues {
   locale: Locale;
   token: string;
   allowedUserId: string;
-  apiUrl?: string;
+  apiUrl?: string | undefined;
   serverUsername: string;
-  serverPassword?: string;
+  serverPassword?: string | undefined;
 }
 
 export interface WizardEnvValues {
   BOT_LOCALE: Locale;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_ALLOWED_USER_ID: string;
-  OPENCODE_API_URL?: string;
+  OPENCODE_API_URL?: string | undefined;
   OPENCODE_SERVER_USERNAME: string;
-  OPENCODE_SERVER_PASSWORD?: string;
+  OPENCODE_SERVER_PASSWORD?: string | undefined;
   OPENCODE_MODEL_PROVIDER: string;
   OPENCODE_MODEL_ID: string;
 }
@@ -125,9 +125,14 @@ function parseEnvAssignmentLine(line: string): ParsedEnvAssignmentLine | null {
     return null;
   }
 
+  const key = match[2];
+  const rawValue = match[3];
+  if (key === undefined || rawValue === undefined) {
+    return null;
+  }
   return {
-    key: match[2],
-    rawValue: match[3],
+    key,
+    rawValue,
     line,
     isCommented: typeof match[1] === "string",
   };
@@ -167,7 +172,11 @@ function collectCustomEnvAssignments(existingContent: string, templateKeys: Set<
 
   const lines = normalizeEnvLineEndings(existingContent);
   for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const parsedLine = parseEnvAssignmentLine(lines[index]);
+    const line = lines[index];
+    if (line === undefined) {
+      continue;
+    }
+    const parsedLine = parseEnvAssignmentLine(line);
     if (parsedLine === null || parsedLine.isCommented || templateKeys.has(parsedLine.key)) {
       continue;
     }
@@ -442,6 +451,9 @@ async function askLocale(): Promise<Locale> {
   const defaultLocale = getLocale();
   const defaultLocaleOption =
     localeOptions.find((localeOption) => localeOption.code === defaultLocale) ?? localeOptions[0];
+  if (!defaultLocaleOption) {
+    return defaultLocale;
+  }
   const optionsText = localeOptions
     .map((localeOption, index) => `${index + 1} - ${localeOption.label} (${localeOption.code})`)
     .join("\n");
@@ -461,7 +473,10 @@ async function askLocale(): Promise<Locale> {
     if (/^\d+$/.test(answer)) {
       const index = Number.parseInt(answer, 10) - 1;
       if (index >= 0 && index < localeOptions.length) {
-        return localeOptions[index].code;
+        const selectedLocale = localeOptions[index];
+        if (selectedLocale) {
+          return selectedLocale.code;
+        }
       }
     }
 

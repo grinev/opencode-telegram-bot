@@ -5,6 +5,7 @@ import { interactionManager } from "../../../src/app/managers/interaction-manage
 import { promptAttachment } from "#src/app/managers/prompt-attachment-manager.js";
 import { handleLsCallback } from "../../../src/bot/callbacks/file-browser-callback-handler.js";
 import { LS_CALLBACK_ATTACH_PREFIX } from "../../../src/bot/menus/file-browser-menu.js";
+import { defined } from "../../helpers/defined.js";
 
 const PROJECT_ROOT = "D:\\Repo";
 const FILE_PATH = "D:\\Repo\\src\\index.ts";
@@ -75,7 +76,7 @@ describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
       [string, { reply_markup: { inline_keyboard: { text: string; callback_data: string }[][] } }],
     ];
     expect(text).toContain("src\\index.ts");
-    expect(options.reply_markup.inline_keyboard[0][0].callback_data).toBe("attach:cancel");
+    expect(defined(options.reply_markup.inline_keyboard[0]?.[0]).callback_data).toBe("attach:cancel");
   });
 
   it("enters the waiting-for-prompt mode", async () => {

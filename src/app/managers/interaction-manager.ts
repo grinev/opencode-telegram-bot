@@ -10,7 +10,13 @@ import { renameManager } from "./rename-manager.js";
 import { taskCreationManager } from "./scheduled-task-creation-manager.js";
 import { logger } from "../../utils/logger.js";
 
-export const DEFAULT_ALLOWED_INTERACTION_COMMANDS = ["/help", "/status", "/abort", "/detach"] as const;
+export const DEFAULT_ALLOWED_INTERACTION_COMMANDS = [
+  "/help",
+  "/status",
+  "/abort",
+  "/detach",
+  "/opencode_stop",
+] as const;
 
 function normalizeCommand(command: string): string | null {
   const trimmed = command.trim().toLowerCase();
@@ -20,8 +26,7 @@ function normalizeCommand(command: string): string | null {
 
   const withSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   const withoutMention = withSlash.split("@")[0];
-
-  if (withoutMention.length <= 1) {
+  if (!withoutMention || withoutMention.length <= 1) {
     return null;
   }
 

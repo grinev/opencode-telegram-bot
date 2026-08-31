@@ -1,5 +1,5 @@
 export interface ProjectInfo {
   id: string;
   worktree: string;
-  name?: string;
+  name?: string | undefined;
 }

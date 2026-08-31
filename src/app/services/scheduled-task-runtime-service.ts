@@ -148,6 +148,9 @@ export class ScheduledTaskRuntime {
     try {
       while (this.deliveryQueue.length > 0 && !foregroundSessionState.isBusy()) {
         const nextDelivery = this.deliveryQueue[0];
+        if (!nextDelivery) {
+          break;
+        }
         const sent = await this.sendDelivery(nextDelivery);
         if (!sent) {
           break;

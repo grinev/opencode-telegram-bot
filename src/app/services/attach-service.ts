@@ -10,6 +10,7 @@ import { clearSession, getCurrentSession } from "./session-service.js";
 import { clearPinnedMessageId, clearProject, getCurrentProject } from "../stores/settings-store.js";
 import { getProjects } from "./project-service.js";
 import { attachManager } from "../managers/attach-manager.js";
+import { resetStreamThrottle } from "../../bot/streaming/stream-throttle.js";
 import { logger } from "../../utils/logger.js";
 import {
   isExpectedOpencodeUnavailableError,
@@ -45,7 +46,7 @@ export interface AttachSessionDeps {
   chatId: number;
   session: SessionInfo;
   ensureEventSubscription: (directory: string) => Promise<void>;
-  forceFullRestore?: boolean;
+  forceFullRestore?: boolean | undefined;
 }
 
 export interface AttachSessionResult {
@@ -301,6 +302,11 @@ async function isProjectVisible(worktree: string): Promise<boolean> {
 export function detachAttachedSession(reason: string): void {
   if (!attachManager.isAttached()) {
     return;
+  }
+
+  const attachedSessionId = attachManager.getSnapshot()?.sessionId;
+  if (attachedSessionId) {
+    resetStreamThrottle(attachedSessionId);
   }
 
   summaryAggregator.clear();

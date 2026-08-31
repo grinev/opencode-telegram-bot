@@ -21,21 +21,25 @@ function isHeadingLine(line: string): boolean {
 
 function normalizeHeadingLine(line: string): string {
   const match = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*$/);
-  if (!match) {
+  const heading = match?.[1];
+  if (!heading) {
     return line;
   }
 
-  return `**${match[1]}**`;
+  return `**${heading}**`;
 }
 
 function normalizeChecklistLine(line: string): string | null {
   const match = line.match(/^(\s*)(?:[-+*]|\d+\.)\s+\[( |x|X)\]\s+(.*)$/);
-  if (!match) {
+  const indent = match?.[1];
+  const checked = match?.[2];
+  const rest = match?.[3];
+  if (indent === undefined || checked === undefined || rest === undefined) {
     return null;
   }
 
-  const marker = match[2].toLowerCase() === "x" ? "✅" : "🔲";
-  return `${match[1]}${marker} ${match[3]}`;
+  const marker = checked.toLowerCase() === "x" ? "✅" : "🔲";
+  return `${indent}${marker} ${rest}`;
 }
 
 function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): string {
@@ -46,6 +50,9 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
+    if (line === undefined) {
+      continue;
+    }
 
     if (isCodeFenceLine(line)) {
       inCodeFence = !inCodeFence;

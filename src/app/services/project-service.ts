@@ -111,7 +111,11 @@ async function isLinkedGitWorktree(worktree: string): Promise<boolean> {
       return false;
     }
 
-    const gitDir = path.resolve(worktree, match[1].trim()).replace(/\\/g, "/").toLowerCase();
+    const gitDirPointer = match[1];
+    if (!gitDirPointer) {
+      return false;
+    }
+    const gitDir = path.resolve(worktree, gitDirPointer.trim()).replace(/\\/g, "/").toLowerCase();
     return gitDir.includes("/.git/worktrees/");
   } catch {
     return false;

@@ -161,7 +161,7 @@ class PermissionManager {
       return null;
     }
 
-    return messageIds[messageIds.length - 1];
+    return messageIds[messageIds.length - 1] ?? null;
   }
 
   /**

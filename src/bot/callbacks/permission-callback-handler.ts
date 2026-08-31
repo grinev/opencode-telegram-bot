@@ -81,7 +81,7 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
   const parts = data.split(":");
   const action = parts[1];
 
-  if (!isPermissionReply(action)) {
+  if (!action || !isPermissionReply(action)) {
     await ctx.answerCallbackQuery({
       text: t("permission.processing_error_callback"),
       show_alert: true,

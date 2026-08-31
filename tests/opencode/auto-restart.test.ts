@@ -73,6 +73,10 @@ vi.mock("#src/utils/logger.ts", () => ({
   },
 }));
 
+vi.mock("#src/runtime/container.ts", () => ({
+  isContainerRuntime: () => false,
+}));
+
 const sut = await loadSut<typeof import("#src/opencode/auto-restart.js")>(
   "#src/opencode/auto-restart.ts",
   import.meta.url,
@@ -166,7 +170,16 @@ describe("opencode/auto-restart", () => {
       .mockResolvedValueOnce(healthyResponse());
     const service = new sut.OpencodeAutoRestartService();
 
-    await service.start();
+    // accelerateTime: the startup path waits for the server with real timers
+    // (waitForOpencodeServerReady polls every 500ms up to 10s). The accelerated
+    // clock collapses those to near-instant, so the test is deterministic on
+    // any runner (the 5s per-test timeout killed it once on CI).
+    const { restore } = accelerateTime();
+    try {
+      await service.start();
+    } finally {
+      restore();
+    }
 
     expect(mocked.startLocalOpencodeServerMock).toHaveBeenCalledTimes(1);
     expect(mocked.startLocalOpencodeServerMock).toHaveBeenCalledWith({

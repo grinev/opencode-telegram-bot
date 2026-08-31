@@ -155,9 +155,11 @@ async function selectSessionById(
 
     const keyboard = keyboardManager.getKeyboard();
     try {
-      await ctx.api.sendMessage(chatId, t("sessions.selected", { title: session.title }), {
-        reply_markup: keyboard,
-      });
+      await ctx.api.sendMessage(
+        chatId,
+        t("sessions.selected", { title: session.title }),
+        keyboard ? { reply_markup: keyboard } : {},
+      );
     } catch (err) {
       logger.error("[Sessions] Failed to send selection message:", err);
     }

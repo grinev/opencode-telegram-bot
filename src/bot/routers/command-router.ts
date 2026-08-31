@@ -27,6 +27,7 @@ import { flushPendingPrompt } from "../handlers/message-merger.js";
 
 interface CommandRouterDeps {
   ensureEventSubscription: (directory: string) => Promise<void>;
+  clearRuntimeState: (reason: string) => void;
 }
 
 let commandsInitialized = false;
@@ -73,7 +74,9 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
   bot.command("status", statusCommand);
   bot.command("settings", settingsCommand);
   bot.command("opencode_start", opencodeStartCommand);
-  bot.command("opencode_stop", opencodeStopCommand);
+  bot.command("opencode_stop", (ctx) =>
+    opencodeStopCommand(ctx, { clearRuntimeState: deps.clearRuntimeState }),
+  );
   bot.command("projects", projectsCommand);
   bot.command("worktree", worktreeCommand);
   bot.command("open", openCommand);

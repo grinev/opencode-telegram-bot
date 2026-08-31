@@ -425,6 +425,8 @@ export const zh: I18nDictionary = {
   "runtime.wizard.not_configured_starting": "应用尚未配置。正在启动向导...\n",
   "runtime.wizard.tty_required":
     "交互式向导需要 TTY 终端。请在交互式 shell 中运行 `opencode-telegram config`。",
+  "runtime.container.command_unavailable":
+    "⚠️ Docker 镜像中无法使用此命令。",
 
   "rename.no_session": "⚠️ 没有活动会话。请先创建或选择一个会话。",
   "rename.prompt": "📝 请输入会话的新标题：\n\n当前：{title}",
@@ -551,7 +553,7 @@ export const zh: I18nDictionary = {
   "legacy.models.error": "🔴 加载模型列表时发生错误。",
 
   "stt.recognizing": "🎤 正在识别音频...",
-  "stt.recognized": "🎤 识别结果：\n{text}",
+  "stt.recognized": "🎤 识别结果：",
   "stt.not_configured":
     "🎤 语音识别尚未配置。\n\n在 .env 中设置 STT_API_URL 和 STT_API_KEY 以启用。",
   "stt.error": "🔴 识别音频失败：{error}",

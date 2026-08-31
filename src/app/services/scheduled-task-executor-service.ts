@@ -203,12 +203,13 @@ function extractAssistantResult(message: AssistantMessageSnapshot | null): {
 }
 
 function summarizeAssistantParts(parts: MessagePartSnapshot[]): Array<{
-  id?: string;
-  type?: string;
-  ignored?: boolean;
-  textLength?: number;
-  tool?: string;
-  status?: string;
+  id?: string | undefined;
+  type?: string | undefined;
+  ignored?: boolean | undefined;
+  textLength?: number | undefined;
+  tool?: string | undefined;
+  status?: string | undefined;
+  reason?: string | undefined;
 }> {
   return parts.map((part) => ({
     id: part.id,

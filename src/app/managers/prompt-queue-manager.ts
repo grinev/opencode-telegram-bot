@@ -40,6 +40,9 @@ class PromptQueueManager {
     }
 
     const [removed] = this.items.splice(index, 1);
+    if (!removed) {
+      return null;
+    }
     logger.debug(
       `[PromptQueue] Prompt removed: id=${removed.id}, position=${index + 1}, size=${this.items.length}`,
     );

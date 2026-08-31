@@ -5,12 +5,12 @@
 export interface ModelInfo {
   providerID: string;
   modelID: string;
-  variant?: string;
+  variant?: string | undefined;
 }
 
 export interface VariantInfo {
   id: string;
-  disabled?: boolean;
+  disabled?: boolean | undefined;
 }
 
 export interface FavoriteModel {

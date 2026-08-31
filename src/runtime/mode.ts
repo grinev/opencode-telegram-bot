@@ -4,8 +4,8 @@ const RUNTIME_MODE_ENV_KEY = "OPENCODE_TELEGRAM_RUNTIME_MODE";
 
 interface ResolveRuntimeModeOptions {
   defaultMode: RuntimeMode;
-  argv?: string[];
-  explicitMode?: RuntimeMode;
+  argv?: string[] | undefined;
+  explicitMode?: RuntimeMode | undefined;
 }
 
 export interface ResolveRuntimeModeResult {
@@ -30,6 +30,9 @@ function parseModeFromArgv(argv: string[]): RuntimeMode | null {
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
+    if (!token) {
+      continue;
+    }
 
     if (token === "--mode") {
       const modeValue = argv[index + 1];
@@ -53,6 +56,9 @@ function parseModeFromArgv(argv: string[]): RuntimeMode | null {
 function hasInvalidModeSyntax(argv: string[]): boolean {
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
+    if (!token) {
+      continue;
+    }
 
     if (token === "--mode") {
       const modeValue = argv[index + 1];

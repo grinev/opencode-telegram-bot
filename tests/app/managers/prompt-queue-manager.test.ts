@@ -90,8 +90,12 @@ describe("app/managers/prompt-queue-manager", () => {
     promptQueue.add("first");
 
     const items = promptQueue.list();
-    items[0].text = "mutated";
+    const firstCopy = items[0];
+    if (!firstCopy) {
+      throw new Error("Expected queued prompt copy");
+    }
+    firstCopy.text = "mutated";
 
-    expect(promptQueue.list()[0].text).toBe("first");
+    expect(promptQueue.list()[0]?.text).toBe("first");
   });
 });

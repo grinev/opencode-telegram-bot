@@ -181,7 +181,11 @@ const MARKED_TEXT_PATTERN = /==(?=\S)([\s\S]*?\S)==/g;
 
 function parseInlineHtmlTag(value: string): { name: string; closing: boolean } | null {
   const match = INLINE_HTML_TAG_PATTERN.exec(value.trim());
-  return match ? { name: match[2].toLowerCase(), closing: match[1] === "/" } : null;
+  const name = match?.[2];
+  if (!name) {
+    return null;
+  }
+  return { name: name.toLowerCase(), closing: match[1] === "/" };
 }
 
 /** An opened tag and the nodes it collects until its closing tag arrives. */
@@ -220,7 +224,7 @@ function pushTextValue(nodes: InlineNode[], value: string): void {
 
   for (const match of value.matchAll(MARKED_TEXT_PATTERN)) {
     pushTextNode(nodes, value.slice(lastIndex, match.index));
-    nodes.push({ type: "marked", children: [{ type: "text", text: match[1] }] });
+    nodes.push({ type: "marked", children: [{ type: "text", text: match[1] ?? "" }] });
     lastIndex = match.index + match[0].length;
   }
 
@@ -311,7 +315,10 @@ function parseInlineNodes(nodes: PhrasingContent[]): InlineNode[] | null {
         // Tags opened inside the one being closed never closed themselves:
         // they keep their markup visible along with their content.
         while (open.length > index) {
-          const frame = open.splice(-1)[0];
+          const frame = open.pop();
+          if (!frame) {
+            break;
+          }
           pushInlineNodes(target(), closeInlineHtmlFrame(frame, open.length === index));
         }
 
@@ -323,7 +330,10 @@ function parseInlineNodes(nodes: PhrasingContent[]): InlineNode[] | null {
   }
 
   while (open.length > 0) {
-    const frame = open.splice(-1)[0];
+    const frame = open.pop();
+    if (!frame) {
+      break;
+    }
     pushInlineNodes(target(), closeInlineHtmlFrame(frame, false));
   }
 

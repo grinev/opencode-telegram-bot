@@ -263,7 +263,7 @@ async function sendAllAnswersToAgent(bot: Context["api"], chatId: number): Promi
 
 /** A paragraph of the question card: an optional bold lead-in plus regular text. */
 interface QuestionSegment {
-  label?: string;
+  label?: string | undefined;
   rest: string;
 }
 
@@ -330,7 +330,10 @@ function truncateQuestionSegments(
         }),
       );
     } else if (result.length > 0) {
-      result[result.length - 1] = appendTruncationSuffix(result[result.length - 1]);
+      const lastSegment = result[result.length - 1];
+      if (lastSegment) {
+        result[result.length - 1] = appendTruncationSuffix(lastSegment);
+      }
     } else {
       result.push(
         appendTruncationSuffix({

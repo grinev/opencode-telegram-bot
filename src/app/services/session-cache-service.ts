@@ -149,7 +149,7 @@ function upsertDirectory(worktree: string, lastUpdated: number): boolean {
 
   if (existingIndex >= 0) {
     const existing = cacheData.directories[existingIndex];
-    if (existing.lastUpdated >= lastUpdated) {
+    if (!existing || existing.lastUpdated >= lastUpdated) {
       return false;
     }
 

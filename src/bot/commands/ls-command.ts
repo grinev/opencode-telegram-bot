@@ -3,6 +3,7 @@ import { getProjectRoot, isWithinProjectRoot } from "../../app/services/file-bro
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { t } from "../../i18n/index.js";
+import { isContainerRuntime } from "../../runtime/container.js";
 import { clearLsPathIndex, renderLsBrowseView } from "../menus/file-browser-menu.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { rememberLsDirectory, resolveInitialLsDirectory } from "../callbacks/file-browser-callback-handler.js";
@@ -10,6 +11,11 @@ import { rememberLsDirectory, resolveInitialLsDirectory } from "../callbacks/fil
 export async function lsCommand(ctx: CommandContext<Context>): Promise<void> {
   if (isForegroundBusy()) {
     await replyBusyBlocked(ctx);
+    return;
+  }
+
+  if (isContainerRuntime()) {
+    await ctx.reply(t("runtime.container.command_unavailable"));
     return;
   }
 

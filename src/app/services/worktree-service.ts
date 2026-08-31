@@ -85,7 +85,8 @@ async function readHeadBranch(gitDir: string): Promise<string | null> {
     const headPath = path.join(gitDir, "HEAD");
     const headContent = (await Bun.file(headPath).text()).trim();
     const match = headContent.match(/^ref:\s+(.+)$/);
-    return match ? normalizeBranchName(match[1]) : null;
+    const ref = match?.[1];
+    return ref ? normalizeBranchName(ref) : null;
   } catch {
     return null;
   }
@@ -125,7 +126,11 @@ export async function resolveGitDir(worktree: string): Promise<string | null> {
       return null;
     }
 
-    return path.resolve(worktree, match[1].trim());
+    const gitDirPointer = match[1];
+    if (!gitDirPointer) {
+      return null;
+    }
+    return path.resolve(worktree, gitDirPointer.trim());
   } catch {
     return null;
   }

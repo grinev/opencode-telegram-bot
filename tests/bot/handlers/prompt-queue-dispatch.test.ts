@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import { createSettingsStoreMock } from "#helpers/settings-store-mock.js";
 import type { Context } from "grammy";
+import { defined } from "../../helpers/defined.js";
 
 const processUserPromptMock = vi.hoisted(() => vi.fn());
 const getPromptQueueEnabledMock = vi.hoisted(() => vi.fn());
@@ -85,7 +86,7 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
 
       expect(promptQueue.list().map((item) => item.text)).toEqual(["do the thing"]);
       expect(replyMock).toHaveBeenCalledTimes(1);
-      expect(replyMock.mock.calls[0][1]).toEqual({ reply_markup: KEYBOARD });
+      expect(defined(replyMock.mock.calls[0]?.[1])).toEqual({ reply_markup: KEYBOARD });
     });
 
     it("rejects a prompt once the queue is full and keeps the queue intact", async () => {
@@ -177,7 +178,7 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
       await dispatchNextQueuedPrompt();
 
       expect(sendBotTextMock).toHaveBeenCalledTimes(1);
-      const echo = sendBotTextMock.mock.calls[0][0];
+      const echo = defined(sendBotTextMock.mock.calls[0]?.[0]);
       expect(echo.text).toContain("first");
       expect(echo.rawFallbackText).toContain("👤");
       expect(echo.rawFallbackText).toContain("> first");
@@ -185,8 +186,8 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
       expect(echo.options).toEqual({ reply_markup: KEYBOARD });
 
       expect(processUserPromptMock).toHaveBeenCalledTimes(1);
-      expect(processUserPromptMock.mock.calls[0][1]).toBe("first");
-      expect(processUserPromptMock.mock.calls[0][2]).toBe(DEPS);
+      expect(defined(processUserPromptMock.mock.calls[0]?.[1])).toBe("first");
+      expect(defined(processUserPromptMock.mock.calls[0]?.[2])).toBe(DEPS);
       expect(promptQueue.list().map((item) => item.text)).toEqual(["second"]);
     });
 

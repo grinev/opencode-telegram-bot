@@ -64,8 +64,13 @@ export function parseProviderCallback(
     return null;
   }
 
-  const providerIndex = parseIndex(parts[0]);
-  const page = parseIndex(parts[1]);
+  const providerIndexText = parts[0];
+  const pageText = parts[1];
+  if (providerIndexText === undefined || pageText === undefined) {
+    return null;
+  }
+  const providerIndex = parseIndex(providerIndexText);
+  const page = parseIndex(pageText);
 
   if (providerIndex === null || page === null) {
     return null;

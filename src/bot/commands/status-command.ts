@@ -106,10 +106,10 @@ export async function statusCommand(ctx: CommandContext<Context>) {
         api: ctx.api,
         chatId: ctx.chat.id,
         text: message,
-        options: { reply_markup: keyboard },
+        options: keyboard ? { reply_markup: keyboard } : {},
       });
     } else {
-      await ctx.reply(message, { reply_markup: keyboard });
+      await ctx.reply(message, keyboard ? { reply_markup: keyboard } : {});
     }
   } catch (error) {
     if (isExpectedOpencodeUnavailableError(error)) {

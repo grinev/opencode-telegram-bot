@@ -298,8 +298,8 @@ export async function executeCommand(
         command: params.commandName,
         arguments: args,
         agent: currentAgent,
-        model,
-        variant: storedModel.variant,
+        ...(model !== undefined ? { model } : {}),
+        ...(storedModel.variant !== undefined ? { variant: storedModel.variant } : {}),
       }),
     onSuccess: ({ error }) => {
       if (error) {

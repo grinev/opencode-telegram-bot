@@ -10,9 +10,9 @@ export type BackgroundSessionNotificationKind =
 export interface BackgroundSessionNotification {
   kind: BackgroundSessionNotificationKind;
   sessionId: string;
-  sessionTitle?: string;
-  requestId?: string;
-  messageId?: string;
+  sessionTitle?: string | undefined;
+  requestId?: string | undefined;
+  messageId?: string | undefined;
 }
 
 type NotificationCallback = (notification: BackgroundSessionNotification) => void | Promise<void>;

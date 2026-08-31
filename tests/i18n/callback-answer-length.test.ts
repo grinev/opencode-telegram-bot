@@ -10,6 +10,7 @@ import { it as itLocale } from "../../src/i18n/it.js";
 import { pt } from "../../src/i18n/pt.js";
 import { ru } from "../../src/i18n/ru.js";
 import { zh } from "../../src/i18n/zh.js";
+import { defined } from "../helpers/defined.js";
 
 // Must stay in sync with CALLBACK_ANSWER_MAX_LENGTH in src/bot/callbacks/feedback.ts.
 const CALLBACK_ANSWER_MAX_LENGTH = 200;
@@ -56,7 +57,7 @@ function collectCallbackAnswerKeys(): Set<string> {
       pattern.lastIndex = 0;
       let match = pattern.exec(source);
       while (match !== null) {
-        keys.add(match[1]);
+        keys.add(defined(match[1]));
         match = pattern.exec(source);
       }
     }

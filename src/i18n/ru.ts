@@ -465,6 +465,8 @@ export const ru: I18nDictionary = {
     "Приложение еще не сконфигурировано. Запускаю wizard...\n",
   "runtime.wizard.tty_required":
     "Интерактивный wizard требует TTY-терминал. Запустите `opencode-telegram config` в интерактивной оболочке.",
+  "runtime.container.command_unavailable":
+    "⚠️ Эта команда недоступна в Docker-образе.",
 
   "rename.no_session": "⚠️ Нет активной сессии. Сначала создайте или выберите сессию.",
   "rename.prompt": "📝 Введите новое название сессии:\n\nТекущее: {title}",
@@ -606,7 +608,7 @@ export const ru: I18nDictionary = {
   "legacy.models.error": "🔴 Произошла ошибка при получении списка моделей.",
 
   "stt.recognizing": "🎤 Распознаю аудио...",
-  "stt.recognized": "🎤 Распознано:\n{text}",
+  "stt.recognized": "🎤 Распознано:",
   "stt.not_configured":
     "🎤 Распознавание голоса не настроено.\n\nУстановите STT_API_URL и STT_API_KEY в .env для включения.",
   "stt.error": "🔴 Не удалось распознать аудио: {error}",

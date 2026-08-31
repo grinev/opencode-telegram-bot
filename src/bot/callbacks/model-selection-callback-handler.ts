@@ -45,7 +45,7 @@ const MODEL_SEARCH_RESULT_CALLBACK_PREFIX = "model:result:";
 interface ModelSearchMetadata {
   flow: string;
   stage: string;
-  messageId?: number;
+  messageId?: number | undefined;
   models: ModelInfo[];
 }
 
@@ -149,6 +149,9 @@ function resolveModelListCallback(data: string): ModelInfo | null {
   }
 
   const [kind, indexText] = parts;
+  if (!kind || !indexText) {
+    return null;
+  }
   const index = parseNonNegativeIndex(indexText);
   if ((kind !== "favorites" && kind !== "recent") || index === null) {
     return null;

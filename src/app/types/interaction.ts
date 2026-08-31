@@ -18,17 +18,17 @@ export interface InteractionState {
 export interface StartInteractionOptions {
   kind: InteractionKind;
   expectedInput: ExpectedInput;
-  allowedCommands?: string[];
-  metadata?: InteractionMetadata;
-  expiresInMs?: number | null;
+  allowedCommands?: string[] | undefined;
+  metadata?: InteractionMetadata | undefined;
+  expiresInMs?: number | null | undefined;
 }
 
 export interface TransitionInteractionOptions {
-  kind?: InteractionKind;
-  expectedInput?: ExpectedInput;
-  allowedCommands?: string[];
-  metadata?: InteractionMetadata;
-  expiresInMs?: number | null;
+  kind?: InteractionKind | undefined;
+  expectedInput?: ExpectedInput | undefined;
+  allowedCommands?: string[] | undefined;
+  metadata?: InteractionMetadata | undefined;
+  expiresInMs?: number | null | undefined;
 }
 
 export type InteractionClearReason = string;
@@ -44,7 +44,7 @@ export interface GuardDecision {
   allow: boolean;
   inputType: IncomingInputType;
   state: InteractionState | null;
-  reason?: BlockReason;
-  command?: string;
-  busy?: boolean;
+  reason?: BlockReason | undefined;
+  command?: string | undefined;
+  busy?: boolean | undefined;
 }

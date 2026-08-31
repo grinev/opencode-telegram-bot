@@ -127,6 +127,9 @@ function parseCronParts(cron: string): CronParts | null {
   }
 
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  if (!minute || !hour || !dayOfMonth || !month || !dayOfWeek) {
+    return null;
+  }
   return {
     minute,
     hour,
@@ -156,7 +159,11 @@ function parseEveryStep(field: string, minStep: number, maxStep: number): number
     return null;
   }
 
-  const step = Number.parseInt(match[1], 10);
+  const stepText = match[1];
+  if (!stepText) {
+    return null;
+  }
+  const step = Number.parseInt(stepText, 10);
   if (!Number.isInteger(step) || step < minStep || step > maxStep) {
     return null;
   }
@@ -176,8 +183,9 @@ function normalizeWeekdayValue(token: string): number | null {
     sat: 6,
   };
 
-  if (normalized in aliases) {
-    return aliases[normalized];
+  const aliasValue = aliases[normalized];
+  if (aliasValue !== undefined) {
+    return aliasValue;
   }
 
   const numericValue = parseExactNumber(normalized, 0, 7);
@@ -199,6 +207,9 @@ function parseWeekdaySet(field: string): Set<number> | null {
 
     if (trimmedToken.includes("-")) {
       const [startRaw, endRaw] = trimmedToken.split("-");
+      if (startRaw === undefined || endRaw === undefined) {
+        return null;
+      }
       const start = normalizeWeekdayValue(startRaw);
       const end = normalizeWeekdayValue(endRaw);
       if (start === null || end === null || start > end) {
@@ -299,7 +310,11 @@ function formatCronTaskBadge(cron: string): string {
 
     if (weekdayValues.size === 1) {
       const [weekday] = weekdayValues;
-      return `${WEEKDAY_LABELS[weekday]} ${formatTime(hour, minute)}`;
+      const weekdayLabel = weekday === undefined ? undefined : WEEKDAY_LABELS[weekday];
+      if (!weekdayLabel) {
+        return "cron";
+      }
+      return `${weekdayLabel} ${formatTime(hour, minute)}`;
     }
   }
 

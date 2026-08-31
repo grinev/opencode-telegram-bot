@@ -44,6 +44,9 @@ export async function handlePhotoMessage(ctx: Context, deps: PhotoHandlerDeps): 
 
   const caption = ctx.message.caption || "";
   const largestPhoto = photos[photos.length - 1];
+  if (!largestPhoto) {
+    return;
+  }
   const downloadFile = deps.downloadFile ?? downloadTelegramFile;
   const getCapabilities = deps.getModelCapabilities ?? getModelCapabilities;
   const getStored = deps.getStoredModel ?? getStoredModel;
