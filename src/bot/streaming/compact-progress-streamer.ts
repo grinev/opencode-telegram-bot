@@ -20,6 +20,7 @@ export interface CompactProgressStreamerOptions {
   throttleMs: StreamThrottleMs;
   sendText: (sessionId: string, text: string) => Promise<number>;
   editText: (sessionId: string, messageId: number, text: string) => Promise<void>;
+  deleteText?: (sessionId: string, messageId: number) => Promise<void>;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -44,11 +45,13 @@ export class CompactProgressStreamer {
   private readonly throttleMs: StreamThrottleMs;
   private readonly sendText: CompactProgressStreamerOptions["sendText"];
   private readonly editText: CompactProgressStreamerOptions["editText"];
+  private readonly deleteText: CompactProgressStreamerOptions["deleteText"];
 
-  constructor({ throttleMs, sendText, editText }: CompactProgressStreamerOptions) {
+  constructor({ throttleMs, sendText, editText, deleteText }: CompactProgressStreamerOptions) {
     this.throttleMs = throttleMs;
     this.sendText = sendText;
     this.editText = editText;
+    this.deleteText = deleteText;
   }
 
   private resolveThrottleMs(sessionId: string): number {
@@ -92,9 +95,19 @@ export class CompactProgressStreamer {
     this.states.get(sessionId)?.filePaths.add(normalizedPath);
   }
 
-  async finalize(sessionId: string): Promise<void> {
+  async finalize(sessionId: string, deleteOnFinish = false): Promise<void> {
     const state = this.states.get(sessionId);
     if (!state) {
+      return;
+    }
+
+    this.clearTimer(state);
+    await state.task.catch(() => false);
+
+    if (deleteOnFinish && this.deleteText) {
+      await this.deleteProgressMessage(state);
+      this.cancelState(state);
+      this.states.delete(sessionId);
       return;
     }
 
@@ -104,11 +117,24 @@ export class CompactProgressStreamer {
       files: state.filePaths.size,
     });
 
-    this.clearTimer(state);
-    await state.task.catch(() => false);
     await this.syncState(state, "finalize");
     this.cancelState(state);
     this.states.delete(sessionId);
+  }
+
+  private async deleteProgressMessage(state: CompactProgressState): Promise<void> {
+    if (state.messageId === null) {
+      return;
+    }
+
+    try {
+      await this.deleteText?.(state.sessionId, state.messageId);
+    } catch (error) {
+      logger.error(
+        `[CompactProgress] Failed to delete progress message: session=${state.sessionId}, error=${getErrorMessage(error)}`,
+        error,
+      );
+    }
   }
 
   clearSession(sessionId: string, reason: string): void {

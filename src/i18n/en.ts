@@ -150,6 +150,7 @@ export const en = {
 
   "settings.menu.title": "⚙️ Bot settings\nTap a setting to toggle its value:",
   "settings.compact_output.label": "Compact output mode",
+  "settings.delete_progress_on_finish.label": "Delete progress on finish",
   "settings.thinking_content.label": "Thinking content",
   "settings.response_streaming.label": "Response streaming",
   "settings.response_streaming.edit": "edit",

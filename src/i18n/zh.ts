@@ -139,6 +139,7 @@ export const zh: I18nDictionary = {
 
   "settings.menu.title": "⚙️ 机器人设置\n点按设置项以切换其值：",
   "settings.compact_output.label": "紧凑输出模式",
+  "settings.delete_progress_on_finish.label": "完成后删除进度",
   "settings.thinking_content.label": "思考内容",
   "settings.response_streaming.label": "回复流式模式",
   "settings.response_streaming.edit": "edit",

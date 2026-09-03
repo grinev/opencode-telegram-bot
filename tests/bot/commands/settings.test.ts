@@ -9,6 +9,7 @@ import {
   SETTINGS_ASSISTANT_FOOTER_CALLBACK,
   SETTINGS_CALLBACK_PREFIX,
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
+  SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK,
   SETTINGS_DIFF_FILES_CALLBACK,
   SETTINGS_PROMPT_QUEUE_CALLBACK,
   SETTINGS_RESPONSE_STREAMING_CALLBACK,
@@ -19,6 +20,8 @@ import {
 const mocked = vi.hoisted(() => ({
   getCompactOutputModeMock: vi.fn(),
   setCompactOutputModeMock: vi.fn(),
+  getDeleteCompactProgressOnFinishMock: vi.fn(),
+  setDeleteCompactProgressOnFinishMock: vi.fn(),
   getResponseStreamingModeMock: vi.fn(),
   setResponseStreamingModeMock: vi.fn(),
   getSendDiffFileAttachmentsMock: vi.fn(),
@@ -37,6 +40,8 @@ const mocked = vi.hoisted(() => ({
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCompactOutputMode: mocked.getCompactOutputModeMock,
   setCompactOutputMode: mocked.setCompactOutputModeMock,
+  getDeleteCompactProgressOnFinish: mocked.getDeleteCompactProgressOnFinishMock,
+  setDeleteCompactProgressOnFinish: mocked.setDeleteCompactProgressOnFinishMock,
   getResponseStreamingMode: mocked.getResponseStreamingModeMock,
   setResponseStreamingMode: mocked.setResponseStreamingModeMock,
   getSendDiffFileAttachments: mocked.getSendDiffFileAttachmentsMock,
@@ -59,6 +64,8 @@ describe("bot/commands/settings-command", () => {
   beforeEach(() => {
     mocked.getCompactOutputModeMock.mockReset();
     mocked.setCompactOutputModeMock.mockReset();
+    mocked.getDeleteCompactProgressOnFinishMock.mockReset();
+    mocked.setDeleteCompactProgressOnFinishMock.mockReset();
     mocked.getResponseStreamingModeMock.mockReset();
     mocked.setResponseStreamingModeMock.mockReset();
     mocked.getSendDiffFileAttachmentsMock.mockReset();
@@ -81,6 +88,7 @@ describe("bot/commands/settings-command", () => {
 
   it("shows settings menu with current compact output and TTS modes", async () => {
     mocked.getCompactOutputModeMock.mockReturnValue(true);
+    mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(true);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("auto");
     const replyMock = vi.fn().mockResolvedValue({ message_id: 10 });
@@ -100,22 +108,26 @@ describe("bot/commands/settings-command", () => {
       `${t("settings.compact_output.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[1][0].text).toBe(
-      `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
+      `${t("settings.delete_progress_on_finish.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[2][0].text).toBe(
-      `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
+      `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
     );
     expect(opts.reply_markup.inline_keyboard[3][0].text).toBe(
-      `${t("settings.tts.label")}: ${t("status.tts.auto")}`,
+      `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[4][0].text).toBe(
+      `${t("settings.tts.label")}: ${t("status.tts.auto")}`,
+    );
+    expect(opts.reply_markup.inline_keyboard[5][0].text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.off")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[5][0].text).toBe(t("inline.button.close"));
+    expect(opts.reply_markup.inline_keyboard[6][0].text).toBe(t("inline.button.close"));
   });
 
   it("shows thinking content setting when compact output is disabled", async () => {
     mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("off");
     const replyMock = vi.fn().mockResolvedValue({ message_id: 10 });
@@ -151,6 +163,7 @@ describe("bot/commands/settings-command", () => {
 
   it("marks draft response streaming mode as experimental", async () => {
     mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getResponseStreamingModeMock.mockReturnValue("draft");
     mocked.getTtsModeMock.mockReturnValue("off");
@@ -175,6 +188,8 @@ describe("bot/callbacks/settings-callback-handler", () => {
   beforeEach(() => {
     mocked.getCompactOutputModeMock.mockReset();
     mocked.setCompactOutputModeMock.mockReset();
+    mocked.getDeleteCompactProgressOnFinishMock.mockReset();
+    mocked.setDeleteCompactProgressOnFinishMock.mockReset();
     mocked.getResponseStreamingModeMock.mockReset();
     mocked.setResponseStreamingModeMock.mockReset();
     mocked.getSendDiffFileAttachmentsMock.mockReset();
@@ -216,6 +231,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
 
   it("toggles compact output mode and returns to settings menu", async () => {
     mocked.getCompactOutputModeMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("off");
     activateSettingsMenu();
@@ -233,13 +249,38 @@ describe("bot/callbacks/settings-callback-handler", () => {
       `${t("settings.compact_output.label")}: ${t("settings.value.on")}`,
     );
     expect(defined(opts?.reply_markup?.inline_keyboard[1]?.[0]).text).toBe(
-      `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
+      `${t("settings.delete_progress_on_finish.label")}: ${t("settings.value.off")}`,
     );
     expect(defined(opts?.reply_markup?.inline_keyboard[2]?.[0]).text).toBe(
-      `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
+      `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
     );
     expect(defined(opts?.reply_markup?.inline_keyboard[3]?.[0]).text).toBe(
+      `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
+    );
+    expect(defined(opts?.reply_markup?.inline_keyboard[4]?.[0]).text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.off")}`,
+    );
+  });
+
+  it("toggles delete progress on finish and returns to settings menu", async () => {
+    mocked.getCompactOutputModeMock.mockReturnValue(true);
+    mocked.getDeleteCompactProgressOnFinishMock
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    mocked.getTtsModeMock.mockReturnValue("off");
+    activateSettingsMenu();
+    const ctx = createCallbackContext(SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK);
+
+    const result = await handleSettingsCallback(ctx);
+
+    expect(result).toBe(true);
+    expect(mocked.setDeleteCompactProgressOnFinishMock).toHaveBeenCalledWith(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
+    expect(text).toBe(t("settings.menu.title"));
+    expect(defined(opts?.reply_markup?.inline_keyboard[1]?.[0]).text).toBe(
+      `${t("settings.delete_progress_on_finish.label")}: ${t("settings.value.on")}`,
     );
   });
 

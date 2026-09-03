@@ -161,6 +161,7 @@ export const fr: I18nDictionary = {
 
   "settings.menu.title": "⚙️ Paramètres du bot\nTouchez un paramètre pour basculer sa valeur :",
   "settings.compact_output.label": "Sortie compacte",
+  "settings.delete_progress_on_finish.label": "Supprimer la progression à la fin",
   "settings.thinking_content.label": "Contenu thinking",
   "settings.response_streaming.label": "Streaming de réponse",
   "settings.response_streaming.edit": "edit",

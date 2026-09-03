@@ -25,6 +25,52 @@ describe("bot/streaming/compact-progress-streamer", () => {
     );
   });
 
+  it("deletes the progress message on finalize when deleteOnFinish is set", async () => {
+    const sendText = vi.fn().mockResolvedValue(10);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText,
+    });
+
+    streamer.updateActivity("s1", "working");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await streamer.finalize("s1", true);
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenCalledWith("s1", "⏳ Working\nworking");
+    expect(deleteText).toHaveBeenCalledTimes(1);
+    expect(deleteText).toHaveBeenCalledWith("s1", 10);
+    expect(editText).not.toHaveBeenCalled();
+  });
+
+  it("keeps the final summary edit when deleteOnFinish is false", async () => {
+    const sendText = vi.fn().mockResolvedValue(10);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText,
+    });
+
+    streamer.updateActivity("s1", "working");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await streamer.finalize("s1", false);
+
+    expect(deleteText).not.toHaveBeenCalled();
+    expect(editText).toHaveBeenCalledTimes(1);
+    expect(editText).toHaveBeenCalledWith(
+      "s1",
+      10,
+      "✅ Finished Work\ntool calls: 0 · changed files: 0",
+    );
+  });
+
   it("does not create a message for thinking-only activity", async () => {
     const sendText = vi.fn().mockResolvedValue(10);
     const editText = vi.fn().mockResolvedValue(undefined);

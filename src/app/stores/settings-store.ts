@@ -192,6 +192,15 @@ export function setCompactOutputMode(enabled: boolean): void {
   void writeSettingsFile(currentSettings);
 }
 
+export function getDeleteCompactProgressOnFinish(): boolean {
+  return currentSettings.deleteCompactProgressOnFinish ?? false;
+}
+
+export function setDeleteCompactProgressOnFinish(enabled: boolean): void {
+  currentSettings.deleteCompactProgressOnFinish = enabled;
+  void writeSettingsFile(currentSettings);
+}
+
 export function getShowThinkingContent(): boolean {
   return currentSettings.showThinkingContent ?? true;
 }
@@ -328,6 +337,7 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
   const knownKeys = new Set([
     "ttsMode",
     "compactOutputMode",
+    "deleteCompactProgressOnFinish",
     "showThinkingContent",
     "showAssistantRunFooter",
     "responseStreamingMode",
@@ -363,7 +373,7 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
         currentSettings.responseStreamingMode = value as ResponseStreamingMode;
       }
     } else {
-      // Boolean settings: compactOutputMode, showThinkingContent, showAssistantRunFooter, sendDiffFileAttachments, promptQueueEnabled
+      // Boolean settings: compactOutputMode, deleteCompactProgressOnFinish, showThinkingContent, showAssistantRunFooter, sendDiffFileAttachments, promptQueueEnabled
       if (typeof value !== "boolean") {
         throw new Error(
           `INITIAL_SETTINGS_PRESET: "${key}" must be a boolean.`,
@@ -373,6 +383,10 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
         case "compactOutputMode":
           if (currentSettings.compactOutputMode === undefined)
             currentSettings.compactOutputMode = value;
+          break;
+        case "deleteCompactProgressOnFinish":
+          if (currentSettings.deleteCompactProgressOnFinish === undefined)
+            currentSettings.deleteCompactProgressOnFinish = value;
           break;
         case "showThinkingContent":
           if (currentSettings.showThinkingContent === undefined)

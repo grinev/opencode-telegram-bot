@@ -152,6 +152,7 @@ export const ar: I18nDictionary = {
 
   "settings.menu.title": "⚙️ إعدادات البوت\nاضغط على إعداد لتبديل قيمته:",
   "settings.compact_output.label": "وضع الإخراج المختصر",
+  "settings.delete_progress_on_finish.label": "حذف التقدم عند الانتهاء",
   "settings.thinking_content.label": "محتوى التفكير",
   "settings.response_streaming.label": "بث الرد",
   "settings.response_streaming.edit": "edit",

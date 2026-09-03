@@ -159,6 +159,7 @@ export const de: I18nDictionary = {
   "settings.menu.title":
     "⚙️ Bot-Einstellungen\nTippen Sie auf eine Einstellung, um ihren Wert umzuschalten:",
   "settings.compact_output.label": "Kompakte Ausgabe",
+  "settings.delete_progress_on_finish.label": "Fortschritt beim Abschluss löschen",
   "settings.thinking_content.label": "Thinking-Inhalt",
   "settings.response_streaming.label": "Antwort-Streaming",
   "settings.response_streaming.edit": "edit",

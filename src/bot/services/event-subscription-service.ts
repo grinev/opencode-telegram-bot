@@ -21,6 +21,7 @@ import {
 import { ToolMessageBatcher } from "../../app/formatters/tool-message-batcher.js";
 import {
   getCompactOutputMode,
+  getDeleteCompactProgressOnFinish,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
   getShowAssistantRunFooter,
@@ -261,6 +262,29 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
           throw error;
         }
+      },
+      deleteText: async (sessionId, messageId) => {
+        if (!this.botInstance || !this.chatIdInstance || this.chatIdInstance <= 0) {
+          throw new Error("Bot context missing for compact progress delete");
+        }
+
+        const currentSession = getCurrentSession();
+        if (!currentSession || currentSession.id !== sessionId) {
+          throw new Error(`Compact progress session mismatch for delete: ${sessionId}`);
+        }
+
+        await this.botInstance.api.deleteMessage(this.chatIdInstance, messageId).catch((error) => {
+          const errorMessage =
+            error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+          if (
+            errorMessage.includes("message to delete not found") ||
+            errorMessage.includes("message identifier is not specified")
+          ) {
+            return;
+          }
+
+          throw error;
+        });
       },
     });
 
@@ -1637,7 +1661,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       return existingTask;
     }
 
-    const nextTask = this.compactProgressStreamer.finalize(sessionId).finally(() => {
+    const nextTask = this.compactProgressStreamer
+      .finalize(sessionId, getDeleteCompactProgressOnFinish())
+      .finally(() => {
       if (this.compactProgressFinalizationTasks.get(sessionId) === nextTask) {
         this.compactProgressFinalizationTasks.delete(sessionId);
       }

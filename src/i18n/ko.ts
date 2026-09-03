@@ -159,6 +159,7 @@ export const ko: I18nDictionary = {
 
   "settings.menu.title": "⚙️ 봇 설정\n항목을 탭하여 값을 전환하세요:",
   "settings.compact_output.label": "간결 출력 모드",
+  "settings.delete_progress_on_finish.label": "완료 시 진행 삭제",
   "settings.thinking_content.label": "생각 내용",
   "settings.response_streaming.label": "응답 스트리밍",
   "settings.response_streaming.edit": "편집",

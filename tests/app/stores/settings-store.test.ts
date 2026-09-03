@@ -106,7 +106,7 @@ describe("app/stores/settings-store", () => {
     vi.resetModules();
     vi.stubEnv(
       "INITIAL_SETTINGS_PRESET",
-      '{"showAssistantRunFooter":false,"compactOutputMode":true,"ttsMode":"auto","responseStreamingMode":"draft","sendDiffFileAttachments":false,"showThinkingContent":false,"promptQueueEnabled":true}',
+      '{"showAssistantRunFooter":false,"compactOutputMode":true,"deleteCompactProgressOnFinish":true,"ttsMode":"auto","responseStreamingMode":"draft","sendDiffFileAttachments":false,"showThinkingContent":false,"promptQueueEnabled":true}',
     );
 
     const store = await import("../../../src/app/stores/settings-store.js");
@@ -114,6 +114,7 @@ describe("app/stores/settings-store", () => {
 
     expect(store.getShowAssistantRunFooter()).toBe(false);
     expect(store.getCompactOutputMode()).toBe(true);
+    expect(store.getDeleteCompactProgressOnFinish()).toBe(true);
     expect(store.getTtsMode()).toBe("auto");
     expect(store.getResponseStreamingMode()).toBe("draft");
     expect(store.getSendDiffFileAttachments()).toBe(false);
