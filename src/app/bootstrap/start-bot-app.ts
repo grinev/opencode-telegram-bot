@@ -17,6 +17,7 @@ import { clearServiceStateFile } from "../../runtime/service/manager.js";
 import { getServiceStateFilePathFromEnv, isServiceChildProcess } from "../../runtime/service/env.js";
 import { flushLogger, getLogFilePath, initializeLogger, logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
+import { startHealthServer, stopHealthServer } from "../../health/server.js";
 
 const SHUTDOWN_TIMEOUT_MS = 5000;
 const SETTINGS_FLUSH_TIMEOUT_MS = 1000;
@@ -102,6 +103,7 @@ export async function startBotApp(): Promise<void> {
   await loadSettings();
   await reconcileStoredModelSelection();
   registerOpenCodeReadyRefreshHandler();
+  await startHealthServer(config.health.port, version);
   const bot = createBot();
   await scheduledTaskRuntime.initialize(
     bot,
@@ -128,6 +130,7 @@ export async function startBotApp(): Promise<void> {
     cleanupBotRuntime(`app_shutdown_${signal.toLowerCase()}`);
     opencodeAutoRestartService.stop();
     scheduledTaskRuntime.shutdown();
+    void stopHealthServer();
 
     shutdownTimeout = setTimeout(() => {
       logger.warn(`[App] Shutdown did not finish in ${SHUTDOWN_TIMEOUT_MS}ms, forcing exit.`);
@@ -186,6 +189,7 @@ export async function startBotApp(): Promise<void> {
     cleanupBotRuntime("app_shutdown_complete");
     opencodeAutoRestartService.stop();
     scheduledTaskRuntime.shutdown();
+    await stopHealthServer();
     await clearManagedServiceState().catch((error) => {
       logger.warn("[App] Failed to clear managed service state", error);
     });

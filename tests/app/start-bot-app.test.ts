@@ -25,6 +25,8 @@ const mocked = vi.hoisted(() => ({
   initializeLoggerMock: vi.fn(),
   getLogFilePathMock: vi.fn(),
   flushLoggerMock: vi.fn(),
+  startHealthServerMock: vi.fn(),
+  stopHealthServerMock: vi.fn(),
   config: {
     opencode: {
       apiUrl: "http://localhost:4096",
@@ -41,7 +43,12 @@ vi.mock("../../src/bot/index.js", () => ({
 }));
 
 vi.mock("../../src/config.js", () => ({
-  config: mocked.config,
+  config: {
+    ...mocked.config,
+    health: {
+      port: 0,
+    },
+  },
 }));
 
 vi.mock("../../src/opencode/auto-restart.js", () => ({
@@ -99,6 +106,11 @@ vi.mock("../../src/utils/logger.js", () => ({
     warn: mocked.loggerWarnMock,
     error: mocked.loggerErrorMock,
   },
+}));
+
+vi.mock("../../src/health/server.js", () => ({
+  startHealthServer: mocked.startHealthServerMock,
+  stopHealthServer: mocked.stopHealthServerMock,
 }));
 
 import { startBotApp } from "../../src/app/bootstrap/start-bot-app.js";
@@ -226,6 +238,8 @@ describe("app/start-bot-app", () => {
 
     expect(mocked.registerOpenCodeReadyRefreshHandlerMock).toHaveBeenCalledTimes(1);
     expect(mocked.notifyOpencodeReadyIfHealthyMock).toHaveBeenCalledWith("startup");
+    expect(mocked.startHealthServerMock).toHaveBeenCalledTimes(1);
+    expect(mocked.startHealthServerMock).toHaveBeenCalledWith(0, expect.any(String));
   });
 
   it("runs startup health notification even when auto-restart handled startup", async () => {
@@ -235,6 +249,7 @@ describe("app/start-bot-app", () => {
     await flushBackgroundTasks();
 
     expect(mocked.notifyOpencodeReadyIfHealthyMock).toHaveBeenCalledWith("startup");
+    expect(mocked.startHealthServerMock).toHaveBeenCalledTimes(1);
   });
 
   it("starts Telegram polling without waiting for OpenCode startup checks", async () => {
@@ -251,6 +266,7 @@ describe("app/start-bot-app", () => {
 
     expect(bot.start).toHaveBeenCalledTimes(1);
     expect(mocked.notifyOpencodeReadyIfHealthyMock).not.toHaveBeenCalled();
+    expect(mocked.startHealthServerMock).toHaveBeenCalledTimes(1);
 
     resolveAutoRestart(false);
     await flushBackgroundTasks();
@@ -404,5 +420,6 @@ describe("app/start-bot-app", () => {
     expect(defined(mocked.flushSettingsMock.mock.invocationCallOrder[0])).toBeGreaterThan(
       defined(mocked.scheduledTaskShutdownMock.mock.invocationCallOrder[0]),
     );
+    expect(mocked.stopHealthServerMock).toHaveBeenCalledTimes(1);
   });
 });
