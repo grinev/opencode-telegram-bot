@@ -313,6 +313,119 @@ describe("summary/aggregator", () => {
     ]);
   });
 
+  describe("subagent variant from assistant message", () => {
+    function createChildSession(): void {
+      summaryAggregator.processEvent({
+        type: "session.created",
+        properties: {
+          info: {
+            id: "child-session-1",
+            parentID: "root-session",
+            title: "Explore architecture (@explore subagent)",
+            slug: "child",
+            directory: "D:/repo",
+            projectID: "p1",
+            version: "1",
+            time: { created: Date.now(), updated: Date.now() },
+          },
+        },
+      } as unknown as Event);
+    }
+
+    function sendAssistantMessage(fields: { variant?: string }): void {
+      summaryAggregator.processEvent({
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "child-message-1",
+            sessionID: "child-session-1",
+            role: "assistant",
+            parentID: "root-message",
+            providerID: "openai",
+            modelID: "gpt-5.4",
+            agent: "explore",
+            ...fields,
+            path: { cwd: "D:/repo", root: "D:/repo" },
+            mode: "all",
+            cost: 0,
+            tokens: {
+              input: 1,
+              output: 1,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            time: { created: Date.now() },
+          },
+        },
+      } as unknown as Event);
+    }
+
+    it("emits a variant from the child assistant message", () => {
+      const onSubagent = vi.fn();
+      summaryAggregator.setOnSubagent(onSubagent);
+      summaryAggregator.setSession("root-session");
+      createChildSession();
+      sendAssistantMessage({ variant: "high" });
+
+      expect(onSubagent.mock.lastCall?.[1]).toEqual([
+        expect.objectContaining({
+          sessionId: "child-session-1",
+          providerID: "openai",
+          modelID: "gpt-5.4",
+          variant: "high",
+        }),
+      ]);
+    });
+
+    it("emits again when a later message adds only a variant", () => {
+      const onSubagent = vi.fn();
+      summaryAggregator.setOnSubagent(onSubagent);
+      summaryAggregator.setSession("root-session");
+      createChildSession();
+      sendAssistantMessage({});
+      const callsAfterModel = onSubagent.mock.calls.length;
+
+      sendAssistantMessage({ variant: "high" });
+
+      expect(onSubagent.mock.calls.length).toBeGreaterThan(callsAfterModel);
+      expect(onSubagent.mock.lastCall?.[1]).toEqual([
+        expect.objectContaining({
+          providerID: "openai",
+          modelID: "gpt-5.4",
+          variant: "high",
+        }),
+      ]);
+    });
+
+    it("keeps the last variant when a later message omits it", () => {
+      const onSubagent = vi.fn();
+      summaryAggregator.setOnSubagent(onSubagent);
+      summaryAggregator.setSession("root-session");
+      createChildSession();
+      sendAssistantMessage({ variant: "high" });
+      sendAssistantMessage({});
+
+      expect(onSubagent.mock.lastCall?.[1]).toEqual([
+        expect.objectContaining({ variant: "high" }),
+      ]);
+    });
+
+    it("does not store an empty variant", () => {
+      const onSubagent = vi.fn();
+      summaryAggregator.setOnSubagent(onSubagent);
+      summaryAggregator.setSession("root-session");
+      createChildSession();
+      sendAssistantMessage({ variant: "" });
+
+      expect(onSubagent.mock.lastCall?.[1]).toEqual([
+        expect.objectContaining({
+          sessionId: "child-session-1",
+        }),
+      ]);
+      expect(onSubagent.mock.lastCall?.[1][0].variant).toBeUndefined();
+    });
+  });
+
   describe("subagent current tool timing", () => {
     function startSubagent(): void {
       summaryAggregator.setSession("root-session");

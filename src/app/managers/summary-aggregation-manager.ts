@@ -132,6 +132,7 @@ export interface SubagentInfo {
   status: SubagentStatus;
   providerID?: string | undefined;
   modelID?: string | undefined;
+  variant?: string | undefined;
   tokens: TokensInfo;
   cost: number;
   currentTool?: string | undefined;
@@ -693,6 +694,7 @@ class SummaryAggregator {
         status: state.status,
         providerID: state.providerID,
         modelID: state.modelID,
+        variant: state.variant,
         tokens: { ...state.tokens },
         cost: state.cost,
         currentTool: state.currentTool,
@@ -718,6 +720,7 @@ class SummaryAggregator {
         status: subagent.status,
         providerID: subagent.providerID,
         modelID: subagent.modelID,
+        variant: subagent.variant,
         tokens: subagent.tokens,
         cost: subagent.cost,
         currentTool: subagent.currentTool,
@@ -1005,6 +1008,7 @@ class SummaryAggregator {
     sessionID: string;
     providerID?: string;
     modelID?: string;
+    variant?: string;
     agent?: string;
     tokens?: {
       input: number;
@@ -1027,6 +1031,9 @@ class SummaryAggregator {
     }
     if (info.modelID) {
       subagent.modelID = info.modelID;
+    }
+    if (info.variant) {
+      subagent.variant = info.variant;
     }
     if (info.tokens) {
       subagent.tokens = {

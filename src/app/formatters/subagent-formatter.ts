@@ -9,12 +9,17 @@ import { formatCompactToolInfo } from "./summary-formatter.js";
 import type { SubagentInfo } from "../managers/summary-aggregation-manager.js";
 import type { ToolInfo } from "../managers/summary-aggregation-manager.js";
 
-function formatModelDisplayName(providerID?: string | null, modelID?: string | null): string {
-  if (providerID && modelID) {
-    return `${providerID}/${modelID}`;
+function formatModelDisplayName(
+  providerID?: string | null,
+  modelID?: string | null,
+  variant?: string | null,
+): string {
+  const name = providerID && modelID ? `${providerID}/${modelID}` : t("pinned.unknown");
+  if (variant) {
+    return `${name} (${variant})`;
   }
 
-  return t("pinned.unknown");
+  return name;
 }
 
 function shouldPreferInputDetails(tool: string, input?: { [key: string]: unknown }): boolean {
@@ -121,7 +126,11 @@ export async function renderSubagentCard(
   subagent: SubagentInfo,
   now: number = Date.now(),
 ): Promise<string> {
-  const modelName = formatModelDisplayName(subagent.providerID, subagent.modelID);
+  const modelName = formatModelDisplayName(
+    subagent.providerID,
+    subagent.modelID,
+    subagent.variant,
+  );
   const lines = [
     `🧩 ${t("subagent.line.task", { task: subagent.description })}`,
     t("subagent.line.agent", { agent: subagent.agent }),

@@ -51,6 +51,67 @@ describe("summary/subagent-formatter", () => {
     expect(text).not.toContain("Working:");
   });
 
+  describe("variant on the Model line", () => {
+    function buildCard(variant?: string) {
+      return {
+        cardId: "card-1",
+        sessionId: "child-1",
+        parentSessionId: "root-1",
+        agent: "explore",
+        description: "task description",
+        prompt: "task description",
+        status: "running" as const,
+        providerID: "openai",
+        modelID: "gpt-5.4",
+        ...(variant !== undefined ? { variant } : {}),
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        cost: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+    }
+
+    it("appends a non-empty variant in parentheses", async () => {
+      const text = await renderSubagentCard(buildCard("high"));
+
+      expect(text).toContain("Model: openai/gpt-5.4 (high)");
+      expect(text).toContain("Agent: explore");
+      expect(text).toContain("🧩 Task: task description");
+    });
+
+    it("keeps the Model line unchanged when variant is absent", async () => {
+      const text = await renderSubagentCard(buildCard());
+
+      expect(text).toContain("Model: openai/gpt-5.4");
+      expect(text).not.toContain("(");
+    });
+
+    it("omits an empty variant", async () => {
+      const text = await renderSubagentCard(buildCard(""));
+
+      expect(text).toContain("Model: openai/gpt-5.4");
+      expect(text).not.toContain("()");
+    });
+
+    it("shows a whitespace-only variant as-is", async () => {
+      const text = await renderSubagentCard(buildCard(" "));
+
+      expect(text).toContain("Model: openai/gpt-5.4 ( )");
+    });
+
+    it("shows the literal default variant", async () => {
+      const text = await renderSubagentCard(buildCard("default"));
+
+      expect(text).toContain("Model: openai/gpt-5.4 (default)");
+    });
+  });
+
   it("localizes labels and shows terminal completion state", async () => {
     setRuntimeLocale("ru");
 
