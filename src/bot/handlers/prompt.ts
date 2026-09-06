@@ -25,6 +25,7 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
 import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
+import { attachManager } from "../../app/managers/attach-manager.js";
 import {
   attachToSession,
   detachAttachedSession,
@@ -397,7 +398,9 @@ export async function processUserPrompt(
           logger.error("[Bot] session.promptAsync raw API error object:", error);
 
           // Send user-friendly error via API directly because ctx is no longer available
-          void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+          if (attachManager.isAttachedSession(currentSession.id)) {
+            void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+          }
           return;
         }
 
@@ -412,7 +415,9 @@ export async function processUserPrompt(
         logger.error("[Bot] session.promptAsync background task failed", promptErrorLogContext);
         logger.error("[Bot] session.promptAsync background failure details:", details);
         logger.error("[Bot] session.promptAsync raw background error object:", error);
-        void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+        if (attachManager.isAttachedSession(currentSession.id)) {
+          void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+        }
       },
     });
 

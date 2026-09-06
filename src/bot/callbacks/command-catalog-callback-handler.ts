@@ -19,6 +19,7 @@ import { t } from "../../i18n/index.js";
 import { cancelMenu } from "./feedback.js";
 import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
 import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
+import { attachManager } from "../../app/managers/attach-manager.js";
 import {
   attachToSession,
   detachAttachedSession,
@@ -312,7 +313,9 @@ export async function executeCommand(
           args,
         });
         logger.error("[Commands] session.command error details:", error);
-        void ctx.api.sendMessage(ctx.chat!.id, t("commands.execute_error")).catch(() => {});
+        if (attachManager.isAttachedSession(session.id)) {
+          void ctx.api.sendMessage(ctx.chat!.id, t("commands.execute_error")).catch(() => {});
+        }
         return;
       }
 
@@ -330,7 +333,9 @@ export async function executeCommand(
         args,
       });
       logger.error("[Commands] session.command background failure details:", error);
-      void ctx.api.sendMessage(ctx.chat!.id, t("commands.execute_error")).catch(() => {});
+      if (attachManager.isAttachedSession(session.id)) {
+        void ctx.api.sendMessage(ctx.chat!.id, t("commands.execute_error")).catch(() => {});
+      }
     },
   });
 }
