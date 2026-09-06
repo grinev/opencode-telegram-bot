@@ -25,6 +25,13 @@ const mocked = vi.hoisted(() => {
   const setCurrentAgentMock = vi.fn((agentName: string) => {
     currentAgent = agentName;
   });
+  const selectModelMock = vi.fn();
+  const getStoredModelMock = vi.fn(() => ({
+    providerID: "stored-provider",
+    modelID: "stored-model",
+    variant: "high",
+  }));
+  const setCurrentVariantMock = vi.fn();
 
   return {
     appAgentsMock,
@@ -33,6 +40,9 @@ const mocked = vi.hoisted(() => {
     getCurrentSessionMock,
     getCurrentAgentMock,
     setCurrentAgentMock,
+    selectModelMock,
+    getStoredModelMock,
+    setCurrentVariantMock,
     loggerDebugMock: vi.fn(),
     loggerErrorMock: vi.fn(),
     loggerInfoMock: vi.fn(),
@@ -70,6 +80,15 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: mocked.getCurrentSessionMock,
 }));
 
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
+  selectModel: mocked.selectModelMock,
+  getStoredModel: mocked.getStoredModelMock,
+}));
+
+vi.mock("../../../src/app/services/variant-selection-service.js", () => ({
+  setCurrentVariant: mocked.setCurrentVariantMock,
+}));
+
 vi.mock("../../../src/utils/logger.js", () => ({
   logger: {
     debug: mocked.loggerDebugMock,
@@ -79,10 +98,21 @@ vi.mock("../../../src/utils/logger.js", () => ({
   },
 }));
 
-import { fetchCurrentAgent, getAvailableAgents, resolveProjectAgent } from "../../../src/app/services/agent-selection-service.js";
+import {
+  applyAgentConfiguredSettings,
+  fetchCurrentAgent,
+  getAvailableAgents,
+  resolveProjectAgent,
+} from "../../../src/app/services/agent-selection-service.js";
 
 function createAgentResponse(
-  agents: Array<{ name: string; mode: "primary" | "all" | "subagent"; hidden?: boolean }>,
+  agents: Array<{
+    name: string;
+    mode: "primary" | "all" | "subagent";
+    hidden?: boolean;
+    model?: { modelID: string; providerID: string };
+    variant?: string;
+  }>,
 ) {
   return {
     data: agents,
@@ -98,6 +128,9 @@ describe("agent/manager", () => {
     mocked.getCurrentSessionMock.mockClear();
     mocked.getCurrentAgentMock.mockClear();
     mocked.setCurrentAgentMock.mockClear();
+    mocked.selectModelMock.mockReset();
+    mocked.getStoredModelMock.mockClear();
+    mocked.setCurrentVariantMock.mockReset();
     mocked.loggerDebugMock.mockReset();
     mocked.loggerErrorMock.mockReset();
     mocked.loggerInfoMock.mockReset();
@@ -189,5 +222,151 @@ describe("agent/manager", () => {
     expect(result).toBe("build");
     expect(mocked.setCurrentAgentMock).toHaveBeenCalledWith("build");
     expect(mocked.sessionMessagesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("applyAgentConfiguredSettings", () => {
+  beforeEach(() => {
+    mocked.appAgentsMock.mockReset();
+    mocked.selectModelMock.mockReset();
+    mocked.setCurrentVariantMock.mockReset();
+    mocked.getStoredModelMock.mockClear();
+    mocked.getStoredModelMock.mockReturnValue({
+      providerID: "stored-provider",
+      modelID: "stored-model",
+      variant: "high",
+    });
+    mocked.setCurrentProject({
+      id: "project-1",
+      worktree: "/workspace/project-1",
+      name: "project-1",
+    });
+  });
+
+  it("writes only the model and preserves the stored variant", async () => {
+    mocked.appAgentsMock.mockResolvedValue(
+      createAgentResponse([
+        {
+          name: "plan",
+          mode: "primary",
+          model: { providerID: "opencode-go", modelID: "kimi" },
+        },
+      ]),
+    );
+
+    const modelApplied = await applyAgentConfiguredSettings("plan");
+
+    expect(modelApplied).toBe(true);
+    expect(mocked.selectModelMock).toHaveBeenCalledWith({
+      providerID: "opencode-go",
+      modelID: "kimi",
+      variant: "high",
+    });
+    expect(mocked.setCurrentVariantMock).not.toHaveBeenCalled();
+  });
+
+  it("writes only the variant and leaves the model", async () => {
+    mocked.appAgentsMock.mockResolvedValue(
+      createAgentResponse([
+        {
+          name: "plan",
+          mode: "primary",
+          variant: "low",
+        },
+      ]),
+    );
+
+    const modelApplied = await applyAgentConfiguredSettings("plan");
+
+    expect(modelApplied).toBe(false);
+    expect(mocked.selectModelMock).not.toHaveBeenCalled();
+    expect(mocked.setCurrentVariantMock).toHaveBeenCalledWith("low");
+  });
+
+  it("writes both when the agent names model and variant", async () => {
+    mocked.appAgentsMock.mockResolvedValue(
+      createAgentResponse([
+        {
+          name: "plan",
+          mode: "primary",
+          model: { providerID: "opencode-go", modelID: "kimi" },
+          variant: "max",
+        },
+      ]),
+    );
+
+    const modelApplied = await applyAgentConfiguredSettings("plan");
+
+    expect(modelApplied).toBe(true);
+    expect(mocked.selectModelMock).toHaveBeenCalledWith({
+      providerID: "opencode-go",
+      modelID: "kimi",
+      variant: "max",
+    });
+    expect(mocked.setCurrentVariantMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves setters untouched when the agent names neither", async () => {
+    mocked.appAgentsMock.mockResolvedValue(
+      createAgentResponse([{ name: "plan", mode: "primary" }]),
+    );
+
+    const modelApplied = await applyAgentConfiguredSettings("plan");
+
+    expect(modelApplied).toBe(false);
+    expect(mocked.selectModelMock).not.toHaveBeenCalled();
+    expect(mocked.setCurrentVariantMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves setters untouched when the listing fails", async () => {
+    mocked.appAgentsMock.mockResolvedValue({ data: null, error: { message: "unavailable" } });
+
+    const modelApplied = await applyAgentConfiguredSettings("plan");
+
+    expect(modelApplied).toBe(false);
+    expect(mocked.selectModelMock).not.toHaveBeenCalled();
+    expect(mocked.setCurrentVariantMock).not.toHaveBeenCalled();
+  });
+
+  it("treats empty model provider or id as unset", async () => {
+    mocked.appAgentsMock.mockResolvedValue(
+      createAgentResponse([
+        {
+          name: "plan",
+          mode: "primary",
+          model: { providerID: "", modelID: "kimi" },
+          variant: "low",
+        },
+      ]),
+    );
+
+    const modelApplied = await applyAgentConfiguredSettings("plan");
+
+    expect(modelApplied).toBe(false);
+    expect(mocked.selectModelMock).not.toHaveBeenCalled();
+    expect(mocked.setCurrentVariantMock).toHaveBeenCalledWith("low");
+  });
+
+  it("treats an empty variant string as unset and does not overwrite the stored variant", async () => {
+    mocked.appAgentsMock.mockResolvedValue(
+      createAgentResponse([
+        {
+          name: "plan",
+          mode: "primary",
+          model: { providerID: "opencode-go", modelID: "kimi" },
+          variant: "",
+        },
+      ]),
+    );
+
+    const modelApplied = await applyAgentConfiguredSettings("plan");
+
+    expect(modelApplied).toBe(true);
+    expect(mocked.selectModelMock).toHaveBeenCalledWith({
+      providerID: "opencode-go",
+      modelID: "kimi",
+      variant: "high",
+    });
+    expect(mocked.setCurrentVariantMock).not.toHaveBeenCalled();
   });
 });

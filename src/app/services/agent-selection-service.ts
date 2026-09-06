@@ -1,6 +1,8 @@
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentAgent, getCurrentProject, setCurrentAgent } from "../stores/settings-store.js";
 import { getCurrentSession } from "./session-service.js";
+import { getStoredModel, selectModel } from "./model-selection-service.js";
+import { setCurrentVariant } from "./variant-selection-service.js";
 import { logger } from "../../utils/logger.js";
 import type { AgentInfo } from "../types/agent.js";
 
@@ -140,6 +142,61 @@ export async function fetchCurrentAgent(): Promise<string> {
 export function selectAgent(agentName: string): void {
   logger.info(`[AgentManager] Selected agent: ${agentName}`);
   setCurrentAgent(agentName);
+}
+
+function configuredField(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Apply the listed agent's configured model and/or variant to current settings.
+ * Independent fields: a missing or empty one is left as it is. Used only by the
+ * agent picker — selectAgent itself stays a name write.
+ * @returns true when a model was written (so the pinned dashboard can follow)
+ */
+export async function applyAgentConfiguredSettings(agentName: string): Promise<boolean> {
+  try {
+    const agents = await getAvailableAgents();
+    const agent = agents.find((entry) => entry.name === agentName);
+    if (!agent) {
+      logger.warn(
+        `[AgentManager] Could not read configured model/variant for agent "${agentName}"; leaving them unchanged`,
+      );
+      return false;
+    }
+
+    const providerID = configuredField(agent.model?.providerID);
+    const modelID = configuredField(agent.model?.modelID);
+    const variant = configuredField(agent.variant);
+    const hasModel = Boolean(providerID && modelID);
+
+    if (hasModel && providerID && modelID) {
+      const storedVariant = variant ?? getStoredModel().variant ?? "default";
+      selectModel({
+        providerID,
+        modelID,
+        variant: storedVariant,
+      });
+      logger.info(
+        `[AgentManager] Applied agent "${agentName}" model ${providerID}/${modelID} (${storedVariant})`,
+      );
+      return true;
+    }
+
+    if (variant) {
+      setCurrentVariant(variant);
+      logger.info(`[AgentManager] Applied agent "${agentName}" variant ${variant}`);
+    }
+
+    return false;
+  } catch (err) {
+    logger.warn(
+      `[AgentManager] Failed to apply configured model/variant for agent "${agentName}"; leaving them unchanged`,
+      err,
+    );
+    return false;
+  }
 }
 
 /**
