@@ -148,6 +148,12 @@ Model picker behavior:
 - Picking a model opens the variant picker right after the confirmation when the model offers
   more than one selectable variant; a model with only `Default` ends at the confirmation
 
+Agent picker behavior:
+
+- Picking an agent applies that agent's configured model and/or variant when the agent names
+  them; a field the agent does not name is left as it is. This is not a model pick and does
+  not open the variant menu
+
 ### Main features already implemented
 
 - [x] Single-user access control by allowed Telegram user ID

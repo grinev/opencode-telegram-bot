@@ -1,5 +1,8 @@
 import { Context } from "grammy";
-import { selectAgent } from "../../app/services/agent-selection-service.js";
+import {
+  applyAgentConfiguredSettings,
+  selectAgent,
+} from "../../app/services/agent-selection-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { getAgentDisplayName } from "../../app/types/agent.js";
@@ -41,13 +44,11 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
 
     const agentName = callbackQuery.data.replace("agent:", "");
 
-    // Select agent and persist
     selectAgent(agentName);
+    const modelApplied = await applyAgentConfiguredSettings(agentName);
 
-    // Update keyboard manager state
     keyboardManager.updateAgent(agentName);
 
-    // Update Reply Keyboard with new agent, current model, and context
     const currentModel = getStoredModel();
     const contextInfo =
       pinnedMessageManager.getContextInfo() ??
@@ -73,8 +74,11 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
 
     clearActiveInlineMenu("agent_selected");
 
-    // Send confirmation message with updated keyboard, then drop the inline menu
     await switched(ctx, t("agent.changed_message", { name: displayName }), keyboard);
+
+    if (modelApplied) {
+      await pinnedMessageManager.refresh();
+    }
 
     return true;
   } catch (err) {
