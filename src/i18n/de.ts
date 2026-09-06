@@ -67,7 +67,7 @@ export const de: I18nDictionary = {
   "bot.thinking": "💭 Denke...",
   "progress.compact.activity": "{header}\n{activity}",
   "progress.compact.working_header": "⏳ Arbeite",
-  "progress.compact.finished_header": "✅ Arbeit abgeschlossen",
+  "progress.compact.finished_header": "✅ Antwort abgeschlossen",
   "progress.compact.thinking": "💭 Denke...",
   "progress.compact.responding": "✍️ Schreibe Antwort...",
   "progress.compact.waiting_question": "❓ Warte auf deine Antwort...",
@@ -420,11 +420,10 @@ export const de: I18nDictionary = {
   "keyboard.variant": "💭 {name}",
   "keyboard.variant_default": "💡 Standard",
   "keyboard.queued_prompt": "❌ {index}. {text}",
-  "queue.added":
-    "📥 Zur Warteschlange hinzugefügt ({count}/{max}). Die Nachricht wird gesendet, sobald die aktuelle Aufgabe abgeschlossen ist.",
+  "queue.added": "📥 Wird an OpenCodes Warteschlange übermittelt.",
   "queue.media_limit": "⚠️ Medien in der Warteschlange sind auf {maxSizeMb} MiB begrenzt. Warte, bis ein Eintrag gesendet wurde.",
   "queue.full":
-    "⚠️ Die Warteschlange ist voll ({max}). Entferne eine Nachricht oder warte, bis die aktuelle Aufgabe abgeschlossen ist.",
+    "⚠️ Die Warteschlange ausstehender Übermittlungen ist voll ({max}). Entferne eine Nachricht oder versuche es gleich erneut.",
   "queue.removed": "🗑 Nachricht aus der Warteschlange entfernt.",
   "queue.not_found": "Diese Nachricht ist nicht mehr in der Warteschlange.",
   "queue.disabled_hint": "Die Nachrichtenwarteschlange lässt sich in /settings aktivieren.",

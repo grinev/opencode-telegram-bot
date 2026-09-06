@@ -94,10 +94,7 @@ export async function tryEnqueuePrompt(ctx: Context, input: QueuedPromptInput): 
   logger.info(
     `[PromptQueue] Prompt queued while session is busy: size=${promptQueue.size()}/${MAX_QUEUED_PROMPTS}`,
   );
-  await replyWithKeyboard(
-    ctx,
-    t("queue.added", { count: String(promptQueue.size()), max: String(MAX_QUEUED_PROMPTS) }),
-  );
+  await replyWithKeyboard(ctx, t("queue.added"));
   return true;
 }
 

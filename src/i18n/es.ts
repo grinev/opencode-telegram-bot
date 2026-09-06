@@ -67,7 +67,7 @@ export const es: I18nDictionary = {
   "bot.thinking": "💭 Pensando...",
   "progress.compact.activity": "{header}\n{activity}",
   "progress.compact.working_header": "⏳ Trabajando",
-  "progress.compact.finished_header": "✅ Trabajo terminado",
+  "progress.compact.finished_header": "✅ Respuesta completada",
   "progress.compact.thinking": "💭 Pensando...",
   "progress.compact.responding": "✍️ Escribiendo respuesta...",
   "progress.compact.waiting_question": "❓ Esperando tu respuesta...",
@@ -417,11 +417,10 @@ export const es: I18nDictionary = {
   "keyboard.variant": "💭 {name}",
   "keyboard.variant_default": "💡 Predeterminado",
   "keyboard.queued_prompt": "❌ {index}. {text}",
-  "queue.added":
-    "📥 Añadido a la cola ({count}/{max}). Se enviará cuando termine la tarea actual.",
+  "queue.added": "📥 Enviando a la cola de OpenCode.",
   "queue.media_limit": "⚠️ Los archivos multimedia en cola están limitados a {maxSizeMb} MiB. Espera a que se envíe un elemento.",
   "queue.full":
-    "⚠️ La cola está llena ({max}). Elimina un mensaje o espera a que termine la tarea actual.",
+    "⚠️ La cola de envíos pendientes está llena ({max}). Elimina un mensaje o inténtalo de nuevo en breve.",
   "queue.removed": "🗑 Mensaje eliminado de la cola.",
   "queue.not_found": "Este mensaje ya no está en la cola.",
   "queue.disabled_hint": "La cola de mensajes se activa en /settings.",

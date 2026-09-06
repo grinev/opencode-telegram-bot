@@ -21,7 +21,7 @@ describe("bot/streaming/compact-progress-streamer", () => {
     expect(editText).toHaveBeenCalledWith(
       "s1",
       10,
-      "✅ Finished Work\ntool calls: 0 · changed files: 0",
+      "✅ Response complete\ntool calls: 0 · changed files: 0",
     );
   });
 
@@ -67,7 +67,7 @@ describe("bot/streaming/compact-progress-streamer", () => {
     expect(editText).toHaveBeenCalledWith(
       "s1",
       10,
-      "✅ Finished Work\ntool calls: 0 · changed files: 0",
+      "✅ Response complete\ntool calls: 0 · changed files: 0",
     );
   });
 
@@ -104,7 +104,7 @@ describe("bot/streaming/compact-progress-streamer", () => {
       2,
       "s1",
       10,
-      "✅ Finished Work\ntool calls: 1 · changed files: 0",
+      "✅ Response complete\ntool calls: 1 · changed files: 0",
     );
   });
 
@@ -126,7 +126,7 @@ describe("bot/streaming/compact-progress-streamer", () => {
     expect(sendText).toHaveBeenCalledTimes(1);
     expect(sendText).toHaveBeenCalledWith(
       "s1",
-      "✅ Finished Work\ntool calls: 2 · changed files: 2",
+      "✅ Response complete\ntool calls: 2 · changed files: 2",
     );
     expect(editText).not.toHaveBeenCalled();
   });

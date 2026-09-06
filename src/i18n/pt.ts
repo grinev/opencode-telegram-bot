@@ -66,7 +66,7 @@ export const pt: I18nDictionary = {
   "bot.thinking": "💭 Pensando...",
   "progress.compact.activity": "{header}\n{activity}",
   "progress.compact.working_header": "⏳ Trabalhando",
-  "progress.compact.finished_header": "✅ Trabalho concluído",
+  "progress.compact.finished_header": "✅ Resposta concluída",
   "progress.compact.thinking": "💭 Pensando...",
   "progress.compact.responding": "✍️ Escrevendo resposta...",
   "progress.compact.waiting_question": "❓ Aguardando sua resposta...",
@@ -418,11 +418,10 @@ export const pt: I18nDictionary = {
   "keyboard.variant": "💭 {name}",
   "keyboard.variant_default": "💡 Padrão",
   "keyboard.queued_prompt": "❌ {index}. {text}",
-  "queue.added":
-    "📥 Adicionado à fila ({count}/{max}). Será enviado quando a tarefa atual terminar.",
+  "queue.added": "📥 Enviando para a fila do OpenCode.",
   "queue.media_limit": "⚠️ A mídia na fila está limitada a {maxSizeMb} MiB. Aguarde o envio de um item.",
   "queue.full":
-    "⚠️ A fila está cheia ({max}). Remova uma mensagem ou aguarde o término da tarefa atual.",
+    "⚠️ A fila de envios pendentes está cheia ({max}). Remova uma mensagem ou tente novamente em breve.",
   "queue.removed": "🗑 Mensagem removida da fila.",
   "queue.not_found": "Esta mensagem não está mais na fila.",
   "queue.disabled_hint": "A fila de mensagens pode ser ativada em /settings.",

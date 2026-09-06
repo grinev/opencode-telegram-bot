@@ -67,7 +67,7 @@ export const fr: I18nDictionary = {
   "bot.thinking": "💭 Réflexion en cours...",
   "progress.compact.activity": "{header}\n{activity}",
   "progress.compact.working_header": "⏳ Travail en cours",
-  "progress.compact.finished_header": "✅ Travail terminé",
+  "progress.compact.finished_header": "✅ Réponse terminée",
   "progress.compact.thinking": "💭 Réflexion en cours...",
   "progress.compact.responding": "✍️ Rédaction de la réponse...",
   "progress.compact.waiting_question": "❓ En attente de votre réponse...",
@@ -421,11 +421,10 @@ export const fr: I18nDictionary = {
   "keyboard.variant": "💭 {name}",
   "keyboard.variant_default": "💡 Par défaut",
   "keyboard.queued_prompt": "❌ {index}. {text}",
-  "queue.added":
-    "📥 Ajouté à la file d'attente ({count}/{max}). Le message sera envoyé à la fin de la tâche en cours.",
+  "queue.added": "📥 Envoi vers la file d'attente d'OpenCode.",
   "queue.media_limit": "⚠️ Les médias en file sont limités à {maxSizeMb} MiB. Attendez l'envoi d'un élément.",
   "queue.full":
-    "⚠️ La file d'attente est pleine ({max}). Supprimez un message ou attendez la fin de la tâche en cours.",
+    "⚠️ La file des envois en attente est pleine ({max}). Supprimez un message ou réessayez bientôt.",
   "queue.removed": "🗑 Message retiré de la file d'attente.",
   "queue.not_found": "Ce message n'est plus dans la file d'attente.",
   "queue.disabled_hint": "La file d'attente des messages s'active dans /settings.",
