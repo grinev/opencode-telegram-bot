@@ -525,6 +525,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     this.sessionCompletionTasks.clear();
     this.clearToolElapsedState(null, reason);
     assistantRunState.clearAll(reason);
+    externalUserInputSuppressionManager.clearAll();
   };
 
   cleanup(reason: string): void {
@@ -707,7 +708,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       });
     });
 
-    summaryAggregator.setOnExternalUserInput(async (sessionId, _messageId, messageText) => {
+    summaryAggregator.setOnExternalUserInput(async (sessionId, messageId, messageText) => {
       void this.enqueueSessionCompletionTask(sessionId, async () => {
         if (!this.botInstance || !this.chatIdInstance) {
           return;
@@ -719,9 +720,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             chatId: this.chatIdInstance,
             currentSessionId: getCurrentSession()?.id ?? null,
             sessionId,
+            messageId,
             text: messageText,
-            consumeSuppressedInput: (incomingSessionId, incomingText) =>
-              externalUserInputSuppressionManager.consume(incomingSessionId, incomingText),
+            consumeSuppressedInput: (incomingSessionId, incomingMessageId, incomingText) =>
+              externalUserInputSuppressionManager.consumeMessage(
+                incomingSessionId,
+                incomingMessageId,
+                incomingText,
+              ),
           });
         } catch (err) {
           logger.error("[Bot] Failed to deliver external user input to Telegram:", err);
@@ -1164,6 +1170,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
       clearPromptResponseMode(sessionId);
+      externalUserInputSuppressionManager.clearSession(sessionId);
 
       if (!this.botInstance || !this.chatIdInstance) {
         foregroundSessionState.markIdle(sessionId);

@@ -1,6 +1,7 @@
 import { Bot, Context } from "grammy";
 import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2";
 import type { Model } from "@opencode-ai/sdk/v2";
+import { randomUUID } from "node:crypto";
 import { opencodeClient } from "../../opencode/client.js";
 import {
   clearSession,
@@ -370,10 +371,8 @@ export async function processUserPrompt(
       configuredModelID: storedModel.modelID,
     });
     setPromptResponseMode(currentSession.id, responseMode);
-
-    if (preparedInput.text.trim().length > 0) {
-      externalUserInputSuppressionManager.register(currentSession.id, preparedInput.text);
-    }
+    const promptMessageId = randomUUID();
+    externalUserInputSuppressionManager.registerMessage(currentSession.id, promptMessageId);
 
     // CRITICAL: Use the async prompt start endpoint here.
     // session.prompt streams the full assistant response and can outlive the original
@@ -382,13 +381,15 @@ export async function processUserPrompt(
     // The actual assistant result still arrives via the SSE event subscription.
     safeBackgroundTask({
       taskName: "session.promptAsync",
-      task: () => opencodeClient.session.promptAsync(promptOptions),
+      task: () =>
+        opencodeClient.session.promptAsync({ ...promptOptions, messageID: promptMessageId }),
       onSuccess: ({ error }) => {
         if (error) {
           foregroundSessionState.markIdle(currentSession.id);
           void markAttachedSessionIdle(currentSession.id);
           assistantRunState.clearRun(currentSession.id, "session_prompt_api_error");
           clearPromptResponseMode(currentSession.id);
+          externalUserInputSuppressionManager.discardMessage(currentSession.id, promptMessageId);
           const details = formatErrorDetails(error, 6000);
           logger.error(
             "[Bot] OpenCode API returned an error for session.promptAsync",
@@ -407,10 +408,6 @@ export async function processUserPrompt(
         logger.info("[Bot] session.promptAsync accepted");
       },
       onError: (error) => {
-        foregroundSessionState.markIdle(currentSession.id);
-        void markAttachedSessionIdle(currentSession.id);
-        assistantRunState.clearRun(currentSession.id, "session_prompt_background_error");
-        clearPromptResponseMode(currentSession.id);
         const details = formatErrorDetails(error, 6000);
         logger.error("[Bot] session.promptAsync background task failed", promptErrorLogContext);
         logger.error("[Bot] session.promptAsync background failure details:", details);

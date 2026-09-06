@@ -892,7 +892,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       const { api, summaryAggregator } = await setupService();
       const { externalUserInputSuppressionManager } =
         await import("../../../src/app/managers/external-input-suppression-manager.js");
-      externalUserInputSuppressionManager.register("session-1", "sent from Telegram");
+      externalUserInputSuppressionManager.registerMessage("session-1", "user-message-1");
 
       emitExternalUserMessage(summaryAggregator, "sent from Telegram");
       await settle();

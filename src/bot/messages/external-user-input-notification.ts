@@ -1,6 +1,7 @@
 import type { Api, RawApi } from "grammy";
 import {
   buildExternalUserInputNotification,
+  type ConsumeSuppressedInput,
   type ExternalUserInputNotification,
 } from "../../app/services/external-user-input-service.js";
 import { sendBotText } from "./telegram-text.js";
@@ -12,8 +13,9 @@ interface DeliverExternalUserInputParams {
   chatId: number;
   currentSessionId: string | null;
   sessionId: string;
+  messageId: string;
   text: string;
-  consumeSuppressedInput: (sessionId: string, text: string) => boolean;
+  consumeSuppressedInput: ConsumeSuppressedInput;
 }
 
 async function sendExternalUserInputNotification(
@@ -35,6 +37,7 @@ export async function deliverExternalUserInputNotification({
   chatId,
   currentSessionId,
   sessionId,
+  messageId,
   text,
   consumeSuppressedInput,
 }: DeliverExternalUserInputParams): Promise<boolean> {
@@ -43,7 +46,7 @@ export async function deliverExternalUserInputNotification({
     return false;
   }
 
-  if (consumeSuppressedInput(sessionId, text)) {
+  if (consumeSuppressedInput(sessionId, messageId, text)) {
     return false;
   }
 

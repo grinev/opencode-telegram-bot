@@ -44,6 +44,7 @@ describe("bot/messages/external-user-input-notification", () => {
       chatId: 777,
       currentSessionId: "session-1",
       sessionId: "session-1",
+      messageId: "message-1",
       text: "Review the parser",
       consumeSuppressedInput: vi.fn().mockReturnValue(false),
     });
@@ -66,12 +67,17 @@ describe("bot/messages/external-user-input-notification", () => {
       chatId: 777,
       currentSessionId: "session-1",
       sessionId: "session-1",
+      messageId: "message-1",
       text: "Review the parser",
       consumeSuppressedInput,
     });
 
     expect(delivered).toBe(false);
-    expect(consumeSuppressedInput).toHaveBeenCalledWith("session-1", "Review the parser");
+    expect(consumeSuppressedInput).toHaveBeenCalledWith(
+      "session-1",
+      "message-1",
+      "Review the parser",
+    );
     expect(mocked.sendBotTextMock).not.toHaveBeenCalled();
   });
 
@@ -81,6 +87,7 @@ describe("bot/messages/external-user-input-notification", () => {
       chatId: 777,
       currentSessionId: "session-2",
       sessionId: "session-1",
+      messageId: "message-1",
       text: "Review the parser",
       consumeSuppressedInput: vi.fn().mockReturnValue(false),
     });

@@ -8,6 +8,12 @@ export interface ExternalUserInputNotification {
   rawFallbackText: string;
 }
 
+export type ConsumeSuppressedInput = (
+  sessionId: string,
+  messageId: string,
+  text: string,
+) => boolean;
+
 function normalizeExternalUserInputText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
 }
