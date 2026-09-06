@@ -109,7 +109,7 @@ Current command set:
 - `/status` - bot version, server, project, and session status
 - `/new` - create a new session
 - `/abort` - stop the current task
-- `/detach` - detach the bot from the current session without stopping it
+- `/detach` - detach the bot from the current session without stopping it; a later command or prompt HTTP failure for that session is not posted to chat unless the bot has re-attached to it
 - `/sessions` - show and switch recent sessions
 - `/messages` - browse user messages in the current session
 - `/projects` - show and switch projects

@@ -7,8 +7,10 @@ import {
   type ProcessPromptDeps,
 } from "../../../src/bot/handlers/prompt.js";
 import { promptAttachment } from "../../../src/app/managers/prompt-attachment-manager.js";
+import { attachManager } from "../../../src/app/managers/attach-manager.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { t } from "../../../src/i18n/index.js";
+import { logger } from "../../../src/utils/logger.js";
 
 const mocked = vi.hoisted(() => ({
   resolvePendingAttachmentMock: vi.fn(),
@@ -196,6 +198,8 @@ function getScheduledBackgroundTask(): {
 
 describe("bot/handlers/prompt", () => {
   beforeEach(() => {
+    attachManager.__resetForTests();
+    attachManager.attach("session-1", "D:\\Projects\\Repo");
     mocked.currentProject = { id: "project-1", worktree: "D:\\Projects\\Repo" };
     mocked.currentSession = {
       id: "session-1",
@@ -305,6 +309,85 @@ describe("bot/handlers/prompt", () => {
     await backgroundTask.task().catch((error) => {
       backgroundTask.onError?.(error);
     });
+
+    expect(deps.bot.api.sendMessage).toHaveBeenCalledWith(
+      777,
+      "Failed to send request to OpenCode.",
+    );
+  });
+
+  it("does not notify the user when promptAsync reports an error after detach", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    attachManager.clear("test_detach");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("request start failed") });
+
+    expect(deps.bot.api.sendMessage).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not notify the user when promptAsync rejects after detach", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    attachManager.clear("test_detach");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    const startError = new Error("network down");
+    mocked.sessionPromptAsyncMock.mockRejectedValueOnce(startError);
+
+    await backgroundTask.task().catch((error) => {
+      backgroundTask.onError?.(error);
+    });
+
+    expect(deps.bot.api.sendMessage).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not notify the user when promptAsync fails while attached to another session", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    attachManager.attach("session-2", "D:\\Projects\\Repo");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("request start failed") });
+
+    expect(deps.bot.api.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("still notifies the user when promptAsync fails after re-attach to the same session", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    attachManager.clear("test_detach");
+    attachManager.attach("session-1", "D:\\Projects\\Repo");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("request start failed") });
 
     expect(deps.bot.api.sendMessage).toHaveBeenCalledWith(
       777,
