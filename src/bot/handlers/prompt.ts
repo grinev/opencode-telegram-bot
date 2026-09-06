@@ -45,13 +45,22 @@ import {
   supportsInput,
 } from "../../app/services/model-capabilities-service.js";
 import type { IncomingPrompt } from "../../app/types/prompt.js";
+import {
+  consumePromptResponseMode,
+  setPromptResponseMode,
+  type PromptResponseMode,
+} from "../../app/managers/prompt-response-mode-manager.js";
+
+export {
+  clearPromptResponseMode,
+  consumePromptResponseMode,
+  setPromptResponseMode,
+  type PromptResponseMode,
+} from "../../app/managers/prompt-response-mode-manager.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
-const promptResponseModes = new Map<string, PromptResponseMode>();
-
-export type PromptResponseMode = "text_only" | "text_and_tts";
 
 type ProcessPromptOptions = {
   responseMode?: PromptResponseMode;
@@ -65,18 +74,9 @@ export function getPromptChatId(): number | null {
   return chatIdInstance;
 }
 
-export function setPromptResponseMode(sessionId: string, responseMode: PromptResponseMode): void {
-  promptResponseModes.set(sessionId, responseMode);
-}
-
-export function clearPromptResponseMode(sessionId: string): void {
-  promptResponseModes.delete(sessionId);
-}
-
-export function consumePromptResponseMode(sessionId: string): PromptResponseMode | null {
-  const responseMode = promptResponseModes.get(sessionId) ?? null;
-  promptResponseModes.delete(sessionId);
-  return responseMode;
+export function discardPromptDeliveryState(sessionId: string, messageId: string): void {
+  consumePromptResponseMode(sessionId, messageId);
+  externalUserInputSuppressionManager.discardMessage(sessionId, messageId);
 }
 
 async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
@@ -370,8 +370,8 @@ export async function processUserPrompt(
       configuredProviderID: storedModel.providerID,
       configuredModelID: storedModel.modelID,
     });
-    setPromptResponseMode(currentSession.id, responseMode);
     const promptMessageId = randomUUID();
+    setPromptResponseMode(currentSession.id, promptMessageId, responseMode);
     externalUserInputSuppressionManager.registerMessage(currentSession.id, promptMessageId);
 
     // CRITICAL: Use the async prompt start endpoint here.
@@ -388,8 +388,7 @@ export async function processUserPrompt(
           foregroundSessionState.markIdle(currentSession.id);
           void markAttachedSessionIdle(currentSession.id);
           assistantRunState.clearRun(currentSession.id, "session_prompt_api_error");
-          clearPromptResponseMode(currentSession.id);
-          externalUserInputSuppressionManager.discardMessage(currentSession.id, promptMessageId);
+          discardPromptDeliveryState(currentSession.id, promptMessageId);
           const details = formatErrorDetails(error, 6000);
           logger.error(
             "[Bot] OpenCode API returned an error for session.promptAsync",

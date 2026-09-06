@@ -421,7 +421,8 @@ describe("bot/handlers/prompt", () => {
     const handled = await processUserPrompt(createContext(), "Review README", createDeps());
 
     expect(handled).toBe(true);
-    expect(consumePromptResponseMode("session-1")).toBe("text_only");
+    const messageId = mocked.suppressionRegisterMock.mock.calls[0]?.[1] as string;
+    expect(consumePromptResponseMode("session-1", messageId)).toBe("text_only");
   });
 
   it("uses plural placeholder text for multiple file-only prompts", async () => {

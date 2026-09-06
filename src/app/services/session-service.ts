@@ -7,6 +7,7 @@ import { promptQueue } from "../managers/prompt-queue-manager.js";
 import { promptAttachment } from "../managers/prompt-attachment-manager.js";
 import type { SessionInfo } from "../types/session.js";
 import { externalUserInputSuppressionManager } from "../managers/external-input-suppression-manager.js";
+import { clearPromptResponseMode } from "../managers/prompt-response-mode-manager.js";
 
 export type { SessionInfo };
 
@@ -19,6 +20,7 @@ export function setCurrentSession(sessionInfo: SessionInfo): void {
     promptAttachment.clear("session_switched");
     if (previousSessionId) {
       externalUserInputSuppressionManager.clearSession(previousSessionId);
+      clearPromptResponseMode(previousSessionId);
     }
   }
 
@@ -35,6 +37,7 @@ export function clearSession(): void {
   promptAttachment.clear("session_cleared");
   if (previousSessionId) {
     externalUserInputSuppressionManager.clearSession(previousSessionId);
+    clearPromptResponseMode(previousSessionId);
   }
   clearSettingsSession();
 }
