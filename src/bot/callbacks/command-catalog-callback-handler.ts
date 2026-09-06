@@ -27,6 +27,7 @@ import {
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
 import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
+import { randomUUID } from "node:crypto";
 import { opencodeClient } from "../../opencode/client.js";
 import {
   buildCommandsConfirmKeyboard,
@@ -285,16 +286,15 @@ export async function executeCommand(
     configuredProviderID: storedModel.providerID,
     configuredModelID: storedModel.modelID,
   });
-  externalUserInputSuppressionManager.register(
-    session.id,
-    args ? `/${params.commandName} ${args}` : `/${params.commandName}`,
-  );
+  const promptMessageId = randomUUID();
+  externalUserInputSuppressionManager.registerMessage(session.id, promptMessageId);
 
   safeBackgroundTask({
     taskName: "session.command",
     task: () =>
       opencodeClient.session.command({
         sessionID: session.id,
+        messageID: promptMessageId,
         directory: session.directory,
         command: params.commandName,
         arguments: args,
@@ -307,6 +307,7 @@ export async function executeCommand(
         foregroundSessionState.markIdle(session.id);
         void markAttachedSessionIdle(session.id);
         assistantRunState.clearRun(session.id, "session_command_api_error");
+        externalUserInputSuppressionManager.discardMessage(session.id, promptMessageId);
         logger.error("[Commands] OpenCode API returned an error for session.command", {
           sessionId: session.id,
           command: params.commandName,

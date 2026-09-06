@@ -5,6 +5,7 @@ import { reconcileForegroundBusyState } from "../../app/services/run-control-ser
 import {
   canQueueMediaPrompt,
   rejectQueuedMediaBeforePreparation,
+  dispatchNextQueuedPrompt,
   shouldSuggestPromptQueue,
   tryEnqueuePrompt,
 } from "../handlers/prompt-queue-dispatch.js";
@@ -12,6 +13,7 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { getIncomingPrompt } from "../handlers/rich-message-handler.js";
 import type { LocalCommandRegistry } from "../../app/services/local-command-registry.js";
+import { telegramInputOrderManager } from "../../app/managers/telegram-input-order-manager.js";
 
 function getInteractionBlockedMessage(
   reason: BlockReason | undefined,
@@ -143,6 +145,9 @@ export async function interactionGuardMiddleware(
   );
 
   if (isQueueableInput && incomingPrompt) {
+    if (ctx.chat && ctx.message?.message_id !== undefined) {
+      await telegramInputOrderManager.waitForEarlier(ctx.chat.id, ctx.message.message_id);
+    }
     const mediaBytes = getQueuedPhotoMediaBytes(incomingPrompt);
     if (incomingPrompt.photos.length > 0) {
       if (await rejectQueuedMediaBeforePreparation(ctx, mediaBytes)) {
