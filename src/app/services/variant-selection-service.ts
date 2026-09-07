@@ -3,6 +3,7 @@
  */
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentModel, setCurrentModel } from "../stores/settings-store.js";
+import { getStoredModel } from "./model-selection-service.js";
 import { logger } from "../../utils/logger.js";
 import type { VariantInfo } from "../types/variant.js";
 
@@ -79,15 +80,17 @@ export function getCurrentVariant(): string {
  * @param variantId Variant ID to set
  */
 export function setCurrentVariant(variantId: string): void {
-  const currentModel = getCurrentModel();
+  const currentModel = getStoredModel();
 
-  if (!currentModel) {
+  if (!currentModel.providerID || !currentModel.modelID) {
     logger.warn("[VariantManager] Cannot set variant: no current model");
     return;
   }
 
-  currentModel.variant = variantId;
-  setCurrentModel(currentModel);
+  setCurrentModel({
+    ...currentModel,
+    variant: variantId,
+  });
   logger.info(`[VariantManager] Variant set to: ${variantId}`);
 }
 

@@ -223,4 +223,64 @@ describe("bot/commands/status-command", () => {
     expect(replyText).toContain("Use /opencode_start to start the server.");
     expect(replyText).not.toContain("OpenCode version:");
   });
+
+  it("appends a named variant on the Model line", async () => {
+    mocked.fetchCurrentModelMock.mockReturnValue({
+      providerID: "openai",
+      modelID: "gpt-5",
+      variant: "low",
+    });
+
+    const ctx = {
+      chat: { id: 42, type: "private" },
+      message: { text: "/status" },
+      api: {},
+      reply: vi.fn(),
+    } as unknown as Context;
+
+    await statusCommand(ctx as never);
+
+    const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
+    expect(message).toContain("Model: 🧠 openai/gpt-5 (low)");
+  });
+
+  it("shows (default) when the current variant is default", async () => {
+    mocked.fetchCurrentModelMock.mockReturnValue({
+      providerID: "openai",
+      modelID: "gpt-5",
+      variant: "default",
+    });
+
+    const ctx = {
+      chat: { id: 42, type: "private" },
+      message: { text: "/status" },
+      api: {},
+      reply: vi.fn(),
+    } as unknown as Context;
+
+    await statusCommand(ctx as never);
+
+    const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
+    expect(message).toContain("Model: 🧠 openai/gpt-5 (default)");
+  });
+
+  it("omits parentheses when the model has no variant", async () => {
+    mocked.fetchCurrentModelMock.mockReturnValue({
+      providerID: "openai",
+      modelID: "gpt-5",
+    });
+
+    const ctx = {
+      chat: { id: 42, type: "private" },
+      message: { text: "/status" },
+      api: {},
+      reply: vi.fn(),
+    } as unknown as Context;
+
+    await statusCommand(ctx as never);
+
+    const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
+    expect(message).toContain("Model: 🧠 openai/gpt-5");
+    expect(message).not.toContain("gpt-5 (");
+  });
 });

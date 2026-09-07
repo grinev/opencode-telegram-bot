@@ -710,7 +710,11 @@ class PinnedMessageManager {
    */
   private formatMessage(): string {
     const currentModel = getStoredModel();
-    const modelName = formatModelDisplayName(currentModel.providerID, currentModel.modelID);
+    const modelName = formatModelDisplayName(
+      currentModel.providerID,
+      currentModel.modelID,
+      currentModel.variant,
+    );
     const projectDisplayName = this.state.projectBranch
       ? `${this.state.projectPath}: ${this.state.projectBranch}`
       : this.state.projectPath;

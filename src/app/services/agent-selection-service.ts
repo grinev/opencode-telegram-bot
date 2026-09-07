@@ -153,7 +153,7 @@ function configuredField(value: string | undefined): string | undefined {
  * Apply the listed agent's configured model and/or variant to current settings.
  * Independent fields: a missing or empty one is left as it is. Used only by the
  * agent picker — selectAgent itself stays a name write.
- * @returns true when a model was written (so the pinned dashboard can follow)
+ * @returns true when a model or variant was written (so the pinned dashboard can follow)
  */
 export async function applyAgentConfiguredSettings(agentName: string): Promise<boolean> {
   try {
@@ -187,6 +187,7 @@ export async function applyAgentConfiguredSettings(agentName: string): Promise<b
     if (variant) {
       setCurrentVariant(variant);
       logger.info(`[AgentManager] Applied agent "${agentName}" variant ${variant}`);
+      return true;
     }
 
     return false;

@@ -38,7 +38,10 @@ export async function statusCommand(ctx: CommandContext<Context>) {
 
     // Add model information
     const currentModel = fetchCurrentModel();
-    const modelDisplay = `🧠 ${currentModel.providerID}/${currentModel.modelID}`;
+    const modelName = `${currentModel.providerID}/${currentModel.modelID}`;
+    const modelDisplay = currentModel.variant
+      ? `🧠 ${modelName} (${currentModel.variant})`
+      : `🧠 ${modelName}`;
     message += `${t("status.line.model", { model: modelDisplay })}\n`;
 
     const currentProject = getCurrentProject();
