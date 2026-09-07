@@ -46,7 +46,7 @@ export async function deliverExternalUserInputNotification({
     return false;
   }
 
-  if (consumeSuppressedInput(sessionId, messageId, text)) {
+  if (consumeSuppressedInput(sessionId, messageId)) {
     return false;
   }
 

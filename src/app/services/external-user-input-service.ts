@@ -11,7 +11,6 @@ export interface ExternalUserInputNotification {
 export type ConsumeSuppressedInput = (
   sessionId: string,
   messageId: string,
-  text: string,
 ) => boolean;
 
 function normalizeExternalUserInputText(text: string): string {

@@ -729,11 +729,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             sessionId,
             messageId,
             text: messageText,
-            consumeSuppressedInput: (incomingSessionId, incomingMessageId, incomingText) =>
+            consumeSuppressedInput: (incomingSessionId, incomingMessageId) =>
               externalUserInputSuppressionManager.consumeMessage(
                 incomingSessionId,
                 incomingMessageId,
-                incomingText,
               ),
           });
         } catch (err) {
@@ -1176,8 +1175,6 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       await this.sessionCompletionTasks.get(sessionId)?.catch(() => undefined);
 
       const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
-      clearPromptResponseMode(sessionId);
-      externalUserInputSuppressionManager.clearSession(sessionId);
 
       if (!this.botInstance || !this.chatIdInstance) {
         foregroundSessionState.markIdle(sessionId);

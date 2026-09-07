@@ -104,6 +104,10 @@ export async function replyWithInlineMenu(
   options: InlineMenuReplyOptions,
 ): Promise<number | null> {
   const keyboard = appendInlineMenuCancelButton(options.keyboard, options.menuKind);
+  const activeMenu = getActiveInlineMenuMetadata(interactionManager.getSnapshot());
+  if (options.menuKind === "settings" && activeMenu?.menuKind === "settings") {
+    interactionManager.clear("settings_menu_reopened");
+  }
   const reservationId = randomUUID();
   const reserved = interactionManager.tryStart({
     kind: "inline",

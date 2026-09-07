@@ -10,33 +10,6 @@ describe("external-input/suppression", () => {
     vi.useRealTimers();
   });
 
-  it("consumes a matching suppressed input for the same session", () => {
-    externalUserInputSuppressionManager.register("session-1", "Review README");
-
-    expect(externalUserInputSuppressionManager.consume("session-1", "Review README")).toBe(true);
-    expect(externalUserInputSuppressionManager.consume("session-1", "Review README")).toBe(false);
-  });
-
-  it("does not consume a suppressed input from another session", () => {
-    externalUserInputSuppressionManager.register("session-1", "Review README");
-
-    expect(externalUserInputSuppressionManager.consume("session-2", "Review README")).toBe(false);
-  });
-
-  it("does not consume different text", () => {
-    externalUserInputSuppressionManager.register("session-1", "Review README");
-
-    expect(externalUserInputSuppressionManager.consume("session-1", "Review tests")).toBe(false);
-  });
-
-  it("expires stale suppression entries", () => {
-    externalUserInputSuppressionManager.register("session-1", "Review README", 1_000);
-
-    expect(externalUserInputSuppressionManager.consume("session-1", "Review README", 61_001)).toBe(
-      false,
-    );
-  });
-
   it("retires an unobserved admitted identity after the bounded lifetime", () => {
     vi.useFakeTimers();
     externalUserInputSuppressionManager.registerMessage("session-1", "message-1");
@@ -47,11 +20,7 @@ describe("external-input/suppression", () => {
     expect(externalUserInputSuppressionManager.__getMessageCountForTests()).toBe(0);
 
     expect(
-      externalUserInputSuppressionManager.consumeMessage(
-        "session-1",
-        "message-1",
-        "different rendered text",
-      ),
+      externalUserInputSuppressionManager.consumeMessage("session-1", "message-1"),
     ).toBe(false);
   });
 
@@ -63,7 +32,7 @@ describe("external-input/suppression", () => {
     vi.advanceTimersByTime(2 * 60 * 1_000);
 
     expect(
-      externalUserInputSuppressionManager.consumeMessage("session-1", "message-1", "different"),
+      externalUserInputSuppressionManager.consumeMessage("session-1", "message-1"),
     ).toBe(true);
     expect(externalUserInputSuppressionManager.__getMessageCountForTests()).toBe(0);
   });
@@ -72,20 +41,7 @@ describe("external-input/suppression", () => {
     externalUserInputSuppressionManager.registerMessage("session-1", "message-1");
 
     expect(
-      externalUserInputSuppressionManager.consumeMessage("session-1", "external-message", "same"),
-    ).toBe(false);
-  });
-
-  it("does not fall back to text suppression when an identity differs", () => {
-    externalUserInputSuppressionManager.register("session-1", "same text");
-    externalUserInputSuppressionManager.registerMessage("session-1", "message-1");
-
-    expect(
-      externalUserInputSuppressionManager.consumeMessage(
-        "session-1",
-        "external-message",
-        "same text",
-      ),
+      externalUserInputSuppressionManager.consumeMessage("session-1", "external-message"),
     ).toBe(false);
   });
 
@@ -93,10 +49,10 @@ describe("external-input/suppression", () => {
     externalUserInputSuppressionManager.registerMessage("session-1", "message-1");
 
     expect(
-      externalUserInputSuppressionManager.consumeMessage("session-2", "message-1", "unrelated"),
+      externalUserInputSuppressionManager.consumeMessage("session-2", "message-1"),
     ).toBe(false);
     expect(
-      externalUserInputSuppressionManager.consumeMessage("session-1", "message-1", "original"),
+      externalUserInputSuppressionManager.consumeMessage("session-1", "message-1"),
     ).toBe(true);
   });
 

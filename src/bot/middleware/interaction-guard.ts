@@ -5,7 +5,6 @@ import { reconcileForegroundBusyState } from "../../app/services/run-control-ser
 import {
   canQueueMediaPrompt,
   rejectQueuedMediaBeforePreparation,
-  dispatchNextQueuedPrompt,
   shouldSuggestPromptQueue,
   tryEnqueuePrompt,
 } from "../handlers/prompt-queue-dispatch.js";

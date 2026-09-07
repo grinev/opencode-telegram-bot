@@ -36,10 +36,6 @@ class TelegramInputOrderManager {
     });
   }
 
-  waitForPending(chatId: number): Promise<void> {
-    return this.waitForEarlier(chatId, Number.POSITIVE_INFINITY);
-  }
-
   __resetForTests(): void {
     for (const waiters of this.waitersByChat.values()) {
       for (const waiter of waiters) {
@@ -93,7 +89,6 @@ export async function telegramInputOrderMiddleware(
   }
 
   if (!message) {
-    await telegramInputOrderManager.waitForPending(chatId);
     await next();
     return;
   }

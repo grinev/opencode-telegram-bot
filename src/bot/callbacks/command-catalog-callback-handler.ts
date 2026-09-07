@@ -27,7 +27,7 @@ import {
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
 import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
-import { randomUUID } from "node:crypto";
+import { createOpencodeMessageId } from "../../utils/opencode-message-id.js";
 import { opencodeClient } from "../../opencode/client.js";
 import {
   buildCommandsConfirmKeyboard,
@@ -286,7 +286,7 @@ export async function executeCommand(
     configuredProviderID: storedModel.providerID,
     configuredModelID: storedModel.modelID,
   });
-  const promptMessageId = randomUUID();
+  const promptMessageId = createOpencodeMessageId();
   externalUserInputSuppressionManager.registerMessage(session.id, promptMessageId);
 
   safeBackgroundTask({

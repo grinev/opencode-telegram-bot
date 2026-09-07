@@ -278,7 +278,7 @@ describe("bot/handlers/prompt", () => {
         modelID: "gpt-5",
       },
       variant: "default",
-      messageID: expect.any(String),
+      messageID: expect.stringMatching(/^msg_/),
     });
     expect(mocked.sessionPromptMock).not.toHaveBeenCalled();
   });
@@ -300,7 +300,7 @@ describe("bot/handlers/prompt", () => {
     );
   });
 
-  it("retains delivery state when promptAsync has an ambiguous transport failure", async () => {
+  it("notifies the user while retaining delivery state after an ambiguous transport failure", async () => {
     const ctx = createContext();
     const deps = createDeps();
 
@@ -316,7 +316,10 @@ describe("bot/handlers/prompt", () => {
       backgroundTask.onError?.(error);
     });
 
-    expect(deps.bot.api.sendMessage).not.toHaveBeenCalled();
+    expect(deps.bot.api.sendMessage).toHaveBeenCalledWith(
+      777,
+      "Failed to send request to OpenCode.",
+    );
     expect(mocked.suppressionDiscardMock).not.toHaveBeenCalled();
   });
 

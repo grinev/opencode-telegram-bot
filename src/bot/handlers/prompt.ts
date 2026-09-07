@@ -1,7 +1,7 @@
 import { Bot, Context } from "grammy";
 import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2";
 import type { Model } from "@opencode-ai/sdk/v2";
-import { randomUUID } from "node:crypto";
+import { createOpencodeMessageId } from "../../utils/opencode-message-id.js";
 import { opencodeClient } from "../../opencode/client.js";
 import {
   clearSession,
@@ -62,8 +62,14 @@ export {
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
 
+export type PromptTarget = {
+  sessionId: string | null;
+  directory: string;
+};
+
 type ProcessPromptOptions = {
   responseMode?: PromptResponseMode;
+  target?: PromptTarget;
 };
 
 export function getPromptBotInstance(): Bot<Context> | null {
@@ -193,6 +199,17 @@ export async function processUserPrompt(
 
   let currentSession = getCurrentSession();
   let createdNewSession = false;
+
+  if (
+    options.target &&
+    (currentProject.worktree !== options.target.directory ||
+      (currentSession?.id ?? null) !== options.target.sessionId ||
+      (currentSession && currentSession.directory !== options.target.directory))
+  ) {
+    logger.warn("[Bot] Refusing prompt after captured context changed");
+    await ctx.reply(t("bot.prompt_send_error"));
+    return false;
+  }
 
   if (currentSession && currentSession.directory !== currentProject.worktree) {
     logger.warn(
@@ -370,7 +387,7 @@ export async function processUserPrompt(
       configuredProviderID: storedModel.providerID,
       configuredModelID: storedModel.modelID,
     });
-    const promptMessageId = randomUUID();
+    const promptMessageId = createOpencodeMessageId();
     setPromptResponseMode(currentSession.id, promptMessageId, responseMode);
     externalUserInputSuppressionManager.registerMessage(currentSession.id, promptMessageId);
 

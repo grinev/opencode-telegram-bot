@@ -76,7 +76,6 @@ describe("bot/messages/external-user-input-notification", () => {
     expect(consumeSuppressedInput).toHaveBeenCalledWith(
       "session-1",
       "message-1",
-      "Review the parser",
     );
     expect(mocked.sendBotTextMock).not.toHaveBeenCalled();
   });

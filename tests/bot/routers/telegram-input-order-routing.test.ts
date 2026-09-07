@@ -133,7 +133,7 @@ describe("bot/routers Telegram album ordering", () => {
     );
   });
 
-  it("holds a project-switch callback behind an earlier album", async () => {
+  it("allows a project-switch callback while an earlier album is pending", async () => {
     let currentSession = { id: "session-a", title: "A", directory: "/repo-a" };
     let currentProject = { id: "project-a", worktree: "/repo-a" };
     vi.spyOn(sessionService, "getCurrentSession").mockImplementation(() => currentSession);
@@ -195,6 +195,6 @@ describe("bot/routers Telegram album ordering", () => {
     } as Update);
 
     await callback;
-    expect(order).toEqual(["album:session-a", "project:session-b"]);
+    expect(order).toEqual(["project:session-b"]);
   });
 });

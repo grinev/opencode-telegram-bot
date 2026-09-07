@@ -30,16 +30,4 @@ describe("app/managers/telegram-input-order-manager", () => {
     await expect(telegramInputOrderManager.waitForEarlier(777, 11)).resolves.toBeUndefined();
   });
 
-  it("holds a callback without a message id until the album is released", async () => {
-    telegramInputOrderManager.defer(777, 10);
-    const released = vi.fn();
-    const waiting = telegramInputOrderManager.waitForPending(777).then(released);
-
-    await Promise.resolve();
-    expect(released).not.toHaveBeenCalled();
-
-    telegramInputOrderManager.release(777, 10);
-    await waiting;
-    expect(released).toHaveBeenCalledTimes(1);
-  });
 });
