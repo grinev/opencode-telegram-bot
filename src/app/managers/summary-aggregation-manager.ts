@@ -18,6 +18,7 @@ export interface SummaryInfo {
 }
 
 export interface MessageCompletionInfo {
+  parentMessageId?: string | undefined;
   agent?: string | undefined;
   providerID?: string | undefined;
   modelID?: string | undefined;
@@ -1266,6 +1267,7 @@ class SummaryAggregator {
 
         if (this.onCompleteCallback && finalText.length > 0) {
           this.onCompleteCallback(this.currentSessionId!, messageID, finalText, {
+            parentMessageId: info.parentID,
             agent: info.agent,
             providerID: info.providerID,
             modelID: info.modelID,

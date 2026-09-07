@@ -92,7 +92,7 @@ function emitAssistantTextPart(aggregator: Aggregator, text: string): void {
   } as unknown as Event);
 }
 
-function emitAssistantCompleted(aggregator: Aggregator): void {
+function emitAssistantCompleted(aggregator: Aggregator, parentMessageId?: string): void {
   aggregator.processEvent({
     type: "message.updated",
     properties: {
@@ -103,6 +103,7 @@ function emitAssistantCompleted(aggregator: Aggregator): void {
         agent: "test-agent",
         providerID: "test-provider",
         modelID: "test-model",
+        ...(parentMessageId ? { parentID: parentMessageId } : {}),
         time: { created: Date.now() - 1000, completed: Date.now() },
       },
     },
@@ -840,6 +841,25 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       );
       expect(assistantRunState.finishRun("session-1", "assertion")).toBeNull();
     }, 30_000);
+
+    it("keeps parent B's TTS mode when delivery for parent A fails", async () => {
+      const { api, summaryAggregator } = await setupService();
+      const { consumePromptResponseMode, setPromptResponseMode } =
+        await import("../../../src/bot/handlers/prompt.js");
+      setPromptResponseMode("session-1", "parent-a", "text_only");
+      setPromptResponseMode("session-1", "parent-b", "text_and_tts");
+      api.sendMessage.mockRejectedValue(new Error("telegram unreachable"));
+      api.editMessageText.mockRejectedValue(new Error("telegram unreachable"));
+
+      emitAssistantTextPart(summaryAggregator, "Answer A");
+      emitAssistantCompleted(summaryAggregator, "parent-a");
+
+      await vi.waitFor(() => {
+        expect(api.sendMessage).toHaveBeenCalled();
+      });
+      expect(consumePromptResponseMode("session-1", "parent-a")).toBeNull();
+      expect(consumePromptResponseMode("session-1", "parent-b")).toBe("text_and_tts");
+    });
   });
 
   describe("assistant stream resilience", () => {
@@ -892,7 +912,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       const { api, summaryAggregator } = await setupService();
       const { externalUserInputSuppressionManager } =
         await import("../../../src/app/managers/external-input-suppression-manager.js");
-      externalUserInputSuppressionManager.register("session-1", "sent from Telegram");
+      externalUserInputSuppressionManager.registerMessage("session-1", "user-message-1");
 
       emitExternalUserMessage(summaryAggregator, "sent from Telegram");
       await settle();

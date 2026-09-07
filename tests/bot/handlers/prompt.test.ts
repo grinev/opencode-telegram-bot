@@ -27,6 +27,7 @@ const mocked = vi.hoisted(() => ({
   sessionPromptAsyncMock: vi.fn(),
   sessionCreateMock: vi.fn(),
   suppressionRegisterMock: vi.fn(),
+  suppressionDiscardMock: vi.fn(),
   safeBackgroundTaskMock: vi.fn(),
   setSessionSummaryMock: vi.fn(),
   setBotAndChatIdMock: vi.fn(),
@@ -144,7 +145,8 @@ vi.mock("../../../src/app/services/attach-service.js", () => ({
 
 vi.mock("../../../src/app/managers/external-input-suppression-manager.js", () => ({
   externalUserInputSuppressionManager: {
-    register: mocked.suppressionRegisterMock,
+    registerMessage: mocked.suppressionRegisterMock,
+    discardMessage: mocked.suppressionDiscardMock,
   },
 }));
 
@@ -252,7 +254,10 @@ describe("bot/handlers/prompt", () => {
       },
       ensureEventSubscription: expect.any(Function),
     });
-    expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "Review README");
+    expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith(
+      "session-1",
+      expect.any(String),
+    );
   });
 
   it("starts prompts through promptAsync instead of the streaming prompt endpoint", async () => {
@@ -273,6 +278,7 @@ describe("bot/handlers/prompt", () => {
         modelID: "gpt-5",
       },
       variant: "default",
+      messageID: expect.stringMatching(/^msg_/),
     });
     expect(mocked.sessionPromptMock).not.toHaveBeenCalled();
   });
@@ -294,7 +300,7 @@ describe("bot/handlers/prompt", () => {
     );
   });
 
-  it("still notifies the user when promptAsync rejects before the run starts", async () => {
+  it("notifies the user while retaining delivery state after an ambiguous transport failure", async () => {
     const ctx = createContext();
     const deps = createDeps();
 
@@ -314,6 +320,7 @@ describe("bot/handlers/prompt", () => {
       777,
       "Failed to send request to OpenCode.",
     );
+    expect(mocked.suppressionDiscardMock).not.toHaveBeenCalled();
   });
 
   it("does not notify the user when promptAsync reports an error after detach", async () => {
@@ -405,7 +412,10 @@ describe("bot/handlers/prompt", () => {
     ]);
 
     expect(handled).toBe(true);
-    expect(mocked.suppressionRegisterMock).not.toHaveBeenCalled();
+    expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith(
+      "session-1",
+      expect.any(String),
+    );
   });
 
   it("keeps text prompts text-only when TTS mode is auto", async () => {
@@ -414,7 +424,8 @@ describe("bot/handlers/prompt", () => {
     const handled = await processUserPrompt(createContext(), "Review README", createDeps());
 
     expect(handled).toBe(true);
-    expect(consumePromptResponseMode("session-1")).toBe("text_only");
+    const messageId = mocked.suppressionRegisterMock.mock.calls[0]?.[1] as string;
+    expect(consumePromptResponseMode("session-1", messageId)).toBe("text_only");
   });
 
   it("uses plural placeholder text for multiple file-only prompts", async () => {

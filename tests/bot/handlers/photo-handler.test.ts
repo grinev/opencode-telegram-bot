@@ -67,6 +67,11 @@ describe("bot/handlers/photo-handler", () => {
 
   it("queues a photo without downloading it while the agent is busy", async () => {
     vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    vi.spyOn(settingsStore, "getCurrentSession").mockReturnValue({
+      id: "session-1",
+      title: "Session",
+      directory: "/repo",
+    });
     foregroundSessionState.markBusy("session-1", "/repo");
     const { ctx } = createPhotoContext("release screenshot");
     const { deps, processPromptMock } = createDeps();

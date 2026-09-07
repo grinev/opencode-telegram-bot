@@ -17,6 +17,7 @@ import { initializePromptQueueDispatch } from "./handlers/prompt-queue-dispatch.
 import { normalizeRichMessage } from "./handlers/rich-message-handler.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { interactionGuardMiddleware } from "./middleware/interaction-guard.js";
+import { telegramInputOrderMiddleware } from "../app/managers/telegram-input-order-manager.js";
 import { staleUpdateMiddleware } from "./middleware/stale-update.js";
 import {
   ensureCommandsInitialized,
@@ -177,6 +178,7 @@ export function createBot(localCommandRegistry = LocalCommandRegistry.empty()): 
   bot.use(staleUpdateMiddleware);
   bot.on("message:rich_message", normalizeRichMessage);
   bot.use((ctx, next) => ensureCommandsInitialized(ctx, next, localCommandRegistry));
+  bot.use(telegramInputOrderMiddleware);
   bot.use((ctx, next) => interactionGuardMiddleware(ctx, next, localCommandRegistry));
 
   registerCommandRouter(bot, {

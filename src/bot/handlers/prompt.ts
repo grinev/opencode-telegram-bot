@@ -1,6 +1,7 @@
 import { Bot, Context } from "grammy";
 import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2";
 import type { Model } from "@opencode-ai/sdk/v2";
+import { createOpencodeMessageId } from "../../utils/opencode-message-id.js";
 import { opencodeClient } from "../../opencode/client.js";
 import {
   clearSession,
@@ -44,16 +45,31 @@ import {
   supportsInput,
 } from "../../app/services/model-capabilities-service.js";
 import type { IncomingPrompt } from "../../app/types/prompt.js";
+import {
+  consumePromptResponseMode,
+  setPromptResponseMode,
+  type PromptResponseMode,
+} from "../../app/managers/prompt-response-mode-manager.js";
+
+export {
+  clearPromptResponseMode,
+  consumePromptResponseMode,
+  setPromptResponseMode,
+  type PromptResponseMode,
+} from "../../app/managers/prompt-response-mode-manager.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
 let chatIdInstance: number | null = null;
-const promptResponseModes = new Map<string, PromptResponseMode>();
 
-export type PromptResponseMode = "text_only" | "text_and_tts";
+export type PromptTarget = {
+  sessionId: string | null;
+  directory: string;
+};
 
 type ProcessPromptOptions = {
   responseMode?: PromptResponseMode;
+  target?: PromptTarget;
 };
 
 export function getPromptBotInstance(): Bot<Context> | null {
@@ -64,18 +80,9 @@ export function getPromptChatId(): number | null {
   return chatIdInstance;
 }
 
-export function setPromptResponseMode(sessionId: string, responseMode: PromptResponseMode): void {
-  promptResponseModes.set(sessionId, responseMode);
-}
-
-export function clearPromptResponseMode(sessionId: string): void {
-  promptResponseModes.delete(sessionId);
-}
-
-export function consumePromptResponseMode(sessionId: string): PromptResponseMode | null {
-  const responseMode = promptResponseModes.get(sessionId) ?? null;
-  promptResponseModes.delete(sessionId);
-  return responseMode;
+export function discardPromptDeliveryState(sessionId: string, messageId: string): void {
+  consumePromptResponseMode(sessionId, messageId);
+  externalUserInputSuppressionManager.discardMessage(sessionId, messageId);
 }
 
 async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
@@ -192,6 +199,17 @@ export async function processUserPrompt(
 
   let currentSession = getCurrentSession();
   let createdNewSession = false;
+
+  if (
+    options.target &&
+    (currentProject.worktree !== options.target.directory ||
+      (currentSession?.id ?? null) !== options.target.sessionId ||
+      (currentSession && currentSession.directory !== options.target.directory))
+  ) {
+    logger.warn("[Bot] Refusing prompt after captured context changed");
+    await ctx.reply(t("bot.prompt_send_error"));
+    return false;
+  }
 
   if (currentSession && currentSession.directory !== currentProject.worktree) {
     logger.warn(
@@ -369,11 +387,9 @@ export async function processUserPrompt(
       configuredProviderID: storedModel.providerID,
       configuredModelID: storedModel.modelID,
     });
-    setPromptResponseMode(currentSession.id, responseMode);
-
-    if (preparedInput.text.trim().length > 0) {
-      externalUserInputSuppressionManager.register(currentSession.id, preparedInput.text);
-    }
+    const promptMessageId = createOpencodeMessageId();
+    setPromptResponseMode(currentSession.id, promptMessageId, responseMode);
+    externalUserInputSuppressionManager.registerMessage(currentSession.id, promptMessageId);
 
     // CRITICAL: Use the async prompt start endpoint here.
     // session.prompt streams the full assistant response and can outlive the original
@@ -382,13 +398,14 @@ export async function processUserPrompt(
     // The actual assistant result still arrives via the SSE event subscription.
     safeBackgroundTask({
       taskName: "session.promptAsync",
-      task: () => opencodeClient.session.promptAsync(promptOptions),
+      task: () =>
+        opencodeClient.session.promptAsync({ ...promptOptions, messageID: promptMessageId }),
       onSuccess: ({ error }) => {
         if (error) {
           foregroundSessionState.markIdle(currentSession.id);
           void markAttachedSessionIdle(currentSession.id);
           assistantRunState.clearRun(currentSession.id, "session_prompt_api_error");
-          clearPromptResponseMode(currentSession.id);
+          discardPromptDeliveryState(currentSession.id, promptMessageId);
           const details = formatErrorDetails(error, 6000);
           logger.error(
             "[Bot] OpenCode API returned an error for session.promptAsync",
@@ -407,10 +424,6 @@ export async function processUserPrompt(
         logger.info("[Bot] session.promptAsync accepted");
       },
       onError: (error) => {
-        foregroundSessionState.markIdle(currentSession.id);
-        void markAttachedSessionIdle(currentSession.id);
-        assistantRunState.clearRun(currentSession.id, "session_prompt_background_error");
-        clearPromptResponseMode(currentSession.id);
         const details = formatErrorDetails(error, 6000);
         logger.error("[Bot] session.promptAsync background task failed", promptErrorLogContext);
         logger.error("[Bot] session.promptAsync background failure details:", details);
