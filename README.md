@@ -280,6 +280,7 @@ Logs are written to `./logs` when running from sources and to the runtime config
 Runtime preferences are changed from `/settings` and stored in `settings.json`:
 
 - Compact output mode
+- Delete progress on finish: available while compact output mode is on, removes the progress message when the run completes
 - Thinking content display
 - Assistant run footer display
 - Diff file attachments
