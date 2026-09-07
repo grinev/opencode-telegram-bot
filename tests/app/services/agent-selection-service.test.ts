@@ -278,7 +278,7 @@ describe("applyAgentConfiguredSettings", () => {
 
     const modelApplied = await applyAgentConfiguredSettings("plan");
 
-    expect(modelApplied).toBe(false);
+    expect(modelApplied).toBe(true);
     expect(mocked.selectModelMock).not.toHaveBeenCalled();
     expect(mocked.setCurrentVariantMock).toHaveBeenCalledWith("low");
   });
@@ -342,7 +342,7 @@ describe("applyAgentConfiguredSettings", () => {
 
     const modelApplied = await applyAgentConfiguredSettings("plan");
 
-    expect(modelApplied).toBe(false);
+    expect(modelApplied).toBe(true);
     expect(mocked.selectModelMock).not.toHaveBeenCalled();
     expect(mocked.setCurrentVariantMock).toHaveBeenCalledWith("low");
   });

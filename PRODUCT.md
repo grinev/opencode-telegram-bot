@@ -73,7 +73,7 @@ No public inbound ports are required for normal usage.
 ### Session status in chat
 
 - Keep a pinned status message in the chat
-- Show session title, project, model, context usage, and changed files
+- Show session title, project, model, context usage, and changed files; when a variant is set, the model line is `provider/id (variant)`
 - Auto-update status from SSE and tool events
 - Preserve pinned message ID across bot restarts
 
@@ -165,7 +165,7 @@ Agent picker behavior:
 - [x] Background notifications for detached/non-current sessions in the currently selected project/worktree
 - [x] Telegram-friendly result delivery, including sending generated code/files when needed
 - [x] Interactive question and permission handling directly in chat (buttons + custom answers)
-- [x] Live pinned session status in chat (project, model, context usage, changed files)
+- [x] Live pinned session status in chat (project, model with variant in parentheses when set, context usage, changed files)
 - [x] In-chat controls for model, agent, variant, and context
 - [x] Built-in and custom command catalog access (`/commands`)
 - [x] Trusted local JSON commands from the persistent application home, executed without OpenCode or model tokens

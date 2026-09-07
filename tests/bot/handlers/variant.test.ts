@@ -1,35 +1,42 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocked = vi.hoisted(() => ({
-  getAvailableAgentsMock: vi.fn(),
-  selectAgentMock: vi.fn(),
-  applyAgentConfiguredSettingsMock: vi.fn(),
+  getStoredAgentMock: vi.fn(),
+  resolveProjectAgentMock: vi.fn(),
   getStoredModelMock: vi.fn(),
+  setCurrentVariantMock: vi.fn(),
+  formatVariantForButtonMock: vi.fn(),
+  formatVariantForDisplayMock: vi.fn(),
   ensureActiveInlineMenuMock: vi.fn(),
   clearActiveInlineMenuMock: vi.fn(),
   keyboardInitializeMock: vi.fn(),
-  keyboardUpdateAgentMock: vi.fn(),
   keyboardUpdateModelMock: vi.fn(),
+  keyboardUpdateVariantMock: vi.fn(),
+  keyboardUpdateAgentMock: vi.fn(),
   keyboardUpdateContextMock: vi.fn(),
-  keyboardGetStateMock: vi.fn(),
   pinnedRefreshContextLimitMock: vi.fn(),
   pinnedGetContextInfoMock: vi.fn(),
   pinnedGetContextLimitMock: vi.fn(),
   pinnedRefreshMock: vi.fn(),
   createMainKeyboardMock: vi.fn(),
   switchedMock: vi.fn(),
-  showVariantMenuAfterModelChangeMock: vi.fn(),
+  notifyMock: vi.fn(),
+  failureMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
-  fetchCurrentAgent: vi.fn(),
-  getAvailableAgents: mocked.getAvailableAgentsMock,
-  selectAgent: mocked.selectAgentMock,
-  applyAgentConfiguredSettings: mocked.applyAgentConfiguredSettingsMock,
+  getStoredAgent: mocked.getStoredAgentMock,
+  resolveProjectAgent: mocked.resolveProjectAgentMock,
 }));
 
 vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: mocked.getStoredModelMock,
+}));
+
+vi.mock("../../../src/app/services/variant-selection-service.js", () => ({
+  setCurrentVariant: mocked.setCurrentVariantMock,
+  formatVariantForButton: mocked.formatVariantForButtonMock,
+  formatVariantForDisplay: mocked.formatVariantForDisplayMock,
 }));
 
 vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
@@ -40,10 +47,10 @@ vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
 vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
   keyboardManager: {
     initialize: mocked.keyboardInitializeMock,
-    updateAgent: mocked.keyboardUpdateAgentMock,
     updateModel: mocked.keyboardUpdateModelMock,
+    updateVariant: mocked.keyboardUpdateVariantMock,
+    updateAgent: mocked.keyboardUpdateAgentMock,
     updateContext: mocked.keyboardUpdateContextMock,
-    getState: mocked.keyboardGetStateMock,
   },
 }));
 
@@ -62,17 +69,12 @@ vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
 
 vi.mock("../../../src/bot/callbacks/feedback.js", () => ({
   switched: mocked.switchedMock,
-  failure: vi.fn(),
+  notify: mocked.notifyMock,
+  failure: mocked.failureMock,
 }));
 
-vi.mock("../../../src/bot/menus/variant-selection-menu.js", () => ({
-  showVariantSelectionMenuAfterModelChange: mocked.showVariantMenuAfterModelChangeMock,
-}));
-
-import { buildAgentSelectionMenu } from "../../../src/bot/menus/agent-selection-menu.js";
-import { handleAgentSelect } from "../../../src/bot/callbacks/agent-selection-callback-handler.js";
+import { handleVariantSelect } from "../../../src/bot/callbacks/variant-selection-callback-handler.js";
 import { t } from "../../../src/i18n/index.js";
-import { getAgentDisplayName } from "../../../src/app/types/agent.js";
 
 function mockContext(overrides: Record<string, unknown> = {}) {
   return {
@@ -87,105 +89,83 @@ function mockContext(overrides: Record<string, unknown> = {}) {
   } as unknown as import("grammy").Context;
 }
 
-describe("bot agent selection", () => {
+describe("bot variant selection", () => {
   beforeEach(() => {
-    mocked.getAvailableAgentsMock.mockReset();
-    mocked.selectAgentMock.mockReset();
-    mocked.applyAgentConfiguredSettingsMock.mockReset();
+    mocked.getStoredAgentMock.mockReset();
+    mocked.resolveProjectAgentMock.mockReset();
     mocked.getStoredModelMock.mockReset();
+    mocked.setCurrentVariantMock.mockReset();
+    mocked.formatVariantForButtonMock.mockReset();
+    mocked.formatVariantForDisplayMock.mockReset();
     mocked.ensureActiveInlineMenuMock.mockReset();
     mocked.clearActiveInlineMenuMock.mockReset();
     mocked.keyboardInitializeMock.mockReset();
-    mocked.keyboardUpdateAgentMock.mockReset();
     mocked.keyboardUpdateModelMock.mockReset();
+    mocked.keyboardUpdateVariantMock.mockReset();
+    mocked.keyboardUpdateAgentMock.mockReset();
     mocked.keyboardUpdateContextMock.mockReset();
-    mocked.keyboardGetStateMock.mockReset();
     mocked.pinnedRefreshContextLimitMock.mockReset();
     mocked.pinnedGetContextInfoMock.mockReset();
     mocked.pinnedGetContextLimitMock.mockReset();
     mocked.pinnedRefreshMock.mockReset();
     mocked.createMainKeyboardMock.mockReset();
     mocked.switchedMock.mockReset();
-    mocked.showVariantMenuAfterModelChangeMock.mockReset();
+    mocked.notifyMock.mockReset();
+    mocked.failureMock.mockReset();
 
     mocked.ensureActiveInlineMenuMock.mockResolvedValue(true);
-    mocked.applyAgentConfiguredSettingsMock.mockResolvedValue(false);
+    mocked.getStoredAgentMock.mockReturnValue("build");
+    mocked.resolveProjectAgentMock.mockResolvedValue("build");
     mocked.getStoredModelMock.mockReturnValue({
       providerID: "opencode-go",
       modelID: "kimi",
-      variant: "high",
+      variant: "low",
     });
+    mocked.formatVariantForButtonMock.mockReturnValue("💭 Low");
+    mocked.formatVariantForDisplayMock.mockReturnValue("Low");
     mocked.pinnedGetContextLimitMock.mockReturnValue(0);
     mocked.pinnedGetContextInfoMock.mockReturnValue(null);
-    mocked.keyboardGetStateMock.mockReturnValue({ variantName: "💡 High" });
     mocked.createMainKeyboardMock.mockReturnValue({});
     mocked.switchedMock.mockResolvedValue(undefined);
     mocked.pinnedRefreshMock.mockResolvedValue(undefined);
     mocked.pinnedRefreshContextLimitMock.mockResolvedValue(undefined);
   });
 
-  it("highlights the selected agent without uppercasing its name", async () => {
-    mocked.getAvailableAgentsMock.mockResolvedValueOnce([
-      { name: "reviewer", mode: "primary" },
-      { name: "build", mode: "primary" },
-    ]);
-
-    const keyboard = await buildAgentSelectionMenu("reviewer");
-
-    expect(keyboard.inline_keyboard[0]?.[0]?.text).toBe("✅ 🤖 Reviewer");
-    expect(keyboard.inline_keyboard[1]?.[0]?.text).toBe("🛠️ Build");
-  });
-
-  it("applies configured settings, confirms with the existing line, and does not open the variant menu", async () => {
-    mocked.applyAgentConfiguredSettingsMock.mockResolvedValueOnce(true);
+  it("refreshes the pinned dashboard after a successful variant pick", async () => {
     const keyboard = { kind: "main" };
     mocked.createMainKeyboardMock.mockReturnValue(keyboard);
 
     const ctx = mockContext({
-      callbackQuery: { data: "agent:plan" },
+      callbackQuery: { data: "variant:low" },
     });
 
-    const result = await handleAgentSelect(ctx);
+    const result = await handleVariantSelect(ctx);
 
     expect(result).toBe(true);
-    expect(mocked.selectAgentMock).toHaveBeenCalledWith("plan");
-    expect(mocked.applyAgentConfiguredSettingsMock).toHaveBeenCalledWith("plan");
-    expect(mocked.createMainKeyboardMock).toHaveBeenCalledWith(
-      "plan",
-      { providerID: "opencode-go", modelID: "kimi", variant: "high" },
-      undefined,
-      "💡 High",
-    );
+    expect(mocked.setCurrentVariantMock).toHaveBeenCalledWith("low");
     expect(mocked.switchedMock).toHaveBeenCalledWith(
       ctx,
-      t("agent.changed_message", { name: getAgentDisplayName("plan") }),
+      t("variant.changed_message", { name: "Low" }),
       keyboard,
     );
     expect(mocked.pinnedRefreshMock).toHaveBeenCalledOnce();
-    expect(mocked.showVariantMenuAfterModelChangeMock).not.toHaveBeenCalled();
   });
 
-  it("refreshes the pinned dashboard when only a variant was applied", async () => {
-    mocked.applyAgentConfiguredSettingsMock.mockResolvedValueOnce(true);
-
-    const ctx = mockContext({
-      callbackQuery: { data: "agent:plan" },
+  it("does not refresh the pin when no model is selected", async () => {
+    mocked.getStoredModelMock.mockReturnValue({
+      providerID: "",
+      modelID: "",
     });
 
-    await handleAgentSelect(ctx);
-
-    expect(mocked.pinnedRefreshMock).toHaveBeenCalledOnce();
-    expect(mocked.showVariantMenuAfterModelChangeMock).not.toHaveBeenCalled();
-  });
-
-  it("does not refresh the pinned dashboard when neither model nor variant was applied", async () => {
     const ctx = mockContext({
-      callbackQuery: { data: "agent:plan" },
+      callbackQuery: { data: "variant:low" },
     });
 
-    await handleAgentSelect(ctx);
+    const result = await handleVariantSelect(ctx);
 
+    expect(result).toBe(true);
+    expect(mocked.setCurrentVariantMock).not.toHaveBeenCalled();
     expect(mocked.pinnedRefreshMock).not.toHaveBeenCalled();
-    expect(mocked.showVariantMenuAfterModelChangeMock).not.toHaveBeenCalled();
+    expect(mocked.notifyMock).toHaveBeenCalled();
   });
 });

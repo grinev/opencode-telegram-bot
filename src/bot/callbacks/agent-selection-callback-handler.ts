@@ -45,7 +45,7 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
     const agentName = callbackQuery.data.replace("agent:", "");
 
     selectAgent(agentName);
-    const modelApplied = await applyAgentConfiguredSettings(agentName);
+    const settingsApplied = await applyAgentConfiguredSettings(agentName);
 
     keyboardManager.updateAgent(agentName);
 
@@ -76,7 +76,7 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
 
     await switched(ctx, t("agent.changed_message", { name: displayName }), keyboard);
 
-    if (modelApplied) {
+    if (settingsApplied) {
       await pinnedMessageManager.refresh();
     }
 

@@ -19,6 +19,7 @@ const mocked = vi.hoisted(() => ({
   getStoredModel: vi.fn().mockReturnValue(null),
   getModelContextLimit: vi.fn().mockResolvedValue(204800),
   getGitWorktreeContext: vi.fn(),
+  formatModelDisplayName: vi.fn(() => "test-model"),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({ opencodeClient: mocked.opencodeClient }));
@@ -60,7 +61,7 @@ vi.mock("../../../src/bot/pinned/pinned-message-format.js", () => ({
   DEFAULT_CONTEXT_LIMIT: 204800,
   formatContextLine: (used: number, limit: number) => `${used}/${limit}`,
   formatCostLine: (cost: number) => `$${cost.toFixed(2)}`,
-  formatModelDisplayName: () => "test-model",
+  formatModelDisplayName: mocked.formatModelDisplayName,
 }));
 
 // Must import AFTER vi.mock calls
@@ -95,6 +96,8 @@ describe("pinned/manager", () => {
 
     mocked.getCurrentSession.mockReturnValue({ id: "ses-1", title: "Test Session" });
     mocked.getCurrentProject.mockReturnValue({ id: "p1", worktree: "D:/repo", name: "repo" });
+    mocked.formatModelDisplayName.mockReset();
+    mocked.formatModelDisplayName.mockReturnValue("test-model");
     mocked.getStoredModel.mockReturnValue({ providerID: "openai", modelID: "gpt-5" });
     mocked.getModelContextLimit.mockResolvedValue(204800);
     mocked.getPinnedMessageId.mockReturnValue(null);
@@ -299,6 +302,20 @@ describe("pinned/manager", () => {
         123,
         expect.stringContaining("Worktree: D:/repo-feature"),
       );
+    });
+  });
+
+  describe("model line", () => {
+    it("passes the stored variant into the model formatter", async () => {
+      mocked.getStoredModel.mockReturnValue({
+        providerID: "openai",
+        modelID: "gpt-5",
+        variant: "low",
+      });
+
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+
+      expect(mocked.formatModelDisplayName).toHaveBeenCalledWith("openai", "gpt-5", "low");
     });
   });
 
