@@ -556,7 +556,9 @@ class SummaryAggregator {
     this.partHashes.clear();
     this.knownTextPartIds.clear();
     this.syntheticPartIds.clear();
-    this.processedToolStates.clear();
+    // processedToolStates is deliberately NOT cleared: call IDs are unique, so
+    // keeping them across resets (error-path clears, session switches) stops
+    // redelivered completions from resending their Telegram messages.
     this.thinkingFiredForMessages.clear();
     this.thinkingFinishedForMessages.clear();
     this.deliveredExternalUserMessageIds.clear();
@@ -1387,6 +1389,33 @@ class SummaryAggregator {
       const state = part.state;
       const input = state.input;
       const title = "title" in state ? state.title : undefined;
+
+      // OpenCode may redeliver historical tool parts (duplicated broadcast or a
+      // burst after an aggregator reset). A call that already completed must not
+      // drive any callback again, or its Telegram message gets resent.
+      if ("status" in state && state.status === "completed") {
+        const completedKey = `completed-${part.callID}`;
+        if (this.processedToolStates.has(completedKey)) {
+          logger.debug(
+            `[Aggregator] Duplicate completed tool ignored: callID=${part.callID}, tool=${part.tool}`,
+          );
+          return;
+        }
+
+        // SessionCompaction.prune re-publishes historical completed parts with
+        // state.time.compacted set. They are context history, not a fresh
+        // completion: mark the call so later replays stay suppressed and never
+        // drive a callback (no tool message, file, root update or subagent).
+        const compactedAt =
+          "time" in state ? (state.time as { compacted?: number }).compacted : undefined;
+        if (compactedAt !== undefined) {
+          this.processedToolStates.add(completedKey);
+          logger.debug(
+            `[Aggregator] Pruned/compacted tool part ignored: callID=${part.callID}, tool=${part.tool}, compactedAt=${compactedAt}`,
+          );
+          return;
+        }
+      }
 
       if (part.tool === "task") {
         this.updateSubagentFromTaskTool(part.sessionID, input);

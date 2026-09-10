@@ -16,6 +16,7 @@ interface SummaryAggregatorPrivateState {
   bot: null;
   chatId: null;
   typingIndicatorEnabled: boolean;
+  processedToolStates: Set<string>;
 }
 
 interface KeyboardManagerPrivateState {
@@ -114,6 +115,12 @@ export async function resetSingletonState(): Promise<void> {
   aggregator.bot = null;
   aggregator.chatId = null;
   aggregator.typingIndicatorEnabled = true;
+  // clear() intentionally preserves processedToolStates (replay protection);
+  // tests need it empty so fixed call IDs cannot leak between tests.
+  // Guarded: files that mock the aggregator module supply a stub without it.
+  if (aggregator.processedToolStates instanceof Set) {
+    aggregator.processedToolStates.clear();
+  }
 
   const keyboard = keyboardManager as unknown as KeyboardManagerPrivateState;
   keyboard.state = null;

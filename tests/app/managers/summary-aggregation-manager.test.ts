@@ -32,6 +32,11 @@ describe("summary/aggregator", () => {
     mocked.getCurrentProjectMock.mockReset();
     mocked.getCurrentProjectMock.mockReturnValue({ id: "p1", worktree: "D:/repo", name: "repo" });
     sut.summaryAggregator.clear();
+    // clear() intentionally preserves processedToolStates; reset it explicitly
+    // so call IDs used by earlier tests cannot suppress later assertions.
+    (
+      sut.summaryAggregator as unknown as { processedToolStates: Set<string> }
+    ).processedToolStates.clear();
     sut.summaryAggregator.setOnCleared(() => {});
     sut.summaryAggregator.setOnTool(() => {});
     sut.summaryAggregator.setOnRootToolUpdate(() => {});
@@ -102,6 +107,175 @@ describe("summary/aggregator", () => {
         hasFileAttachment: false,
       }),
     );
+  });
+
+  it("ignores a redelivered completed tool part instead of notifying twice", () => {
+    const onTool = vi.fn();
+    sut.summaryAggregator.setOnTool(onTool);
+    sut.summaryAggregator.setSession("session-1");
+
+    const completedBashEvent = {
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-1",
+          sessionID: "session-1",
+          messageID: "message-1",
+          type: "tool",
+          callID: "call-redelivery",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { command: "npm test" },
+            metadata: {},
+          },
+        },
+      },
+    } as unknown as Event;
+
+    sut.summaryAggregator.processEvent(completedBashEvent);
+    sut.summaryAggregator.processEvent(completedBashEvent);
+
+    expect(onTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps suppressing redelivered completions after clear()", () => {
+    const onTool = vi.fn();
+    sut.summaryAggregator.setOnTool(onTool);
+    sut.summaryAggregator.setSession("session-1");
+
+    sut.summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-1",
+          sessionID: "session-1",
+          messageID: "message-1",
+          type: "tool",
+          callID: "call-survives-clear",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { command: "npm test" },
+            metadata: {},
+          },
+        },
+      },
+    } as unknown as Event);
+
+    sut.summaryAggregator.clear();
+    sut.summaryAggregator.setSession("session-1");
+    sut.summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-1",
+          sessionID: "session-1",
+          messageID: "message-1",
+          type: "tool",
+          callID: "call-survives-clear",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { command: "npm test" },
+            metadata: {},
+          },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a pruned completed tool part replayed with time.compacted", () => {
+    const onTool = vi.fn();
+    const onToolFile = vi.fn();
+    const onRootToolUpdate = vi.fn();
+    sut.summaryAggregator.setOnTool(onTool);
+    sut.summaryAggregator.setOnToolFile(onToolFile);
+    sut.summaryAggregator.setOnRootToolUpdate(onRootToolUpdate);
+    sut.summaryAggregator.setSession("session-1");
+
+    const compactedEditEvent = (compacted: boolean) =>
+      ({
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part-pruned-edit",
+            sessionID: "session-1",
+            messageID: "message-1",
+            type: "tool",
+            callID: "call-pruned-edit",
+            tool: "edit",
+            state: {
+              status: "completed",
+              input: { filePath: "src/one.ts" },
+              metadata: {
+                filediff: { file: "D:/repo/src/one.ts", additions: 2, deletions: 1 },
+                diff: "@@ -1,2 +1,3 @@\n old\n-before\n+after\n+extra",
+              },
+              time: {
+                start: Date.now(),
+                end: Date.now(),
+                ...(compacted ? { compacted: Date.now() } : {}),
+              },
+            },
+          },
+        },
+      }) as unknown as Event;
+
+    sut.summaryAggregator.processEvent(compactedEditEvent(true));
+
+    expect(onTool).not.toHaveBeenCalled();
+    expect(onToolFile).not.toHaveBeenCalled();
+    expect(onRootToolUpdate).not.toHaveBeenCalled();
+
+    // The compacted call must stay suppressed when replayed without the marker.
+    sut.summaryAggregator.processEvent(compactedEditEvent(false));
+    expect(onTool).not.toHaveBeenCalled();
+    expect(onToolFile).not.toHaveBeenCalled();
+    expect(onRootToolUpdate).not.toHaveBeenCalled();
+  });
+
+  it("still notifies for a fresh completed edit without time.compacted", () => {
+    const onTool = vi.fn();
+    const onToolFile = vi.fn();
+    sut.summaryAggregator.setOnTool(onTool);
+    sut.summaryAggregator.setOnToolFile(onToolFile);
+    sut.summaryAggregator.setSession("session-1");
+
+    sut.summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-fresh-edit",
+          sessionID: "session-1",
+          messageID: "message-1",
+          type: "tool",
+          callID: "call-fresh-edit",
+          tool: "edit",
+          state: {
+            status: "completed",
+            input: { filePath: "src/one.ts" },
+            metadata: {
+              filediff: { file: "D:/repo/src/one.ts", additions: 2, deletions: 1 },
+              diff: "@@ -1,2 +1,3 @@\n old\n-before\n+after\n+extra",
+            },
+            time: { start: Date.now(), end: Date.now() },
+          },
+        },
+      },
+    } as unknown as Event);
+
+    expect(onTool).toHaveBeenCalledTimes(1);
+    expect(onTool.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        callId: "call-fresh-edit",
+        tool: "edit",
+        hasFileAttachment: true,
+      }),
+    );
+    expect(onToolFile).toHaveBeenCalledTimes(1);
   });
 
   it("emits root tool updates before completion filtering", () => {
