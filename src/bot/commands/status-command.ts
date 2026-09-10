@@ -2,7 +2,7 @@ import { CommandContext, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
-import { getCurrentProject, getTtsMode } from "../../app/stores/settings-store.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { fetchCurrentAgent } from "../../app/services/agent-selection-service.js";
 import { fetchCurrentModel } from "../../app/services/model-selection-service.js";
 import { getAgentDisplayName } from "../../app/types/agent.js";
@@ -12,6 +12,7 @@ import { logger } from "../../utils/logger.js";
 import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";
 import { t } from "../../i18n/index.js";
 import { sendBotText } from "../messages/telegram-text.js";
+import { getBotVersion } from "../../runtime/bot-version.js";
 
 export async function statusCommand(ctx: CommandContext<Context>) {
   try {
@@ -21,32 +22,26 @@ export async function statusCommand(ctx: CommandContext<Context>) {
       throw error || new Error("No data received from server");
     }
 
+    const botVersion = await getBotVersion();
     let message = `${t("status.header_running")}\n\n`;
-    const healthLabel = data.healthy ? t("status.health.healthy") : t("status.health.unhealthy");
-    message += `${t("status.line.health", { health: healthLabel })}\n`;
+    message += `${t("status.line.bot_version", { version: botVersion })}\n`;
     if (data.version) {
       message += `${t("status.line.version", { version: data.version })}\n`;
     }
-    const ttsMode = getTtsMode();
-    message += `${t("status.line.tts", {
-      tts:
-        ttsMode === "off"
-          ? t("status.tts.off")
-          : ttsMode === "all"
-            ? t("status.tts.all")
-            : t("status.tts.auto"),
-    })}\n`;
 
     // Add agent information
     const currentAgent = await fetchCurrentAgent();
     const agentDisplay = currentAgent
       ? getAgentDisplayName(currentAgent)
       : t("status.agent_not_set");
-    message += `${t("status.line.mode", { mode: agentDisplay })}\n`;
+    message += `\n${t("status.line.mode", { mode: agentDisplay })}\n`;
 
     // Add model information
     const currentModel = fetchCurrentModel();
-    const modelDisplay = `🧠 ${currentModel.providerID}/${currentModel.modelID}`;
+    const modelName = `${currentModel.providerID}/${currentModel.modelID}`;
+    const modelDisplay = currentModel.variant
+      ? `🧠 ${modelName} (${currentModel.variant})`
+      : `🧠 ${modelName}`;
     message += `${t("status.line.model", { model: modelDisplay })}\n`;
 
     const currentProject = getCurrentProject();
@@ -117,6 +112,9 @@ export async function statusCommand(ctx: CommandContext<Context>) {
     } else {
       logger.error("[Bot] Error checking server status:", error);
     }
-    await ctx.reply(t("status.server_unavailable"));
+    const botVersion = await getBotVersion();
+    await ctx.reply(
+      `${t("status.header_unavailable")}\n${t("status.line.bot_version", { version: botVersion })}\n\n${t("status.unavailable_hint")}`,
+    );
   }
 }

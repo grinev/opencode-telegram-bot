@@ -109,6 +109,8 @@ export const ar: I18nDictionary = {
   "bot.file_download_error": "🔴 تعذر تنزيل الملف",
   "bot.file_type_unsupported":
     "⚠️ نوع الملف غير مدعوم. أرسل صورة أو مستندًا (PDF، DOCX، PPTX) أو ملفًا نصيًا أو برمجيًا.",
+  "bot.rich_message_media_skipped": "⚠️ تم تخطي {count} من أجزاء الوسائط غير المدعومة.",
+  "bot.message_type_unsupported": "⚠️ نوع الرسالة هذا غير مدعوم.",
   "bot.media_group_not_processed":
     "⚠️ تعذر معالجة ملف أو أكثر في هذه المجموعة. لم يتم إرسال أي ملف إلى OpenCode.",
   "bot.media_group_download_error": "🔴 تعذر تنزيل أحد الملفات. لم يتم إرسال أي ملف إلى OpenCode.",
@@ -120,7 +122,8 @@ export const ar: I18nDictionary = {
   "status.health.healthy": "يعمل بشكل طبيعي",
   "status.health.unhealthy": "توجد مشكلة",
   "status.line.health": "الحالة: {health}",
-  "status.line.version": "الإصدار: {version}",
+  "status.line.version": "إصدار OpenCode: {version}",
+  "status.line.bot_version": "Bot version: {version}",
   "status.line.managed_yes": "تم تشغيله بواسطة البوت: نعم",
   "status.line.managed_no": "تم تشغيله بواسطة البوت: لا",
   "status.line.pid": "PID: {pid}",
@@ -139,7 +142,8 @@ export const ar: I18nDictionary = {
   "status.session_selected": "الجلسة الحالية: {title}",
   "status.session_not_selected": "الجلسة الحالية: غير محددة",
   "status.session_hint": "استخدم /sessions لاختيار جلسة أو /new لبدء جلسة جديدة",
-  "status.server_unavailable": "🔴 خادم OpenCode غير متاح\n\nاستخدم /opencode_start لتشغيل الخادم.",
+  "status.header_unavailable": "🔴 خادم OpenCode غير متاح",
+  "status.unavailable_hint": "استخدم /opencode_start لتشغيل الخادم.",
 
   "tts.off": "🔇 تم تعطيل الردود الصوتية.",
   "tts.all": "🔊 تم تفعيل الردود الصوتية لجميع الرسائل.",
@@ -150,6 +154,7 @@ export const ar: I18nDictionary = {
 
   "settings.menu.title": "⚙️ إعدادات البوت\nاضغط على إعداد لتبديل قيمته:",
   "settings.compact_output.label": "وضع الإخراج المختصر",
+  "settings.delete_progress_on_finish.label": "حذف التقدم عند الانتهاء",
   "settings.thinking_content.label": "محتوى التفكير",
   "settings.response_streaming.label": "بث الرد",
   "settings.response_streaming.edit": "edit",
@@ -390,6 +395,7 @@ export const ar: I18nDictionary = {
   "keyboard.queued_prompt": "❌ {index}. {text}",
   "queue.added": "📥 أُضيفت إلى قائمة الانتظار ({count}/{max}). ستُرسل بعد انتهاء المهمة الحالية.",
   "queue.full": "⚠️ قائمة الانتظار ممتلئة ({max}). احذف رسالة أو انتظر انتهاء المهمة الحالية.",
+  "queue.media_limit": "⚠️ الوسائط في قائمة الانتظار محدودة بـ {maxSizeMb} MiB. انتظر إرسال عنصر ثم أعد المحاولة.",
   "queue.removed": "🗑 تمت إزالة الرسالة من قائمة الانتظار.",
   "queue.not_found": "لم تعد هذه الرسالة في قائمة الانتظار.",
   "queue.disabled_hint": "يمكن تفعيل قائمة انتظار الرسائل من /settings.",
@@ -447,7 +453,7 @@ export const ar: I18nDictionary = {
   "runtime.wizard.api_url_invalid":
     "أدخل رابطًا صالحًا (http/https) أو اضغط Enter لاستخدام الافتراضي.\n",
   "runtime.wizard.start": "إعداد OpenCode Telegram Bot.\n",
-  "runtime.wizard.saved": "تم حفظ الإعدادات في:\n- {envPath}\n- {settingsPath}\n",
+  "runtime.wizard.saved": "تم حفظ الإعدادات في:\n- {envPath}\n",
   "runtime.wizard.not_configured_starting":
     "لم يتم إعداد التطبيق بعد. جارٍ تشغيل معالج الإعداد...\n",
   "runtime.wizard.tty_required":
@@ -630,4 +636,7 @@ export const ar: I18nDictionary = {
   "attachment.cancel": "❌ إلغاء الإرفاق",
   "attachment.cancelled": "❌ تم إلغاء الإرفاق",
   "attachment.invalid": "⚠️ الملف المرفق لم يعد متاحًا. سيتم إرسال الرسالة بدونه.",
+  "local_command.empty_output": "The command produced no output.",
+  "local_command.failed": "Command failed with exit code {exitCode}: {stderr}",
+  "local_command.timeout": "The command timed out.",
 };

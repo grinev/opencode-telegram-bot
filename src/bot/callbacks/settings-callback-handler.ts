@@ -2,6 +2,7 @@ import type { Context } from "grammy";
 import { isTtsConfigured } from "../../app/services/tts-service.js";
 import {
   getCompactOutputMode,
+  getDeleteCompactProgressOnFinish,
   getPromptQueueEnabled,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
@@ -9,6 +10,7 @@ import {
   getShowThinkingContent,
   getTtsMode,
   setCompactOutputMode,
+  setDeleteCompactProgressOnFinish,
   setPromptQueueEnabled,
   setResponseStreamingMode,
   setSendDiffFileAttachments,
@@ -26,6 +28,7 @@ import {
   SETTINGS_ASSISTANT_FOOTER_CALLBACK,
   SETTINGS_CALLBACK_PREFIX,
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
+  SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK,
   SETTINGS_DIFF_FILES_CALLBACK,
   SETTINGS_PROMPT_QUEUE_CALLBACK,
   SETTINGS_RESPONSE_STREAMING_CALLBACK,
@@ -76,6 +79,16 @@ export async function handleSettingsCallback(ctx: Context): Promise<boolean> {
   try {
     if (callbackData === SETTINGS_COMPACT_OUTPUT_CALLBACK) {
       setCompactOutputMode(!getCompactOutputMode());
+      const { text, keyboard } = buildSettingsMenuView();
+      await ctx.answerCallbackQuery({ text: t("settings.saved") });
+      await ctx.editMessageText(text, {
+        reply_markup: appendInlineMenuCancelButton(keyboard, "settings"),
+      });
+      return true;
+    }
+
+    if (callbackData === SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK) {
+      setDeleteCompactProgressOnFinish(!getDeleteCompactProgressOnFinish());
       const { text, keyboard } = buildSettingsMenuView();
       await ctx.answerCallbackQuery({ text: t("settings.saved") });
       await ctx.editMessageText(text, {

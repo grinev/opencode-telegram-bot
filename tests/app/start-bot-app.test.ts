@@ -107,6 +107,7 @@ vi.mock("#src/utils/logger.ts", () => ({
   },
 }));
 
+import { defined } from "#helpers/defined.js";
 const { startBotApp } = await loadSut<typeof import("#src/app/bootstrap/start-bot-app.js")>(
   "#src/app/bootstrap/start-bot-app.ts",
   import.meta.url,
@@ -350,6 +351,44 @@ describe("app/start-bot-app", () => {
     await rm(stateDir, { recursive: true, force: true });
   });
 
+  it("flushes the log file after settings on uncaught exception", async () => {
+    const { releaseStart, appPromise } = await startAppWithPendingBot();
+
+    expectHandler("uncaughtException")(new Error("boom"));
+    await vi.waitFor(() => {
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+    });
+
+    expect(mocked.flushLoggerMock).toHaveBeenCalledTimes(1);
+    expect(defined(mocked.flushLoggerMock.mock.invocationCallOrder[0])).toBeGreaterThan(
+      defined(mocked.flushSettingsMock.mock.invocationCallOrder[0]),
+    );
+
+    releaseStart();
+    await appPromise;
+  });
+
+  it("flushes the log file after settings before the forced shutdown exit", async () => {
+    const { releaseStart, appPromise } = await startAppWithPendingBot();
+
+    vi.useFakeTimers();
+    expectHandler("SIGINT")();
+    await vi.advanceTimersByTimeAsync(5000);
+    await flushBackgroundTasks();
+
+    expect(mocked.loggerWarnMock).toHaveBeenCalledWith(expect.stringContaining("forcing exit"));
+    expect(mocked.flushSettingsMock).toHaveBeenCalledTimes(1);
+    expect(mocked.flushLoggerMock).toHaveBeenCalledTimes(1);
+    expect(defined(mocked.flushLoggerMock.mock.invocationCallOrder[0])).toBeGreaterThan(
+      defined(mocked.flushSettingsMock.mock.invocationCallOrder[0]),
+    );
+    expect(processExitSpy).toHaveBeenCalledWith(0);
+
+    vi.useRealTimers();
+    releaseStart();
+    await appPromise;
+  });
+
   it("flushes settings before the forced shutdown exit", async () => {
     const { releaseStart, appPromise } = await startAppWithPendingBot();
 
@@ -371,8 +410,8 @@ describe("app/start-bot-app", () => {
     await startBotApp();
 
     expect(mocked.flushSettingsMock).toHaveBeenCalledTimes(1);
-    expect(mocked.flushSettingsMock.mock.invocationCallOrder[0]).toBeGreaterThan(
-      mocked.scheduledTaskShutdownMock.mock.invocationCallOrder[0],
+    expect(defined(mocked.flushSettingsMock.mock.invocationCallOrder[0])).toBeGreaterThan(
+      defined(mocked.scheduledTaskShutdownMock.mock.invocationCallOrder[0]),
     );
   });
 });

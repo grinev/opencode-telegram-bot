@@ -51,3 +51,5 @@ export function getLocalizedBotCommands(): BotCommandDefinition[] {
 }
 
 export const BOT_COMMANDS: BotCommandDefinition[] = getLocalizedBotCommands();
+
+export const BUILT_IN_COMMAND_NAMES = ["start", ...COMMAND_DEFINITIONS.map(({ command }) => command)];

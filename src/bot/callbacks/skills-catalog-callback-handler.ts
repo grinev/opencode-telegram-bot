@@ -8,6 +8,7 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { cancelMenu } from "./feedback.js";
 import { processUserPrompt, type ProcessPromptDeps } from "../handlers/prompt.js";
+import { createIncomingPrompt } from "../../app/types/prompt.js";
 import {
   buildSkillsConfirmKeyboard,
   buildSkillsListKeyboard,
@@ -164,7 +165,7 @@ export async function executeSkill(
   await ctx.reply(executingMessage.text, { entities: executingMessage.entities });
 
   const promptText = args ? `/${params.skillName} ${args}` : `/${params.skillName}`;
-  await processUserPrompt(ctx, promptText, deps);
+  await processUserPrompt(ctx, createIncomingPrompt(promptText), deps);
 }
 
 export async function handleSkillsCallback(

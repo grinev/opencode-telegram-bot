@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import { InlineKeyboard } from "grammy";
 import type { InlineKeyboardButton } from "grammy/types";
+import { defined } from "#helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
   getModelSelectionListsMock: vi.fn(),
@@ -24,6 +25,7 @@ const mocked = vi.hoisted(() => ({
   pinnedGetContextLimitMock: vi.fn(),
   createMainKeyboardMock: vi.fn(),
   replyWithInlineMenuMock: vi.fn(),
+  showVariantMenuAfterModelChangeMock: vi.fn(),
 }));
 
 vi.mock("#src/app/services/model-selection-service.ts", () => ({
@@ -55,6 +57,12 @@ vi.mock("#src/bot/keyboards/keyboard-manager.ts", () => ({
 
 vi.mock("#src/bot/keyboards/main-reply-keyboard.ts", () => ({
   createMainKeyboard: mocked.createMainKeyboardMock,
+}));
+
+vi.mock("#src/bot/menus/variant-selection-menu.ts", () => ({
+  buildVariantSelectionMenu: vi.fn(),
+  showVariantSelectionMenu: vi.fn(),
+  showVariantSelectionMenuAfterModelChange: mocked.showVariantMenuAfterModelChangeMock,
 }));
 
 vi.mock("#src/bot/pinned/pinned-message-manager.ts", () => ({
@@ -127,6 +135,14 @@ function getCallbackData(button: InlineKeyboardButton): string | undefined {
   return "callback_data" in button ? button.callback_data : undefined;
 }
 
+function cell(
+  keyboard: ReadonlyArray<ReadonlyArray<InlineKeyboardButton>>,
+  row: number,
+  col: number,
+): InlineKeyboardButton {
+  return defined(keyboard[row]?.[col], `button[${row}][${col}]`);
+}
+
 describe("bot model selection", () => {
   beforeEach(() => {
     mocked.getModelSelectionListsMock.mockReset();
@@ -153,6 +169,7 @@ describe("bot model selection", () => {
     mocked.pinnedGetContextLimitMock.mockReset().mockReturnValue(0);
     mocked.createMainKeyboardMock.mockReset().mockReturnValue({ keyboard: [["main"]] });
     mocked.replyWithInlineMenuMock.mockReset().mockResolvedValue(999);
+    mocked.showVariantMenuAfterModelChangeMock.mockReset().mockResolvedValue(undefined);
   });
 
   describe("buildModelSelectionMenu", () => {
@@ -167,10 +184,10 @@ describe("bot model selection", () => {
       expect(keyboard).toBeInstanceOf(InlineKeyboard);
       const rows = keyboard.inline_keyboard;
       expect(rows.length).toBeGreaterThanOrEqual(1);
-      expect(rows[0][0].text).toBe("🔍 Search");
-      expect(getCallbackData(rows[0][0])).toBe("model:search");
-      expect(rows[0][1].text).toBe("🗂 Providers");
-      expect(getCallbackData(rows[0][1])).toBe("model:providers:0");
+      expect(cell(rows, 0, 0).text).toBe("🔍 Search");
+      expect(getCallbackData(cell(rows, 0, 0))).toBe("model:search");
+      expect(cell(rows, 0, 1).text).toBe("🗂 Providers");
+      expect(getCallbackData(cell(rows, 0, 1))).toBe("model:providers:0");
     });
 
     it("still returns keyboard with search button when no favorites or recent", async () => {
@@ -183,8 +200,8 @@ describe("bot model selection", () => {
 
       // Keyboard always has at least the search button row
       expect(keyboard.inline_keyboard.length).toBeGreaterThanOrEqual(1);
-      expect(keyboard.inline_keyboard[0][0].text).toBe("🔍 Search");
-      expect(getCallbackData(keyboard.inline_keyboard[0][0])).toBe("model:search");
+      expect(cell(keyboard.inline_keyboard, 0, 0).text).toBe("🔍 Search");
+      expect(getCallbackData(cell(keyboard.inline_keyboard, 0, 0))).toBe("model:search");
     });
 
     it("uses short callback data for long model IDs", async () => {
@@ -195,7 +212,7 @@ describe("bot model selection", () => {
       });
 
       const keyboard = await buildModelSelectionMenu();
-      const callbackData = getCallbackData(keyboard.inline_keyboard[1][0]);
+      const callbackData = getCallbackData(cell(keyboard.inline_keyboard, 1, 0));
 
       expect(callbackData).toBe("model:list:recent:0");
       expect(Buffer.byteLength(callbackData ?? "", "utf-8")).toBeLessThanOrEqual(64);
@@ -258,6 +275,22 @@ describe("bot model selection", () => {
         variant: "default",
       });
       expect(mocked.getModelSelectionListsMock).not.toHaveBeenCalled();
+      expect(mocked.showVariantMenuAfterModelChangeMock).toHaveBeenCalledWith(ctx, {
+        providerID: "fireworks",
+        modelID: longModelID,
+        variant: "default",
+      });
+
+      const replyOrder = defined(
+        (ctx.reply as unknown as { mock: { invocationCallOrder: number[] } }).mock
+          .invocationCallOrder[0],
+        "confirmation reply order",
+      );
+      const variantMenuOrder = defined(
+        mocked.showVariantMenuAfterModelChangeMock.mock.invocationCallOrder[0],
+        "variant menu order",
+      );
+      expect(replyOrder).toBeLessThan(variantMenuOrder);
     });
 
     it("rejects stale search result callbacks instead of parsing them as legacy models", async () => {
@@ -395,10 +428,11 @@ describe("bot model selection", () => {
       });
 
       const result = await handleModelSearchTextInput(ctx);
-      const replyOptions = vi.mocked(ctx.reply).mock.calls[0][1] as {
+      const replyCall = defined(vi.mocked(ctx.reply).mock.calls[0]);
+      const replyOptions = replyCall[1] as {
         reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> };
       };
-      const callbackData = replyOptions.reply_markup.inline_keyboard[0][0].callback_data;
+      const callbackData = defined(replyOptions.reply_markup.inline_keyboard[0]?.[0]).callback_data;
 
       expect(result).toBe(true);
       expect(callbackData).toBe("model:result:0");
@@ -494,6 +528,11 @@ describe("bot model selection", () => {
         modelID: longModelID,
         variant: "default",
       });
+      expect(mocked.showVariantMenuAfterModelChangeMock).toHaveBeenCalledWith(ctx, {
+        providerID: "fireworks",
+        modelID: longModelID,
+        variant: "default",
+      });
     });
 
     it("rejects stale short list callbacks instead of parsing them as legacy models", async () => {
@@ -535,10 +574,10 @@ describe("bot model selection", () => {
 
       expect(view.text).toBe("Select provider from the list:");
       expect(view.keyboard.inline_keyboard).toHaveLength(3);
-      expect(view.keyboard.inline_keyboard[0][0].text).toBe("Provider 0 (1)");
-      expect(getCallbackData(view.keyboard.inline_keyboard[0][0])).toBe("model:provider:0:0");
-      expect(view.keyboard.inline_keyboard[2][0].text).toBe("⬅️ Back");
-      expect(getCallbackData(view.keyboard.inline_keyboard[2][0])).toBe("model:root");
+      expect(cell(view.keyboard.inline_keyboard, 0, 0).text).toBe("Provider 0 (1)");
+      expect(getCallbackData(cell(view.keyboard.inline_keyboard, 0, 0))).toBe("model:provider:0:0");
+      expect(cell(view.keyboard.inline_keyboard, 2, 0).text).toBe("⬅️ Back");
+      expect(getCallbackData(cell(view.keyboard.inline_keyboard, 2, 0))).toBe("model:root");
     });
 
     it("paginates providers and exposes the normalized page", () => {
@@ -548,13 +587,13 @@ describe("bot model selection", () => {
       expect(view.text).toContain("Page 2/2");
 
       const providerButtons = view.keyboard.inline_keyboard.filter((row) =>
-        getCallbackData(row[0])?.startsWith("model:provider:"),
+        getCallbackData(defined(row[0]))?.startsWith("model:provider:"),
       );
       expect(providerButtons).toHaveLength(2);
-      expect(getCallbackData(providerButtons[0][0])).toBe("model:provider:10:0");
+      expect(getCallbackData(cell(providerButtons, 0, 0))).toBe("model:provider:10:0");
 
-      const paginationRow = view.keyboard.inline_keyboard.at(-2);
-      expect(getCallbackData(paginationRow![0])).toBe("model:providers:0");
+      const paginationRow = defined(view.keyboard.inline_keyboard.at(-2));
+      expect(getCallbackData(defined(paginationRow[0]))).toBe("model:providers:0");
     });
 
     it("clamps an out-of-range page", () => {
@@ -568,7 +607,7 @@ describe("bot model selection", () => {
 
       expect(view.text).toBe("⚠️ No connected providers");
       expect(view.keyboard.inline_keyboard).toHaveLength(1);
-      expect(getCallbackData(view.keyboard.inline_keyboard[0][0])).toBe("model:root");
+      expect(getCallbackData(cell(view.keyboard.inline_keyboard, 0, 0))).toBe("model:root");
     });
   });
 
@@ -587,10 +626,10 @@ describe("bot model selection", () => {
 
       expect(view.text).toBe("OpenAI — select model:");
       expect(view.pageModels).toHaveLength(2);
-      expect(view.keyboard.inline_keyboard[0][0].text).toBe("model-0");
-      expect(getCallbackData(view.keyboard.inline_keyboard[0][0])).toBe("model:pick:0");
-      expect(view.keyboard.inline_keyboard[1][0].text).toBe("✅ model-1");
-      expect(getCallbackData(view.keyboard.inline_keyboard[2][0])).toBe("model:providers:2");
+      expect(cell(view.keyboard.inline_keyboard, 0, 0).text).toBe("model-0");
+      expect(getCallbackData(cell(view.keyboard.inline_keyboard, 0, 0))).toBe("model:pick:0");
+      expect(cell(view.keyboard.inline_keyboard, 1, 0).text).toBe("✅ model-1");
+      expect(getCallbackData(cell(view.keyboard.inline_keyboard, 2, 0))).toBe("model:providers:2");
     });
 
     it("paginates models with per-page indices", () => {
@@ -602,10 +641,10 @@ describe("bot model selection", () => {
         { providerID: "openai", modelID: "model-10" },
         { providerID: "openai", modelID: "model-11" },
       ]);
-      expect(getCallbackData(view.keyboard.inline_keyboard[0][0])).toBe("model:pick:0");
+      expect(getCallbackData(cell(view.keyboard.inline_keyboard, 0, 0))).toBe("model:pick:0");
 
-      const paginationRow = view.keyboard.inline_keyboard.at(-2);
-      expect(getCallbackData(paginationRow![0])).toBe("model:provider:3:0");
+      const paginationRow = defined(view.keyboard.inline_keyboard.at(-2));
+      expect(getCallbackData(defined(paginationRow[0]))).toBe("model:provider:3:0");
     });
 
     it("shows a placeholder when the provider has no models", () => {
@@ -729,6 +768,11 @@ describe("bot model selection", () => {
 
       expect(result).toBe(true);
       expect(mocked.selectModelMock).toHaveBeenCalledWith({
+        providerID: "openai",
+        modelID: "gpt-5",
+        variant: "default",
+      });
+      expect(mocked.showVariantMenuAfterModelChangeMock).toHaveBeenCalledWith(ctx, {
         providerID: "openai",
         modelID: "gpt-5",
         variant: "default",

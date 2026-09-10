@@ -1,12 +1,15 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Context } from "grammy";
 import { loadSut } from "#helpers/sut-loader.js";
+
+const botVersion = (JSON.parse(readFileSync("package.json", "utf-8")) as { version: string })
+  .version;
 
 const mocked = vi.hoisted(() => ({
   healthMock: vi.fn(),
   getCurrentSessionMock: vi.fn(),
   getCurrentProjectMock: vi.fn(),
-  getTtsModeMock: vi.fn(),
   fetchCurrentAgentMock: vi.fn(),
   fetchCurrentModelMock: vi.fn(),
   getGitWorktreeContextMock: vi.fn(),
@@ -148,7 +151,6 @@ describe("bot/commands/status-command", () => {
     mocked.healthMock.mockReset();
     mocked.getCurrentSessionMock.mockReset();
     mocked.getCurrentProjectMock.mockReset();
-    mocked.getTtsModeMock.mockReset();
     mocked.fetchCurrentAgentMock.mockReset();
     mocked.fetchCurrentModelMock.mockReset();
     mocked.getGitWorktreeContextMock.mockReset();
@@ -169,7 +171,6 @@ describe("bot/commands/status-command", () => {
     mocked.healthMock.mockResolvedValue({ data: { healthy: true, version: "1.0.0" }, error: null });
     mocked.getCurrentSessionMock.mockReturnValue({ id: "s1", title: "S", directory: "/repo" });
     mocked.getCurrentProjectMock.mockReturnValue({ id: "p1", worktree: "/repo", name: "Repo" });
-    mocked.getTtsModeMock.mockReturnValue("all");
     mocked.fetchCurrentAgentMock.mockResolvedValue("build");
     mocked.fetchCurrentModelMock.mockReturnValue({ providerID: "openai", modelID: "gpt-5" });
     mocked.getGitWorktreeContextMock.mockResolvedValue(null);
@@ -181,7 +182,7 @@ describe("bot/commands/status-command", () => {
     mocked.sendBotTextMock.mockResolvedValue(undefined);
   });
 
-  it("includes TTS status in the rendered message", async () => {
+  it("includes bot and OpenCode versions and omits health and audio replies", async () => {
     const ctx = {
       chat: { id: 42, type: "private" },
       message: { text: "/status" },
@@ -192,8 +193,11 @@ describe("bot/commands/status-command", () => {
     await statusCommand(ctx as never);
 
     const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
-    expect(message).toContain("Audio replies");
-    expect(message).toContain("All");
+    expect(message).toContain(`Bot version: ${botVersion}`);
+    expect(message).toContain("OpenCode version: 1.0.0");
+    expect(message).toContain("OpenCode version: 1.0.0\n\nAgent:");
+    expect(message).not.toContain("Status: Healthy");
+    expect(message).not.toContain("Audio replies");
     expect(message).not.toContain("Started by bot");
   });
 
@@ -244,7 +248,11 @@ describe("bot/commands/status-command", () => {
     expect(mocked.loggerErrorMock).not.toHaveBeenCalled();
     expect(mocked.loggerWarnMock).toHaveBeenCalledTimes(1);
     expect(reply).toHaveBeenCalledTimes(1);
-    expect(reply.mock.calls[0]?.[0]).toContain("OpenCode Server is unavailable");
+    const replyText = reply.mock.calls[0]?.[0] as string;
+    expect(replyText).toContain("OpenCode Server is unavailable");
+    expect(replyText).toContain(`Bot version: ${botVersion}`);
+    expect(replyText).toContain("Use /opencode_start to start the server.");
+    expect(replyText).not.toContain("OpenCode version:");
   });
 
   it("logs unexpected failures as errors", async () => {
@@ -268,6 +276,70 @@ describe("bot/commands/status-command", () => {
       unexpectedError,
     );
     expect(reply).toHaveBeenCalledTimes(1);
-    expect(reply.mock.calls[0]?.[0]).toContain("OpenCode Server is unavailable");
+    const replyText = reply.mock.calls[0]?.[0] as string;
+    expect(replyText).toContain("OpenCode Server is unavailable");
+    expect(replyText).toContain(`Bot version: ${botVersion}`);
+    expect(replyText).toContain("Use /opencode_start to start the server.");
+    expect(replyText).not.toContain("OpenCode version:");
+  });
+
+  it("appends a named variant on the Model line", async () => {
+    mocked.fetchCurrentModelMock.mockReturnValue({
+      providerID: "openai",
+      modelID: "gpt-5",
+      variant: "low",
+    });
+
+    const ctx = {
+      chat: { id: 42, type: "private" },
+      message: { text: "/status" },
+      api: {},
+      reply: vi.fn(),
+    } as unknown as Context;
+
+    await statusCommand(ctx as never);
+
+    const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
+    expect(message).toContain("Model: 🧠 openai/gpt-5 (low)");
+  });
+
+  it("shows (default) when the current variant is default", async () => {
+    mocked.fetchCurrentModelMock.mockReturnValue({
+      providerID: "openai",
+      modelID: "gpt-5",
+      variant: "default",
+    });
+
+    const ctx = {
+      chat: { id: 42, type: "private" },
+      message: { text: "/status" },
+      api: {},
+      reply: vi.fn(),
+    } as unknown as Context;
+
+    await statusCommand(ctx as never);
+
+    const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
+    expect(message).toContain("Model: 🧠 openai/gpt-5 (default)");
+  });
+
+  it("omits parentheses when the model has no variant", async () => {
+    mocked.fetchCurrentModelMock.mockReturnValue({
+      providerID: "openai",
+      modelID: "gpt-5",
+    });
+
+    const ctx = {
+      chat: { id: 42, type: "private" },
+      message: { text: "/status" },
+      api: {},
+      reply: vi.fn(),
+    } as unknown as Context;
+
+    await statusCommand(ctx as never);
+
+    const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
+    expect(message).toContain("Model: 🧠 openai/gpt-5");
+    expect(message).not.toContain("gpt-5 (");
   });
 });

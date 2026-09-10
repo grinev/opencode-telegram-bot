@@ -35,6 +35,7 @@ vi.mock("#src/config.ts", () => ({
   },
 }));
 
+import { defined } from "#helpers/defined.js";
 const { isDocExtractorConfigured, extractDocument } = await loadSut<
   typeof import("#src/app/services/document-extractor-service.js")
 >("#src/app/services/document-extractor-service.ts", import.meta.url);
@@ -91,7 +92,8 @@ describe("extractDocument", () => {
     expect(result).toEqual({ text: "Extracted document content" });
 
     expect(fetchSpy).toHaveBeenCalledOnce();
-    const [url, options] = fetchSpy.mock.calls[0];
+    const call = defined(fetchSpy.mock.calls[0]);
+    const [url, options] = call;
     expect(url).toBe("https://extractor.example.com/extract");
     expect(options?.method).toBe("POST");
     expect((options?.headers as Record<string, string>)["Authorization"]).toBe(
@@ -111,7 +113,7 @@ describe("extractDocument", () => {
     const fileBuffer = Buffer.from("fake-docx-data");
     await extractDocument(fileBuffer, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "doc.docx");
 
-    const formData = fetchSpy.mock.calls[0][1]?.body as FormData;
+    const formData = defined(fetchSpy.mock.calls[0]?.[1])?.body as FormData;
     const fileField = formData.get("file") as Blob;
 
     expect(fileField).toBeInstanceOf(Blob);
@@ -131,7 +133,7 @@ describe("extractDocument", () => {
     const fileBuffer = Buffer.from("fake-document-data");
     await extractDocument(fileBuffer, "application/pdf", "doc.pdf");
 
-    const headers = fetchSpy.mock.calls[0][1]?.headers as Record<string, string>;
+    const headers = defined(fetchSpy.mock.calls[0]?.[1])?.headers as Record<string, string>;
     expect(headers["Authorization"]).toBeUndefined();
   });
 

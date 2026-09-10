@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Bot, Context } from "grammy";
 import type { ScheduledTask } from "#src/app/types/scheduled-task.js";
+import { defined } from "#helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
   tasks: [] as ScheduledTask[],
@@ -114,7 +115,7 @@ vi.mock("#src/app/stores/scheduled-task-store.ts", () => ({
         return null;
       }
 
-      const nextTask = cloneTask(updater(cloneTask(mocked.tasks[index])));
+      const nextTask = cloneTask(updater(cloneTask(defined(mocked.tasks[index]))));
       mocked.tasks[index] = nextTask;
       return cloneTask(nextTask);
     },

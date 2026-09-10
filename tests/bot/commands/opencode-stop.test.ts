@@ -109,6 +109,7 @@ const { interactionManager } = await loadSut<typeof import("#src/app/managers/in
   "#src/app/managers/interaction-manager.ts",
   import.meta.url,
 );
+import { createIncomingPrompt } from "#src/app/types/prompt.js";
 
 function createContext(): Context {
   return {
@@ -219,7 +220,7 @@ describe("bot/commands/opencode-stop-command", () => {
       directory: "D:/repo",
       busy: true,
     });
-    promptQueue.add("queued after hang");
+    promptQueue.add(createIncomingPrompt("queued after hang"));
     interactionManager.start({
       kind: "question",
       expectedInput: "mixed",

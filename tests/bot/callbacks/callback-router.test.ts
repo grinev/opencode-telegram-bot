@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Context } from "grammy";
 import { loadSut } from "#helpers/sut-loader.js";
+import { defined } from "#helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
   clearInteractionErrorState: vi.fn(),
@@ -330,7 +331,7 @@ function registerAndGetCallback() {
     ensureEventSubscription: vi.fn(),
     setTelegramContext: vi.fn(),
   });
-  return bot.on.mock.calls[0][1] as (ctx: Context) => Promise<void>;
+  return defined(bot.on.mock.calls[0]?.[1]) as (ctx: Context) => Promise<void>;
 }
 
 function createCallbackContext(data = "unknown"): Context {

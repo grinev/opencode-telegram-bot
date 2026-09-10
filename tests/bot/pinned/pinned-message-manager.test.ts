@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import { loadSut } from "#helpers/sut-loader.js";
 import { createSettingsStoreMock } from "#helpers/settings-store-mock.js";
+import { defined } from "#helpers/defined.js";
+import { __resetStreamThrottleForTests, noteStreamActivity } from "#src/bot/streaming/stream-throttle.js";
 
 const mocked = vi.hoisted(() => ({
   opencodeClient: {
@@ -20,6 +22,7 @@ const mocked = vi.hoisted(() => ({
   getStoredModel: vi.fn().mockReturnValue(null),
   getModelContextLimit: vi.fn().mockResolvedValue(204800),
   getGitWorktreeContext: vi.fn(),
+  formatModelDisplayName: vi.fn(() => "test-model"),
 }));
 
 vi.mock("#src/opencode/client.js", () => ({ opencodeClient: mocked.opencodeClient }));
@@ -45,6 +48,11 @@ vi.mock("#src/app/services/model-selection-service.ts", () => ({
   getFavoriteModels: vi.fn(() => []),
   getModelSelectionLists: vi.fn(),
   __resetModelCatalogCacheForTests: vi.fn(),
+  selectModel: vi.fn(),
+  getProviders: vi.fn(async () => []),
+  getProviderModels: vi.fn(async () => []),
+  searchModels: vi.fn(async () => []),
+  fetchCurrentModel: vi.fn(),
 }));
 vi.mock("#src/app/services/model-context-limit-service.js", () => ({
   DEFAULT_CONTEXT_LIMIT: 204800,
@@ -76,7 +84,7 @@ vi.mock("#src/bot/pinned/pinned-message-format.js", () => ({
   DEFAULT_CONTEXT_LIMIT: 204800,
   formatContextLine: (used: number, limit: number) => `${used}/${limit}`,
   formatCostLine: (cost: number) => `$${cost.toFixed(2)}`,
-  formatModelDisplayName: () => "test-model",
+  formatModelDisplayName: mocked.formatModelDisplayName,
 }));
 
 // Must import AFTER vi.mock calls
@@ -86,6 +94,10 @@ const { pinnedMessageManager } = await loadSut<typeof import("#src/bot/pinned/pi
 );
 
 describe("pinned/manager", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   let fakeApi: {
     sendMessage: ReturnType<typeof vi.fn>;
     editMessageText: ReturnType<typeof vi.fn>;
@@ -101,11 +113,14 @@ describe("pinned/manager", () => {
       unpinAllChatMessages: vi.fn().mockResolvedValue(undefined),
     };
 
+    __resetStreamThrottleForTests();
     // Reset manager state by re-initializing
     pinnedMessageManager.initialize(fakeApi as never, 123);
 
     mocked.getCurrentSession.mockReturnValue({ id: "ses-1", title: "Test Session" });
     mocked.getCurrentProject.mockReturnValue({ id: "p1", worktree: "D:/repo", name: "repo" });
+    mocked.formatModelDisplayName.mockReset();
+    mocked.formatModelDisplayName.mockReturnValue("test-model");
     mocked.getStoredModel.mockReturnValue({ providerID: "openai", modelID: "gpt-5" });
     mocked.getModelContextLimit.mockResolvedValue(204800);
     mocked.getPinnedMessageId.mockReturnValue(null);
@@ -315,6 +330,20 @@ describe("pinned/manager", () => {
     });
   });
 
+  describe("model line", () => {
+    it("passes the stored variant into the model formatter", async () => {
+      mocked.getStoredModel.mockReturnValue({
+        providerID: "openai",
+        modelID: "gpt-5",
+        variant: "low",
+      });
+
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+
+      expect(mocked.formatModelDisplayName).toHaveBeenCalledWith("openai", "gpt-5", "low");
+    });
+  });
+
   describe("setOnKeyboardUpdate race condition fix", () => {
     it("fires callback immediately with current state when contextLimit is known", async () => {
       // Create session to set contextLimit
@@ -365,7 +394,7 @@ describe("pinned/manager", () => {
       await vi.advanceTimersByTimeAsync(1000);
 
       expect(fakeApi.editMessageText).toHaveBeenCalledTimes(1);
-      const text = String(fakeApi.editMessageText.mock.calls[0][2]);
+      const text = String(defined(fakeApi.editMessageText.mock.calls[0]?.[2]));
       expect(text).toContain("src/a.ts (+1)");
       expect(text).toContain("src/b.ts (+2 -1)");
       expect(text).toContain("src/c.ts (+3)");
@@ -393,7 +422,17 @@ describe("pinned/manager", () => {
       expect(pinnedMessageManager.getState().changedFiles).toEqual([
         { file: "D:/repo/src/a.ts", additions: 5, deletions: 3 },
       ]);
-      expect(String(fakeApi.editMessageText.mock.calls[0][2])).toContain("src/a.ts (+5 -3)");
+    });
+
+    it("lengthens the debounce window after a minute of activity", async () => {
+      noteStreamActivity("ses-1", Date.now() - 60_000);
+
+      pinnedMessageManager.addFileChange({ file: "D:/repo/src/b.ts", additions: 1, deletions: 0 });
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(fakeApi.editMessageText).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fakeApi.editMessageText).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -415,7 +454,7 @@ describe("pinned/manager", () => {
       const third = pinnedMessageManager.onCostUpdate(3);
 
       expect(fakeApi.editMessageText).toHaveBeenCalledTimes(1);
-      expect(String(fakeApi.editMessageText.mock.calls[0][2])).toContain("$1.00");
+      expect(String(defined(fakeApi.editMessageText.mock.calls[0]?.[2]))).toContain("$1.00");
 
       releaseFirstEdit();
       await Promise.all([first, second, third]);
@@ -423,7 +462,7 @@ describe("pinned/manager", () => {
       // The two updates that arrived during the first edit collapse into a
       // single trailing edit carrying the latest state.
       expect(fakeApi.editMessageText).toHaveBeenCalledTimes(2);
-      expect(String(fakeApi.editMessageText.mock.calls[1][2])).toContain("$6.00");
+      expect(String(defined(fakeApi.editMessageText.mock.calls[1]?.[2]))).toContain("$6.00");
     });
 
     it("skips a non-forced update when the rendered text did not change", async () => {
@@ -617,6 +656,8 @@ describe("pinned/manager", () => {
       ]);
       await vi.advanceTimersByTimeAsync(1000);
 
+      await vi.advanceTimersByTimeAsync(1000);
+
       expect(fakeApi.editMessageText).toHaveBeenCalledTimes(1);
     });
 
@@ -632,7 +673,7 @@ describe("pinned/manager", () => {
       await vi.advanceTimersByTimeAsync(1000);
 
       expect(fakeApi.editMessageText).toHaveBeenCalledTimes(2);
-      expect(String(fakeApi.editMessageText.mock.calls[1][2])).not.toContain("src/b.ts");
+      expect(String(defined(fakeApi.editMessageText.mock.calls[1]?.[2]))).not.toContain("src/b.ts");
     });
 
     it("applies a diff that changes the line counts of the same file", async () => {
@@ -646,7 +687,7 @@ describe("pinned/manager", () => {
       await vi.advanceTimersByTimeAsync(1000);
 
       expect(fakeApi.editMessageText).toHaveBeenCalledTimes(2);
-      expect(String(fakeApi.editMessageText.mock.calls[1][2])).toContain("src/a.ts (+2)");
+      expect(String(defined(fakeApi.editMessageText.mock.calls[1]?.[2]))).toContain("src/a.ts (+2)");
     });
   });
 
@@ -740,7 +781,7 @@ describe("pinned/manager", () => {
       await pinnedMessageManager.onSessionTitleUpdate("Renamed session");
 
       expect(fakeApi.editMessageText).toHaveBeenCalledTimes(1);
-      expect(String(fakeApi.editMessageText.mock.calls[0][2])).toContain("Renamed session");
+      expect(String(defined(fakeApi.editMessageText.mock.calls[0]?.[2]))).toContain("Renamed session");
     });
 
     it("drops the busy flag as soon as the session is detached", async () => {
@@ -831,7 +872,7 @@ describe("pinned/manager", () => {
       );
       await vi.advanceTimersByTimeAsync(1000);
 
-      const text = String(fakeApi.editMessageText.mock.calls[0][2]);
+      const text = String(defined(fakeApi.editMessageText.mock.calls[0]?.[2]));
       expect(text).toContain("Files (12):");
       expect(text).toContain("src/file-9.ts");
       expect(text).not.toContain("src/file-10.ts");
@@ -844,7 +885,7 @@ describe("pinned/manager", () => {
       ]);
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(String(fakeApi.editMessageText.mock.calls[0][2])).toContain(".../nested/path/file.ts");
+      expect(String(defined(fakeApi.editMessageText.mock.calls[0]?.[2]))).toContain(".../nested/path/file.ts");
     });
   });
 

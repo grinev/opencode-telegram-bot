@@ -1,6 +1,6 @@
 {
   "name": "@primigenum/opencode-telegram-bot",
-  "version": "0.24.1",
+  "version": "0.25.1",
   "description": "Telegram bot client for OpenCode to run and monitor coding tasks from chat. Bun port of @grinev/opencode-telegram-bot.",
   "type": "module",
   "main": "./src/index.ts",

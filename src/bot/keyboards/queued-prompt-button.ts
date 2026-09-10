@@ -22,13 +22,15 @@ export function formatQueuedPromptButtonLabel(index: number, text: string): stri
 }
 
 export function getQueuedPromptButtonLabels(): string[] {
-  return promptQueue.list().map((item, index) => formatQueuedPromptButtonLabel(index + 1, item.text));
+  return promptQueue
+    .list()
+    .map((item, index) => formatQueuedPromptButtonLabel(index + 1, item.displayText));
 }
 
 export function findQueuedPromptByButtonLabel(label: string): QueuedPrompt | null {
   const items = promptQueue.list();
   const index = items.findIndex(
-    (item, itemIndex) => formatQueuedPromptButtonLabel(itemIndex + 1, item.text) === label,
+    (item, itemIndex) => formatQueuedPromptButtonLabel(itemIndex + 1, item.displayText) === label,
   );
 
   return index < 0 ? null : (items[index] ?? null);

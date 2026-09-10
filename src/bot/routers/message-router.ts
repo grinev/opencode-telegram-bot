@@ -31,6 +31,8 @@ import { queuePromptForMerging } from "../handlers/message-merger.js";
 import { handleCatalogTextArguments } from "../handlers/text-message-handler.js";
 import { handleVoiceMessage } from "../handlers/voice-handler.js";
 import { unknownCommandMiddleware } from "../middleware/unknown-command.js";
+import { getIncomingPrompt } from "../handlers/rich-message-handler.js";
+import { handleUnsupportedMessage } from "../handlers/unsupported-message-handler.js";
 
 interface MessageRouterDeps {
   ensureEventSubscription: (directory: string) => Promise<void>;
@@ -183,10 +185,11 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
   });
 
   bot.on("message:text", async (ctx) => {
-    const text = ctx.message?.text;
-    if (!text) {
+    const input = getIncomingPrompt(ctx);
+    if (!input) {
       return;
     }
+    const { text } = input;
 
     deps.setTelegramContext(bot, ctx.chat.id);
 
@@ -220,10 +223,14 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
       return;
     }
 
-    queuePromptForMerging(ctx, text, promptDeps, config.bot.messageMergeWindowMs);
+    queuePromptForMerging(ctx, input, promptDeps, config.bot.messageMergeWindowMs);
 
     logger.debug(
       `[Bot] message:text handler completed (merge window=${config.bot.messageMergeWindowMs}ms)`,
     );
+  });
+
+  bot.on("message", async (ctx) => {
+    await handleUnsupportedMessage(ctx);
   });
 }

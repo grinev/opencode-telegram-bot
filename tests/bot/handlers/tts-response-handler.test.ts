@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "#vitest";
 import { InputFile } from "grammy";
 import { mockDep } from "#helpers/mock-dep.js";
 import { loadSut } from "#helpers/sut-loader.js";
+import { defined } from "#helpers/defined.js";
 
 import { loadSut } from "#helpers/sut-loader.js";
 mockDep(
@@ -50,7 +51,8 @@ describe("bot/handlers/tts-response-handler", () => {
     expect(result).toBe(true);
     expect(synthesizeSpeechMock).toHaveBeenCalledWith("Hello from audio");
     expect(sendAudioMock).toHaveBeenCalledTimes(1);
-    const [chatId, inputFile] = sendAudioMock.mock.calls[0];
+    const call = defined(sendAudioMock.mock.calls[0]);
+    const [chatId, inputFile] = call;
     expect(chatId).toBe(123);
     expect(inputFile).toBeInstanceOf(InputFile);
     expect(sendMessageMock).not.toHaveBeenCalled();

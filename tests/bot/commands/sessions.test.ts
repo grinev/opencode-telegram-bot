@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Bot, Context } from "grammy";
 import { loadSut } from "#helpers/sut-loader.js";
 import { createSettingsStoreMock } from "#helpers/settings-store-mock.js";
+import { defined } from "#helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -17,7 +18,14 @@ const mocked = vi.hoisted(() => ({
   keyboardInitializeMock: vi.fn(),
   keyboardGetKeyboardMock: vi.fn(() => ({ inline_keyboard: [] })),
   keyboardUpdateAgentMock: vi.fn(),
+  keyboardUpdateModelMock: vi.fn(),
   keyboardUpdateContextMock: vi.fn(),
+  applySessionSettingsMock: vi.fn(),
+  getStoredModelMock: vi.fn(() => ({
+    providerID: "opencode-go",
+    modelID: "deepseek-v4-flash",
+    variant: "default",
+  })),
   keyboardGetContextInfoMock: vi.fn(() => null),
   pinnedIsInitializedMock: vi.fn(() => false),
   pinnedInitializeMock: vi.fn(),
@@ -42,6 +50,19 @@ vi.mock("#src/opencode/client.ts", () => ({
 const settingsStoreMock = createSettingsStoreMock();
 settingsStoreMock.getCurrentProject = vi.fn(() => mocked.currentProject);
 vi.mock("#src/app/stores/settings-store.ts", () => settingsStoreMock);
+
+vi.mock("#src/app/services/model-selection-service.ts", () => ({
+  getStoredModel: mocked.getStoredModelMock,
+  selectModel: vi.fn(),
+  reconcileStoredModelSelection: vi.fn(),
+  getFavoriteModels: vi.fn(() => []),
+  getModelSelectionLists: vi.fn(),
+  __resetModelCatalogCacheForTests: vi.fn(),
+  getProviders: vi.fn(async () => []),
+  getProviderModels: vi.fn(async () => []),
+  searchModels: vi.fn(async () => []),
+  fetchCurrentModel: vi.fn(),
+}));
 
 vi.mock("#src/app/services/session-service.ts", () => ({
   setCurrentSession: mocked.setCurrentSessionMock,
@@ -77,13 +98,22 @@ vi.mock("#src/bot/keyboards/keyboard-manager.ts", () => ({
     getKeyboard: mocked.keyboardGetKeyboardMock,
     getContextInfo: mocked.keyboardGetContextInfoMock,
     updateAgent: mocked.keyboardUpdateAgentMock,
+    updateModel: mocked.keyboardUpdateModelMock,
     updateContext: mocked.keyboardUpdateContextMock,
   },
 }));
 
 vi.mock("#src/app/services/agent-selection-service.ts", () => ({
   resolveProjectAgent: mocked.resolveProjectAgentMock,
-    getStoredAgent: vi.fn(),
+  getStoredAgent: vi.fn(),
+  getAvailableAgents: vi.fn(async () => []),
+  fetchCurrentAgent: vi.fn(async () => "build"),
+  selectAgent: vi.fn(),
+  applyAgentConfiguredSettings: vi.fn(async () => false),
+}));
+
+vi.mock("#src/app/services/session-settings-service.ts", () => ({
+  applySessionSettings: mocked.applySessionSettingsMock,
 }));
 
 vi.mock("#src/bot/pinned/pinned-message-manager.ts", () => ({
@@ -262,7 +292,9 @@ describe("bot/commands/sessions", () => {
     mocked.keyboardGetContextInfoMock.mockReset();
     mocked.keyboardGetContextInfoMock.mockReturnValue(null);
     mocked.keyboardUpdateAgentMock.mockReset();
+    mocked.keyboardUpdateModelMock.mockReset();
     mocked.keyboardUpdateContextMock.mockReset();
+    mocked.applySessionSettingsMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReturnValue(false);
     mocked.pinnedInitializeMock.mockReset();
@@ -339,7 +371,7 @@ describe("bot/commands/sessions", () => {
     });
     expect(ctx.editMessageText).toHaveBeenCalledTimes(1);
 
-    const [text, options] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [text, options] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
@@ -469,6 +501,64 @@ describe("bot/commands/sessions", () => {
         taskName: "sessions.sendPreview",
       }),
     );
+  });
+
+  it("pulls the settings of the selected session before attaching to it", async () => {
+    const session = createSession(0);
+    mocked.sessionGetMock.mockResolvedValueOnce({ data: session, error: null });
+
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    await handleSessionSelect(createCallbackContext("session:session-1", 456), createDeps());
+
+    expect(mocked.applySessionSettingsMock).toHaveBeenCalledWith(session);
+    expect(defined(mocked.applySessionSettingsMock.mock.invocationCallOrder[0])).toBeLessThan(
+      defined(mocked.attachToSessionMock.mock.invocationCallOrder[0]),
+    );
+  });
+
+  it("puts the pulled model on the keyboard sent with the selection message", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    await handleSessionSelect(createCallbackContext("session:session-1", 456), createDeps());
+
+    expect(mocked.keyboardUpdateModelMock).toHaveBeenCalledWith({
+      providerID: "opencode-go",
+      modelID: "deepseek-v4-flash",
+      variant: "default",
+    });
+    expect(defined(mocked.keyboardUpdateModelMock.mock.invocationCallOrder[0])).toBeLessThan(
+      defined(mocked.keyboardGetKeyboardMock.mock.invocationCallOrder[0]),
+    );
+  });
+
+  it("pulls the settings when a background session notification is opened", async () => {
+    const session = createSession(0);
+    mocked.sessionGetMock.mockResolvedValueOnce({ data: session, error: null });
+
+    const handled = await handleBackgroundSessionOpen(
+      createCallbackContext("background-session:session-1", 456),
+      createDeps(),
+    );
+
+    expect(handled).toBe(true);
+    expect(mocked.applySessionSettingsMock).toHaveBeenCalledWith(session);
   });
 
   it("blocks session selection callback while foreground session is busy", async () => {

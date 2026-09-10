@@ -106,6 +106,8 @@ export const ko: I18nDictionary = {
   "bot.photo_too_large": "⚠️ 사진이 너무 큽니다 (최대 {maxSizeMb}MB)",
   "bot.photo_model_no_image": "⚠️ 현재 모델은 이미지 입력을 지원하지 않습니다. 텍스트만 전송합니다.",
   "bot.photo_download_error": "🔴 사진 다운로드에 실패했습니다",
+  "bot.photo_vision_describing": "🔍 로컬 비전 모델로 사진을 설명하는 중...",
+  "bot.photo_vision_fallback_error": "🔴 로컬 비전 서비스를 사용할 수 없습니다 (127.0.0.1:8082). ~/models/lfm2.5-vl-3b/start.sh 로 시작하세요",
   "bot.photo_no_caption": "💡 팁: 이 사진으로 무엇을 할지 설명하는 캡션을 추가해 보세요.",
   "bot.file_downloading": "⏳ 파일을 다운로드하는 중...",
   "bot.files_downloading": "⏳ 파일들을 다운로드하는 중...",
@@ -113,6 +115,8 @@ export const ko: I18nDictionary = {
   "bot.file_download_error": "🔴 파일 다운로드에 실패했습니다",
   "bot.file_type_unsupported":
     "⚠️ 지원되지 않는 파일 형식입니다. 이미지, 문서(PDF, DOCX, PPTX) 또는 텍스트/코드 파일을 보내 주세요.",
+  "bot.rich_message_media_skipped": "⚠️ 지원되지 않는 미디어 {count}개를 건너뛰었습니다.",
+  "bot.message_type_unsupported": "⚠️ 지원되지 않는 메시지 형식입니다.",
   "bot.media_group_not_processed":
     "⚠️ 이 앨범의 일부 파일은 처리할 수 없습니다. OpenCode에 아무것도 전송되지 않았습니다.",
   "bot.media_group_download_error":
@@ -125,7 +129,8 @@ export const ko: I18nDictionary = {
   "status.health.healthy": "정상",
   "status.health.unhealthy": "비정상",
   "status.line.health": "상태: {health}",
-  "status.line.version": "버전: {version}",
+  "status.line.version": "OpenCode 버전: {version}",
+  "status.line.bot_version": "Bot version: {version}",
   "status.line.managed_yes": "봇이 시작함: 예",
   "status.line.managed_no": "봇이 시작함: 아니요",
   "status.line.pid": "PID: {pid}",
@@ -144,8 +149,8 @@ export const ko: I18nDictionary = {
   "status.session_selected": "현재 세션: {title}",
   "status.session_not_selected": "현재 세션: 선택 안 됨",
   "status.session_hint": "/sessions에서 선택하거나 /new로 새로 만들어 주세요",
-  "status.server_unavailable":
-    "🔴 OpenCode 서버에 연결할 수 없습니다\n\n/opencode_start로 서버를 시작해 주세요.",
+  "status.header_unavailable": "🔴 OpenCode 서버에 연결할 수 없습니다",
+  "status.unavailable_hint": "/opencode_start로 서버를 시작해 주세요.",
 
   "tts.off": "🔇 음성 답변이 비활성화되었습니다.",
   "tts.all": "🔊 모든 메시지에 음성 답변이 활성화되었습니다.",
@@ -156,6 +161,7 @@ export const ko: I18nDictionary = {
 
   "settings.menu.title": "⚙️ 봇 설정\n항목을 탭하여 값을 전환하세요:",
   "settings.compact_output.label": "간결 출력 모드",
+  "settings.delete_progress_on_finish.label": "완료 시 진행 삭제",
   "settings.thinking_content.label": "생각 내용",
   "settings.response_streaming.label": "응답 스트리밍",
   "settings.response_streaming.edit": "편집",
@@ -408,6 +414,7 @@ export const ko: I18nDictionary = {
   "keyboard.queued_prompt": "❌ {index}. {text}",
   "queue.added": "📥 대기열에 추가되었습니다 ({count}/{max}). 현재 작업이 끝나면 전송됩니다.",
   "queue.full": "⚠️ 대기열이 가득 찼습니다 ({max}). 메시지를 삭제하거나 현재 작업이 끝날 때까지 기다려 주세요.",
+  "queue.media_limit": "⚠️ 대기열 미디어는 총 {maxSizeMb} MiB로 제한됩니다. 항목이 전송된 후 다시 시도하세요.",
   "queue.removed": "🗑 대기열에서 메시지를 삭제했습니다.",
   "queue.not_found": "이 메시지는 더 이상 대기열에 없습니다.",
   "queue.disabled_hint": "메시지 대기열은 /settings에서 활성화할 수 있습니다.",
@@ -466,7 +473,7 @@ export const ko: I18nDictionary = {
   "runtime.wizard.api_url_invalid":
     "유효한 URL(http/https)을 입력하거나 Enter를 눌러 기본값을 사용하세요.\n",
   "runtime.wizard.start": "OpenCode Telegram Bot 설정을 시작합니다.\n",
-  "runtime.wizard.saved": "설정이 저장되었습니다:\n- {envPath}\n- {settingsPath}\n",
+  "runtime.wizard.saved": "설정이 저장되었습니다:\n- {envPath}\n",
   "runtime.wizard.not_configured_starting":
     "아직 구성되지 않았습니다. 설정 마법사를 시작합니다...\n",
   "runtime.wizard.tty_required":
@@ -656,4 +663,7 @@ export const ko: I18nDictionary = {
   "attachment.cancel": "❌ 첨부 취소",
   "attachment.cancelled": "❌ 첨부가 취소되었습니다",
   "attachment.invalid": "⚠️ 첨부한 파일을 더 이상 사용할 수 없습니다. 파일 없이 메시지를 보냅니다.",
+  "local_command.empty_output": "The command produced no output.",
+  "local_command.failed": "Command failed with exit code {exitCode}: {stderr}",
+  "local_command.timeout": "The command timed out.",
 };

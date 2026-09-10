@@ -52,6 +52,8 @@ export function createSettingsStoreMock(): SettingsStoreMock {
     setVisibleProjects: vi.fn(),
     getCompactOutputMode: vi.fn(() => false),
     setCompactOutputMode: vi.fn(),
+    getDeleteCompactProgressOnFinish: vi.fn(() => false),
+    setDeleteCompactProgressOnFinish: vi.fn(),
     getShowThinkingContent: vi.fn(() => true),
     setShowThinkingContent: vi.fn(),
     getShowAssistantRunFooter: vi.fn(() => true),

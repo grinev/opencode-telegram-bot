@@ -41,6 +41,7 @@ const { __resetUserAbortErrorSuppressionForTests, shouldSuppressUserAbortSession
 );
 import { promptQueue } from "#src/app/managers/prompt-queue-manager.js";
 import { promptAttachment } from "#src/app/managers/prompt-attachment-manager.js";
+import { createIncomingPrompt } from "#src/app/types/prompt.js";
 
 const mocked = vi.hoisted(() => ({
   currentSession: null as { id: string; title: string; directory: string } | null,
@@ -204,7 +205,7 @@ describe("bot/commands/abort", () => {
       data: { "session-1": { type: "idle" } },
       error: null,
     });
-    promptQueue.add("queued while running");
+    promptQueue.add(createIncomingPrompt("queued while running"));
 
     const ctx = {
       chat: { id: 777 },

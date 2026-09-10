@@ -15,9 +15,15 @@ export function formatTokenCount(count: number): string {
 export function formatModelDisplayName(
   providerID?: string | null,
   modelID?: string | null,
+  variant?: string | null,
 ): string {
   if (providerID && modelID) {
-    return `${providerID}/${modelID}`;
+    const name = `${providerID}/${modelID}`;
+    if (variant) {
+      return `${name} (${variant})`;
+    }
+
+    return name;
   }
 
   return t("pinned.unknown");

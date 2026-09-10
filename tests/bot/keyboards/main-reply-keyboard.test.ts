@@ -4,9 +4,18 @@ const { createAgentKeyboard, createMainKeyboard, removeKeyboard } = await loadSu
   "#src/bot/keyboards/main-reply-keyboard.ts",
   import.meta.url,
 );
+import { defined } from "#helpers/defined.js";
 
 function getButtonText(button: string | { text: string }): string {
   return typeof button === "string" ? button : button.text;
+}
+
+function buttonTextAt(
+  keyboard: ReturnType<typeof createMainKeyboard>,
+  row: number,
+  col: number,
+): string {
+  return getButtonText(defined(keyboard.keyboard[row]?.[col], `button[${row}][${col}]`));
 }
 
 describe("bot/keyboards/main-reply-keyboard", () => {
@@ -16,10 +25,10 @@ describe("bot/keyboards/main-reply-keyboard", () => {
       modelID: "openai/gpt-4o",
     });
 
-    expect(getButtonText(keyboard.keyboard[0][0])).toBe("🛠️ Build Agent");
-    expect(getButtonText(keyboard.keyboard[0][1])).toBe("📊 0");
-    expect(getButtonText(keyboard.keyboard[1][0])).toBe("🧠 openrouter\nopenai/gpt-4o");
-    expect(getButtonText(keyboard.keyboard[1][1])).toBe("💡 Default");
+    expect(buttonTextAt(keyboard, 0, 0)).toBe("🛠️ Build Agent");
+    expect(buttonTextAt(keyboard, 0, 1)).toBe("📊 0");
+    expect(buttonTextAt(keyboard, 1, 0)).toBe("🧠 openrouter\nopenai/gpt-4o");
+    expect(buttonTextAt(keyboard, 1, 1)).toBe("💡 Default");
     expect(keyboard.resize_keyboard).toBe(true);
     expect(keyboard.is_persistent).toBe(true);
   });
@@ -38,9 +47,9 @@ describe("bot/keyboards/main-reply-keyboard", () => {
       "⚡ Fast",
     );
 
-    expect(getButtonText(keyboard.keyboard[0][0])).toBe("📋 Plan Agent");
-    expect(getButtonText(keyboard.keyboard[0][1])).toBe("📊 150K / 1.5M (10%)");
-    expect(getButtonText(keyboard.keyboard[1][1])).toBe("⚡ Fast");
+    expect(buttonTextAt(keyboard, 0, 0)).toBe("📋 Plan Agent");
+    expect(buttonTextAt(keyboard, 0, 1)).toBe("📊 150K / 1.5M (10%)");
+    expect(buttonTextAt(keyboard, 1, 1)).toBe("⚡ Fast");
   });
 
   it("keeps the fixed 2x2 grid when no prompt is queued", () => {
@@ -64,12 +73,12 @@ describe("bot/keyboards/main-reply-keyboard", () => {
       ["❌ 1. first", "❌ 2. second"],
     );
 
-    expect(getButtonText(keyboard.keyboard[0][0])).toBe("❌ 1. first");
-    expect(getButtonText(keyboard.keyboard[1][0])).toBe("❌ 2. second");
-    expect(getButtonText(keyboard.keyboard[2][0])).toBe("🛠️ Build Agent");
-    expect(getButtonText(keyboard.keyboard[2][1])).toBe("📊 0");
-    expect(getButtonText(keyboard.keyboard[3][0])).toBe("🧠 openrouter\nopenai/gpt-4o");
-    expect(getButtonText(keyboard.keyboard[3][1])).toBe("💡 Default");
+    expect(buttonTextAt(keyboard, 0, 0)).toBe("❌ 1. first");
+    expect(buttonTextAt(keyboard, 1, 0)).toBe("❌ 2. second");
+    expect(buttonTextAt(keyboard, 2, 0)).toBe("🛠️ Build Agent");
+    expect(buttonTextAt(keyboard, 2, 1)).toBe("📊 0");
+    expect(buttonTextAt(keyboard, 3, 0)).toBe("🧠 openrouter\nopenai/gpt-4o");
+    expect(buttonTextAt(keyboard, 3, 1)).toBe("💡 Default");
   });
 
   it("creates custom agent keyboard and remove payload", () => {

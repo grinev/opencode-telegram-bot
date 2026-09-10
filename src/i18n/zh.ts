@@ -97,6 +97,8 @@ export const zh: I18nDictionary = {
   "bot.file_download_error": "🔴 下载文件失败",
   "bot.file_type_unsupported":
     "⚠️ 不支持此文件类型。请发送图片、文档（PDF、DOCX、PPTX）或文本/代码文件。",
+  "bot.rich_message_media_skipped": "⚠️ 已跳过 {count} 个不受支持的媒体部分。",
+  "bot.message_type_unsupported": "⚠️ 不支持此消息类型。",
   "bot.media_group_not_processed":
     "⚠️ 此相册中有一个或多个文件无法处理。未向 OpenCode 发送任何内容。",
   "bot.media_group_download_error": "🔴 无法下载其中一个文件。未向 OpenCode 发送任何内容。",
@@ -108,7 +110,8 @@ export const zh: I18nDictionary = {
   "status.health.healthy": "健康",
   "status.health.unhealthy": "不健康",
   "status.line.health": "状态：{health}",
-  "status.line.version": "版本：{version}",
+  "status.line.version": "OpenCode 版本：{version}",
+  "status.line.bot_version": "Bot version: {version}",
   "status.line.managed_yes": "由机器人启动：是",
   "status.line.managed_no": "由机器人启动：否",
   "status.line.pid": "PID：{pid}",
@@ -127,7 +130,8 @@ export const zh: I18nDictionary = {
   "status.session_selected": "当前会话：{title}",
   "status.session_not_selected": "当前会话：未选择",
   "status.session_hint": "使用 /sessions 选择一个会话，或 /new 创建",
-  "status.server_unavailable": "🔴 OpenCode 服务器不可用\n\n使用 /opencode_start 启动服务器。",
+  "status.header_unavailable": "🔴 OpenCode 服务器不可用",
+  "status.unavailable_hint": "使用 /opencode_start 启动服务器。",
 
   "tts.off": "🔇 语音回复已关闭。",
   "tts.all": "🔊 已为所有消息启用语音回复。",
@@ -137,6 +141,7 @@ export const zh: I18nDictionary = {
 
   "settings.menu.title": "⚙️ 机器人设置\n点按设置项以切换其值：",
   "settings.compact_output.label": "紧凑输出模式",
+  "settings.delete_progress_on_finish.label": "完成后删除进度",
   "settings.thinking_content.label": "思考内容",
   "settings.response_streaming.label": "回复流式模式",
   "settings.response_streaming.edit": "edit",
@@ -367,6 +372,7 @@ export const zh: I18nDictionary = {
   "keyboard.queued_prompt": "❌ {index}. {text}",
   "queue.added": "📥 已加入队列（{count}/{max}）。当前任务完成后将自动发送。",
   "queue.full": "⚠️ 队列已满（{max}）。请删除一条消息或等待当前任务完成。",
+  "queue.media_limit": "⚠️ 队列媒体总大小限制为 {maxSizeMb} MiB。请等待一个项目发送后重试。",
   "queue.removed": "🗑 消息已从队列中移除。",
   "queue.not_found": "该消息已不在队列中。",
   "queue.disabled_hint": "可在 /settings 中开启消息队列。",
@@ -421,7 +427,7 @@ export const zh: I18nDictionary = {
     "请输入 OpenCode 服务器密码（可选）。\n按 Enter 保持为空。\n> ",
   "runtime.wizard.api_url_invalid": "请输入有效 URL（http/https），或按 Enter 使用默认值。\n",
   "runtime.wizard.start": "OpenCode Telegram Bot 设置。\n",
-  "runtime.wizard.saved": "配置已保存：\n- {envPath}\n- {settingsPath}\n",
+  "runtime.wizard.saved": "配置已保存：\n- {envPath}\n",
   "runtime.wizard.not_configured_starting": "应用尚未配置。正在启动向导...\n",
   "runtime.wizard.tty_required":
     "交互式向导需要 TTY 终端。请在交互式 shell 中运行 `opencode-telegram config`。",
@@ -599,4 +605,7 @@ export const zh: I18nDictionary = {
   "attachment.cancel": "❌ 取消附加",
   "attachment.cancelled": "❌ 已取消附加",
   "attachment.invalid": "⚠️ 附加的文件已不可用，将不带该文件发送消息。",
+  "local_command.empty_output": "The command produced no output.",
+  "local_command.failed": "Command failed with exit code {exitCode}: {stderr}",
+  "local_command.timeout": "The command timed out.",
 };

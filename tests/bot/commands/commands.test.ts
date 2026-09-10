@@ -30,6 +30,9 @@ const { foregroundSessionState } = await loadSut<typeof import("#src/app/manager
   "#src/app/managers/foreground-session-state-manager.ts",
   import.meta.url,
 );
+import { attachManager } from "#src/app/managers/attach-manager.js";
+import { defined } from "#helpers/defined.js";
+import { logger } from "#src/utils/logger.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -115,24 +118,6 @@ vi.mock("#src/app/services/model-selection-service.ts", () => ({
 vi.mock("#src/utils/safe-background-task.ts", () => ({
   safeBackgroundTask: vi.fn((options) => {
     mocked.safeBackgroundTaskMock(options);
-    try {
-      const taskPromise = options.task();
-      void Promise.resolve(taskPromise)
-        .then((result) => {
-          if (options.onSuccess) {
-            return options.onSuccess(result);
-          }
-        })
-        .catch((error) => {
-          if (options.onError) {
-            return options.onError(error);
-          }
-        });
-    } catch (error) {
-      if (options.onError) {
-        void options.onError(error);
-      }
-    }
   }),
 }));
 
@@ -205,10 +190,30 @@ function createDeps(): ExecuteCommandDeps {
   };
 }
 
+function getScheduledBackgroundTask(): {
+  task: () => Promise<unknown>;
+  onSuccess?: (value: { error: unknown | null }) => void;
+  onError?: (error: unknown) => void;
+} {
+  const [[options]] = mocked.safeBackgroundTaskMock.mock.calls as [
+    [
+      {
+        task: () => Promise<unknown>;
+        onSuccess?: (value: { error: unknown | null }) => void;
+        onError?: (error: unknown) => void;
+      },
+    ],
+  ];
+
+  return options;
+}
+
 describe("bot/commands/commands", () => {
   beforeEach(() => {
     interactionManager.clear("test_setup");
     foregroundSessionState.__resetForTests();
+    attachManager.__resetForTests();
+    attachManager.attach("session-1", "D:\\Projects\\Repo");
 
     mocked.currentProject = {
       id: "project-1",
@@ -267,7 +272,7 @@ describe("bot/commands/commands", () => {
     expect(mocked.commandListMock).toHaveBeenCalledWith({ directory: "D:/Projects/Repo" });
     expect(ctx.reply).toHaveBeenCalledTimes(1);
 
-    const [, options] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
@@ -331,7 +336,8 @@ describe("bot/commands/commands", () => {
 
     const ctx = createCallbackContext("commands:execute", 400);
     const handled = await handleCommandsCallback(ctx, createDeps());
-    await Promise.resolve();
+    const backgroundTask = getScheduledBackgroundTask();
+    await backgroundTask.task();
 
     expect(handled).toBe(true);
     expect(interactionManager.getSnapshot()).toBeNull();
@@ -376,7 +382,8 @@ describe("bot/commands/commands", () => {
 
     const ctx = createTextContext("about spring");
     const handled = await handleCommandTextArguments(ctx, createDeps());
-    await Promise.resolve();
+    const backgroundTask = getScheduledBackgroundTask();
+    await backgroundTask.task();
 
     expect(handled).toBe(true);
     expect(interactionManager.getSnapshot()).toBeNull();
@@ -400,6 +407,167 @@ describe("bot/commands/commands", () => {
       model: "openai/gpt-5",
       variant: "default",
     });
+  });
+
+  it("notifies the user when session.command reports an error while attached", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "mixed",
+      metadata: {
+        flow: "commands",
+        stage: "confirm",
+        messageId: 400,
+        projectDirectory: "D:\\Projects\\Repo",
+        commandName: "poem",
+      },
+    });
+
+    const ctx = createCallbackContext("commands:execute", 400);
+    const handled = await handleCommandsCallback(ctx, createDeps());
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("command failed") });
+
+    expect(handled).toBe(true);
+    expect(ctx.api.sendMessage).toHaveBeenCalledWith(777, t("commands.execute_error"));
+  });
+
+  it("notifies the user when session.command rejects while attached", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "mixed",
+      metadata: {
+        flow: "commands",
+        stage: "confirm",
+        messageId: 400,
+        projectDirectory: "D:\\Projects\\Repo",
+        commandName: "poem",
+      },
+    });
+
+    const ctx = createCallbackContext("commands:execute", 400);
+    const handled = await handleCommandsCallback(ctx, createDeps());
+    const backgroundTask = getScheduledBackgroundTask();
+    const startError = new Error("network down");
+    mocked.sessionCommandMock.mockRejectedValueOnce(startError);
+
+    await backgroundTask.task().catch((error) => {
+      backgroundTask.onError?.(error);
+    });
+
+    expect(handled).toBe(true);
+    expect(ctx.api.sendMessage).toHaveBeenCalledWith(777, t("commands.execute_error"));
+  });
+
+  it("does not notify the user when session.command reports an error after detach", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "mixed",
+      metadata: {
+        flow: "commands",
+        stage: "confirm",
+        messageId: 400,
+        projectDirectory: "D:\\Projects\\Repo",
+        commandName: "poem",
+      },
+    });
+
+    const ctx = createCallbackContext("commands:execute", 400);
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+    const handled = await handleCommandsCallback(ctx, createDeps());
+
+    attachManager.clear("test_detach");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("command failed") });
+
+    expect(handled).toBe(true);
+    expect(ctx.api.sendMessage).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not notify the user when session.command rejects after detach", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "mixed",
+      metadata: {
+        flow: "commands",
+        stage: "confirm",
+        messageId: 400,
+        projectDirectory: "D:\\Projects\\Repo",
+        commandName: "poem",
+      },
+    });
+
+    const ctx = createCallbackContext("commands:execute", 400);
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+    const handled = await handleCommandsCallback(ctx, createDeps());
+
+    attachManager.clear("test_detach");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    const startError = new Error("network down");
+    mocked.sessionCommandMock.mockRejectedValueOnce(startError);
+
+    await backgroundTask.task().catch((error) => {
+      backgroundTask.onError?.(error);
+    });
+
+    expect(handled).toBe(true);
+    expect(ctx.api.sendMessage).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not notify the user when session.command fails while attached to another session", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "mixed",
+      metadata: {
+        flow: "commands",
+        stage: "confirm",
+        messageId: 400,
+        projectDirectory: "D:\\Projects\\Repo",
+        commandName: "poem",
+      },
+    });
+
+    const ctx = createCallbackContext("commands:execute", 400);
+    const handled = await handleCommandsCallback(ctx, createDeps());
+
+    attachManager.attach("session-2", "D:\\Projects\\Repo");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("command failed") });
+
+    expect(handled).toBe(true);
+    expect(ctx.api.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("still notifies the user when session.command fails after re-attach to the same session", async () => {
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "mixed",
+      metadata: {
+        flow: "commands",
+        stage: "confirm",
+        messageId: 400,
+        projectDirectory: "D:\\Projects\\Repo",
+        commandName: "poem",
+      },
+    });
+
+    const ctx = createCallbackContext("commands:execute", 400);
+    const handled = await handleCommandsCallback(ctx, createDeps());
+
+    attachManager.clear("test_detach");
+    attachManager.attach("session-1", "D:\\Projects\\Repo");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("command failed") });
+
+    expect(handled).toBe(true);
+    expect(ctx.api.sendMessage).toHaveBeenCalledWith(777, t("commands.execute_error"));
   });
 
   it("handles stale callback as inactive", async () => {
@@ -443,7 +611,7 @@ describe("bot/commands/commands", () => {
 
     expect(mocked.commandListMock).toHaveBeenCalledWith({ directory: "D:/Projects/Repo" });
 
-    const [, options] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string; text: string }>> } },
     ];
@@ -474,7 +642,7 @@ describe("bot/commands/commands", () => {
 
     expect(ctx.reply).toHaveBeenCalledTimes(1);
 
-    const [, options] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
@@ -518,7 +686,7 @@ describe("bot/commands/commands", () => {
     expect(handled).toBe(true);
     expect(ctx.editMessageText).toHaveBeenCalledTimes(1);
 
-    const [text, options] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [text, options] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string; text: string }>> } },
     ];

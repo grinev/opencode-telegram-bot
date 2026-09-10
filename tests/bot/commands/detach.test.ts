@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Context } from "grammy";
-import { loadSut } from "#helpers/sut-loader.js";
+import { defined } from "#helpers/defined.js";
 
 import { loadSut } from "#helpers/sut-loader.js";
 const mocked = {
@@ -165,9 +165,10 @@ describe("bot/commands/detach", () => {
   });
 
   it("detaches the active session and clears UI state", async () => {
-    mocked.currentSession = { id: "session-1", title: "Session", directory: "D:/repo" };
+    mocked.currentSession = { id: "session-1", title: "Long Run", directory: "D:/repo" };
 
-    await sut.detachCommand(createContext() as never);
+    const ctx = createContext();
+    await sut.detachCommand(ctx as never);
 
     expect(mocked.detachAttachedSessionMock).toHaveBeenCalledWith("detach_command");
     expect(mocked.clearSessionMock).toHaveBeenCalledWith();
@@ -177,6 +178,13 @@ describe("bot/commands/detach", () => {
     expect(mocked.clearAllInteractionStateMock).toHaveBeenCalledWith("detach_command");
     expect(mocked.pinnedClearMock).toHaveBeenCalled();
     expect(mocked.keyboardUpdateContextMock).toHaveBeenCalledWith(0, 200000);
+    expect(defined(mocked.keyboardUpdateContextMock.mock.invocationCallOrder[0])).toBeLessThan(
+      defined(mocked.keyboardGetKeyboardMock.mock.invocationCallOrder[0]),
+    );
+    expect(ctx.reply).toHaveBeenCalledWith(
+      t("detach.success", { title: "Long Run" }),
+      expect.objectContaining({ reply_markup: { keyboard: true } }),
+    );
   });
 
   it("replies with a not-attached message when no session is active", async () => {

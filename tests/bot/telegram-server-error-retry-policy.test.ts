@@ -17,7 +17,6 @@ function accelerateTime(): { restore: () => void } {
     },
   };
 }
-
 const mocked = vi.hoisted(() => ({
   fetch: vi.fn(),
 }));

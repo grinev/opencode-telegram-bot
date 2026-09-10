@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "#vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "#vitest";
 import type { Context } from "grammy";
 import { loadSut } from "#helpers/sut-loader.js";
+import { defined } from "#helpers/defined.js";
 const { t } = await loadSut<typeof import("#src/i18n/index.js")>(
   "#src/i18n/index.ts",
   import.meta.url,
@@ -171,6 +172,10 @@ function makeScanResult(
 // --- Tests ---
 
 describe("open command", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   beforeEach(() => {
     clearOpenPathIndex();
     // Reset hoisted mocks that need custom return values
@@ -220,6 +225,16 @@ describe("open command", () => {
       await openCommand(ctx as never);
 
       expect(mocked.replyBusyBlockedMock).toHaveBeenCalledWith(ctx);
+      expect(mocked.scanDirectoryMock).not.toHaveBeenCalled();
+    });
+
+    it("should warn instead of browsing when running in a container", async () => {
+      vi.stubEnv("OPENCODE_TELEGRAM_CONTAINER", "1");
+
+      const ctx = createCommandContext();
+      await openCommand(ctx as never);
+
+      expect(ctx.reply).toHaveBeenCalledWith(t("runtime.container.command_unavailable"));
       expect(mocked.scanDirectoryMock).not.toHaveBeenCalled();
     });
 
@@ -358,8 +373,8 @@ describe("open command", () => {
         "open_project_selected",
         expect.objectContaining({ presentation: expect.any(Object) }),
       );
-      const upsertOrder = mocked.upsertSessionDirectoryMock.mock.invocationCallOrder[0];
-      const getProjectOrder = mocked.getProjectByWorktreeMock.mock.invocationCallOrder[0];
+      const upsertOrder = defined(mocked.upsertSessionDirectoryMock.mock.invocationCallOrder[0]);
+      const getProjectOrder = defined(mocked.getProjectByWorktreeMock.mock.invocationCallOrder[0]);
       expect(upsertOrder).toBeLessThan(getProjectOrder);
 
       expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
@@ -407,7 +422,7 @@ describe("open command", () => {
       await openCommand(ctx as never);
 
       // Extract callback_data from the keyboard built by ctx.reply
-      const replyCall = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0];
+      const replyCall = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]);
       const keyboard = replyCall[1]?.reply_markup;
       const firstRow = keyboard?.inline_keyboard?.[0];
       const callbackData = firstRow?.[0]?.callback_data as string;
@@ -438,7 +453,7 @@ describe("open command", () => {
       const ctx = createCommandContext();
       await openCommand(ctx as never);
 
-      const replyCall = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0];
+      const replyCall = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]);
       const keyboard = replyCall[1]?.reply_markup;
       const firstRow = keyboard?.inline_keyboard?.[0];
       const callbackData = firstRow?.[0]?.callback_data as string;
@@ -455,7 +470,7 @@ describe("open command", () => {
       const ctx = createCommandContext();
       await openCommand(ctx as never);
 
-      const replyCall = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0];
+      const replyCall = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]);
       const keyboard = replyCall[1]?.reply_markup;
       const firstRow = keyboard?.inline_keyboard?.[0];
       const callbackData = firstRow?.[0]?.callback_data as string;
@@ -474,7 +489,7 @@ describe("open command", () => {
       const cmdCtx = createCommandContext();
       await openCommand(cmdCtx as never);
 
-      const replyCall = (cmdCtx.reply as ReturnType<typeof vi.fn>).mock.calls[0];
+      const replyCall = defined((cmdCtx.reply as ReturnType<typeof vi.fn>).mock.calls[0]);
       const callbackData = replyCall[1]?.reply_markup?.inline_keyboard?.[0]?.[0]
         ?.callback_data as string;
       expect(callbackData).toMatch(/^open:nav:#\d+$/);

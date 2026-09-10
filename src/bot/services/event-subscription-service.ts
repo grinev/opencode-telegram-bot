@@ -9,7 +9,7 @@ import {
   type ToolInfo,
 } from "../../app/managers/summary-aggregation-manager.js";
 import { formatCompactToolActivity, formatToolInfo } from "../../app/formatters/summary-formatter.js";
-import { renderSubagentCards } from "../../app/formatters/subagent-formatter.js";
+import { renderSubagentCard } from "../../app/formatters/subagent-formatter.js";
 import {
   RUNNING_ICON,
   TOOL_ELAPSED_THRESHOLD_MS,
@@ -20,6 +20,7 @@ import {
 import { ToolMessageBatcher } from "../../app/formatters/tool-message-batcher.js";
 import {
   getCompactOutputMode,
+  getDeleteCompactProgressOnFinish,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
   getShowAssistantRunFooter,
@@ -266,6 +267,29 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           throw error;
         }
       },
+      deleteText: async (sessionId, messageId) => {
+        if (!this.botInstance || !this.chatIdInstance || this.chatIdInstance <= 0) {
+          throw new Error("Bot context missing for compact progress delete");
+        }
+
+        const currentSession = getCurrentSession();
+        if (!currentSession || currentSession.id !== sessionId) {
+          throw new Error(`Compact progress session mismatch for delete: ${sessionId}`);
+        }
+
+        await this.botInstance.api.deleteMessage(this.chatIdInstance, messageId).catch((error) => {
+          const errorMessage =
+            error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+          if (
+            errorMessage.includes("message to delete not found") ||
+            errorMessage.includes("message identifier is not specified")
+          ) {
+            return;
+          }
+
+          throw error;
+        });
+      },
     });
 
     this.toolCallStreamer = new ToolCallStreamer({
@@ -424,17 +448,25 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     }
 
     try {
-      const renderedCards = await renderSubagentCards(subagents, Date.now());
-      if (!renderedCards) {
-        return;
-      }
-
-      this.toolCallStreamer.replaceByPrefix(
-        sessionId,
-        SUBAGENT_STREAM_PREFIX,
-        renderedCards,
-        "subagent",
+      const now = Date.now();
+      const renderedCards = await Promise.all(
+        subagents.map(async (subagent) => ({
+          subagent,
+          text: await renderSubagentCard(subagent, now),
+        })),
       );
+      for (const { subagent, text } of renderedCards) {
+        if (!text) {
+          continue;
+        }
+
+        this.toolCallStreamer.replaceByPrefix(
+          sessionId,
+          SUBAGENT_STREAM_PREFIX,
+          text,
+          this.getSubagentStreamKey(subagent.cardId),
+        );
+      }
     } catch (err) {
       logger.error("Failed to refresh subagent activity for Telegram:", err);
     }
@@ -817,20 +849,33 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
 
       this.subagentSnapshots.set(sessionId, subagents);
-      this.runningToolTracker.setHeartbeatActive(sessionId, true);
+      this.runningToolTracker.setHeartbeatActive(
+        sessionId,
+        subagents.some(
+          (subagent) => subagent.status === "pending" || subagent.status === "running",
+        ),
+      );
 
       try {
-        const renderedCards = await renderSubagentCards(subagents, Date.now());
-        if (!renderedCards) {
-          return;
-        }
-
-        this.toolCallStreamer.replaceByPrefix(
-          sessionId,
-          SUBAGENT_STREAM_PREFIX,
-          renderedCards,
-          "subagent",
+        const now = Date.now();
+        const renderedCards = await Promise.all(
+          subagents.map(async (subagent) => ({
+            subagent,
+            text: await renderSubagentCard(subagent, now),
+          })),
         );
+        for (const { subagent, text } of renderedCards) {
+          if (!text) {
+            continue;
+          }
+
+          this.toolCallStreamer.replaceByPrefix(
+            sessionId,
+            SUBAGENT_STREAM_PREFIX,
+            text,
+            this.getSubagentStreamKey(subagent.cardId),
+          );
+        }
       } catch (err) {
         logger.error("Failed to render subagent activity for Telegram:", err);
       }
@@ -1139,7 +1184,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       try {
         await Promise.all([
           this.toolMessageBatcher.flushSession(sessionId, "session_idle"),
-          this.toolCallStreamer.flushSession(sessionId, "session_idle"),
+          this.toolCallStreamer.breakSession(sessionId, "session_idle"),
         ]);
 
         if (getShowAssistantRunFooter() && completedRun?.hasCompletedResponse) {
@@ -1202,7 +1247,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       assistantRunState.clearRun(sessionId, "session_error");
       await Promise.all([
         this.toolMessageBatcher.flushSession(sessionId, "session_error"),
-        this.toolCallStreamer.flushSession(sessionId, "session_error"),
+        this.toolCallStreamer.breakSession(sessionId, "session_error"),
       ]);
 
       const normalizedMessage = message.trim() || t("common.unknown_error");
@@ -1620,7 +1665,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       return existingTask;
     }
 
-    const nextTask = this.compactProgressStreamer.finalize(sessionId).finally(() => {
+    const nextTask = this.compactProgressStreamer
+      .finalize(sessionId, getDeleteCompactProgressOnFinish())
+      .finally(() => {
       if (this.compactProgressFinalizationTasks.get(sessionId) === nextTask) {
         this.compactProgressFinalizationTasks.delete(sessionId);
       }
@@ -1642,6 +1689,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     }
 
     return "default";
+  }
+
+  private getSubagentStreamKey(cardId: string): ToolStreamKey {
+    return `subagent:${cardId}`;
   }
 
   private getCompactToolActivity(toolInfo: ToolInfo): string | null {

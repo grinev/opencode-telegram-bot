@@ -44,6 +44,7 @@ No public inbound ports are required for normal usage.
 
 - Fetch last N sessions (name + date)
 - Select an existing session and automatically follow its live updates
+- Switching to an existing session adopts the agent, model, and variant it last ran with
 - Create a new session
 - Use OpenCode-generated session title (based on conversation)
 
@@ -52,7 +53,7 @@ No public inbound ports are required for normal usage.
 - Send text prompts to OpenCode
 - Accept voice/audio messages, transcribe via Whisper-compatible STT API, and forward recognized text as prompts
 - Interrupt current task (ESC equivalent)
-- Optionally queue text messages sent while a task is running (max 5) and send them one by one after completion
+- Optionally queue text, transcribed voice, photos, rich formatted messages with photos, supported documents, and media groups sent while a task is running; hold at most `MAX_QUEUED_PROMPTS` (5) items and 20 MiB of raw Telegram media bytes, checked from reliable `file_size` before downloads
 - Handle OpenCode questions with inline options and custom text answers
 - Send selected/custom answers back to OpenCode (`question.reply`)
 - Handle permission requests interactively (`allow once` / `always` / `reject`)
@@ -61,6 +62,7 @@ No public inbound ports are required for normal usage.
 
 - Send each completed assistant response after completion signal from SSE
 - Show elapsed time for tool calls running longer than 20 seconds, updated on a timer so it keeps counting while a tool blocks without producing output; covers subagent cards and compact mode, and the total duration stays on the finished tool line. A finished subagent card keeps the time its whole run took. Durations use the same `· 🕒 1h 2m 3s` format as the assistant run footer
+- A subagent card shows Task, Agent, and Model; when OpenCode sends a variant, the Model line is `provider/id (variant)`
 - Render assistant replies with native Telegram formatting: real tables with the column alignment declared in markdown, bullet lists with their nesting, block quotes that keep their nested content, headings, and syntax-highlighted code. Numbered lists and checklists keep literal markers (`1.`, ✅/🔲), because Telegram clients number a native ordered list from zero and do not draw the native checkbox at all
 - Deliver reasoning as a collapsed quote that expands on tap
 - Hide full model reasoning by default; optionally stream it in the thinking message when explicitly enabled
@@ -71,7 +73,7 @@ No public inbound ports are required for normal usage.
 ### Session status in chat
 
 - Keep a pinned status message in the chat
-- Show session title, project, model, context usage, and changed files
+- Show session title, project, model, context usage, and changed files; when a variant is set, the model line is `provider/id (variant)`
 - Auto-update status from SSE and tool events
 - Preserve pinned message ID across bot restarts
 
@@ -105,10 +107,10 @@ No public inbound ports are required for normal usage.
 
 Current command set:
 
-- `/status` - server, project, and session status
+- `/status` - bot version, server, project, and session status
 - `/new` - create a new session
 - `/abort` - stop the current task
-- `/detach` - detach the bot from the current session without stopping it
+- `/detach` - detach the bot from the current session without stopping it; a later command or prompt HTTP failure for that session is not posted to chat unless the bot has re-attached to it
 - `/sessions` - show and switch recent sessions
 - `/messages` - browse user messages in the current session
 - `/projects` - show and switch projects
@@ -144,6 +146,14 @@ Model picker behavior:
 - Default configured model (`OPENCODE_MODEL_PROVIDER` + `OPENCODE_MODEL_ID`) is treated as favorite
 - Models can be browsed by provider: the picker offers a providers list and a paginated model
   list per provider, with a back button on each screen (page size: `MODELS_LIST_LIMIT`)
+- Picking a model opens the variant picker right after the confirmation when the model offers
+  more than one selectable variant; a model with only `Default` ends at the confirmation
+
+Agent picker behavior:
+
+- Picking an agent applies that agent's configured model and/or variant when the agent names
+  them; a field the agent does not name is left as it is. This is not a model pick and does
+  not open the variant menu
 
 ### Main features already implemented
 
@@ -155,9 +165,10 @@ Model picker behavior:
 - [x] Background notifications for detached/non-current sessions in the currently selected project/worktree
 - [x] Telegram-friendly result delivery, including sending generated code/files when needed
 - [x] Interactive question and permission handling directly in chat (buttons + custom answers)
-- [x] Live pinned session status in chat (project, model, context usage, changed files)
+- [x] Live pinned session status in chat (project, model with variant in parentheses when set, context usage, changed files)
 - [x] In-chat controls for model, agent, variant, and context
 - [x] Built-in and custom command catalog access (`/commands`)
+- [x] Trusted local JSON commands from the persistent application home, executed without OpenCode or model tokens
 - [x] Skills catalog access (`/skills`)
 - [x] Scheduled task creation flow (`/task`), remembering the agent selected at creation and showing it (alongside the model) in the task confirmation and task details
 - [x] Scheduled task runtime execution with deferred Telegram delivery
@@ -179,8 +190,9 @@ Model picker behavior:
 - [x] Interactive project file browsing and file download from Telegram (`/ls`)
 - [x] Attaching a project file from `/ls` to the next prompt as a native OpenCode file part
 - [x] `/messages` command: browse session messages with revert and fork functionality
-- [x] Optional message queue for text sent while the agent is busy, managed from the bottom keyboard
+- [x] Optional message queue for text, voice, photos, rich formatted messages with photos, documents, and media groups sent while the agent is busy, managed from the bottom keyboard
 - [x] Native Telegram rich message formatting for assistant replies (Bot API 10.1)
+- [x] Incoming Telegram rich formatted messages (Bot API 10.1): converted to Markdown, accepted anywhere text is accepted, with photos attached and unsupported message types answered explicitly
 
 ## Current Task List
 

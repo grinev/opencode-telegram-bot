@@ -166,6 +166,23 @@ describe("bot/commands/rename", () => {
     expect(interactionManager.getSnapshot()?.kind).toBe("rename");
   });
 
+  it("keeps rename flow active on a present empty rich title", async () => {
+    renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    renameManager.setMessageId(555);
+    interactionManager.start({
+      kind: "rename",
+      expectedInput: "text",
+      metadata: { sessionId: "session-1", messageId: 555 },
+    });
+
+    const ctx = createRenameTextContext("");
+    const handled = await handleRenameTextAnswer(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.reply).toHaveBeenCalledWith(t("rename.empty_title"));
+    expect(renameManager.isWaitingForName()).toBe(true);
+  });
+
   it("rejects stale rename cancel callback", async () => {
     renameManager.startWaiting("session-1", "D:/repo", "Old title");
     renameManager.setMessageId(555);

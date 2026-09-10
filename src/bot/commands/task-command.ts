@@ -325,7 +325,7 @@ export async function taskCommand(ctx: CommandContext<Context>): Promise<void> {
 
 export async function handleTaskTextInput(ctx: Context): Promise<boolean> {
   const text = ctx.message?.text;
-  if (!text || text.startsWith("/")) {
+  if (text === undefined || text.startsWith("/")) {
     return false;
   }
 

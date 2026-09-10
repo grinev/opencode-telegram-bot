@@ -93,6 +93,7 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
 
     // Send confirmation message with updated keyboard, then drop the inline menu
     await switched(ctx, t("variant.changed_message", { name: displayName }), keyboard);
+    await pinnedMessageManager.refresh();
 
     return true;
   } catch (err) {

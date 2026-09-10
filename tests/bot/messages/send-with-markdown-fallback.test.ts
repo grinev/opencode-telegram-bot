@@ -9,6 +9,10 @@ function badRequestError(message: string): Error & { error_code: number } {
   return Object.assign(new Error(message), { error_code: 400 });
 }
 
+function badRequestError(message: string): Error & { error_code: number } {
+  return Object.assign(new Error(message), { error_code: 400 });
+}
+
 describe("bot/messages/send-with-markdown-fallback", () => {
   it("sends with MarkdownV2 when there is no parse error", async () => {
     const sendMessage = vi.fn().mockResolvedValue(undefined);

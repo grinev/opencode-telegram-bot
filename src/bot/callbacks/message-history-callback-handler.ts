@@ -4,6 +4,10 @@ import type { InteractionState } from "../../app/types/interaction.js";
 import { clearAllInteractionState, interactionManager } from "../../app/managers/interaction-manager.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession } from "../../app/services/session-service.js";
+import { applySessionSettings } from "../../app/services/session-settings-service.js";
+import { getStoredAgent } from "../../app/services/agent-selection-service.js";
+import { getStoredModel } from "../../app/services/model-selection-service.js";
+import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import type { SessionInfo } from "../../app/types/session.js";
 import { attachToSession } from "../../app/services/attach-service.js";
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
@@ -276,6 +280,11 @@ export async function handleMessagesCallback(
         };
 
         setCurrentSession(sessionInfo);
+        // Pull before attaching, so the pinned message rendered inside
+        // attachToSession already carries the forked session's model.
+        applySessionSettings(forkedSession);
+        keyboardManager.updateAgent(getStoredAgent());
+        keyboardManager.updateModel(getStoredModel());
         clearAllInteractionState("session_forked");
         await ingestSessionInfoForCache(forkedSession);
 

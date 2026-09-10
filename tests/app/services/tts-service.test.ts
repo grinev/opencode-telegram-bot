@@ -72,6 +72,7 @@ vi.mock("#src/config.ts", () => ({
   },
 }));
 
+import { defined } from "#helpers/defined.js";
 const { isTtsConfigured, synthesizeSpeech, stripMarkdownForSpeech, extractLanguageCode, _resetGoogleClient } = await loadSut<typeof import("#src/app/services/tts-service.js")>(
   "#src/app/services/tts-service.ts",
   import.meta.url,
@@ -248,7 +249,7 @@ describe("synthesizeSpeech (OpenAI)", () => {
 
     await synthesizeSpeech("Hello **bold** world");
 
-    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    const body = JSON.parse(String(defined(fetchSpy.mock.calls[0]?.[1])?.body));
     expect(body.input).toBe("Hello bold world");
   });
 
@@ -267,7 +268,8 @@ describe("synthesizeSpeech (OpenAI)", () => {
     expect(result.buffer).toEqual(Buffer.from([1, 2, 3]));
 
     expect(fetchSpy).toHaveBeenCalledOnce();
-    const [url, options] = fetchSpy.mock.calls[0];
+    const call = defined(fetchSpy.mock.calls[0]);
+    const [url, options] = call;
     expect(url).toBe("https://api.openai.com/v1/audio/speech");
     expect(options?.method).toBe("POST");
     expect((options?.headers as Record<string, string>)["Authorization"]).toBe(
@@ -315,10 +317,10 @@ describe("synthesizeSpeech (Google)", () => {
     const result = await synthesizeSpeech("Hello world");
 
     expect(mockSynthesizeSpeech).toHaveBeenCalledOnce();
-    const callArgs = mockSynthesizeSpeech.mock.calls[0];
-    expect(callArgs[0].input).toEqual({ text: "Hello world" });
-    expect(callArgs[0].voice).toEqual({ languageCode: "en-US", name: "en-US-Studio-O" });
-    expect(callArgs[0].audioConfig).toEqual({ audioEncoding: "MP3" });
+    const callArgs = defined(mockSynthesizeSpeech.mock.calls[0]);
+    expect(defined(callArgs[0]).input).toEqual({ text: "Hello world" });
+    expect(defined(callArgs[0]).voice).toEqual({ languageCode: "en-US", name: "en-US-Studio-O" });
+    expect(defined(callArgs[0]).audioConfig).toEqual({ audioEncoding: "MP3" });
 
     expect(result.filename).toBe("assistant-reply.mp3");
     expect(result.mimeType).toBe("audio/mpeg");
@@ -328,9 +330,9 @@ describe("synthesizeSpeech (Google)", () => {
   it("passes timeout option to Google SDK", async () => {
     await synthesizeSpeech("Hello");
 
-    const callArgs = mockSynthesizeSpeech.mock.calls[0];
+    const callArgs = defined(mockSynthesizeSpeech.mock.calls[0]);
     expect(callArgs[1]).toHaveProperty("timeout");
-    expect(callArgs[1].timeout).toBe(60_000);
+    expect(defined(callArgs[1]).timeout).toBe(60_000);
   });
 
   it("handles Uint8Array audioContent from Google SDK", async () => {
@@ -351,8 +353,8 @@ describe("synthesizeSpeech (Google)", () => {
   it("strips markdown before sending to Google TTS", async () => {
     await synthesizeSpeech("Hello **bold** and `code`");
 
-    const callArgs = mockSynthesizeSpeech.mock.calls[0];
-    expect(callArgs[0].input).toEqual({ text: "Hello bold and code" });
+    const callArgs = defined(mockSynthesizeSpeech.mock.calls[0]);
+    expect(defined(callArgs[0]).input).toEqual({ text: "Hello bold and code" });
   });
 });
 
@@ -389,7 +391,8 @@ describe("synthesizeSpeech (ElevenLabs)", () => {
     expect(result.buffer).toEqual(Buffer.from([7, 8, 9]));
 
     expect(fetchSpy).toHaveBeenCalledOnce();
-    const [url, options] = fetchSpy.mock.calls[0];
+    const call = defined(fetchSpy.mock.calls[0]);
+    const [url, options] = call;
     expect(url).toBe("https://api.elevenlabs.io/v1/text-to-speech/nPczCjzI2devNBz1zQrb");
     expect(options?.method).toBe("POST");
     expect((options?.headers as Record<string, string>)["xi-api-key"]).toBe("xi-test-key");
@@ -412,7 +415,7 @@ describe("synthesizeSpeech (ElevenLabs)", () => {
 
     await synthesizeSpeech("Hello world");
 
-    expect(fetchSpy.mock.calls[0][0]).toBe(
+    expect(defined(fetchSpy.mock.calls[0]?.[0])).toBe(
       "https://api.elevenlabs.io/v1/text-to-speech/nPczCjzI2devNBz1zQrb",
     );
   });
@@ -428,7 +431,7 @@ describe("synthesizeSpeech (ElevenLabs)", () => {
 
     await synthesizeSpeech("Hello world");
 
-    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+    expect(JSON.parse(String(defined(fetchSpy.mock.calls[0]?.[1])?.body))).toEqual({
       text: "Hello world",
       model_id: "eleven_flash_v2_5",
     });
@@ -464,7 +467,8 @@ describe("synthesizeSpeech (Edge)", () => {
     const result = await synthesizeSpeech("Hello **bold** world");
 
     expect(mockEdgeSynth).toHaveBeenCalledOnce();
-    const [text, options] = mockEdgeSynth.mock.calls[0];
+    const call = defined(mockEdgeSynth.mock.calls[0]);
+    const [text, options] = call;
     // Markdown is stripped before being passed to the provider.
     expect(text).toBe("Hello bold world");
     expect(options.voice).toBe("en-US-EmmaMultilingualNeural");

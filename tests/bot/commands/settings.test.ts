@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "#vitest";
 import { mock as bunMock } from "bun:test";
 import type { Context } from "grammy";
 import { loadSut } from "#helpers/sut-loader.js";
+import { defined } from "#helpers/defined.js";
 
 // Pre-load the real module at module scope so it's cached by Bun. The mock
 // factory then returns a plain object mixing real exports with mocked fns.
@@ -10,6 +11,8 @@ import * as _realSettingsStore from "../../../src/app/stores/settings-store.js";
 const mocked = {
   getCompactOutputModeMock: vi.fn(),
   setCompactOutputModeMock: vi.fn(),
+  getDeleteCompactProgressOnFinishMock: vi.fn(),
+  setDeleteCompactProgressOnFinishMock: vi.fn(),
   getResponseStreamingModeMock: vi.fn(),
   setResponseStreamingModeMock: vi.fn(),
   getSendDiffFileAttachmentsMock: vi.fn(),
@@ -36,6 +39,7 @@ bunMock.module("#src/app/stores/settings-store.ts", () => ({
   clearSessionDirectoryCache: _realSettingsStore.clearSessionDirectoryCache,
   getCompactOutputMode: mocked.getCompactOutputModeMock,
   getCurrentAgent: _realSettingsStore.getCurrentAgent,
+  getDeleteCompactProgressOnFinish: mocked.getDeleteCompactProgressOnFinishMock,
   getCurrentModel: _realSettingsStore.getCurrentModel,
   getCurrentProject: _realSettingsStore.getCurrentProject,
   getCurrentSession: _realSettingsStore.getCurrentSession,
@@ -56,6 +60,7 @@ bunMock.module("#src/app/stores/settings-store.ts", () => ({
   setCurrentModel: _realSettingsStore.setCurrentModel,
   setCurrentProject: _realSettingsStore.setCurrentProject,
   setCurrentSession: _realSettingsStore.setCurrentSession,
+  setDeleteCompactProgressOnFinish: mocked.setDeleteCompactProgressOnFinishMock,
   setPinnedMessageId: _realSettingsStore.setPinnedMessageId,
   setPromptQueueEnabled: mocked.setPromptQueueEnabledMock,
   setResponseStreamingMode: mocked.setResponseStreamingModeMock,
@@ -94,6 +99,7 @@ const {
   SETTINGS_ASSISTANT_FOOTER_CALLBACK,
   SETTINGS_CALLBACK_PREFIX,
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
+  SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK,
   SETTINGS_DIFF_FILES_CALLBACK,
   SETTINGS_PROMPT_QUEUE_CALLBACK,
   SETTINGS_RESPONSE_STREAMING_CALLBACK,
@@ -116,6 +122,7 @@ describe("bot/commands/settings-command", () => {
 
   it("shows settings menu with current compact output and TTS modes", async () => {
     mocked.getCompactOutputModeMock.mockReturnValue(true);
+    mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(true);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("auto");
     const replyMock = vi.fn().mockResolvedValue({ message_id: 10 });
@@ -128,28 +135,33 @@ describe("bot/commands/settings-command", () => {
     await settingsCommand(ctx as never);
 
     expect(replyMock).toHaveBeenCalledTimes(1);
-    const [text, opts] = replyMock.mock.calls[0];
+    const call = defined(replyMock.mock.calls[0]);
+    const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
     expect(opts.reply_markup.inline_keyboard[0][0].text).toBe(
       `${t("settings.compact_output.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[1][0].text).toBe(
-      `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
+      `${t("settings.delete_progress_on_finish.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[2][0].text).toBe(
-      `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
+      `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
     );
     expect(opts.reply_markup.inline_keyboard[3][0].text).toBe(
-      `${t("settings.tts.label")}: ${t("status.tts.auto")}`,
+      `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[4][0].text).toBe(
+      `${t("settings.tts.label")}: ${t("status.tts.auto")}`,
+    );
+    expect(opts.reply_markup.inline_keyboard[5][0].text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.off")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[5][0].text).toBe(t("inline.button.close"));
+    expect(opts.reply_markup.inline_keyboard[6][0].text).toBe(t("inline.button.close"));
   });
 
   it("shows thinking content setting when compact output is disabled", async () => {
     mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("off");
     const replyMock = vi.fn().mockResolvedValue({ message_id: 10 });
@@ -161,7 +173,8 @@ describe("bot/commands/settings-command", () => {
 
     await settingsCommand(ctx as never);
 
-    const [, opts] = replyMock.mock.calls[0];
+    const call = defined(replyMock.mock.calls[0]);
+    const [, opts] = call;
     expect(opts.reply_markup.inline_keyboard[1][0].text).toBe(
       `${t("settings.thinking_content.label")}: ${t("settings.value.on")}`,
     );
@@ -184,6 +197,7 @@ describe("bot/commands/settings-command", () => {
 
   it("marks draft response streaming mode as experimental", async () => {
     mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getResponseStreamingModeMock.mockReturnValue("draft");
     mocked.getTtsModeMock.mockReturnValue("off");
@@ -196,7 +210,8 @@ describe("bot/commands/settings-command", () => {
 
     await settingsCommand(ctx as never);
 
-    const [, opts] = replyMock.mock.calls[0];
+    const call = defined(replyMock.mock.calls[0]);
+    const [, opts] = call;
     expect(opts.reply_markup.inline_keyboard[3][0].text).toBe(
       `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.draft")}`,
     );
@@ -234,6 +249,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
 
   it("toggles compact output mode and returns to settings menu", async () => {
     mocked.getCompactOutputModeMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("off");
     activateSettingsMenu();
@@ -244,19 +260,45 @@ describe("bot/callbacks/settings-callback-handler", () => {
     expect(result).toBe(true);
     expect(mocked.setCompactOutputModeMock).toHaveBeenCalledWith(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
-    const [text, opts] = vi.mocked(ctx.editMessageText).mock.calls[0];
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(opts?.reply_markup?.inline_keyboard[0][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[0]?.[0]).text).toBe(
       `${t("settings.compact_output.label")}: ${t("settings.value.on")}`,
     );
-    expect(opts?.reply_markup?.inline_keyboard[1][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[1]?.[0]).text).toBe(
+      `${t("settings.delete_progress_on_finish.label")}: ${t("settings.value.off")}`,
+    );
+    expect(defined(opts?.reply_markup?.inline_keyboard[2]?.[0]).text).toBe(
       `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.edit")}`,
     );
-    expect(opts?.reply_markup?.inline_keyboard[2][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[3]?.[0]).text).toBe(
       `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
     );
-    expect(opts?.reply_markup?.inline_keyboard[3][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[4]?.[0]).text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.off")}`,
+    );
+  });
+
+  it("toggles delete progress on finish and returns to settings menu", async () => {
+    mocked.getCompactOutputModeMock.mockReturnValue(true);
+    mocked.getDeleteCompactProgressOnFinishMock
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    mocked.getTtsModeMock.mockReturnValue("off");
+    activateSettingsMenu();
+    const ctx = createCallbackContext(SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK);
+
+    const result = await handleSettingsCallback(ctx);
+
+    expect(result).toBe(true);
+    expect(mocked.setDeleteCompactProgressOnFinishMock).toHaveBeenCalledWith(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
+    expect(text).toBe(t("settings.menu.title"));
+    expect(defined(opts?.reply_markup?.inline_keyboard[1]?.[0]).text).toBe(
+      `${t("settings.delete_progress_on_finish.label")}: ${t("settings.value.on")}`,
     );
   });
 
@@ -272,9 +314,10 @@ describe("bot/callbacks/settings-callback-handler", () => {
     expect(result).toBe(true);
     expect(mocked.setShowThinkingContentMock).toHaveBeenCalledWith(false);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
-    const [text, opts] = vi.mocked(ctx.editMessageText).mock.calls[0];
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(opts?.reply_markup?.inline_keyboard[1][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[1]?.[0]).text).toBe(
       `${t("settings.thinking_content.label")}: ${t("settings.value.off")}`,
     );
   });
@@ -292,9 +335,10 @@ describe("bot/callbacks/settings-callback-handler", () => {
     expect(result).toBe(true);
     expect(mocked.setSendDiffFileAttachmentsMock).toHaveBeenCalledWith(false);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
-    const [text, opts] = vi.mocked(ctx.editMessageText).mock.calls[0];
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(opts?.reply_markup?.inline_keyboard[2][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[2]?.[0]).text).toBe(
       `${t("settings.diff_files.label")}: ${t("settings.value.off")}`,
     );
   });
@@ -312,9 +356,10 @@ describe("bot/callbacks/settings-callback-handler", () => {
     expect(result).toBe(true);
     expect(mocked.setResponseStreamingModeMock).toHaveBeenCalledWith("draft");
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
-    const [text, opts] = vi.mocked(ctx.editMessageText).mock.calls[0];
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(opts?.reply_markup?.inline_keyboard[3][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[3]?.[0]).text).toBe(
       `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.draft")}`,
     );
   });
@@ -332,9 +377,10 @@ describe("bot/callbacks/settings-callback-handler", () => {
     expect(result).toBe(true);
     expect(mocked.setShowAssistantRunFooterMock).toHaveBeenCalledWith(false);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
-    const [text, opts] = vi.mocked(ctx.editMessageText).mock.calls[0];
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(opts?.reply_markup?.inline_keyboard[4][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[4]?.[0]).text).toBe(
       `${t("settings.assistant_footer.label")}: ${t("settings.value.off")}`,
     );
   });
@@ -352,9 +398,10 @@ describe("bot/callbacks/settings-callback-handler", () => {
     expect(result).toBe(true);
     expect(mocked.setPromptQueueEnabledMock).toHaveBeenCalledWith(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
-    const [text, opts] = vi.mocked(ctx.editMessageText).mock.calls[0];
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(opts?.reply_markup?.inline_keyboard[6][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[6]?.[0]).text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.on")}`,
     );
   });
@@ -372,9 +419,10 @@ describe("bot/callbacks/settings-callback-handler", () => {
     expect(result).toBe(true);
     expect(mocked.setTtsModeMock).toHaveBeenCalledWith("all");
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("tts.all") });
-    const [text, opts] = vi.mocked(ctx.editMessageText).mock.calls[0];
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(opts?.reply_markup?.inline_keyboard[5][0].text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[5]?.[0]).text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.all")}`,
     );
   });

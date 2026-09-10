@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "#vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Context } from "grammy";
 import { loadSut } from "#helpers/sut-loader.js";
 import { createSettingsStoreMock } from "#helpers/settings-store-mock.js";
@@ -22,6 +22,8 @@ const mocked = vi.hoisted(() => ({
   loggerErrorMock: vi.fn(),
   scanLsDirectoryMock: vi.fn(),
   getFileDetailsMock: vi.fn(),
+  readdirMock: vi.fn(),
+  statMock: vi.fn(),
 }));
 
 vi.mock("#src/app/services/run-control-service.ts", () => ({
@@ -162,6 +164,10 @@ function makeLsEntry(name: string, type: "file" | "directory") {
 }
 
 describe("bot/commands/ls", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   beforeEach(() => {
     sut.clearSessionDirectories();
     clearLsPathIndex();
@@ -201,6 +207,16 @@ describe("bot/commands/ls", () => {
       size: 1234,
       modified: new Date("2024-01-02T00:00:00.000Z"),
     });
+  });
+
+  it("warns instead of listing when running in a container", async () => {
+    vi.stubEnv("OPENCODE_TELEGRAM_CONTAINER", "1");
+    const ctx = createCommandContext();
+
+    await lsCommand(ctx as never);
+
+    expect(ctx.reply).toHaveBeenCalledWith(t("runtime.container.command_unavailable"));
+    expect(mocked.readdirMock).not.toHaveBeenCalled();
   });
 
   it("opens an inline browser for the current project", async () => {

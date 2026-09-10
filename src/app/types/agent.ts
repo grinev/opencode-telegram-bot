@@ -8,6 +8,11 @@ export interface AgentInfo {
   mode: "subagent" | "primary" | "all";
   hidden?: boolean;
   steps?: number;
+  model?: {
+    modelID: string;
+    providerID: string;
+  };
+  variant?: string;
 }
 
 /**

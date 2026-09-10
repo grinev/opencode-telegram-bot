@@ -106,6 +106,8 @@ export const en = {
   "bot.file_download_error": "🔴 Failed to download file",
   "bot.file_type_unsupported":
     "⚠️ This file type is not supported. Send an image, document (PDF, DOCX, PPTX), or text/code file.",
+  "bot.rich_message_media_skipped": "⚠️ Skipped {count} unsupported media part(s).",
+  "bot.message_type_unsupported": "⚠️ This message type is not supported.",
   "bot.media_group_not_processed":
     "⚠️ One or more files in this album cannot be processed. Nothing was sent to OpenCode.",
   "bot.media_group_download_error":
@@ -118,7 +120,8 @@ export const en = {
   "status.health.healthy": "Healthy",
   "status.health.unhealthy": "Unhealthy",
   "status.line.health": "Status: {health}",
-  "status.line.version": "Version: {version}",
+  "status.line.version": "OpenCode version: {version}",
+  "status.line.bot_version": "Bot version: {version}",
   "status.line.managed_yes": "Started by bot: Yes",
   "status.line.managed_no": "Started by bot: No",
   "status.line.pid": "PID: {pid}",
@@ -137,8 +140,8 @@ export const en = {
   "status.session_selected": "Current session: {title}",
   "status.session_not_selected": "Current session: not selected",
   "status.session_hint": "Use /sessions to select one or /new to create one",
-  "status.server_unavailable":
-    "🔴 OpenCode Server is unavailable\n\nUse /opencode_start to start the server.",
+  "status.header_unavailable": "🔴 OpenCode Server is unavailable",
+  "status.unavailable_hint": "Use /opencode_start to start the server.",
 
   "tts.off": "🔇 Audio replies disabled.",
   "tts.all": "🔊 Audio replies enabled for all messages.",
@@ -149,6 +152,7 @@ export const en = {
 
   "settings.menu.title": "⚙️ Bot settings\nTap a setting to toggle its value:",
   "settings.compact_output.label": "Compact output mode",
+  "settings.delete_progress_on_finish.label": "Delete progress on finish",
   "settings.thinking_content.label": "Thinking content",
   "settings.response_streaming.label": "Response streaming",
   "settings.response_streaming.edit": "edit",
@@ -401,6 +405,7 @@ export const en = {
   "keyboard.queued_prompt": "❌ {index}. {text}",
   "queue.added": "📥 Added to queue ({count}/{max}). It will be sent when the current task finishes.",
   "queue.full": "⚠️ Queue is full ({max}). Remove a message or wait for the current task to finish.",
+  "queue.media_limit": "⚠️ Queued media is limited to {maxSizeMb} MiB. Wait for an item to send, then try again.",
   "queue.removed": "🗑 Message removed from the queue.",
   "queue.not_found": "This message is no longer in the queue.",
   "queue.disabled_hint": "The message queue can be enabled in /settings.",
@@ -458,7 +463,7 @@ export const en = {
     "Enter OpenCode server password (optional).\nPress Enter to keep it empty.\n> ",
   "runtime.wizard.api_url_invalid": "Enter a valid URL (http/https) or press Enter for default.\n",
   "runtime.wizard.start": "OpenCode Telegram Bot setup.\n",
-  "runtime.wizard.saved": "Configuration saved:\n- {envPath}\n- {settingsPath}\n",
+  "runtime.wizard.saved": "Configuration saved:\n- {envPath}\n",
   "runtime.wizard.not_configured_starting":
     "Application is not configured yet. Starting wizard...\n",
   "runtime.wizard.tty_required":
@@ -648,6 +653,9 @@ export const en = {
   "attachment.cancel": "❌ Cancel attachment",
   "attachment.cancelled": "❌ Attachment cancelled",
   "attachment.invalid": "⚠️ The attached file is no longer available. Sending the message without it.",
+  "local_command.empty_output": "The command produced no output.",
+  "local_command.failed": "Command failed with exit code {exitCode}: {stderr}",
+  "local_command.timeout": "The command timed out.",
 } as const;
 
 export type I18nKey = keyof typeof en;

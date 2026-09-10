@@ -11,8 +11,10 @@ import { opencodeReadyLifecycle } from "../opencode/ready-lifecycle.js";
 import { logger } from "../utils/logger.js";
 import { safeBackgroundTask } from "../utils/safe-background-task.js";
 import { withTelegramRateLimitRetry } from "../utils/telegram-rate-limit-retry.js";
+import { LocalCommandRegistry } from "../app/services/local-command-registry.js";
 import { registerCallbackRouter } from "./callbacks/callback-router.js";
 import { initializePromptQueueDispatch } from "./handlers/prompt-queue-dispatch.js";
+import { normalizeRichMessage } from "./handlers/rich-message-handler.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { interactionGuardMiddleware } from "./middleware/interaction-guard.js";
 import { staleUpdateMiddleware } from "./middleware/stale-update.js";
@@ -69,7 +71,7 @@ function isTelegramApiErrorResponse(response: unknown): response is TelegramApiE
   );
 }
 
-export function createBot(): Bot<Context> {
+export function createBot(localCommandRegistry = LocalCommandRegistry.empty()): Bot<Context> {
   clearAllInteractionState("bot_startup");
   attachManager.clear("bot_startup");
   eventSubscriptionService.clearRuntimeState("bot_startup");
@@ -173,12 +175,14 @@ export function createBot(): Bot<Context> {
 
   bot.use(authMiddleware);
   bot.use(staleUpdateMiddleware);
-  bot.use(ensureCommandsInitialized);
-  bot.use(interactionGuardMiddleware);
+  bot.on("message:rich_message", normalizeRichMessage);
+  bot.use((ctx, next) => ensureCommandsInitialized(ctx, next, localCommandRegistry));
+  bot.use((ctx, next) => interactionGuardMiddleware(ctx, next, localCommandRegistry));
 
   registerCommandRouter(bot, {
     ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
     clearRuntimeState: (reason) => eventSubscriptionService.clearRuntimeState(reason),
+    localCommandRegistry,
   });
   registerCallbackRouter(bot, {
     ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,

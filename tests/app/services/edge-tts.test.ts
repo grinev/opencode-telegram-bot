@@ -16,6 +16,7 @@ import {
   SEC_MS_GEC_VERSION,
   _resetClockSkew,
 } from "../../../src/app/services/edge-tts.js";
+import { defined } from "../../helpers/defined.js";
 
 describe("generateSecMsGec", () => {
   beforeEach(() => _resetClockSkew());
@@ -132,8 +133,12 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
     if (handler) (handler as (...a: unknown[]) => void)(...args);
   }
 
+  function lastSocket(): FakeWs {
+    return defined(sockets[sockets.length - 1]);
+  }
+
   function emit(event: string, ...args: unknown[]): void {
-    emitOn(sockets[sockets.length - 1], event, ...args);
+    emitOn(lastSocket(), event, ...args);
   }
 
   /** Drains pending microtasks so awaited chunk promises settle. */
@@ -185,10 +190,10 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
     emit("open");
 
     // Two messages sent on open: speech.config then the ssml.
-    const ws = sockets[0];
+    const ws = defined(sockets[0]);
     expect(ws.send).toHaveBeenCalledTimes(2);
-    expect(ws.send.mock.calls[0][0]).toContain("Path:speech.config");
-    const ssml = String(ws.send.mock.calls[1][0]);
+    expect(defined(ws.send.mock.calls[0]?.[0])).toContain("Path:speech.config");
+    const ssml = String(defined(ws.send.mock.calls[1]?.[0]));
     expect(ssml).toContain("Path:ssml");
     expect(ssml).toContain("<voice name='en-US-AriaNeural'>");
     expect(ssml).toContain("Hello world");
@@ -216,19 +221,19 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
     await flush();
 
     expect(sockets).toHaveLength(1);
-    emitOn(sockets[0], "open");
+    emitOn(defined(sockets[0]), "open");
     const firstAudio = Buffer.from([0x01, 0x02]);
-    emitOn(sockets[0], "message", audioFrame(firstAudio), true);
-    emitOn(sockets[0], "message", "Path:turn.end\r\n\r\n", false);
+    emitOn(defined(sockets[0]), "message", audioFrame(firstAudio), true);
+    emitOn(defined(sockets[0]), "message", "Path:turn.end\r\n\r\n", false);
     await flush();
 
     // The second chunk must get its own fresh connection.
     expect(sockets).toHaveLength(2);
-    emitOn(sockets[1], "open");
-    expect(sockets[1].send.mock.calls[0][0]).toContain("Path:speech.config");
+    emitOn(defined(sockets[1]), "open");
+    expect(defined(defined(sockets[1]).send.mock.calls[0]?.[0])).toContain("Path:speech.config");
     const secondAudio = Buffer.from([0x03, 0x04]);
-    emitOn(sockets[1], "message", audioFrame(secondAudio), true);
-    emitOn(sockets[1], "message", "Path:turn.end\r\n\r\n", false);
+    emitOn(defined(sockets[1]), "message", audioFrame(secondAudio), true);
+    emitOn(defined(sockets[1]), "message", "Path:turn.end\r\n\r\n", false);
 
     const result = await promise;
     expect(result).toEqual(Buffer.concat([firstAudio, secondAudio]));
@@ -244,14 +249,14 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
     const promise = synthesizeWithEdgeTts(text, { voice: "en-US-AriaNeural" });
     await flush();
 
-    emitOn(sockets[0], "open");
-    emitOn(sockets[0], "message", audioFrame(Buffer.from([0x01])), true);
-    emitOn(sockets[0], "message", "Path:turn.end\r\n\r\n", false);
+    emitOn(defined(sockets[0]), "open");
+    emitOn(defined(sockets[0]), "message", audioFrame(Buffer.from([0x01])), true);
+    emitOn(defined(sockets[0]), "message", "Path:turn.end\r\n\r\n", false);
     await flush();
 
     expect(sockets).toHaveLength(2);
-    emitOn(sockets[1], "open");
-    emitOn(sockets[1], "close");
+    emitOn(defined(sockets[1]), "open");
+    emitOn(defined(sockets[1]), "close");
 
     await expect(promise).rejects.toThrow("connection closed");
   });
@@ -309,7 +314,7 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
     await Promise.resolve();
     emit("open");
 
-    const ssml = String(sockets[0].send.mock.calls[1][0]);
+    const ssml = String(defined(defined(sockets[0]).send.mock.calls[1]?.[0]));
     expect(ssml).toContain("<voice name='en-US-O&apos;Brien&amp;Co'>");
   });
 
@@ -322,17 +327,17 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
     const promise = synthesizeWithEdgeTts("Hello", { voice: "en-US-AriaNeural" });
     await flush();
 
-    emitOn(sockets[0], "unexpected-response", {}, {
+    emitOn(defined(sockets[0]), "unexpected-response", {}, {
       statusCode: 403,
       headers: { date: new Date().toUTCString() },
     });
     await flush();
 
     expect(sockets).toHaveLength(2);
-    emitOn(sockets[1], "open");
+    emitOn(defined(sockets[1]), "open");
     const audioBytes = Buffer.from([0xff, 0xf3]);
-    emitOn(sockets[1], "message", audioFrame(audioBytes), true);
-    emitOn(sockets[1], "message", "Path:turn.end\r\n\r\n", false);
+    emitOn(defined(sockets[1]), "message", audioFrame(audioBytes), true);
+    emitOn(defined(sockets[1]), "message", "Path:turn.end\r\n\r\n", false);
 
     await expect(promise).resolves.toEqual(audioBytes);
   });
@@ -352,9 +357,9 @@ describe("synthesizeWithEdgeTts (WebSocket flow)", () => {
 
     // Burn 50s of the budget on the first chunk, then complete it.
     await vi.advanceTimersByTimeAsync(50_000);
-    emitOn(sockets[0], "open");
-    emitOn(sockets[0], "message", audioFrame(Buffer.from([0x01])), true);
-    emitOn(sockets[0], "message", "Path:turn.end\r\n\r\n", false);
+    emitOn(defined(sockets[0]), "open");
+    emitOn(defined(sockets[0]), "message", audioFrame(Buffer.from([0x01])), true);
+    emitOn(defined(sockets[0]), "message", "Path:turn.end\r\n\r\n", false);
     await flush();
 
     // The second chunk only has 10s left; 10s later the whole call times out.

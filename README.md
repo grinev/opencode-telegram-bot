@@ -38,9 +38,9 @@ Everything else is identical. Same commands, same Telegram UX, same `.env` schem
 - **Live status** — pinned message with current project/worktree, model, context usage, and changed files list, updated in real time
 - **Model switching** — pick models from OpenCode favorites and recent history directly in the chat (favorites are shown first), or browse all models by provider
 - **Agent modes** — switch between Plan and Build modes on the fly
-- **Subagent activity** — watch live subagent progress in chat
-- **Custom Commands** — run OpenCode custom commands from an inline menu
-- **Skills Catalog** — browse OpenCode skills from an inline menu
+- **Subagent activity** — watch live subagent progress in chat, including the current task, agent, model (with variant when set), and active tool step
+- **Custom Commands** — run OpenCode custom commands (and built-ins like `init`/`review`) from an inline menu with confirmation
+- **Skills Catalog** — browse OpenCode skills from an inline menu and run them immediately or with arguments in the next message
 - **Interactive Q&A** — answer agent questions and approve permissions via inline buttons
 - **Runtime settings** — use `/settings` to change runtime preferences; see [Runtime Settings](#runtime-settings)
 - **Voice prompts** — send voice/audio messages, transcribe them via a Whisper-compatible API, and optionally enable spoken replies in `/settings`
@@ -52,6 +52,7 @@ Everything else is identical. Same commands, same Telegram UX, same `.env` schem
 - **Git worktree switching** — browse and switch between existing git worktrees for the current repository with `/worktree`
 - **Security** — strict user ID whitelist; no one else can access your bot, even if they find it
 - **Localization** — UI localization is supported for multiple languages (`BOT_LOCALE`)
+- **Docker support** — run the bot as a container while OpenCode stays on the host; see [Docker Deployment](#docker-deployment)
 - **Interactive file browser** — use `/ls` to browse files and directories inside the current project, open subdirectories, go back, and download files by tapping them
 - **Attach a file to your next prompt** — tap **📎 Attach to next prompt** on a text file in `/ls`, and it is sent to OpenCode together with your next message, once
 
@@ -135,7 +136,7 @@ bun run dist/cli.js config
 
 | Command           | Description                                             |
 | ----------------- | ------------------------------------------------------- |
-| `/status`         | Server health, current project, session, and model info |
+| `/status`         | Bot version, server health, current project, session, and model info |
 | `/new`            | Create a new session                                    |
 | `/abort`          | Abort the current task                                  |
 | `/detach`         | Detach from the current session without stopping it     |
@@ -153,7 +154,7 @@ bun run dist/cli.js config
 | `/task`           | Create a scheduled task                                 |
 | `/tasklist`       | Browse and delete scheduled tasks                       |
 | `/opencode_start` | Start the local OpenCode server on the bot machine      |
-| `/opencode_stop`  | Stop the local OpenCode server on the bot machine       |
+| `/opencode_stop`  | Stop the local OpenCode server, including during a run  |
 | `/help`           | Show available commands                                 |
 
 Any regular text message is sent as a prompt to the coding agent only when no blocking interaction is active. Voice/audio messages are transcribed and then sent as prompts when STT is configured.
@@ -196,9 +197,23 @@ For this to work, the console OpenCode instance must be started on the same port
 
 ### Localization
 
-- Supported locales: `en`, `ar`, `de`, `es`, `fr`, `it`, `pt`, `ru`, `zh`
+- Supported locales: `en`, `ar`, `de`, `es`, `fr`, `it`, `ko`, `pt`, `ru`, `zh`
 - The setup wizard asks for language first
 - You can change locale later with `BOT_LOCALE`
+
+### Local JSON Commands
+
+Trusted local commands live in `<appHome>/local-commands/`, one JSON file per command. The filename becomes the command name, so `quota.json` appears as `/quota` in Telegram’s command menu after the bot restarts:
+
+```json
+{
+  "description": "Show provider quota limits",
+  "exec": "node /home/you/bin/quota.js",
+  "allowWhenBusy": true
+}
+```
+
+`description` and `exec` are required; `description` is a single line of at most 256 characters. Extra fields are ignored. Commands run through the platform shell with the bot’s OS permissions and inherited environment, from `<appHome>`; treat every file in this directory as trusted code. They receive no Telegram text or attachments, never invoke OpenCode, time out after 30 seconds, and are not listed in `/help` or `/commands`. `allowWhenBusy` defaults to `false`; it permits a command while OpenCode is working but never during an active bot interaction.
 
 ### Environment Variables
 
@@ -223,10 +238,11 @@ The first time you start the bot, the configuration wizard runs and writes `.env
 | `OPENCODE_SERVER_PASSWORD`                 | Server auth password                                                                                                  |    No    | —                        |
 | `OPENCODE_MODEL_PROVIDER`                  | Default model provider                                                                                                |   Yes    | `opencode`               |
 | `OPENCODE_MODEL_ID`                        | Default model ID                                                                                                      |   Yes    | `big-pickle`             |
-| `BOT_LOCALE`                               | Bot UI language (supported locale code, e.g. `en`, `ar`, `de`, `es`, `fr`, `it`, `pt`, `ru`, `zh`)                    |    No    | `en`                     |
+| `BOT_LOCALE`                               | Bot UI language (supported locale code, e.g. `en`, `ar`, `de`, `es`, `fr`, `it`, `ko`, `pt`, `ru`, `zh`)              |    No    | `en`                     |
 | `SESSIONS_LIST_LIMIT`                      | Sessions per page in `/sessions`                                                                                      |    No    | `10`                     |
 | `MESSAGES_LIST_LIMIT`                      | User messages per page in `/messages`                                                                                 |    No    | `10`                     |
 | `PROJECTS_LIST_LIMIT`                      | Projects per page in `/projects`                                                                                      |    No    | `10`                     |
+| `PROJECTS_EXCLUDED_PATHS`                  | Comma-separated absolute paths hidden from `/projects` (exact worktree match)                                        |    No    | *(none)*                 |
 | `OPEN_BROWSER_ROOTS`                       | Comma-separated paths `/open` is allowed to browse (supports `~`)                                                     |    No    | `~` (home directory)     |
 | `COMMANDS_LIST_LIMIT`                      | Items per page in `/commands` and `/skills`                                                                           |    No    | `10`                     |
 | `MODELS_LIST_LIMIT`                        | Providers and provider models per page in the model picker                                                            |    No    | `10`                     |
@@ -235,7 +251,6 @@ The first time you start the bot, the configuration wizard runs and writes `.env
 | `SCHEDULED_TASK_DISABLE_NOTIFICATION`      | Send scheduled task result/error messages without Telegram push notifications                                         |    No    | `false`                  |
 | `BASH_TOOL_DISPLAY_MAX_LENGTH`             | Maximum displayed length for `bash` tool commands in Telegram summaries; longer commands are truncated                |    No    | `128`                    |
 | `TRACK_BACKGROUND_SESSIONS`                | Track detached/non-current sessions in the current selected project/worktree and send short notifications             |    No    | `true`                   |
-| `RESPONSE_STREAM_THROTTLE_MS`              | Stream update throttle in milliseconds for assistant, thinking, and tool message edits                                |    No    | `1000`                   |
 | `MESSAGE_FORMAT_MODE`                      | Assistant reply formatting mode: `markdown` (native Telegram rich blocks) or `raw` (plain text)                       |    No    | `markdown`               |
 | `MESSAGE_MERGE_WINDOW_MS`                  | Merge Telegram-split long text messages into one prompt after this wait window (ms); `0` disables merging             |    No    | `1500`                   |
 | `INITIAL_SETTINGS_PRESET`                  | JSON object that seeds default `/settings` values on first run (keys not yet persisted); see [Runtime Settings](#runtime-settings) |    No    | `{}`                     |
@@ -268,14 +283,15 @@ Logs are written to `./logs` when running from sources and to the runtime config
 Runtime preferences are changed from `/settings` and stored in `settings.json`:
 
 - Compact output mode
+- Delete progress on finish: available while compact output mode is on, removes the progress message when the run completes
 - Thinking content display
 - Assistant run footer display
 - Diff file attachments
 - Response streaming mode: `edit` or `draft (experimental)`; applies only to final assistant replies, not thinking messages
 - Audio replies: `off`, `all`, or `auto` when TTS is configured
-- Message queue: hold text messages sent while the agent is busy instead of rejecting them
+- Message queue: hold text, voice, photos, rich formatted messages with photos, documents, and media groups sent while the agent is busy instead of rejecting them
 
-With the message queue enabled, plain text sent while the agent is busy is held (up to 5 messages) instead of being turned down. Queued messages appear as buttons above the usual bottom-keyboard grid — tap one to drop it. They are sent one at a time as each run finishes, and the queue is cleared by `/abort` or a session/project switch.
+With the message queue enabled, text, transcribed voice, photos, rich formatted messages with photos, supported documents, and media groups sent while the agent is busy are held instead of being turned down. The queue holds at most `MAX_QUEUED_PROMPTS` (5) items and 20 MiB of raw Telegram media bytes in total; the limit is checked from reliable Telegram `file_size` metadata before media is downloaded or prepared, while base64 data-URI expansion is not counted. Queued media without a reliable source size is refused while the task is busy. Queued messages appear as buttons above the usual bottom-keyboard grid — tap one to drop it. They are sent one at a time as each run finishes, and the queue is cleared by `/abort` or a session/project switch.
 
 You can seed the initial defaults for any of these settings without hard-coding them in your Docker image by setting `INITIAL_SETTINGS_PRESET` to a JSON object. Only keys not yet persisted in `settings.json` are affected — settings the user has already changed via `/settings` are left untouched:
 

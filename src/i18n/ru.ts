@@ -106,6 +106,9 @@ export const ru: I18nDictionary = {
   "bot.file_download_error": "🔴 Не удалось скачать файл",
   "bot.file_type_unsupported":
     "⚠️ Этот тип файла не поддерживается. Отправьте изображение, документ (PDF, DOCX, PPTX) или текстовый/кодовый файл.",
+  "bot.rich_message_media_skipped":
+    "⚠️ Пропущено неподдерживаемых медиафрагментов: {count}.",
+  "bot.message_type_unsupported": "⚠️ Этот тип сообщения не поддерживается.",
   "bot.media_group_not_processed":
     "⚠️ Один или несколько файлов в альбоме нельзя обработать. В OpenCode ничего не отправлено.",
   "bot.media_group_download_error":
@@ -118,7 +121,8 @@ export const ru: I18nDictionary = {
   "status.health.healthy": "Healthy",
   "status.health.unhealthy": "Unhealthy",
   "status.line.health": "Статус: {health}",
-  "status.line.version": "Версия: {version}",
+  "status.line.version": "Версия OpenCode: {version}",
+  "status.line.bot_version": "Версия бота: {version}",
   "status.line.managed_yes": "Запущен ботом: Да",
   "status.line.managed_no": "Запущен ботом: Нет",
   "status.line.pid": "PID: {pid}",
@@ -137,8 +141,8 @@ export const ru: I18nDictionary = {
   "status.session_selected": "Текущая сессия: {title}",
   "status.session_not_selected": "Текущая сессия: не выбрана",
   "status.session_hint": "Используйте /sessions для выбора или /new для создания",
-  "status.server_unavailable":
-    "🔴 OpenCode Server недоступен\n\nИспользуйте /opencode_start для запуска сервера.",
+  "status.header_unavailable": "🔴 OpenCode Server недоступен",
+  "status.unavailable_hint": "Используйте /opencode_start для запуска сервера.",
 
   "tts.off": "🔇 Аудиоответы выключены.",
   "tts.all": "🔊 Аудиоответы включены для всех сообщений.",
@@ -148,6 +152,7 @@ export const ru: I18nDictionary = {
 
   "settings.menu.title": "⚙️ Настройки бота\nНажмите на параметр, чтобы переключить его значение:",
   "settings.compact_output.label": "Компактный вывод",
+  "settings.delete_progress_on_finish.label": "Удалять прогресс по завершении",
   "settings.thinking_content.label": "Содержимое thinking",
   "settings.response_streaming.label": "Стриминг ответа",
   "settings.response_streaming.edit": "edit",
@@ -403,6 +408,7 @@ export const ru: I18nDictionary = {
   "keyboard.queued_prompt": "❌ {index}. {text}",
   "queue.added": "📥 Добавлено в очередь ({count}/{max}). Сообщение уйдёт после завершения текущей задачи.",
   "queue.full": "⚠️ Очередь заполнена ({max}). Удалите сообщение или дождитесь завершения текущей задачи.",
+  "queue.media_limit": "⚠️ Медиа в очереди ограничены {maxSizeMb} MiB. Дождитесь отправки элемента и повторите попытку.",
   "queue.removed": "🗑 Сообщение удалено из очереди.",
   "queue.not_found": "Этого сообщения больше нет в очереди.",
   "queue.disabled_hint": "Очередь сообщений включается в /settings.",
@@ -460,7 +466,7 @@ export const ru: I18nDictionary = {
   "runtime.wizard.api_url_invalid":
     "Введите корректный URL (http/https) или нажмите Enter для значения по умолчанию.\n",
   "runtime.wizard.start": "Настройка OpenCode Telegram Bot.\n",
-  "runtime.wizard.saved": "Конфигурация сохранена:\n- {envPath}\n- {settingsPath}\n",
+  "runtime.wizard.saved": "Конфигурация сохранена:\n- {envPath}\n",
   "runtime.wizard.not_configured_starting":
     "Приложение еще не сконфигурировано. Запускаю wizard...\n",
   "runtime.wizard.tty_required":
@@ -657,4 +663,7 @@ export const ru: I18nDictionary = {
   "attachment.cancel": "❌ Отменить вложение",
   "attachment.cancelled": "❌ Вложение отменено",
   "attachment.invalid": "⚠️ Прикреплённый файл больше недоступен. Отправляю сообщение без него.",
+  "local_command.empty_output": "Команда не вернула вывод.",
+  "local_command.failed": "Команда завершилась с кодом {exitCode}: {stderr}",
+  "local_command.timeout": "Время выполнения команды истекло.",
 };

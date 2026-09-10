@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import { createSettingsStoreMock } from "#helpers/settings-store-mock.js";
 import type { Context } from "grammy";
-import { defined } from "../../helpers/defined.js";
+import { defined } from "#helpers/defined.js";
+import { createIncomingPrompt } from "#src/app/types/prompt.js";
 
 const processUserPromptMock = vi.hoisted(() => vi.fn());
 const getPromptQueueEnabledMock = vi.hoisted(() => vi.fn());
@@ -40,8 +41,8 @@ const {
   __resetPromptQueueDispatchForTests,
   dispatchNextQueuedPrompt,
   initializePromptQueueDispatch,
-  shouldSuggestPromptQueue,
-  tryEnqueuePrompt,
+  shouldSuggestPromptQueue: shouldSuggestPromptQueueInput,
+  tryEnqueuePrompt: tryEnqueueInput,
 } = await loadSut<typeof import("#src/bot/handlers/prompt-queue-dispatch.js")>(
   "#src/bot/handlers/prompt-queue-dispatch.ts",
   import.meta.url,
@@ -58,6 +59,14 @@ function makeContext(): Context {
     api: { sendMessage: vi.fn() },
     reply: replyMock,
   } as unknown as Context;
+}
+
+function tryEnqueuePrompt(ctx: Context, text: string): Promise<boolean> {
+  return tryEnqueueInput(ctx, createIncomingPrompt(text));
+}
+
+function shouldSuggestPromptQueue(text: string): boolean {
+  return shouldSuggestPromptQueueInput(createIncomingPrompt(text));
 }
 
 describe("bot/handlers/prompt-queue-dispatch", () => {
@@ -186,9 +195,42 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
       expect(echo.options).toEqual({ reply_markup: KEYBOARD });
 
       expect(processUserPromptMock).toHaveBeenCalledTimes(1);
-      expect(defined(processUserPromptMock.mock.calls[0]?.[1])).toBe("first");
+      expect(defined(processUserPromptMock.mock.calls[0]?.[1]).text).toBe("first");
       expect(defined(processUserPromptMock.mock.calls[0]?.[2])).toBe(DEPS);
       expect(promptQueue.list().map((item) => item.text)).toEqual(["second"]);
+    });
+
+    it("dispatches queued media with its prepared file parts", async () => {
+      const ctx = makeContext();
+      const filePart = {
+        type: "file" as const,
+        mime: "image/jpeg",
+        filename: "photo.jpg",
+        url: "data:image/jpeg;base64,cGhvdG8=",
+      };
+      await tryEnqueueInput(ctx, {
+        ...createIncomingPrompt("inspect this", { fileParts: [filePart] }),
+        displayText: "release screenshot",
+      });
+
+      await dispatchNextQueuedPrompt();
+
+      expect(processUserPromptMock).toHaveBeenCalledWith(
+        ctx,
+        {
+          id: "queued-1",
+          text: "inspect this",
+          fileParts: [filePart],
+          photos: [],
+          displayText: "release screenshot",
+          mediaBytes: 0,
+        },
+        DEPS,
+        {},
+      );
+      expect(defined(sendBotTextMock.mock.calls[0]?.[0]).rawFallbackText).toContain(
+        "release screenshot",
+      );
     });
 
     it("drains the queue one prompt per idle transition", async () => {
@@ -199,7 +241,10 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
       await dispatchNextQueuedPrompt();
       await dispatchNextQueuedPrompt();
 
-      expect(processUserPromptMock.mock.calls.map((call) => call[1])).toEqual(["first", "second"]);
+      expect(processUserPromptMock.mock.calls.map((call) => call[1].text)).toEqual([
+        "first",
+        "second",
+      ]);
       expect(promptQueue.size()).toBe(0);
     });
 
@@ -229,7 +274,10 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
 
       await dispatchNextQueuedPrompt();
 
-      expect(processUserPromptMock.mock.calls.map((call) => call[1])).toEqual(["first", "second"]);
+      expect(processUserPromptMock.mock.calls.map((call) => call[1].text)).toEqual([
+        "first",
+        "second",
+      ]);
     });
 
     it("does not requeue a prompt that could not be dispatched", async () => {

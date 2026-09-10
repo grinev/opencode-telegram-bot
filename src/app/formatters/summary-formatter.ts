@@ -359,6 +359,10 @@ function formatDiff(diff: string): string {
   return formattedLines.join("\n");
 }
 
+// Unlabelled .txt attachments are guessed at by the reader; without this mark Notepad
+// and Android browsers fall back to the system code page and render UTF-8 as mojibake
+const UTF8_BOM = "\uFEFF";
+
 export function prepareCodeFile(
   content: string,
   filePath: string,
@@ -386,7 +390,7 @@ export function prepareCodeFile(
       : t("tool.file_header.edit", { path: displayPath });
   const fullContent = header + processedContent;
 
-  const buffer = Buffer.from(fullContent, "utf8");
+  const buffer = Buffer.from(UTF8_BOM + fullContent, "utf8");
   const basename = path.basename(filePath);
   const filename = `${operation}_${basename}.txt`;
 

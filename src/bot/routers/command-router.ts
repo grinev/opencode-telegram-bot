@@ -24,15 +24,25 @@ import { statusCommand } from "../commands/status-command.js";
 import { BOT_COMMANDS } from "../commands/definitions.js";
 import { logger } from "../../utils/logger.js";
 import { flushPendingPrompt } from "../handlers/message-merger.js";
+import {
+  LocalCommandRegistry,
+  type LocalCommandResult,
+} from "../../app/services/local-command-registry.js";
+import { sendMessageWithMarkdownFallback } from "../messages/send-with-markdown-fallback.js";
+import { t } from "../../i18n/index.js";
 
 interface CommandRouterDeps {
   ensureEventSubscription: (directory: string) => Promise<void>;
   clearRuntimeState: (reason: string) => void;
+  localCommandRegistry?: LocalCommandRegistry;
 }
 
 let commandsInitialized = false;
-
-export async function ensureCommandsInitialized(ctx: Context, next: NextFunction): Promise<void> {
+export async function ensureCommandsInitialized(
+  ctx: Context,
+  next: NextFunction,
+  localCommandRegistry = LocalCommandRegistry.empty(),
+): Promise<void> {
   if (commandsInitialized || !ctx.from || ctx.from.id !== config.telegram.allowedUserId) {
     await next();
     return;
@@ -45,7 +55,7 @@ export async function ensureCommandsInitialized(ctx: Context, next: NextFunction
   }
 
   try {
-    await ctx.api.setMyCommands(BOT_COMMANDS, {
+    await ctx.api.setMyCommands([...BOT_COMMANDS, ...localCommandRegistry.definitions()], {
       scope: {
         type: "chat",
         chat_id: ctx.chat.id,
@@ -62,6 +72,7 @@ export async function ensureCommandsInitialized(ctx: Context, next: NextFunction
 }
 
 export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps): void {
+  const registry = deps.localCommandRegistry ?? LocalCommandRegistry.empty();
   bot.use(async (ctx, next) => {
     if (ctx.chat && ctx.message?.text?.startsWith("/")) {
       flushPendingPrompt(ctx.chat.id);
@@ -92,4 +103,24 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
   bot.command("commands", commandsCommand);
   bot.command("skills", skillsCommand);
   bot.command("mcps", mcpsCommand);
+  for (const definition of registry.definitions()) {
+    bot.command(definition.command, async (ctx) => {
+      const result = await registry.execute(definition.command);
+      if (!ctx.chat) return;
+      await sendMessageWithMarkdownFallback({
+        api: ctx.api,
+        chatId: ctx.chat.id,
+        text: localCommandReply(result),
+      });
+    });
+  }
+}
+
+function localCommandReply(result: LocalCommandResult): string {
+  switch (result.kind) {
+    case "success": return result.text;
+    case "empty": return t("local_command.empty_output");
+    case "timeout": return t("local_command.timeout");
+    case "failed": return t("local_command.failed", { exitCode: result.exitCode ?? "unknown", stderr: result.stderr });
+  }
 }

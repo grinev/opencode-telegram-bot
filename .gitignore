@@ -21,6 +21,7 @@ Thumbs.db
 .opencode/
 opencode.json
 .pi/
+.omp/
 
 # Project specific
 logs/
@@ -29,6 +30,7 @@ settings.json
 settings.json.bak
 settings.json.tmp
 .tmp/
+e2e/output/
 
 # Packaging artifacts
 *.tgz

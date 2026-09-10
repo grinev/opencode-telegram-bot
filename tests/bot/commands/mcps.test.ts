@@ -17,6 +17,7 @@ const { t } = await loadSut<typeof import("#src/i18n/index.js")>(
   "#src/i18n/index.ts",
   import.meta.url,
 );
+import { defined } from "#helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -123,7 +124,7 @@ describe("bot/commands/mcps", () => {
     expect(mocked.mcpStatusMock).toHaveBeenCalledWith({ directory: "D:/Projects/Repo" });
     expect(ctx.reply).toHaveBeenCalledTimes(1);
 
-    const [, options] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
@@ -354,7 +355,7 @@ describe("bot/commands/mcps", () => {
       expect.objectContaining({ reply_markup: expect.any(Object) }),
     );
 
-    const [, options] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [, options] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
@@ -378,7 +379,7 @@ describe("bot/commands/mcps", () => {
     const ctx = createCommandContext(850);
     await mcpsCommand(ctx as never);
 
-    const [, options] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];

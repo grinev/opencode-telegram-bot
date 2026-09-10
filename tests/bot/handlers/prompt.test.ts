@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Bot, Context } from "grammy";
 import { loadSut } from "#helpers/sut-loader.js";
+import type { FilePartInput } from "@opencode-ai/sdk/v2";
 import type { ProcessPromptDeps } from "#src/bot/handlers/prompt.js";
 import { promptAttachment } from "#src/app/managers/prompt-attachment-manager.js";
-const { consumePromptResponseMode, processUserPrompt } = await loadSut<typeof import("#src/bot/handlers/prompt.js")>(
+import { attachManager } from "#src/app/managers/attach-manager.js";
+import { createIncomingPrompt } from "#src/app/types/prompt.js";
+import { logger } from "#src/utils/logger.js";
+const { consumePromptResponseMode, processUserPrompt: processIncomingPrompt } = await loadSut<typeof import("#src/bot/handlers/prompt.js")>(
   "#src/bot/handlers/prompt.ts",
+  import.meta.url,
+);
+const { t } = await loadSut<typeof import("#src/i18n/index.js")>(
+  "#src/i18n/index.ts",
   import.meta.url,
 );
 
@@ -164,6 +172,16 @@ function createDeps(): ProcessPromptDeps {
   };
 }
 
+function processUserPrompt(
+  ctx: Context,
+  text: string,
+  deps: ProcessPromptDeps,
+  fileParts: FilePartInput[] = [],
+  options: { responseMode?: "text_only" | "text_and_tts" } = {},
+): Promise<boolean> {
+  return processIncomingPrompt(ctx, createIncomingPrompt(text, { fileParts }), deps, options);
+}
+
 function getScheduledBackgroundTask(): {
   task: () => Promise<unknown>;
   onSuccess?: (value: { error: unknown | null }) => void;
@@ -184,6 +202,8 @@ function getScheduledBackgroundTask(): {
 
 describe("bot/handlers/prompt", () => {
   beforeEach(() => {
+    attachManager.__resetForTests();
+    attachManager.attach("session-1", "D:\\Projects\\Repo");
     mocked.currentProject = { id: "project-1", worktree: "D:\\Projects\\Repo" };
     mocked.currentSession = {
       id: "session-1",
@@ -300,6 +320,85 @@ describe("bot/handlers/prompt", () => {
     );
   });
 
+  it("does not notify the user when promptAsync reports an error after detach", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    attachManager.clear("test_detach");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("request start failed") });
+
+    expect(deps.bot.api.sendMessage).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not notify the user when promptAsync rejects after detach", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    attachManager.clear("test_detach");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    const startError = new Error("network down");
+    mocked.sessionPromptAsyncMock.mockRejectedValueOnce(startError);
+
+    await backgroundTask.task().catch((error) => {
+      backgroundTask.onError?.(error);
+    });
+
+    expect(deps.bot.api.sendMessage).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not notify the user when promptAsync fails while attached to another session", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    attachManager.attach("session-2", "D:\\Projects\\Repo");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("request start failed") });
+
+    expect(deps.bot.api.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("still notifies the user when promptAsync fails after re-attach to the same session", async () => {
+    const ctx = createContext();
+    const deps = createDeps();
+
+    const handled = await processUserPrompt(ctx, "Review README", deps);
+
+    expect(handled).toBe(true);
+
+    attachManager.clear("test_detach");
+    attachManager.attach("session-1", "D:\\Projects\\Repo");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    backgroundTask.onSuccess?.({ error: new Error("request start failed") });
+
+    expect(deps.bot.api.sendMessage).toHaveBeenCalledWith(
+      777,
+      "Failed to send request to OpenCode.",
+    );
+  });
+
   it("does not register suppression entry for file-only prompts", async () => {
     const handled = await processUserPrompt(createContext(), "", createDeps(), [
       {
@@ -350,6 +449,100 @@ describe("bot/handlers/prompt", () => {
         ],
       }),
     );
+  });
+
+  it("does not call OpenCode for an empty prompt without attachments", async () => {
+    const ctx = createContext();
+
+    const handled = await processIncomingPrompt(ctx, createIncomingPrompt(""), createDeps());
+
+    expect(handled).toBe(false);
+    expect(mocked.attachToSessionMock).not.toHaveBeenCalled();
+    expect(mocked.safeBackgroundTaskMock).not.toHaveBeenCalled();
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
+
+  it("downloads deferred rich photos after the prompt is accepted", async () => {
+    const ctx = createContext();
+    const downloadFile = vi.fn().mockResolvedValue({
+      buffer: Buffer.from("photo"),
+      filePath: "photos/rich.jpg",
+    });
+    const deps: ProcessPromptDeps = {
+      ...createDeps(),
+      downloadFile,
+      getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: true } }),
+    };
+
+    const handled = await processIncomingPrompt(
+      ctx,
+      createIncomingPrompt("", {
+        photos: [{ fileId: "rich-photo", filename: "rich.jpg", source: "rich" }],
+      }),
+      deps,
+    );
+
+    expect(handled).toBe(true);
+    expect(ctx.reply).toHaveBeenCalledWith(t("bot.photo_downloading"));
+    expect(downloadFile).toHaveBeenCalledWith(ctx.api, "rich-photo");
+
+    const backgroundTask = getScheduledBackgroundTask();
+    await backgroundTask.task();
+    expect(mocked.sessionPromptAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          { type: "text", text: "See attached file" },
+          expect.objectContaining({
+            type: "file",
+            mime: "image/jpeg",
+            filename: "rich.jpg",
+            url: expect.stringMatching(/^data:image\/jpeg;base64,/),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("rejects a rich photo envelope when the model does not support images", async () => {
+    const ctx = createContext();
+    const deps: ProcessPromptDeps = {
+      ...createDeps(),
+      downloadFile: vi.fn(),
+      getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: false } }),
+    };
+
+    const handled = await processIncomingPrompt(
+      ctx,
+      createIncomingPrompt("Describe this", {
+        photos: [{ fileId: "photo", filename: "photo.jpg", source: "rich" }],
+      }),
+      deps,
+    );
+
+    expect(handled).toBe(false);
+    expect(ctx.reply).toHaveBeenCalledWith(t("bot.photo_model_no_image"));
+    expect(mocked.safeBackgroundTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("aborts a rich envelope when one photo download fails", async () => {
+    const ctx = createContext();
+    const deps: ProcessPromptDeps = {
+      ...createDeps(),
+      downloadFile: vi.fn().mockRejectedValue(new Error("download failed")),
+      getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: true } }),
+    };
+
+    const handled = await processIncomingPrompt(
+      ctx,
+      createIncomingPrompt("Describe this", {
+        photos: [{ fileId: "photo", filename: "photo.jpg", source: "rich" }],
+      }),
+      deps,
+    );
+
+    expect(handled).toBe(false);
+    expect(ctx.reply).toHaveBeenLastCalledWith(t("bot.photo_download_error"));
+    expect(mocked.safeBackgroundTaskMock).not.toHaveBeenCalled();
   });
 
   describe("pending /ls attachment", () => {
@@ -451,6 +644,103 @@ describe("bot/handlers/prompt", () => {
 
       expect(mocked.resolvePendingAttachmentMock).toHaveBeenCalled();
       expect(mocked.interactionClearMock).not.toHaveBeenCalledWith("attachment_consumed");
+    });
+  });
+
+  describe("local vision fallback", () => {
+    const photoInput = (text = "Use this caption") =>
+      createIncomingPrompt(text, {
+        photos: [{ fileId: "photo-1", filename: "photo.jpg", source: "standalone" }],
+      });
+
+    function createVisionDeps(describeImage: ReturnType<typeof vi.fn>): ProcessPromptDeps {
+      return {
+        ...createDeps(),
+        downloadFile: vi.fn().mockResolvedValue({
+          buffer: Buffer.from("photo-bytes"),
+          filePath: "photos/file.jpg",
+        }),
+        getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: false } }),
+        describeImage,
+        savePhoto: vi.fn().mockReturnValue("/home/test/.opencode/uploads/photo-123.png"),
+      };
+    }
+
+    it("describes a standalone photo with the local vision model and saves it for the agent", async () => {
+      const ctx = createContext();
+      const describeImage = vi
+        .fn()
+        .mockResolvedValue({ ok: true, description: "A photo showing a salon booking." });
+      const deps = createVisionDeps(describeImage);
+
+      const handled = await processIncomingPrompt(ctx, photoInput(), deps);
+
+      expect(handled).toBe(true);
+      expect(ctx.reply).toHaveBeenCalledWith(t("bot.photo_vision_describing"));
+      expect(deps.downloadFile).toHaveBeenCalledWith(ctx.api, "photo-1");
+      expect(describeImage).toHaveBeenCalledWith(Buffer.from("photo-bytes"), "image/jpeg");
+      expect(deps.savePhoto).toHaveBeenCalledWith(Buffer.from("photo-bytes"));
+
+      await getScheduledBackgroundTask().task();
+
+      const [promptArgs] = mocked.sessionPromptAsyncMock.mock.calls[0] as [
+        { parts: Array<{ type: string; text?: string }> },
+      ];
+      const textPart = promptArgs.parts.find((part) => part.type === "text");
+      expect(textPart?.text).toContain("Use this caption");
+      expect(textPart?.text).toContain("A photo showing a salon booking.");
+      expect(textPart?.text).toContain("/home/test/.opencode/uploads/photo-123.png");
+    });
+
+    it("sends only the vision text when the photo has no caption", async () => {
+      const ctx = createContext();
+      const deps = createVisionDeps(
+        vi.fn().mockResolvedValue({ ok: true, description: "Red squares on white." }),
+      );
+
+      const handled = await processIncomingPrompt(ctx, photoInput(""), deps);
+
+      expect(handled).toBe(true);
+
+      await getScheduledBackgroundTask().task();
+
+      const [promptArgs] = mocked.sessionPromptAsyncMock.mock.calls[0] as [
+        { parts: Array<{ type: string; text?: string }> },
+      ];
+      const textPart = promptArgs.parts.find((part) => part.type === "text");
+      expect(textPart?.text).toContain("Red squares on white.");
+      expect(textPart?.text).not.toContain("Use this caption");
+    });
+
+    it("degrades to the caption text when the local vision service fails", async () => {
+      const ctx = createContext();
+      const deps = createVisionDeps(
+        vi.fn().mockResolvedValue({ ok: false, error: "fetch failed" }),
+      );
+
+      const handled = await processIncomingPrompt(ctx, photoInput(), deps);
+
+      expect(handled).toBe(true);
+      expect(ctx.reply).toHaveBeenCalledWith(t("bot.photo_vision_fallback_error"));
+
+      await getScheduledBackgroundTask().task();
+
+      expect(mocked.sessionPromptAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({ parts: [{ type: "text", text: "Use this caption" }] }),
+      );
+    });
+
+    it("drops the photo when vision fails and there is no caption", async () => {
+      const ctx = createContext();
+      const deps = createVisionDeps(
+        vi.fn().mockResolvedValue({ ok: false, error: "fetch failed" }),
+      );
+
+      const handled = await processIncomingPrompt(ctx, photoInput(""), deps);
+
+      expect(handled).toBe(false);
+      expect(ctx.reply).toHaveBeenCalledWith(t("bot.photo_vision_fallback_error"));
+      expect(mocked.sessionPromptAsyncMock).not.toHaveBeenCalled();
     });
   });
 });

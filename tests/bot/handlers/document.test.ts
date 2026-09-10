@@ -23,6 +23,9 @@ vi.mock("#src/app/services/document-extractor-service.ts", () => ({
   isDocExtractorConfigured: vi.fn(),
   extractDocument: vi.fn(),
 }));
+import { MAX_QUEUED_MEDIA_BYTES, promptQueue } from "#src/app/managers/prompt-queue-manager.js";
+import { foregroundSessionState } from "#src/app/managers/foreground-session-state-manager.js";
+import * as settingsStore from "#src/app/stores/settings-store.js";
 
 function createDocumentContext(overrides: Partial<Context["message"]> = {}): {
   ctx: Context;
@@ -81,7 +84,10 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
     downloadFile: downloadMock,
     getModelCapabilities: getCapabilitiesMock,
     getStoredModel: getStoredModelMock,
-    processPrompt: processPromptMock,
+    processPrompt: (ctx, input, promptDeps) =>
+      input.fileParts.length > 0
+        ? processPromptMock(ctx, input.text, promptDeps, input.fileParts)
+        : processPromptMock(ctx, input.text, promptDeps),
     ...overrides,
   };
 
@@ -92,9 +98,90 @@ describe("bot/handlers/document", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     flushPendingPromptMock.mockClear();
+    promptQueue.__resetForTests();
+    foregroundSessionState.__resetForTests();
+  });
+
+  it("rejects oversized queued image documents before downloading", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "/repo");
+    const { ctx } = createDocumentContext({
+      document: {
+        file_id: "image-file-id",
+        file_unique_id: "image-unique-id",
+        file_name: "image.png",
+        mime_type: "image/png",
+        file_size: MAX_QUEUED_MEDIA_BYTES + 1,
+      },
+    });
+    const { deps, downloadMock, processPromptMock } = createDocumentDeps();
+
+    await handleDocumentMessage(ctx, deps);
+
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(processPromptMock).not.toHaveBeenCalled();
+    expect(promptQueue.mediaSize()).toBe(0);
+  });
+
+  it("rejects oversized queued PDFs before downloading", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "/repo");
+    const { ctx } = createDocumentContext({
+      document: {
+        file_id: "pdf-file-id",
+        file_unique_id: "pdf-unique-id",
+        file_name: "large.pdf",
+        mime_type: "application/pdf",
+        file_size: MAX_QUEUED_MEDIA_BYTES + 1,
+      },
+    });
+    const { deps, downloadMock, processPromptMock } = createDocumentDeps();
+
+    await handleDocumentMessage(ctx, deps);
+
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(processPromptMock).not.toHaveBeenCalled();
+    expect(promptQueue.mediaSize()).toBe(0);
+  });
+
+  it("rejects queued documents with an unknown media size", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "/repo");
+    const { ctx } = createDocumentContext({
+      document: {
+        file_id: "unknown-file-id",
+        file_unique_id: "unknown-unique-id",
+        file_name: "unknown.png",
+        mime_type: "image/png",
+      },
+    });
+    const { deps, downloadMock } = createDocumentDeps();
+
+    await handleDocumentMessage(ctx, deps);
+
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(promptQueue.mediaSize()).toBe(0);
   });
 
   describe("text files", () => {
+    it("reserves raw source bytes when a text file is queued", async () => {
+      vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+      foregroundSessionState.markBusy("session-1", "/repo");
+      const { ctx } = createDocumentContext();
+      const { deps, downloadMock, processPromptMock } = createDocumentDeps();
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(downloadMock).toHaveBeenCalledOnce();
+      expect(processPromptMock).not.toHaveBeenCalled();
+      expect(promptQueue.list()).toEqual([
+        expect.objectContaining({
+          mediaBytes: 1024,
+        }),
+      ]);
+      expect(promptQueue.mediaSize()).toBe(1024);
+    });
+
     it("downloads and sends text file content as prompt", async () => {
       const { ctx, replyMock } = createDocumentContext();
       const { deps, processPromptMock, downloadMock } = createDocumentDeps();

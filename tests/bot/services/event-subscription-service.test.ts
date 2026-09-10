@@ -214,17 +214,20 @@ function emitTaskTool(summaryAggregator: { processEvent(event: Event): void }): 
   } as unknown as Event);
 }
 
-function emitSubagentStart(summaryAggregator: { processEvent(event: Event): void }): void {
+function emitSubagentStart(
+  summaryAggregator: { processEvent(event: Event): void },
+  suffix = "1",
+): void {
   summaryAggregator.processEvent({
     type: "message.part.updated",
     properties: {
       part: {
-        id: "subtask-1",
+        id: `subtask-${suffix}`,
         sessionID: "session-1",
         messageID: "message-1",
         type: "subtask",
-        prompt: "Inspect the project",
-        description: "inspect task",
+        prompt: `Inspect the project ${suffix}`,
+        description: `inspect task ${suffix}`,
         agent: "explore",
       },
     },
@@ -234,10 +237,10 @@ function emitSubagentStart(summaryAggregator: { processEvent(event: Event): void
     type: "session.created",
     properties: {
       info: {
-        id: "child-session-1",
+        id: `child-session-${suffix}`,
         parentID: "session-1",
-        title: "inspect task (@explore subagent)",
-        slug: "child",
+        title: `inspect task ${suffix} (@explore subagent)`,
+        slug: `child-${suffix}`,
         directory: "D:/repo",
         projectID: "p1",
         version: "1",
@@ -603,6 +606,29 @@ describe("bot/services/event-subscription-service", () => {
 
       const texts = collectSentTexts(api);
       expect(texts.some((text) => text.includes("npm run lint") && /· 🕒 \d+s/.test(text))).toBe(
+        true,
+      );
+    });
+
+    it("sends overlapping subagents as independent card messages", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+
+      useTrackerFakeTimers();
+      emitSubagentStart(summaryAggregator, "1");
+      emitSubagentStart(summaryAggregator, "2");
+      await flushPendingDispatch();
+
+      const cardMessages = api.sendMessage.mock.calls
+        .map((call) => String(call[1]))
+        .filter((text) => text.includes("🧩"));
+
+      expect(cardMessages).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("inspect task 1"),
+          expect.stringContaining("inspect task 2"),
+        ]),
+      );
+      expect(cardMessages.every((text) => !(text.includes("inspect task 1") && text.includes("inspect task 2")))).toBe(
         true,
       );
     });

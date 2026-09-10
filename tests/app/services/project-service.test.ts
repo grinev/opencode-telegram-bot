@@ -4,9 +4,14 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "#vitest";
 
 import { loadSut } from "#helpers/sut-loader.js";
-const { projectListMock, cachedSessionProjectsMock } = vi.hoisted(() => ({
+const { projectListMock, cachedSessionProjectsMock, configMock } = vi.hoisted(() => ({
   projectListMock: vi.fn(),
   cachedSessionProjectsMock: vi.fn(),
+  configMock: {
+    bot: {
+      excludedProjectPaths: [] as string[],
+    },
+  },
 }));
 
 vi.mock("#src/opencode/client.ts", () => ({
@@ -15,6 +20,10 @@ vi.mock("#src/opencode/client.ts", () => ({
       list: projectListMock,
     },
   },
+}));
+
+vi.mock("#src/config.ts", () => ({
+  config: configMock,
 }));
 
 vi.mock("#src/app/services/session-cache-service.ts", () => ({
@@ -42,6 +51,7 @@ describe("project/manager", () => {
     projectListMock.mockReset();
     cachedSessionProjectsMock.mockReset();
     delete process.env.OPENCODE_TELEGRAM_VISIBLE_PROJECTS;
+    configMock.bot.excludedProjectPaths = [];
   });
 
   afterEach(async () => {
@@ -278,6 +288,177 @@ describe("project/manager", () => {
       // by the linked-worktree filter. The whitelist sees it as empty.
       expect(projects).toHaveLength(0);
     });
+  });
+
+  it("keeps all projects when no excluded paths are configured", async () => {
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([
+      { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+      { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+    ]);
+  });
+
+  it("filters out projects whose worktree matches an excluded path", async () => {
+    configMock.bot.excludedProjectPaths = ["/home/user/repo-b"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p1", worktree: "/home/user/repo-a", name: "Repo A" }]);
+  });
+
+  it("filters out projects matching any of multiple excluded paths", async () => {
+    configMock.bot.excludedProjectPaths = ["/home/user/repo-a", "/home/user/repo-b"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+        { id: "p3", worktree: "/home/user/repo-c", name: "Repo C" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p3", worktree: "/home/user/repo-c", name: "Repo C" }]);
+  });
+
+  it("applies exclusion after hiding linked git worktrees", async () => {
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), "opencode-excluded-worktrees-"));
+
+    const mainWorktree = path.join(tempRoot, "repo-main");
+    const linkedWorktree = path.join(tempRoot, "repo-feature");
+    const excludedWorktree = path.join(tempRoot, "repo-excluded");
+
+    await mkdir(path.join(mainWorktree, ".git"), { recursive: true });
+    await mkdir(linkedWorktree, { recursive: true });
+    await mkdir(excludedWorktree, { recursive: true });
+    await writeFile(
+      path.join(linkedWorktree, ".git"),
+      `gitdir: ${path.join(mainWorktree, ".git", "worktrees", "feature")}`,
+      "utf-8",
+    );
+
+    configMock.bot.excludedProjectPaths = [excludedWorktree];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "main", worktree: mainWorktree, name: "Main" },
+        { id: "feature", worktree: linkedWorktree, name: "Feature" },
+        { id: "excluded", worktree: excludedWorktree, name: "Excluded" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "main", worktree: mainWorktree, name: "Main" }]);
+  });
+
+  it("filters out projects when excluded path has trailing separator", async () => {
+    configMock.bot.excludedProjectPaths = ["/home/user/repo-b/"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b", name: "Repo B" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p1", worktree: "/home/user/repo-a", name: "Repo A" }]);
+  });
+
+  it("filters out projects when worktree has trailing separator but excluded does not", async () => {
+    configMock.bot.excludedProjectPaths = ["/home/user/repo-b"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "/home/user/repo-a/", name: "Repo A" },
+        { id: "p2", worktree: "/home/user/repo-b/", name: "Repo B" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p1", worktree: "/home/user/repo-a/", name: "Repo A" }]);
+  });
+
+  it("filters out projects with Windows casing differences", async () => {
+    configMock.bot.excludedProjectPaths = ["c:\\users\\dev\\repo"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "C:\\Users\\Dev\\Repo", name: "Repo A" },
+        { id: "p2", worktree: "C:\\Users\\Dev\\Other", name: "Other" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p2", worktree: "C:\\Users\\Dev\\Other", name: "Other" }]);
+  });
+
+  it("filters out projects with Windows mixed separators", async () => {
+    configMock.bot.excludedProjectPaths = ["C:/Users/Dev/Repo"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "C:\\Users\\Dev\\Repo", name: "Repo A" },
+        { id: "p2", worktree: "C:\\Users\\Dev\\Other", name: "Other" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p2", worktree: "C:\\Users\\Dev\\Other", name: "Other" }]);
+  });
+
+  it("filters out projects with Windows trailing separator and casing", async () => {
+    configMock.bot.excludedProjectPaths = ["C:\\Users\\Dev\\Repo\\"];
+
+    projectListMock.mockResolvedValueOnce({
+      data: [
+        { id: "p1", worktree: "c:/users/dev/repo", name: "Repo A" },
+        { id: "p2", worktree: "C:/Users/Dev/Other/", name: "Other" },
+      ],
+      error: null,
+    });
+    cachedSessionProjectsMock.mockResolvedValueOnce([]);
+
+    const projects = await getProjects();
+
+    expect(projects).toEqual([{ id: "p2", worktree: "C:/Users/Dev/Other/", name: "Other" }]);
   });
 
   describe("getProjectByWorktree", () => {

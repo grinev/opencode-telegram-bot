@@ -1,5 +1,4 @@
 import type { Context } from "grammy";
-import type { FilePartInput } from "@opencode-ai/sdk/v2";
 import { config } from "../../config.js";
 import { getTtsMode } from "../../app/stores/settings-store.js";
 import {
@@ -8,12 +7,14 @@ import {
   type SttResult,
 } from "../../app/services/stt-service.js";
 import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
+import { createIncomingPrompt, type IncomingPrompt } from "../../app/types/prompt.js";
 import { flushPendingPrompt } from "./message-merger.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { buildTelegramFileUrl } from "../../app/services/file-download-service.js";
 import { buildQuotedNotification } from "../../app/services/quoted-notification.js";
 import { editBotText } from "../messages/telegram-text.js";
+import { tryEnqueuePromptIfBusy } from "./prompt-queue-dispatch.js";
 
 const TELEGRAM_DOWNLOAD_TIMEOUT_MS = 30_000;
 
@@ -87,9 +88,8 @@ export interface VoiceMessageDeps extends ProcessPromptDeps {
   transcribeAudio?: (audioBuffer: Buffer, filename: string) => Promise<SttResult>;
   processPrompt?: (
     ctx: Context,
-    text: string,
+    input: IncomingPrompt,
     deps: ProcessPromptDeps,
-    fileParts?: FilePartInput[],
     options?: { responseMode?: "text_only" | "text_and_tts" },
   ) => Promise<boolean>;
 }
@@ -235,7 +235,16 @@ export async function handleVoiceMessage(ctx: Context, deps: VoiceMessageDeps): 
     const currentTtsMode = getTtsMode();
     const responseMode =
       currentTtsMode === "all" || currentTtsMode === "auto" ? "text_and_tts" : "text_only";
-    await processPrompt(ctx, textForLLM, deps, [], { responseMode });
+    if (
+      await tryEnqueuePromptIfBusy(ctx, {
+        ...createIncomingPrompt(textForLLM),
+        displayText: recognizedText,
+        responseMode,
+      })
+    ) {
+      return;
+    }
+    await processPrompt(ctx, createIncomingPrompt(textForLLM), deps, { responseMode });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "unknown error";
     logger.error("[Voice] Error processing voice message:", err);

@@ -103,7 +103,38 @@ describe("config boolean env parsing", () => {
     expect(config.bot.messageFormatMode).toBe("markdown");
   });
 
-  it("parses markdown message format mode", () => {
+  it("returns an empty list when PROJECTS_EXCLUDED_PATHS is not set", async () => {
+    vi.stubEnv("PROJECTS_EXCLUDED_PATHS", "");
+
+    const config = createConfig(process.env);
+
+    expect(config.bot.excludedProjectPaths).toEqual([]);
+  });
+
+  it("parses PROJECTS_EXCLUDED_PATHS as a comma-separated path list", async () => {
+    vi.stubEnv(
+      "PROJECTS_EXCLUDED_PATHS",
+      "/home/user/repo-a,/home/user/repo-b,/home/user/repo-c",
+    );
+
+    const config = createConfig(process.env);
+
+    expect(config.bot.excludedProjectPaths).toEqual([
+      "/home/user/repo-a",
+      "/home/user/repo-b",
+      "/home/user/repo-c",
+    ]);
+  });
+
+  it("trims whitespace and drops empty entries from PROJECTS_EXCLUDED_PATHS", async () => {
+    vi.stubEnv("PROJECTS_EXCLUDED_PATHS", "  /home/user/repo-a , ,/home/user/repo-b  ");
+
+    const config = createConfig(process.env);
+
+    expect(config.bot.excludedProjectPaths).toEqual(["/home/user/repo-a", "/home/user/repo-b"]);
+  });
+
+  it("parses markdown message format mode", async () => {
     vi.stubEnv("MESSAGE_FORMAT_MODE", "MARKDOWN");
 
     const config = createConfig(process.env);
@@ -230,31 +261,7 @@ describe("config boolean env parsing", () => {
     expect(config.bot.scheduledTaskExecutionTimeoutMinutes).toBe(120);
   });
 
-  it("uses default response stream throttle when RESPONSE_STREAM_THROTTLE_MS is missing", () => {
-    vi.stubEnv("RESPONSE_STREAM_THROTTLE_MS", "");
-
-    const config = createConfig(process.env);
-
-    expect(config.bot.responseStreamThrottleMs).toBe(1000);
-  });
-
-  it("parses RESPONSE_STREAM_THROTTLE_MS as a positive integer", () => {
-    vi.stubEnv("RESPONSE_STREAM_THROTTLE_MS", "750");
-
-    const config = createConfig(process.env);
-
-    expect(config.bot.responseStreamThrottleMs).toBe(750);
-  });
-
-  it("falls back to default response stream throttle on invalid value", () => {
-    vi.stubEnv("RESPONSE_STREAM_THROTTLE_MS", "zero");
-
-    const config = createConfig(process.env);
-
-    expect(config.bot.responseStreamThrottleMs).toBe(1000);
-  });
-
-  it("uses default bash tool display length when env is missing", () => {
+  it("uses default bash tool display length when env is missing", async () => {
     vi.stubEnv("BASH_TOOL_DISPLAY_MAX_LENGTH", "");
 
     const config = createConfig(process.env);

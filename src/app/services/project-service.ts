@@ -1,5 +1,6 @@
 import path from "bun:path";
 import { opencodeClient } from "../../opencode/client.js";
+import { config } from "../../config.js";
 import { getCachedSessionProjects } from "./session-cache-service.js";
 import { getVisibleProjects } from "../stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
@@ -84,11 +85,19 @@ async function getResolvedProjects(options?: {
     );
   }
 
+  const excludedPaths = config.bot.excludedProjectPaths;
+  const excludedKeys = new Set(excludedPaths.map((excluded) => worktreeKey(excluded)));
+  const filteredProjects =
+    excludedKeys.size > 0
+      ? visibleProjects.filter((project) => !excludedKeys.has(worktreeKey(project.worktree)))
+      : visibleProjects;
+  const hiddenExcluded = visibleProjects.length - filteredProjects.length;
+
   logger.debug(
-    `[ProjectManager] Projects resolved: api=${projects.length}, cached=${cachedProjects.length}, hiddenLinkedWorktrees=${hiddenLinkedWorktrees}, total=${visibleProjects.length}`,
+    `[ProjectManager] Projects resolved: api=${projects.length}, cached=${cachedProjects.length}, hiddenLinkedWorktrees=${hiddenLinkedWorktrees}, hiddenExcluded=${hiddenExcluded}, total=${filteredProjects.length}`,
   );
 
-  return visibleProjects;
+  return filteredProjects;
 }
 
 async function isLinkedGitWorktree(worktree: string): Promise<boolean> {

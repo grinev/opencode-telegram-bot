@@ -1,5 +1,6 @@
 import { Bot, Context } from "grammy";
 import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2";
+import type { Model } from "@opencode-ai/sdk/v2";
 import { opencodeClient } from "../../opencode/client.js";
 import {
   clearSession,
@@ -24,6 +25,7 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
 import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
+import { attachManager } from "../../app/managers/attach-manager.js";
 import {
   attachToSession,
   detachAttachedSession,
@@ -33,6 +35,20 @@ import {
 import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
 import { promptAttachment } from "../../app/managers/prompt-attachment-manager.js";
 import { resolvePendingAttachment } from "../../app/services/prompt-attachment-service.js";
+import {
+  downloadTelegramFile,
+  toDataUri,
+} from "../../app/services/file-download-service.js";
+import {
+  getModelCapabilities,
+  supportsInput,
+} from "../../app/services/model-capabilities-service.js";
+import {
+  describeImageWithLocalVision,
+  type LocalVisionResult,
+} from "../../app/services/local-vision-service.js";
+import { savePhotoForAgent } from "../../app/services/photo-save-service.js";
+import type { IncomingPrompt } from "../../app/types/prompt.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
@@ -113,6 +129,21 @@ async function resetMismatchedSessionContext(): Promise<void> {
 export interface ProcessPromptDeps {
   bot: Bot<Context>;
   ensureEventSubscription: (directory: string) => Promise<void>;
+  downloadFile?: (
+    api: Context["api"],
+    fileId: string,
+  ) => Promise<{ buffer: Buffer; filePath: string }>;
+  getModelCapabilities?: (
+    providerId: string,
+    modelId: string,
+  ) => Promise<Model["capabilities"] | null>;
+  getStoredModel?: () => { providerID: string; modelID: string; variant?: string };
+  describeImage?: (
+    buffer: Buffer,
+    mime?: string,
+    question?: string,
+  ) => Promise<LocalVisionResult>;
+  savePhoto?: (buffer: Buffer, extension?: string) => string;
 }
 
 /**
@@ -138,21 +169,28 @@ async function retireAttachmentConfirmation(
  * the prompt to OpenCode. Used by text, voice, and photo message handlers.
  *
  * @param ctx - Grammy context
- * @param text - Text content of the prompt
+ * @param input - Text and attachment content of the prompt
  * @param deps - Dependencies (bot and event subscription)
- * @param fileParts - Optional file parts (for photo/document attachments)
  * @returns true if the prompt was dispatched, false if it was blocked/failed early.
  */
 export async function processUserPrompt(
   ctx: Context,
-  text: string,
+  input: IncomingPrompt,
   deps: ProcessPromptDeps,
-  fileParts: FilePartInput[] = [],
   options: ProcessPromptOptions = {},
 ): Promise<boolean> {
   const { bot, ensureEventSubscription } = deps;
   const responseMode =
     options.responseMode ?? (getTtsMode() === "all" ? "text_and_tts" : "text_only");
+
+  if (
+    input.text.trim().length === 0 &&
+    input.fileParts.length === 0 &&
+    input.photos.length === 0 &&
+    !promptAttachment.get()
+  ) {
+    return false;
+  }
 
   const currentProject = getCurrentProject();
   if (!currentProject) {
@@ -240,18 +278,22 @@ export async function processUserPrompt(
 
   try {
     const currentAgent = await resolveProjectAgent(getStoredAgent());
-    const storedModel = getStoredModel();
+    const storedModel = (deps.getStoredModel ?? getStoredModel)();
+    const preparedInput = await prepareTelegramPhotos(ctx, input, deps, storedModel);
+    if (!preparedInput) {
+      return false;
+    }
 
     // Build parts array with text and files
     const parts: Array<TextPartInput | FilePartInput> = [];
 
     // Add text part if present
-    if (text.trim().length > 0) {
-      parts.push({ type: "text", text });
+    if (preparedInput.text.trim().length > 0) {
+      parts.push({ type: "text", text: preparedInput.text });
     }
 
     // Add file parts
-    parts.push(...fileParts);
+    parts.push(...preparedInput.fileParts);
 
     // A file picked in /ls belongs to this prompt. Capture whether one existed before
     // resolving it: the resolver clears the attachment on every failed check, so afterwards
@@ -276,9 +318,10 @@ export async function processUserPrompt(
 
     // If no text and files exist, use a placeholder
     if (parts.length === 0 || (parts.length > 0 && parts.every((p) => p.type === "file"))) {
-      if (fileParts.length > 0) {
+      if (preparedInput.fileParts.length > 0) {
         // Files without text - add a minimal system prompt
-        const attachmentText = fileParts.length === 1 ? "See attached file" : "See attached files";
+        const attachmentText =
+          preparedInput.fileParts.length === 1 ? "See attached file" : "See attached files";
         parts.unshift({ type: "text", text: attachmentText });
       }
     }
@@ -321,7 +364,7 @@ export async function processUserPrompt(
       modelProvider: storedModel.providerID || "default",
       modelId: storedModel.modelID || "default",
       variant: storedModel.variant || "default",
-      promptLength: text.length,
+      promptLength: preparedInput.text.length,
       fileCount: filePartCount,
     };
 
@@ -339,8 +382,8 @@ export async function processUserPrompt(
     });
     setPromptResponseMode(currentSession.id, responseMode);
 
-    if (text.trim().length > 0) {
-      externalUserInputSuppressionManager.register(currentSession.id, text);
+    if (preparedInput.text.trim().length > 0) {
+      externalUserInputSuppressionManager.register(currentSession.id, preparedInput.text);
     }
 
     // CRITICAL: Use the async prompt start endpoint here.
@@ -366,7 +409,9 @@ export async function processUserPrompt(
           logger.error("[Bot] session.promptAsync raw API error object:", error);
 
           // Send user-friendly error via API directly because ctx is no longer available
-          void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+          if (attachManager.isAttachedSession(currentSession.id)) {
+            void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+          }
           return;
         }
 
@@ -381,7 +426,9 @@ export async function processUserPrompt(
         logger.error("[Bot] session.promptAsync background task failed", promptErrorLogContext);
         logger.error("[Bot] session.promptAsync background failure details:", details);
         logger.error("[Bot] session.promptAsync raw background error object:", error);
-        void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+        if (attachManager.isAttachedSession(currentSession.id)) {
+          void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+        }
       },
     });
 
@@ -398,5 +445,118 @@ export async function processUserPrompt(
     }
     await ctx.reply(t("error.generic"));
     return false;
+  }
+}
+
+async function prepareTelegramPhotos(
+  ctx: Context,
+  input: IncomingPrompt,
+  deps: ProcessPromptDeps,
+  storedModel: { providerID: string; modelID: string },
+): Promise<IncomingPrompt | null> {
+  if (input.photos.length === 0) {
+    return input;
+  }
+
+  const getCapabilities = deps.getModelCapabilities ?? getModelCapabilities;
+  const capabilities = await getCapabilities(storedModel.providerID, storedModel.modelID);
+
+  if (!supportsInput(capabilities, "image")) {
+    const onlyStandalone = input.photos.every((photo) => photo.source === "standalone");
+    if (!onlyStandalone) {
+      logger.warn(
+        `[Bot] Model ${storedModel.providerID}/${storedModel.modelID} doesn't support image input`,
+      );
+      await ctx.reply(
+        input.photos.some((photo) => photo.source === "album")
+          ? t("bot.media_group_not_processed")
+          : t("bot.photo_model_no_image"),
+      );
+      return null;
+    }
+
+    // Vision fallback: the active model is text-only. Describe the photo
+    // with the LOCAL vision model and send the description as text.
+    logger.warn(
+      `[Bot] Model ${storedModel.providerID}/${storedModel.modelID} doesn't support image input — using local vision fallback`,
+    );
+    await ctx.reply(t("bot.photo_vision_describing"));
+
+    const downloadFile = deps.downloadFile ?? downloadTelegramFile;
+    const describeImage = deps.describeImage ?? describeImageWithLocalVision;
+    const savePhoto = deps.savePhoto ?? savePhotoForAgent;
+    const downloadedBuffers: Buffer[] = [];
+
+    try {
+      for (const photo of input.photos) {
+        const downloaded = await downloadFile(ctx.api, photo.fileId);
+        downloadedBuffers.push(downloaded.buffer);
+      }
+    } catch (err) {
+      logger.error("[Bot] Failed to download photo for local vision:", err);
+      await ctx.reply(t("bot.photo_download_error"));
+      return null;
+    }
+
+    const visionSections: string[] = [];
+    for (const buffer of downloadedBuffers) {
+      const visionResult = await describeImage(buffer, "image/jpeg");
+      if (!visionResult.ok) {
+        logger.error(`[Bot] Local vision fallback failed: ${visionResult.error}`);
+        // Degrade gracefully: without a vision description we still forward
+        // the caption as text (pre-fallback behavior) instead of dropping
+        // the user's message entirely.
+        await ctx.reply(t("bot.photo_vision_fallback_error"));
+        if (input.text.trim().length > 0) {
+          return { ...input, photos: [] };
+        }
+        return null;
+      }
+
+      // Save the original photo so the opencode agent can inspect it itself
+      // (e.g. with the describe_image tool) while working on the prompt.
+      const photoPath = savePhoto(buffer);
+      logger.info(`[Bot] Photo saved for agent inspection: ${photoPath}`);
+
+      visionSections.push(
+        `[Local vision description of the attached photo]\n${visionResult.description}\n\n[The original photo is available on disk at: ${photoPath} — use the describe_image tool on that path whenever you need visual details (colors, layout, exact text).]`,
+      );
+    }
+
+    const visionNote = visionSections.join("\n\n");
+    const combinedText = input.text ? `${input.text}\n\n${visionNote}` : visionNote;
+    logger.info("[Bot] Photo described by local vision, sending as text");
+    return { ...input, text: combinedText, photos: [] };
+  }
+
+  const isAlbum = input.photos.every((photo) => photo.source === "album");
+  await ctx.reply(
+    isAlbum || input.photos.length > 1 ? t("bot.files_downloading") : t("bot.photo_downloading"),
+  );
+
+  const downloadFile = deps.downloadFile ?? downloadTelegramFile;
+
+  try {
+    const downloadedParts: FilePartInput[] = [];
+    for (const photo of input.photos) {
+      const downloaded = await downloadFile(ctx.api, photo.fileId);
+      downloadedParts.push({
+        type: "file",
+        mime: "image/jpeg",
+        filename: photo.filename,
+        url: toDataUri(downloaded.buffer, "image/jpeg"),
+      });
+    }
+
+    logger.info(`[Bot] Prepared ${downloadedParts.length} Telegram photo(s) for prompt`);
+    return {
+      ...input,
+      fileParts: [...input.fileParts, ...downloadedParts],
+      photos: [],
+    };
+  } catch (err) {
+    logger.error("[Bot] Error downloading Telegram photo input:", err);
+    await ctx.reply(isAlbum ? t("bot.media_group_download_error") : t("bot.photo_download_error"));
+    return null;
   }
 }

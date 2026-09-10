@@ -22,6 +22,7 @@ const { t } = await loadSut<typeof import("#src/i18n/index.js")>(
   "#src/i18n/index.ts",
   import.meta.url,
 );
+import { defined } from "#helpers/defined.js";
 
 const QUESTION_ONE: Question = {
   header: "Q1",
@@ -181,7 +182,7 @@ describe("bot question menu/callbacks", () => {
     await showCurrentQuestion(api, 123);
 
     const calls = (api.sendRichMessage as unknown as { mock: { calls: unknown[][] } }).mock.calls;
-    const message = calls[0][1] as { blocks: unknown[] };
+    const message = defined(calls[0]?.[1]) as { blocks: unknown[] };
 
     expect(message.blocks.at(-1)).toEqual({
       type: "paragraph",
@@ -201,7 +202,7 @@ describe("bot question menu/callbacks", () => {
     await showCurrentQuestion(api, 123);
 
     const calls = (api.sendRichMessage as unknown as { mock: { calls: unknown[][] } }).mock.calls;
-    const message = calls[0][1] as { blocks: Array<{ text: unknown }> };
+    const message = defined(calls[0]?.[1]) as { blocks: Array<{ text: unknown }> };
 
     const flatten = (text: unknown): string => {
       if (typeof text === "string") {

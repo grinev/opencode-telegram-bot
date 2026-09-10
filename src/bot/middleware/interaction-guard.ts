@@ -3,11 +3,15 @@ import { resolveInteractionGuardDecision } from "./interaction-guard-decision.js
 import type { BlockReason, InteractionKind } from "../../app/types/interaction.js";
 import { reconcileForegroundBusyState } from "../../app/services/run-control-service.js";
 import {
+  canQueueMediaPrompt,
+  rejectQueuedMediaBeforePreparation,
   shouldSuggestPromptQueue,
   tryEnqueuePrompt,
 } from "../handlers/prompt-queue-dispatch.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { getIncomingPrompt } from "../handlers/rich-message-handler.js";
+import type { LocalCommandRegistry } from "../../app/services/local-command-registry.js";
 
 function getInteractionBlockedMessage(
   reason: BlockReason | undefined,
@@ -88,12 +92,39 @@ function getInteractionBlockedMessage(
   }
 }
 
-export async function interactionGuardMiddleware(ctx: Context, next: NextFunction): Promise<void> {
-  let decision = resolveInteractionGuardDecision(ctx);
+function getQueuedPhotoMediaBytes(input: ReturnType<typeof getIncomingPrompt>): number | undefined {
+  if (!input?.photos.length) {
+    return 0;
+  }
+
+  let mediaBytes = 0;
+  for (const photo of input.photos) {
+    if (
+      typeof photo.fileSize !== "number" ||
+      !Number.isSafeInteger(photo.fileSize) ||
+      photo.fileSize < 0
+    ) {
+      return undefined;
+    }
+    mediaBytes += photo.fileSize;
+    if (!Number.isSafeInteger(mediaBytes)) {
+      return undefined;
+    }
+  }
+
+  return mediaBytes;
+}
+
+export async function interactionGuardMiddleware(
+  ctx: Context,
+  next: NextFunction,
+  localCommandRegistry?: LocalCommandRegistry,
+): Promise<void> {
+  let decision = resolveInteractionGuardDecision(ctx, localCommandRegistry);
 
   if (!decision.allow && decision.busy) {
     await reconcileForegroundBusyState();
-    decision = resolveInteractionGuardDecision(ctx);
+    decision = resolveInteractionGuardDecision(ctx, localCommandRegistry);
   }
 
   if (decision.allow) {
@@ -101,13 +132,27 @@ export async function interactionGuardMiddleware(ctx: Context, next: NextFunctio
     return;
   }
 
-  const queueableText = ctx.message?.text;
+  const incomingPrompt = getIncomingPrompt(ctx);
+  if (decision.busy && !decision.state && canQueueMediaPrompt(ctx)) {
+    await next();
+    return;
+  }
+
   const isQueueableInput = Boolean(
-    decision.busy && decision.inputType === "text" && !decision.state && queueableText,
+    decision.busy && decision.inputType === "text" && !decision.state && incomingPrompt,
   );
 
-  if (isQueueableInput) {
-    const queued = await tryEnqueuePrompt(ctx, queueableText!);
+  if (isQueueableInput && incomingPrompt) {
+    const mediaBytes = getQueuedPhotoMediaBytes(incomingPrompt);
+    if (incomingPrompt.photos.length > 0) {
+      if (await rejectQueuedMediaBeforePreparation(ctx, mediaBytes)) {
+        return;
+      }
+    }
+    const queued = await tryEnqueuePrompt(
+      ctx,
+      mediaBytes === undefined ? incomingPrompt : { ...incomingPrompt, mediaBytes },
+    );
     if (queued) {
       return;
     }
@@ -121,7 +166,7 @@ export async function interactionGuardMiddleware(ctx: Context, next: NextFunctio
 
   // Only hint where the message would actually have been queued - not for button
   // presses or commands that are turned down while the agent is busy.
-  if (isQueueableInput && shouldSuggestPromptQueue(queueableText!)) {
+  if (isQueueableInput && incomingPrompt && shouldSuggestPromptQueue(incomingPrompt)) {
     message = `${message} ${t("queue.disabled_hint")}`;
   }
 

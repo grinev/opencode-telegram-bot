@@ -312,16 +312,6 @@ async function writeFileAtomically(filePath: string, content: string): Promise<v
   await atomicRename(tempFilePath, filePath);
 }
 
-async function ensureSettingsFile(settingsFilePath: string): Promise<void> {
-  const exists = await Bun.file(settingsFilePath).exists();
-  if (exists) {
-    return;
-  }
-
-  await mkdirRecursive(path.dirname(settingsFilePath));
-  await Bun.write(settingsFilePath, "{}\n");
-}
-
 function getEnvExamplePath(): string {
   const currentFilePath = Bun.fileURLToPath(import.meta.url);
   return path.resolve(path.dirname(currentFilePath), "..", "..", ".env.example");
@@ -627,12 +617,10 @@ async function runWizardAndPersist(runtimePaths: RuntimePaths): Promise<void> {
 
   const envContent = buildEnvFileContent(existingContent ?? "", envValues, envExampleContent);
   await writeFileAtomically(runtimePaths.envFilePath, envContent);
-  await ensureSettingsFile(runtimePaths.settingsFilePath);
 
   process.stdout.write(
     t("runtime.wizard.saved", {
       envPath: runtimePaths.envFilePath,
-      settingsPath: runtimePaths.settingsFilePath,
     }),
   );
 }
@@ -646,7 +634,6 @@ export async function ensureRuntimeConfigForStart(): Promise<void> {
 
   const validationResult = await validateExistingEnv(runtimePaths.envFilePath);
   if (validationResult.isValid) {
-    await ensureSettingsFile(runtimePaths.settingsFilePath);
     return;
   }
 

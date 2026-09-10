@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from "#vitest";
+import { beforeEach, describe, expect, it, vi } from "#vitest";
 import { loadSut } from "#helpers/sut-loader.js";
 import { QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "#src/bot/message-patterns.js";
 import { promptQueue } from "#src/app/managers/prompt-queue-manager.js";
 import { interactionManager } from "#src/app/managers/interaction-manager.js";
 import { t } from "#src/i18n/index.js";
+import { defined } from "#helpers/defined.js";
+import { createIncomingPrompt } from "#src/app/types/prompt.js";
 const { registerMessageRouter } = await loadSut<typeof import("#src/bot/routers/message-router.js")>(
   "#src/bot/routers/message-router.ts",
   import.meta.url,
@@ -23,7 +25,7 @@ describe("bot/routers/message-router", () => {
 
     expect(bot.hears).toHaveBeenCalledTimes(5);
     // The queued prompt route must win over the other reply keyboard routes.
-    expect(bot.hears.mock.calls[0][0]).toBe(QUEUED_PROMPT_BUTTON_TEXT_PATTERN);
+    expect(defined(bot.hears.mock.calls[0]?.[0])).toBe(QUEUED_PROMPT_BUTTON_TEXT_PATTERN);
     expect(bot.on.mock.calls.map(([event]) => event)).toEqual([
       "message:text",
       "message:text",
@@ -33,6 +35,7 @@ describe("bot/routers/message-router", () => {
       "message:photo",
       "message:document",
       "message:text",
+      "message",
     ]);
   });
 
@@ -45,7 +48,7 @@ describe("bot/routers/message-router", () => {
         setTelegramContext: vi.fn(),
       });
 
-      return bot.hears.mock.calls[0][1] as (ctx: unknown, next: () => Promise<void>) => Promise<void>;
+      return defined(bot.hears.mock.calls[0]?.[1]) as (ctx: unknown, next: () => Promise<void>) => Promise<void>;
     }
 
     function makeButtonContext(text: string) {
@@ -62,9 +65,9 @@ describe("bot/routers/message-router", () => {
     });
 
     it("removes the pressed prompt from the middle of the queue", async () => {
-      promptQueue.add("first");
-      promptQueue.add("second");
-      promptQueue.add("third");
+      promptQueue.add(createIncomingPrompt("first"));
+      promptQueue.add(createIncomingPrompt("second"));
+      promptQueue.add(createIncomingPrompt("third"));
       const handler = registerAndGetQueuedPromptHandler();
       const ctx = makeButtonContext("❌ 2. second");
       const next = vi.fn();
@@ -88,7 +91,7 @@ describe("bot/routers/message-router", () => {
     });
 
     it("answers not_found when the label no longer matches the queue", async () => {
-      promptQueue.add("still queued");
+      promptQueue.add(createIncomingPrompt("still queued"));
       const handler = registerAndGetQueuedPromptHandler();
       const ctx = makeButtonContext("❌ 3. already gone");
       const next = vi.fn();

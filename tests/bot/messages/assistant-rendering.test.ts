@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "#vitest";
 import { mockDep } from "#helpers/mock-dep.js";
+import { defined } from "#helpers/defined.js";
 import type { Config } from "#src/config.js";
 
 // The fork mocks config via mockDep (absolute path), not vi.doMock with a
@@ -113,8 +114,8 @@ describe("bot/messages/assistant-rendering", () => {
     const parts = module.renderAssistantFinalPartsSafe("# Title\n\nSome **bold** text");
 
     expect(parts).toHaveLength(1);
-    expect(parts[0].source).toBe("blocks");
-    expect(parts[0].blocks.map((block) => block.type)).toEqual(["heading", "paragraph"]);
+    expect(defined(parts[0]).source).toBe("blocks");
+    expect(defined(parts[0]).blocks.map((block) => block.type)).toEqual(["heading", "paragraph"]);
   });
 
   it("parses the stable prefix and keeps the streaming tail literal", async () => {
@@ -123,7 +124,7 @@ describe("bot/messages/assistant-rendering", () => {
     const payload = module.prepareAssistantStreamingPayload("## Done\n\n| unfinished |");
 
     expect(payload?.parts).toHaveLength(1);
-    expect(payload?.parts[0].blocks).toEqual([
+    expect(defined(payload?.parts[0]).blocks).toEqual([
       { type: "heading", text: "Done", size: 2 },
       { type: "paragraph", text: "| unfinished |" },
     ]);
@@ -134,7 +135,7 @@ describe("bot/messages/assistant-rendering", () => {
 
     const payload = module.prepareAssistantStreamingPayload("# still typing");
 
-    expect(payload?.parts[0].blocks).toEqual([{ type: "paragraph", text: "# still typing" }]);
+    expect(defined(payload?.parts[0]).blocks).toEqual([{ type: "paragraph", text: "# still typing" }]);
   });
 
   it("returns no payload for empty text", async () => {

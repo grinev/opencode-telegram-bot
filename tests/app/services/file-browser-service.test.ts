@@ -4,6 +4,7 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { loadSut } from "#helpers/sut-loader.js";
+import { defined } from "#helpers/defined.js";
 const { getHomeDirectory, pathToDisplayPath, scanDirectory, buildEntryLabel, buildTreeHeader, isScanError, MAX_ENTRIES_PER_PAGE } = await loadSut<typeof import("#src/app/services/file-browser-service.js")>(
   "#src/app/services/file-browser-service.ts",
   import.meta.url,
@@ -59,9 +60,9 @@ describe("file-tree", () => {
       if (isScanError(result)) return;
 
       expect(result.entries).toHaveLength(3);
-      expect(result.entries[0].name).toBe("alpha");
-      expect(result.entries[1].name).toBe("bravo");
-      expect(result.entries[2].name).toBe("charlie");
+      expect(defined(result.entries[0]).name).toBe("alpha");
+      expect(defined(result.entries[1]).name).toBe("bravo");
+      expect(defined(result.entries[2]).name).toBe("charlie");
       expect(result.totalCount).toBe(3);
     });
 
@@ -74,7 +75,7 @@ describe("file-tree", () => {
       if (isScanError(result)) return;
 
       expect(result.entries).toHaveLength(1);
-      expect(result.entries[0].name).toBe("visible");
+      expect(defined(result.entries[0]).name).toBe("visible");
     });
 
     it("should skip files (only list directories)", async () => {
@@ -86,7 +87,7 @@ describe("file-tree", () => {
       if (isScanError(result)) return;
 
       expect(result.entries).toHaveLength(1);
-      expect(result.entries[0].name).toBe("subdir");
+      expect(defined(result.entries[0]).name).toBe("subdir");
     });
 
     it("should paginate entries", async () => {

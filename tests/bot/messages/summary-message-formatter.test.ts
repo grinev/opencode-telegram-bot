@@ -8,6 +8,7 @@ const { formatCompactToolActivity, formatToolInfo, prepareCodeFile } = await loa
   "#src/app/formatters/summary-formatter.ts",
   import.meta.url,
 );
+import { defined } from "#helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
   getCurrentProjectMock: vi.fn(() => ({ id: "p1", worktree: "D:/repo", name: "repo" })),
@@ -61,8 +62,8 @@ describe("bot/messages/summary-message-formatter", () => {
     const longText = "a".repeat(4500);
     const parts = formatSummaryWithMode(longText, "raw");
     expect(parts.length).toBeGreaterThan(1);
-    expect(parts[0].startsWith("```\n")).toBe(true);
-    expect(parts[0].endsWith("\n```")).toBe(true);
+    expect(defined(parts[0]).startsWith("```\n")).toBe(true);
+    expect(defined(parts[0]).endsWith("\n```")).toBe(true);
   });
 
   it("formats markdown summaries for Telegram MarkdownV2 mode", () => {
@@ -76,8 +77,8 @@ describe("bot/messages/summary-message-formatter", () => {
     const parts = formatSummaryWithMode("a".repeat(4500), "markdown");
 
     expect(parts.length).toBeGreaterThan(1);
-    expect(parts[0].startsWith("```\n")).toBe(false);
-    expect(parts[0].endsWith("\n```")).toBe(false);
+    expect(defined(parts[0]).startsWith("```\n")).toBe(false);
+    expect(defined(parts[0]).endsWith("\n```")).toBe(false);
   });
 
   it("supports custom message limits for streamed markdown parts", () => {
@@ -99,8 +100,8 @@ describe("bot/messages/summary-message-formatter", () => {
 
     expect(parts.length).toBeGreaterThan(1);
     expect(parts.every((part) => part.length <= 120)).toBe(true);
-    expect(parts[0].startsWith("```\n")).toBe(true);
-    expect(parts[0].endsWith("\n```")).toBe(true);
+    expect(defined(parts[0]).startsWith("```\n")).toBe(true);
+    expect(defined(parts[0]).endsWith("\n```")).toBe(true);
   });
 
   it("adapts headings, quotes, tables and horizontal rules for Telegram", () => {
@@ -153,7 +154,7 @@ describe("bot/messages/summary-message-formatter", () => {
     const parts = formatSummaryWithMode("*text: *value**", "markdown");
 
     expect(parts).toHaveLength(1);
-    expect(parts[0].length).toBeGreaterThan(0);
+    expect(defined(parts[0]).length).toBeGreaterThan(0);
     expect(parts[0]).toContain("text");
     expect(parts[0]).toContain("value");
   });
@@ -370,6 +371,22 @@ describe("bot/messages/summary-message-formatter", () => {
 
     const oversized = prepareCodeFile("a".repeat(101 * 1024), "src/large.ts", "write");
     expect(oversized).toBeNull();
+  });
+
+  it("starts file payloads with a UTF-8 BOM so readers do not guess the system code page", () => {
+    const writeFile = prepareCodeFile("const x = 1;", "src/app.ts", "write");
+    expect(writeFile?.buffer.subarray(0, 3).toString("hex")).toBe("efbbbf");
+    expect(writeFile?.buffer.subarray(3).toString("utf8")).toBe(
+      "Write File/Path: src/app.ts\n============================================================\n\nconst x = 1;",
+    );
+
+    const editFile = prepareCodeFile("@@ -1,1 +1,1 @@\n-line1\n+line2", "src/app.ts", "edit");
+    expect(editFile?.buffer.subarray(0, 3).toString("hex")).toBe("efbbbf");
+    expect(editFile?.buffer.subarray(3).toString("utf8")).toContain("Edit File/Path: src/app.ts");
+
+    const cyrillic = prepareCodeFile('const привет = "мир";', "src/app.ts", "write");
+    expect(cyrillic?.buffer.subarray(0, 3).toString("hex")).toBe("efbbbf");
+    expect(cyrillic?.buffer.subarray(3).toString("utf8")).toContain('const привет = "мир";');
   });
 
   it("normalizes absolute paths to project-relative form", () => {

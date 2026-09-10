@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "#vitest";
 import { ToolCallStreamer } from "../../../src/bot/streaming/tool-call-streamer.js";
+import { defined } from "../../helpers/defined.js";
 
 describe("bot/streaming/tool-call-streamer", () => {
   afterEach(() => {
@@ -90,10 +91,14 @@ describe("bot/streaming/tool-call-streamer", () => {
     expect(editText).toHaveBeenCalledWith("s1", 10, "regular tool\n\nregular tool update");
   });
 
-  it("keeps subagent updates in a separate replace-by-prefix stream", async () => {
+  it("keeps each subagent in an independently editable stream", async () => {
     vi.useFakeTimers();
 
-    const sendText = vi.fn().mockResolvedValueOnce(20).mockResolvedValueOnce(21);
+    const sendText = vi
+      .fn()
+      .mockResolvedValueOnce(20)
+      .mockResolvedValueOnce(21)
+      .mockResolvedValueOnce(22);
     const editText = vi.fn().mockResolvedValue(undefined);
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ToolCallStreamer({
@@ -108,19 +113,88 @@ describe("bot/streaming/tool-call-streamer", () => {
       expect(sendText).toHaveBeenCalledTimes(1);
     });
 
-    streamer.replaceByPrefix("s1", "subagent", "subagent card", "subagent");
+    streamer.replaceByPrefix("s1", "subagent", "first subagent card", "subagent:card-1");
     await vi.waitFor(() => {
       expect(sendText).toHaveBeenCalledTimes(2);
     });
 
-    streamer.replaceByPrefix("s1", "subagent", "subagent card updated", "subagent");
+    streamer.replaceByPrefix("s1", "subagent", "second subagent card", "subagent:card-2");
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(3);
+    });
+
+    streamer.replaceByPrefix(
+      "s1",
+      "subagent",
+      "first subagent card updated",
+      "subagent:card-1",
+    );
     await vi.waitFor(() => {
       expect(editText).toHaveBeenCalledTimes(1);
     });
 
     expect(sendText).toHaveBeenNthCalledWith(1, "s1", "regular tool");
-    expect(sendText).toHaveBeenNthCalledWith(2, "s1", "subagent card");
-    expect(editText).toHaveBeenCalledWith("s1", 21, "subagent card updated");
+    expect(sendText).toHaveBeenNthCalledWith(2, "s1", "first subagent card");
+    expect(sendText).toHaveBeenNthCalledWith(3, "s1", "second subagent card");
+    expect(editText).toHaveBeenCalledWith("s1", 21, "first subagent card updated");
+  });
+
+  it("paces Telegram operations from independently ready subagent streams", async () => {
+    vi.useFakeTimers();
+
+    const operationTimes: number[] = [];
+    let nextMessageId = 30;
+    const sendText = vi.fn(async () => {
+      operationTimes.push(Date.now());
+      return nextMessageId++;
+    });
+    const streamer = new ToolCallStreamer({
+      throttleMs: 100,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
+    });
+
+    streamer.replaceByPrefix("s1", "subagent", "first card", "subagent:card-1");
+    streamer.replaceByPrefix("s1", "subagent", "second card", "subagent:card-2");
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(99);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sendText).toHaveBeenCalledTimes(2);
+    expect(defined(operationTimes[1]) - defined(operationTimes[0])).toBeGreaterThanOrEqual(100);
+  });
+
+  it("cancels queued subagent operations when all streams are cleared", async () => {
+    vi.useFakeTimers();
+
+    let nextMessageId = 40;
+    const sendText = vi.fn(async () => nextMessageId++);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 100,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
+    });
+
+    streamer.replaceByPrefix("s1", "subagent", "first card", "subagent:card-1");
+    streamer.replaceByPrefix("s1", "subagent", "stale card", "subagent:card-2");
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    streamer.clearAll("detach");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    streamer.replaceByPrefix("s1", "subagent", "new card", "subagent:card-3");
+    await vi.advanceTimersByTimeAsync(200);
+    expect(sendText).toHaveBeenCalledTimes(2);
+    expect(sendText).toHaveBeenLastCalledWith("s1", "new card");
   });
 
   it("creates continuation messages when the stream exceeds Telegram limits", async () => {
@@ -321,7 +395,15 @@ describe("bot/streaming/tool-call-streamer", () => {
     streamer.append("s1", "regular tool");
     streamer.append("s1", "todo tool", "todo");
 
-    await streamer.flushSession("s1", "manual_flush");
+    const flushPromise = streamer.flushSession("s1", "manual_flush");
+    // The per-session Telegram operation queue throttles each send behind a
+    // Date.now()-based delay; vi.waitFor advances the fake clock until both
+    // queued sends have fired (the single advanceTimersByTimeAsync(200) that
+    // upstream uses does not cover the second nested delay under bun).
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(2);
+    });
+    await flushPromise;
 
     expect(sendText).toHaveBeenCalledTimes(2);
     expect(sendText).toHaveBeenNthCalledWith(1, "s1", "regular tool");
@@ -380,7 +462,7 @@ describe("bot/streaming/tool-call-streamer", () => {
     expect(deleteText).not.toHaveBeenCalled();
   });
 
-  it("routes new tool calls into a fresh stream while a break flush is still finishing", async () => {
+  it("routes new tool calls after an in-flight break operation finishes", async () => {
     vi.useFakeTimers();
 
     const editResolution: { current: null | (() => void) } = { current: null };
@@ -412,14 +494,15 @@ describe("bot/streaming/tool-call-streamer", () => {
     const breakPromise = streamer.breakSession("s1", "thinking_started");
     streamer.append("s1", "after break");
 
-    await vi.waitFor(() => {
-      expect(sendText).toHaveBeenCalledTimes(2);
-    });
+    expect(sendText).toHaveBeenCalledTimes(1);
 
     if (editResolution.current) {
       editResolution.current();
     }
     await expect(breakPromise).resolves.toBeUndefined();
+    await vi.waitFor(() => {
+      expect(sendText).toHaveBeenCalledTimes(2);
+    });
 
     expect(sendText).toHaveBeenNthCalledWith(2, "s1", "after break");
   });

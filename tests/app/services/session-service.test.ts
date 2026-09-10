@@ -15,6 +15,7 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { promptAttachment } from "../../../src/app/managers/prompt-attachment-manager.js";
 import { clearSession, setCurrentSession } from "../../../src/app/services/session-service.js";
+import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 
 const SESSION = { id: "session-1", title: "Session 1", directory: "D:\\Projects\\Repo" };
 
@@ -27,7 +28,7 @@ describe("app/services/session-service", () => {
 
   it("drops queued prompts when switching to another session", () => {
     setCurrentSession(SESSION);
-    promptQueue.add("queued for session 1");
+    promptQueue.add(createIncomingPrompt("queued for session 1"));
 
     setCurrentSession({ ...SESSION, id: "session-2" });
 
@@ -36,7 +37,7 @@ describe("app/services/session-service", () => {
 
   it("keeps queued prompts when the same session is only renamed", () => {
     setCurrentSession(SESSION);
-    promptQueue.add("queued for session 1");
+    promptQueue.add(createIncomingPrompt("queued for session 1"));
 
     setCurrentSession({ ...SESSION, title: "Renamed" });
 
@@ -45,7 +46,7 @@ describe("app/services/session-service", () => {
 
   it("drops queued prompts when the session is cleared", () => {
     setCurrentSession(SESSION);
-    promptQueue.add("queued for session 1");
+    promptQueue.add(createIncomingPrompt("queued for session 1"));
 
     clearSession();
 

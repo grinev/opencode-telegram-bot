@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "#vitest";
 import { loadSut } from "#helpers/sut-loader.js";
-const { renderSubagentCards } = await loadSut<typeof import("#src/app/formatters/subagent-formatter.js")>(
+const { renderSubagentCard, renderSubagentCards } = await loadSut<typeof import("#src/app/formatters/subagent-formatter.js")>(
   "#src/app/formatters/subagent-formatter.ts",
   import.meta.url,
 );
@@ -17,36 +17,34 @@ describe("summary/subagent-formatter", () => {
   it("renders subagent cards with requested OpenCode-like layout", async () => {
     setRuntimeLocale("en");
 
-    const text = await renderSubagentCards([
-      {
-        cardId: "card-1",
-        sessionId: "child-1",
-        parentSessionId: "root-1",
-        agent: "explore",
-        description: "task description",
-        prompt: "task description",
-        status: "running",
-        providerID: "openai",
-        modelID: "gpt-5.4",
-        tokens: {
-          input: 54000,
-          output: 10,
-          reasoning: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-        },
-        cost: 0.18,
-        currentTool: "read",
-        currentToolInput: {
-          filePath: "src/bot/pinned/pinned-message-manager.ts",
-          offset: 1,
-          limit: 280,
-        },
-        currentToolTitle: "Reading pinned manager",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+    const text = await renderSubagentCard({
+      cardId: "card-1",
+      sessionId: "child-1",
+      parentSessionId: "root-1",
+      agent: "explore",
+      description: "task description",
+      prompt: "task description",
+      status: "running",
+      providerID: "openai",
+      modelID: "gpt-5.4",
+      tokens: {
+        input: 54000,
+        output: 10,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
       },
-    ]);
+      cost: 0.18,
+      currentTool: "read",
+      currentToolInput: {
+        filePath: "src/bot/pinned/pinned-message-manager.ts",
+        offset: 1,
+        limit: 280,
+      },
+      currentToolTitle: "Reading pinned manager",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
 
     expect(text).toContain("🧩 Task: task description");
     expect(text).toContain("Agent: explore");
@@ -55,6 +53,67 @@ describe("summary/subagent-formatter", () => {
     expect(text).not.toContain("Cost:");
     expect(text).toContain("📖 read src/bot/pinned/pinned-message-manager.ts");
     expect(text).not.toContain("Working:");
+  });
+
+  describe("variant on the Model line", () => {
+    function buildCard(variant?: string) {
+      return {
+        cardId: "card-1",
+        sessionId: "child-1",
+        parentSessionId: "root-1",
+        agent: "explore",
+        description: "task description",
+        prompt: "task description",
+        status: "running" as const,
+        providerID: "openai",
+        modelID: "gpt-5.4",
+        ...(variant !== undefined ? { variant } : {}),
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        cost: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+    }
+
+    it("appends a non-empty variant in parentheses", async () => {
+      const text = await renderSubagentCard(buildCard("high"));
+
+      expect(text).toContain("Model: openai/gpt-5.4 (high)");
+      expect(text).toContain("Agent: explore");
+      expect(text).toContain("🧩 Task: task description");
+    });
+
+    it("keeps the Model line unchanged when variant is absent", async () => {
+      const text = await renderSubagentCard(buildCard());
+
+      expect(text).toContain("Model: openai/gpt-5.4");
+      expect(text).not.toContain("(");
+    });
+
+    it("omits an empty variant", async () => {
+      const text = await renderSubagentCard(buildCard(""));
+
+      expect(text).toContain("Model: openai/gpt-5.4");
+      expect(text).not.toContain("()");
+    });
+
+    it("shows a whitespace-only variant as-is", async () => {
+      const text = await renderSubagentCard(buildCard(" "));
+
+      expect(text).toContain("Model: openai/gpt-5.4 ( )");
+    });
+
+    it("shows the literal default variant", async () => {
+      const text = await renderSubagentCard(buildCard("default"));
+
+      expect(text).toContain("Model: openai/gpt-5.4 (default)");
+    });
   });
 
   it("localizes labels and shows terminal completion state", async () => {

@@ -18,7 +18,7 @@ export async function handleCommandTextArguments(
   deps: ExecuteCommandDeps,
 ): Promise<boolean> {
   const text = ctx.message?.text;
-  if (!text || text.startsWith("/")) {
+  if (text === undefined || text.startsWith("/")) {
     return false;
   }
 
@@ -53,7 +53,7 @@ export async function handleSkillTextArguments(
   deps: ExecuteCommandDeps,
 ): Promise<boolean> {
   const text = ctx.message?.text;
-  if (!text || text.startsWith("/")) {
+  if (text === undefined || text.startsWith("/")) {
     return false;
   }
 

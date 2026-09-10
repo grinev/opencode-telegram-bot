@@ -18,6 +18,7 @@ export interface Settings {
   pinnedMessageId?: number | undefined;
   ttsMode?: "off" | "all" | "auto" | undefined;
   compactOutputMode?: boolean | undefined;
+  deleteCompactProgressOnFinish?: boolean | undefined;
   showThinkingContent?: boolean | undefined;
   showAssistantRunFooter?: boolean | undefined;
   responseStreamingMode?: ResponseStreamingMode | undefined;

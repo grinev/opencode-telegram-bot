@@ -67,7 +67,7 @@ export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
   }
 
   const text = ctx.message?.text;
-  if (!text) {
+  if (text === undefined) {
     return false;
   }
 

@@ -9,6 +9,7 @@ const { getLocalizedBotCommands } = await loadSut<typeof import("#src/bot/comman
   "#src/bot/commands/definitions.ts",
   import.meta.url,
 );
+import { defined } from "#helpers/defined.js";
 
 describe("bot/commands/help-command", () => {
   it("returns full commands list from centralized definitions", async () => {
@@ -21,7 +22,7 @@ describe("bot/commands/help-command", () => {
 
     expect(replyMock).toHaveBeenCalledTimes(1);
 
-    const helpText = replyMock.mock.calls[0][0] as string;
+    const helpText = defined(replyMock.mock.calls[0]?.[0]) as string;
     const commands = getLocalizedBotCommands();
 
     for (const item of commands) {

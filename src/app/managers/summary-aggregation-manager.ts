@@ -132,6 +132,7 @@ export interface SubagentInfo {
   status: SubagentStatus;
   providerID?: string | undefined;
   modelID?: string | undefined;
+  variant?: string | undefined;
   tokens: TokensInfo;
   cost: number;
   currentTool?: string | undefined;
@@ -330,6 +331,9 @@ class SummaryAggregator {
   private pendingSubagentCardIdsByParent: Map<string, string[]> = new Map();
   private pendingChildSessionIdsByParent: Map<string, string[]> = new Map();
   private fallbackSubagentCardIdsByParent: Map<string, string[]> = new Map();
+  private finishedSubagentSessionIds: Set<string> = new Set();
+  private acceptsSubagentEvents = false;
+  private subagentRunStartedAt = 0;
   private lastSubagentSnapshot = "";
 
   setBotAndChatId(bot: Bot, chatId: number): void {
@@ -544,6 +548,7 @@ class SummaryAggregator {
       this.clear();
       this.currentSessionId = sessionId;
       this.trackedSessionParents.set(sessionId, null);
+      this.acceptsSubagentEvents = true;
     }
   }
 
@@ -569,6 +574,9 @@ class SummaryAggregator {
     this.pendingSubagentCardIdsByParent.clear();
     this.pendingChildSessionIdsByParent.clear();
     this.fallbackSubagentCardIdsByParent.clear();
+    this.finishedSubagentSessionIds.clear();
+    this.acceptsSubagentEvents = false;
+    this.subagentRunStartedAt = 0;
     this.lastSubagentSnapshot = "";
     this.permissionQueue = Promise.resolve();
     this.messageCount = 0;
@@ -638,6 +646,37 @@ class SummaryAggregator {
     }
   }
 
+  private retireSubagent(cardId: string): void {
+    const state = this.subagentStates.get(cardId);
+    if (!state) {
+      return;
+    }
+
+    this.subagentStates.delete(cardId);
+    this.subagentOrder = this.subagentOrder.filter((currentCardId) => currentCardId !== cardId);
+    this.removeFromQueue(this.pendingSubagentCardIdsByParent, state.parentSessionId, cardId);
+    this.removeFromQueue(this.fallbackSubagentCardIdsByParent, state.parentSessionId, cardId);
+
+    if (state.sessionId) {
+      this.subagentCardIdBySessionId.delete(state.sessionId);
+      this.trackedSessionParents.delete(state.sessionId);
+      this.removeFromQueue(
+        this.pendingChildSessionIdsByParent,
+        state.parentSessionId,
+        state.sessionId,
+      );
+      this.finishedSubagentSessionIds.add(state.sessionId);
+    }
+
+    this.lastSubagentSnapshot = "";
+  }
+
+  private retireAllSubagents(): void {
+    for (const cardId of [...this.subagentOrder]) {
+      this.retireSubagent(cardId);
+    }
+  }
+
   private emitSubagentState(): void {
     if (!this.currentSessionId || !this.onSubagentCallback || this.subagentOrder.length === 0) {
       return;
@@ -657,6 +696,7 @@ class SummaryAggregator {
         status: state.status,
         providerID: state.providerID,
         modelID: state.modelID,
+        variant: state.variant,
         tokens: { ...state.tokens },
         cost: state.cost,
         currentTool: state.currentTool,
@@ -682,6 +722,7 @@ class SummaryAggregator {
         status: subagent.status,
         providerID: subagent.providerID,
         modelID: subagent.modelID,
+        variant: subagent.variant,
         tokens: subagent.tokens,
         cost: subagent.cost,
         currentTool: subagent.currentTool,
@@ -817,34 +858,6 @@ class SummaryAggregator {
     this.removeFromQueue(this.pendingSubagentCardIdsByParent, state.parentSessionId, cardId);
   }
 
-  private findPendingSubagentWithoutSession(): SubagentState | null {
-    for (const cardId of this.subagentOrder) {
-      const state = this.subagentStates.get(cardId);
-      if (state && !state.sessionId) {
-        return state;
-      }
-    }
-
-    return null;
-  }
-
-  private attachUnknownSessionToPendingSubagent(sessionId: string): boolean {
-    const pendingState = this.findPendingSubagentWithoutSession();
-    if (!pendingState) {
-      return false;
-    }
-
-    this.trackedSessionParents.set(sessionId, pendingState.parentSessionId);
-    this.attachSessionToSubagent(pendingState.cardId, sessionId);
-    this.removeFromQueue(
-      this.pendingChildSessionIdsByParent,
-      pendingState.parentSessionId,
-      sessionId,
-    );
-    this.emitSubagentState();
-    return true;
-  }
-
   private findNextSubagentForTaskTool(parentSessionId: string): SubagentState | null {
     for (const cardId of this.subagentOrder) {
       const state = this.subagentStates.get(cardId);
@@ -900,6 +913,10 @@ class SummaryAggregator {
     prompt: string,
     command?: string,
   ): void {
+    if (!this.acceptsSubagentEvents) {
+      return;
+    }
+
     const fallbackCardId = this.dequeue(this.fallbackSubagentCardIdsByParent, parentSessionId);
     if (fallbackCardId) {
       const fallbackState = this.subagentStates.get(fallbackCardId);
@@ -957,6 +974,21 @@ class SummaryAggregator {
       return;
     }
 
+    if (this.finishedSubagentSessionIds.has(info.id)) {
+      return;
+    }
+
+    const createdAt = info.time?.created;
+    if (
+      !this.acceptsSubagentEvents ||
+      (this.subagentRunStartedAt > 0 &&
+        typeof createdAt === "number" &&
+        createdAt < this.subagentRunStartedAt)
+    ) {
+      this.finishedSubagentSessionIds.add(info.id);
+      return;
+    }
+
     if (!this.trackedSessionParents.has(info.parentID)) {
       return;
     }
@@ -978,6 +1010,7 @@ class SummaryAggregator {
     sessionID: string;
     providerID?: string;
     modelID?: string;
+    variant?: string;
     agent?: string;
     tokens?: {
       input: number;
@@ -987,6 +1020,10 @@ class SummaryAggregator {
     };
     cost?: number;
   }): void {
+    if (this.finishedSubagentSessionIds.has(info.sessionID)) {
+      return;
+    }
+
     const subagent = this.getOrCreateSubagentForSession(info.sessionID);
     if (info.agent) {
       subagent.agent = info.agent;
@@ -996,6 +1033,9 @@ class SummaryAggregator {
     }
     if (info.modelID) {
       subagent.modelID = info.modelID;
+    }
+    if (info.variant) {
+      subagent.variant = info.variant;
     }
     if (info.tokens) {
       subagent.tokens = {
@@ -1021,6 +1061,10 @@ class SummaryAggregator {
     input?: { [key: string]: unknown },
     title?: string,
   ): void {
+    if (this.finishedSubagentSessionIds.has(sessionId)) {
+      return;
+    }
+
     const subagent = this.getOrCreateSubagentForSession(sessionId);
     const status = "status" in state ? state.status : undefined;
 
@@ -1047,6 +1091,10 @@ class SummaryAggregator {
   }
 
   private updateSubagentStepStart(sessionId: string, snapshot?: string): void {
+    if (this.finishedSubagentSessionIds.has(sessionId)) {
+      return;
+    }
+
     const subagent = this.getOrCreateSubagentForSession(sessionId);
     subagent.status = "running";
     subagent.terminalMessage = undefined;
@@ -1068,6 +1116,10 @@ class SummaryAggregator {
     cost: number,
     snapshot?: string,
   ): void {
+    if (this.finishedSubagentSessionIds.has(sessionId)) {
+      return;
+    }
+
     const subagent = this.getOrCreateSubagentForSession(sessionId);
     subagent.status = "running";
     subagent.terminalMessage = undefined;
@@ -1113,6 +1165,7 @@ class SummaryAggregator {
     subagent.finishedAt = Date.now();
     subagent.updatedAt = Date.now();
     this.emitSubagentState();
+    this.retireSubagent(cardId);
   }
 
   private handleMessageUpdated(
@@ -1122,12 +1175,10 @@ class SummaryAggregator {
   ): void {
     const { info } = event.properties;
 
-    if (
-      info.sessionID !== this.currentSessionId &&
-      !this.trackedSessionParents.has(info.sessionID) &&
-      info.role === "assistant"
-    ) {
-      this.attachUnknownSessionToPendingSubagent(info.sessionID);
+    if (info.sessionID === this.currentSessionId && info.role === "user") {
+      this.acceptsSubagentEvents = true;
+      this.subagentRunStartedAt =
+        typeof info.time?.created === "number" ? info.time.created : Date.now();
     }
 
     if (this.isTrackedChildSession(info.sessionID)) {
@@ -1241,14 +1292,6 @@ class SummaryAggregator {
     },
   ): void {
     const { part } = event.properties;
-
-    if (
-      part.sessionID !== this.currentSessionId &&
-      !this.trackedSessionParents.has(part.sessionID) &&
-      part.type !== "subtask"
-    ) {
-      this.attachUnknownSessionToPendingSubagent(part.sessionID);
-    }
 
     const isCurrentRootSession = part.sessionID === this.currentSessionId;
     const isTrackedChildSession = this.isTrackedChildSession(part.sessionID);
@@ -2076,6 +2119,8 @@ class SummaryAggregator {
     }
 
     logger.info(`[Aggregator] Session became idle: ${sessionID}`);
+    this.acceptsSubagentEvents = false;
+    this.retireAllSubagents();
 
     // Stop typing indicator when session goes idle
     this.stopTypingIndicator();
@@ -2136,6 +2181,8 @@ class SummaryAggregator {
     }
 
     logger.warn(`[Aggregator] Session error: ${sessionID}: ${message}`);
+    this.acceptsSubagentEvents = false;
+    this.retireAllSubagents();
     this.stopTypingIndicator();
 
     if (this.onSessionErrorCallback) {

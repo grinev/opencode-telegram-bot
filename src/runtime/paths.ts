@@ -8,6 +8,7 @@ export interface RuntimePaths {
   settingsFilePath: string;
   logsDirPath: string;
   runDirPath: string;
+  localCommandsDirPath: string;
 }
 
 const APP_DIR_NAME = "opencode-telegram-bot";
@@ -54,5 +55,6 @@ export function getRuntimePaths(): RuntimePaths {
     settingsFilePath: path.join(appHome, "settings.json"),
     logsDirPath: path.join(appHome, "logs"),
     runDirPath: path.join(appHome, "run"),
+    localCommandsDirPath: path.join(appHome, "local-commands"),
   };
 }

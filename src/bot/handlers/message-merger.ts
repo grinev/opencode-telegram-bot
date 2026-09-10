@@ -1,11 +1,12 @@
 import type { Context } from "grammy";
+import type { IncomingPrompt } from "../../app/types/prompt.js";
 import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
 import { logger } from "../../utils/logger.js";
 
 const TELEGRAM_SPLIT_CHUNK_MIN_LENGTH = 4000;
 
 interface PendingPrompt {
-  texts: string[];
+  inputs: IncomingPrompt[];
   ctx: Context;
   deps: ProcessPromptDeps;
   timer: ReturnType<typeof setTimeout>;
@@ -25,16 +26,16 @@ function flushPending(chatId: number): void {
   pendingByChat.delete(chatId);
   clearTimeout(pending.timer);
 
-  const { texts, ctx, deps } = pending;
-  if (texts.length > 1) {
+  const { inputs, ctx, deps } = pending;
+  if (inputs.length > 1) {
     logger.info(
-      `[Bot] Merging ${texts.length} quick consecutive messages into one prompt (chatId=${chatId}, totalLength=${texts.reduce((sum, part) => sum + part.length, 0)})`,
+      `[Bot] Merging ${inputs.length} quick consecutive messages into one prompt (chatId=${chatId}, totalLength=${inputs.reduce((sum, input) => sum + input.text.length, 0)})`,
     );
   } else {
     logger.debug(`[Bot] Flushing single pending prompt (chatId=${chatId})`);
   }
 
-  void processUserPrompt(ctx, texts.join("\n\n"), deps).catch((err) => {
+  void processUserPrompt(ctx, mergeIncomingPrompts(inputs), deps).catch((err) => {
     logger.error(`[Bot] Failed to process merged prompt (chatId=${chatId})`, err);
   });
 }
@@ -49,33 +50,33 @@ function flushPending(chatId: number): void {
  */
 export function queuePromptForMerging(
   ctx: Context,
-  text: string,
+  input: IncomingPrompt,
   deps: ProcessPromptDeps,
   mergeWindowMs: number,
 ): void {
   const chatId = ctx.chat!.id;
   const existing = pendingByChat.get(chatId);
 
-  if (mergeWindowMs <= 0 || (!existing && text.length < TELEGRAM_SPLIT_CHUNK_MIN_LENGTH)) {
-    void processUserPrompt(ctx, text, deps).catch((err) => {
+  if (mergeWindowMs <= 0 || (!existing && input.text.length < TELEGRAM_SPLIT_CHUNK_MIN_LENGTH)) {
+    void processUserPrompt(ctx, input, deps).catch((err) => {
       logger.error(`[Bot] Failed to process prompt (chatId=${chatId})`, err);
     });
     return;
   }
 
   if (existing) {
-    existing.texts.push(text);
+    existing.inputs.push(input);
     existing.ctx = ctx;
     clearTimeout(existing.timer);
     existing.timer = setTimeout(() => flushPending(chatId), mergeWindowMs);
     logger.debug(
-      `[Bot] Appended message to pending prompt (chatId=${chatId}, parts=${existing.texts.length})`,
+      `[Bot] Appended message to pending prompt (chatId=${chatId}, parts=${existing.inputs.length})`,
     );
     return;
   }
 
   const timer = setTimeout(() => flushPending(chatId), mergeWindowMs);
-  pendingByChat.set(chatId, { texts: [text], ctx, deps, timer });
+  pendingByChat.set(chatId, { inputs: [input], ctx, deps, timer });
   logger.debug(
     `[Bot] Started prompt merge window (chatId=${chatId}, mergeWindowMs=${mergeWindowMs})`,
   );
@@ -92,4 +93,12 @@ export function __resetMessageMergerForTests(): void {
     clearTimeout(pending.timer);
   }
   pendingByChat.clear();
+}
+
+function mergeIncomingPrompts(inputs: IncomingPrompt[]): IncomingPrompt {
+  return {
+    text: inputs.map((input) => input.text).join("\n\n"),
+    fileParts: inputs.flatMap((input) => input.fileParts),
+    photos: inputs.flatMap((input) => input.photos),
+  };
 }

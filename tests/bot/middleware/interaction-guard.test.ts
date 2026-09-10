@@ -2,20 +2,34 @@ import { beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Context, NextFunction } from "grammy";
 import { mockDep } from "#helpers/mock-dep.js";
 import { loadSut } from "#helpers/sut-loader.js";
+import { createSettingsStoreMock } from "#helpers/settings-store-mock.js";
+import {
+  MAX_QUEUED_MEDIA_BYTES,
+  MAX_QUEUED_PROMPTS,
+  promptQueue,
+} from "#src/app/managers/prompt-queue-manager.js";
+import { createIncomingPrompt } from "#src/app/types/prompt.js";
+import { setIncomingPrompt } from "#src/bot/handlers/rich-message-handler.js";
+import * as settingsStore from "#src/app/stores/settings-store.js";
+import * as actualRunControlService from "#src/app/services/run-control-service.js";
 
-import { loadSut } from "#helpers/sut-loader.js";
 const mocked = {
   reconcileForegroundBusyStateMock: vi.fn(),
+  getPromptQueueEnabled: vi.fn(),
 };
 
 mockDep(
   "#src/app/services/run-control-service.ts",
   () => ({
+    ...actualRunControlService,
     reconcileForegroundBusyState: mocked.reconcileForegroundBusyStateMock,
-    isForegroundBusy: vi.fn(() => false),
   }),
   import.meta.url,
 );
+
+const settingsStoreMock = createSettingsStoreMock();
+settingsStoreMock.getPromptQueueEnabled = mocked.getPromptQueueEnabled;
+vi.mock("#src/app/stores/settings-store.ts", () => settingsStoreMock);
 
 const sut = await loadSut<typeof import("#src/bot/middleware/interaction-guard.js")>(
   "#src/bot/middleware/interaction-guard.ts",
@@ -64,10 +78,13 @@ function createVoiceContext(): Context {
 
 describe("interactionGuardMiddleware", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     interactionManager.clear("test_setup");
     foregroundSessionState.__resetForTests();
     mocked.reconcileForegroundBusyStateMock.mockReset();
     mocked.reconcileForegroundBusyStateMock.mockResolvedValue(undefined);
+    mocked.getPromptQueueEnabled.mockReset().mockReturnValue(false);
+    promptQueue.__resetForTests();
   });
 
   it("passes through when there is no active interaction", async () => {
@@ -311,6 +328,35 @@ describe("interactionGuardMiddleware", () => {
     );
   });
 
+  it("passes queued media to its handler while busy", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    const ctx = {
+      chat: { id: 1 },
+      message: { photo: [{ file_id: "photo-file-id" }] },
+      reply: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Context;
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
+
+  it("does not pass media through a blocking interaction to the queue", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    interactionManager.start({ kind: "permission", expectedInput: "callback" });
+    const ctx = createVoiceContext();
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(ctx.reply).toHaveBeenCalledWith(t("permission.blocked.expected_reply"));
+  });
+
   it("does not suggest the queue for a reply keyboard button pressed while busy", async () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
@@ -422,5 +468,105 @@ describe("interactionGuardMiddleware", () => {
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
+  });
+
+  it("queues a photo-only rich prompt while busy without downloading", async () => {
+    mocked.getPromptQueueEnabled.mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    const ctx = createTextContext("");
+    setIncomingPrompt(
+      ctx,
+      createIncomingPrompt("", {
+        photos: [{ fileId: "photo-1", filename: "rich.jpg", source: "rich", fileSize: 512 }],
+      }),
+    );
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(promptQueue.list()).toEqual([
+      expect.objectContaining({
+        text: "",
+        photos: [{ fileId: "photo-1", filename: "rich.jpg", source: "rich", fileSize: 512 }],
+        mediaBytes: 512,
+      }),
+    ]);
+    expect(ctx.reply).toHaveBeenCalledWith(
+      t("queue.added", { count: "1", max: String(MAX_QUEUED_PROMPTS) }),
+      expect.anything(),
+    );
+  });
+
+  it("rejects a rich photo prompt with an unknown media size while busy", async () => {
+    mocked.getPromptQueueEnabled.mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    const ctx = createTextContext("");
+    setIncomingPrompt(
+      ctx,
+      createIncomingPrompt("", {
+        photos: [{ fileId: "photo-1", filename: "rich.jpg", source: "rich" }],
+      }),
+    );
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(promptQueue.size()).toBe(0);
+    expect(ctx.reply).toHaveBeenCalledWith(
+      t("queue.media_limit", { maxSizeMb: "20" }),
+      expect.anything(),
+    );
+  });
+
+  it("rejects a rich photo aggregate above the media limit while busy", async () => {
+    mocked.getPromptQueueEnabled.mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    const ctx = createTextContext("");
+    setIncomingPrompt(
+      ctx,
+      createIncomingPrompt("", {
+        photos: [
+          {
+            fileId: "photo-1",
+            filename: "first.jpg",
+            source: "rich",
+            fileSize: MAX_QUEUED_MEDIA_BYTES,
+          },
+          { fileId: "photo-2", filename: "second.jpg", source: "rich", fileSize: 1 },
+        ],
+      }),
+    );
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(promptQueue.mediaSize()).toBe(0);
+    expect(ctx.reply).toHaveBeenCalledWith(
+      t("queue.media_limit", { maxSizeMb: "20" }),
+      expect.anything(),
+    );
+  });
+
+  it("rejects a rich prompt when the queue is full", async () => {
+    mocked.getPromptQueueEnabled.mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    for (let index = 0; index < MAX_QUEUED_PROMPTS; index++) {
+      promptQueue.add(createIncomingPrompt(`queued ${index}`));
+    }
+    const ctx = createTextContext("overflow");
+    setIncomingPrompt(ctx, createIncomingPrompt("overflow"));
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await interactionGuardMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(promptQueue.size()).toBe(MAX_QUEUED_PROMPTS);
+    expect(ctx.reply).toHaveBeenCalledWith(
+      t("queue.full", { max: String(MAX_QUEUED_PROMPTS) }),
+      expect.anything(),
+    );
   });
 });

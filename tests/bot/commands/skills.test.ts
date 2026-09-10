@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Bot, Context } from "grammy";
 import { loadSut } from "#helpers/sut-loader.js";
+import { createIncomingPrompt } from "#src/app/types/prompt.js";
 const { skillsCommand } = await loadSut<typeof import("#src/bot/commands/skills-catalog-command.js")>(
   "#src/bot/commands/skills-catalog-command.ts",
   import.meta.url,
@@ -26,6 +27,7 @@ const { t } = await loadSut<typeof import("#src/i18n/index.js")>(
   import.meta.url,
 );
 import type { ProcessPromptDeps } from "#src/bot/handlers/prompt.js";
+import { defined } from "#helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -137,7 +139,7 @@ describe("bot/commands/skills", () => {
     expect(mocked.commandListMock).toHaveBeenCalledWith({ directory: "D:/Projects/Repo" });
     expect(ctx.reply).toHaveBeenCalledTimes(1);
 
-    const [, options] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
@@ -230,7 +232,7 @@ describe("bot/commands/skills", () => {
     expect(ctx.reply).toHaveBeenCalledWith(`${t("skills.executing_prefix")}\n/borsch`, {
       entities: [{ type: "code", offset: t("skills.executing_prefix").length + 1, length: 7 }],
     });
-    expect(mocked.processUserPromptMock).toHaveBeenCalledWith(ctx, "/borsch", deps);
+    expect(mocked.processUserPromptMock).toHaveBeenCalledWith(ctx, createIncomingPrompt("/borsch"), deps);
   });
 
   it("executes selected skill with arguments from text message", async () => {
@@ -261,7 +263,7 @@ describe("bot/commands/skills", () => {
     );
     expect(mocked.processUserPromptMock).toHaveBeenCalledWith(
       ctx,
-      "/borsch with garlic buns",
+      createIncomingPrompt("/borsch with garlic buns"),
       deps,
     );
   });
@@ -315,7 +317,7 @@ describe("bot/commands/skills", () => {
     expect(handled).toBe(true);
     expect(ctx.editMessageText).toHaveBeenCalledTimes(1);
 
-    const [text, options] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [text, options] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string; text: string }>> } },
     ];

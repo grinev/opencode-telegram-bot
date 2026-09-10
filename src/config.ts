@@ -48,6 +48,21 @@ function getEnvVar(env: EnvRecord, key: string, required: boolean = true): strin
   return value || "";
 }
 
+function getOptionalPathListEnvVar(
+  env: EnvRecord,
+  key: string,
+  delimiter: string = ",",
+): string[] {
+  const value = getEnvVar(env, key, false);
+  if (!value || value.trim() === "") {
+    return [];
+  }
+  return value
+    .split(delimiter)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 function getOptionalPositiveIntEnvVar(
   env: EnvRecord,
   key: string,
@@ -323,7 +338,6 @@ export function createConfig(env: EnvRecord) {
         "SCHEDULED_TASK_DISABLE_NOTIFICATION",
         false,
       ),
-      responseStreamThrottleMs: getOptionalPositiveIntEnvVar(env, "RESPONSE_STREAM_THROTTLE_MS", 1000),
       responseStreamingMode: getOptionalStreamingModeEnvVar(env, "RESPONSE_STREAMING_MODE", "edit"),
       bashToolDisplayMaxLength: getOptionalPositiveIntEnvVar(env, "BASH_TOOL_DISPLAY_MAX_LENGTH", 128),
       locale: getOptionalLocaleEnvVar(env, "BOT_LOCALE", "en"),
@@ -338,6 +352,7 @@ export function createConfig(env: EnvRecord) {
       // Short messages are processed immediately; 0 disables merging entirely.
       messageMergeWindowMs: getOptionalNonNegativeIntEnvVar(env, "MESSAGE_MERGE_WINDOW_MS", 1500),
       initialSettingsPreset: parseInitialSettingsPreset(env),
+      excludedProjectPaths: getOptionalPathListEnvVar(env, "PROJECTS_EXCLUDED_PATHS"),
     },
     files: {
       maxFileSizeKb: parseInt(getEnvVar(env, "CODE_FILE_MAX_SIZE_KB", false) || "100", 10),

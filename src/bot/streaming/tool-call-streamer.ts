@@ -7,7 +7,7 @@ import {
 const TELEGRAM_MESSAGE_SAFE_LENGTH = 4000;
 const DEFAULT_STREAM_KEY = "default";
 
-export type ToolStreamKey = "default" | "subagent" | "todo";
+export type ToolStreamKey = "default" | "todo" | `subagent:${string}`;
 
 interface ToolCallStreamerOptions {
   throttleMs: StreamThrottleMs;
@@ -74,6 +74,8 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+class TelegramOperationCancelledError extends Error {}
+
 function splitLongText(text: string, limit: number): string[] {
   if (text.length <= limit) {
     return [text];
@@ -118,6 +120,9 @@ export class ToolCallStreamer {
   private readonly deleteText: ToolCallStreamerOptions["deleteText"];
   private readonly states: Map<string, StreamState> = new Map();
   private readonly allStates: Set<StreamState> = new Set();
+  private readonly telegramOperationTasks = new Map<string, Promise<void>>();
+  private readonly lastTelegramOperationAt = new Map<string, number>();
+  private readonly telegramOperationTokens = new Map<string, object>();
 
   constructor(options: ToolCallStreamerOptions) {
     this.throttleMs = options.throttleMs;
@@ -214,6 +219,7 @@ export class ToolCallStreamer {
   }
 
   clearSession(sessionId: string, reason: string): void {
+    this.cancelTelegramOperations(sessionId);
     let clearedAny = false;
     for (const state of Array.from(this.allStates)) {
       if (state.sessionId !== sessionId) {
@@ -233,6 +239,11 @@ export class ToolCallStreamer {
   }
 
   clearAll(reason: string): void {
+    const sessionIds = new Set(Array.from(this.allStates, (state) => state.sessionId));
+    for (const sessionId of sessionIds) {
+      this.cancelTelegramOperations(sessionId);
+    }
+
     for (const state of Array.from(this.allStates)) {
       this.cancelState(state);
     }
@@ -378,6 +389,10 @@ export class ToolCallStreamer {
         );
         return true;
       } catch (error) {
+        if (state.cancelled || error instanceof TelegramOperationCancelledError) {
+          return false;
+        }
+
         const retryAfterMs = getRetryAfterMs(error);
         if (retryAfterMs === null) {
           this.markStreamBroken(state, error, reason);
@@ -411,6 +426,77 @@ export class ToolCallStreamer {
     );
   }
 
+  private enqueueTelegramOperation<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const token = this.telegramOperationTokens.get(sessionId) ?? {};
+    this.telegramOperationTokens.set(sessionId, token);
+    const previousTask = this.telegramOperationTasks.get(sessionId) ?? Promise.resolve();
+    const task = previousTask.catch(() => undefined).then(async () => {
+      const throttleMs = this.resolveThrottleMs(sessionId);
+      const lastOperationAt = this.lastTelegramOperationAt.get(sessionId);
+      if (lastOperationAt !== undefined) {
+        const remainingDelayMs = throttleMs - (Date.now() - lastOperationAt);
+        if (remainingDelayMs > 0) {
+          await delay(remainingDelayMs);
+        }
+      }
+
+      if (this.telegramOperationTokens.get(sessionId) !== token) {
+        throw new TelegramOperationCancelledError();
+      }
+
+      try {
+        return await operation();
+      } finally {
+        this.lastTelegramOperationAt.set(sessionId, Date.now());
+      }
+    });
+
+    this.telegramOperationTasks.set(
+      sessionId,
+      task.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    const queueTail = this.telegramOperationTasks.get(sessionId)!;
+    void queueTail.finally(() => {
+      if (
+        this.telegramOperationTasks.get(sessionId) === queueTail &&
+        this.telegramOperationTokens.get(sessionId) === token
+      ) {
+        this.telegramOperationTasks.delete(sessionId);
+        this.telegramOperationTokens.delete(sessionId);
+      }
+    });
+    return task;
+  }
+
+  private cancelTelegramOperations(sessionId: string): void {
+    const cancellationToken = {};
+    this.telegramOperationTokens.set(sessionId, cancellationToken);
+    const pendingTask = this.telegramOperationTasks.get(sessionId);
+    if (!pendingTask) {
+      this.telegramOperationTokens.delete(sessionId);
+      this.lastTelegramOperationAt.delete(sessionId);
+      return;
+    }
+
+    void pendingTask.finally(() => {
+      if (this.telegramOperationTasks.get(sessionId) !== pendingTask) {
+        return;
+      }
+
+      this.telegramOperationTasks.delete(sessionId);
+      if (this.telegramOperationTokens.get(sessionId) === cancellationToken) {
+        this.telegramOperationTokens.delete(sessionId);
+      }
+      this.lastTelegramOperationAt.delete(sessionId);
+    });
+  }
+
   private async syncMessages(state: StreamState, parts: string[]): Promise<void> {
     for (let index = 0; index < parts.length; index++) {
       if (state.cancelled) {
@@ -424,12 +510,16 @@ export class ToolCallStreamer {
       const currentMessageId = state.telegramMessageIds[index];
 
       if (currentMessageId) {
-        await this.editText(state.sessionId, currentMessageId, text);
+        await this.enqueueTelegramOperation(state.sessionId, () =>
+          this.editText(state.sessionId, currentMessageId, text),
+        );
         state.lastSentParts[index] = text;
         continue;
       }
 
-      const messageId = await this.sendText(state.sessionId, text);
+      const messageId = await this.enqueueTelegramOperation(state.sessionId, () =>
+        this.sendText(state.sessionId, text),
+      );
       state.telegramMessageIds[index] = messageId;
       state.lastSentParts[index] = text;
     }
@@ -441,7 +531,9 @@ export class ToolCallStreamer {
 
       const messageId = state.telegramMessageIds[index];
       if (messageId) {
-        await this.deleteText(state.sessionId, messageId);
+        await this.enqueueTelegramOperation(state.sessionId, () =>
+          this.deleteText(state.sessionId, messageId),
+        );
       }
       state.telegramMessageIds.pop();
       state.lastSentParts.pop();

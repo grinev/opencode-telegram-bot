@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "#vitest";
 import type { Context } from "grammy";
 import { loadSut } from "#helpers/sut-loader.js";
+import { createIncomingPrompt } from "#src/app/types/prompt.js";
+import { promptQueue } from "#src/app/managers/prompt-queue-manager.js";
+import { foregroundSessionState } from "#src/app/managers/foreground-session-state-manager.js";
+import * as settingsStore from "#src/app/stores/settings-store.js";
 import type { PhotoHandlerDeps } from "#src/bot/handlers/photo-handler.js";
 
 const flushPendingPromptMock = vi.hoisted(() => vi.fn());
@@ -41,7 +45,6 @@ const configMock = {
     taskLimit: 10,
     scheduledTaskExecutionTimeoutMinutes: 120,
     scheduledTaskNotificationsSilent: false,
-    responseStreamThrottleMs: 1000,
     responseStreamingMode: "edit",
     bashToolDisplayMaxLength: 128,
     locale: "en",
@@ -50,6 +53,7 @@ const configMock = {
     hideToolFileMessages: false,
     trackBackgroundSessions: true,
     messageFormatMode: "markdown",
+    excludedProjectPaths: [],
   },
   files: {
     maxFileSizeKb: 100,
@@ -82,16 +86,10 @@ vi.mock("#src/config.ts", () => ({
   config: configMock,
 }));
 
-async function getSut() {
-  return loadSut<typeof import("#src/bot/handlers/photo-handler.js")>(
-    "#src/bot/handlers/photo-handler.ts",
-    import.meta.url,
-  );
-}
-
-async function getT() {
-  return loadSut<typeof import("#src/i18n/index.js")>("#src/i18n/index.ts", import.meta.url);
-}
+const { handlePhotoMessage } = await loadSut<typeof import("#src/bot/handlers/photo-handler.js")>(
+  "#src/bot/handlers/photo-handler.ts",
+  import.meta.url,
+);
 
 function createPhotoContext(caption = "Describe this"): { ctx: Context; replyMock: ReturnType<typeof vi.fn> } {
   const replyMock = vi.fn().mockResolvedValue({ message_id: 100 });
@@ -101,7 +99,7 @@ function createPhotoContext(caption = "Describe this"): { ctx: Context; replyMoc
       caption,
       photo: [
         { file_id: "small-photo", file_unique_id: "small", width: 320, height: 240 },
-        { file_id: "large-photo", file_unique_id: "large", width: 1280, height: 960 },
+        { file_id: "large-photo", file_unique_id: "large", width: 1280, height: 960, file_size: 512 },
       ],
     },
     reply: replyMock,
@@ -116,7 +114,6 @@ function createDeps(overrides: Partial<PhotoHandlerDeps> = {}): {
   processPromptMock: ReturnType<typeof vi.fn>;
   downloadMock: ReturnType<typeof vi.fn>;
   getCapabilitiesMock: ReturnType<typeof vi.fn>;
-  describeImageMock: ReturnType<typeof vi.fn>;
 } {
   const processPromptMock = vi.fn().mockResolvedValue(true);
   const downloadMock = vi.fn().mockResolvedValue({
@@ -124,10 +121,6 @@ function createDeps(overrides: Partial<PhotoHandlerDeps> = {}): {
     filePath: "photos/file.jpg",
   });
   const getCapabilitiesMock = vi.fn().mockResolvedValue({ input: { image: true } });
-  const describeImageMock = vi
-    .fn()
-    .mockResolvedValue({ ok: true, description: "A photo showing a salon booking." });
-  const savePhotoMock = vi.fn().mockReturnValue("/home/test/.opencode/uploads/photo-123.png");
   const deps: PhotoHandlerDeps = {
     bot: {} as PhotoHandlerDeps["bot"],
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
@@ -135,126 +128,81 @@ function createDeps(overrides: Partial<PhotoHandlerDeps> = {}): {
     getModelCapabilities: getCapabilitiesMock,
     getStoredModel: vi.fn(() => ({ providerID: "test-provider", modelID: "test-model" })),
     processPrompt: processPromptMock,
-    describeImage: describeImageMock,
-    savePhoto: savePhotoMock,
     ...overrides,
   };
 
-  return {
-    deps,
-    processPromptMock,
-    downloadMock,
-    getCapabilitiesMock,
-    describeImageMock,
-    savePhotoMock,
-  };
+  return { deps, processPromptMock, downloadMock, getCapabilitiesMock };
 }
 
 describe("bot/handlers/photo-handler", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     flushPendingPromptMock.mockClear();
+    promptQueue.__resetForTests();
+    foregroundSessionState.__resetForTests();
   });
 
-  it("downloads the largest photo and sends it as a file part", async () => {
-    const { ctx, replyMock } = createPhotoContext();
-    const { deps, processPromptMock, downloadMock } = createDeps();
+  it("queues a photo without downloading it while the agent is busy", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    foregroundSessionState.markBusy("session-1", "/repo");
+    const { ctx } = createPhotoContext("release screenshot");
+    const { deps, processPromptMock } = createDeps();
 
-    const { handlePhotoMessage } = await getSut();
+    await handlePhotoMessage(ctx, deps);
+
+    expect(processPromptMock).not.toHaveBeenCalled();
+    expect(promptQueue.list()).toEqual([
+      expect.objectContaining({
+        text: "release screenshot",
+        displayText: "release screenshot",
+        photos: [expect.objectContaining({ filename: "photo.jpg", fileId: "large-photo" })],
+        mediaBytes: 512,
+      }),
+    ]);
+  });
+
+  it("passes the largest photo to the shared prompt pipeline", async () => {
+    const { ctx, replyMock } = createPhotoContext();
+    const { deps, processPromptMock, downloadMock, getCapabilitiesMock } = createDeps();
+
     await handlePhotoMessage(ctx, deps);
 
     expect(flushPendingPromptMock).toHaveBeenCalledWith(777);
-    expect(replyMock).toHaveBeenCalledWith((await getT()).t("bot.photo_downloading"));
-    expect(downloadMock).toHaveBeenCalledWith(ctx.api, "large-photo");
+    expect(replyMock).not.toHaveBeenCalled();
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(getCapabilitiesMock).not.toHaveBeenCalled();
     expect(processPromptMock).toHaveBeenCalledWith(
       ctx,
-      "Describe this",
-      deps,
-      [
-        expect.objectContaining({
-          type: "file",
-          mime: "image/jpeg",
-          filename: "photo.jpg",
-          url: expect.stringMatching(/^data:image\/jpeg;base64,/),
-        }),
-      ],
-    );
-  });
-
-  it("describes the photo with the local vision model when the model does not support images", async () => {
-    const { ctx, replyMock } = createPhotoContext("Use this caption");
-    const { deps, processPromptMock, downloadMock, describeImageMock } = createDeps({
-      getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: false } }),
-    });
-
-    const { handlePhotoMessage } = await getSut();
-    await handlePhotoMessage(ctx, deps);
-
-    expect(replyMock).toHaveBeenCalledWith((await getT()).t("bot.photo_vision_describing"));
-    expect(downloadMock).toHaveBeenCalledWith(ctx.api, "large-photo");
-    expect(describeImageMock).toHaveBeenCalledWith(Buffer.from("photo-bytes"), "image/jpeg");
-    expect(processPromptMock).toHaveBeenCalledWith(
-      ctx,
-      expect.stringContaining("Use this caption"),
-      deps,
-    );
-    expect(processPromptMock).toHaveBeenCalledWith(
-      ctx,
-      expect.stringContaining("A photo showing a salon booking."),
-      deps,
-    );
-    expect(processPromptMock).toHaveBeenCalledWith(
-      ctx,
-      expect.stringContaining("/home/test/.opencode/uploads/photo-123.png"),
+      createIncomingPrompt("Describe this", {
+        photos: [
+          {
+            fileId: "large-photo",
+            filename: "photo.jpg",
+            source: "standalone",
+          },
+        ],
+      }),
       deps,
     );
   });
 
-  it("reports an error when the local vision service is unavailable and degrades to caption-only", async () => {
-    const { ctx, replyMock } = createPhotoContext("Use this caption");
-    const { deps, processPromptMock } = createDeps({
-      getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: false } }),
-      describeImage: vi.fn().mockResolvedValue({ ok: false, error: "fetch failed" }),
-    });
-
-    const { handlePhotoMessage } = await getSut();
-    await handlePhotoMessage(ctx, deps);
-
-    expect(replyMock).toHaveBeenCalledWith((await getT()).t("bot.photo_vision_fallback_error"));
-    expect(processPromptMock).toHaveBeenCalledWith(ctx, "Use this caption", deps);
-  });
-
-  it("reports an error and drops the message when vision fails and there is no caption", async () => {
-    const { ctx, replyMock } = createPhotoContext("");
-    const { deps, processPromptMock } = createDeps({
-      getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: false } }),
-      describeImage: vi.fn().mockResolvedValue({ ok: false, error: "fetch failed" }),
-    });
-
-    const { handlePhotoMessage } = await getSut();
-    await handlePhotoMessage(ctx, deps);
-
-    expect(replyMock).toHaveBeenCalledWith((await getT()).t("bot.photo_vision_fallback_error"));
-    expect(processPromptMock).not.toHaveBeenCalled();
-  });
-
-  it("describes a photo without caption using only the local vision text", async () => {
+  it("keeps a photo-only prompt when the caption is empty", async () => {
     const { ctx } = createPhotoContext("");
-    const { deps, processPromptMock } = createDeps({
-      getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: false } }),
-    });
+    const { deps, processPromptMock } = createDeps();
 
-    const { handlePhotoMessage } = await getSut();
     await handlePhotoMessage(ctx, deps);
 
     expect(processPromptMock).toHaveBeenCalledWith(
       ctx,
-      expect.not.stringContaining("Caption"),
-      deps,
-    );
-    expect(processPromptMock).toHaveBeenCalledWith(
-      ctx,
-      expect.stringContaining("A photo showing a salon booking."),
+      createIncomingPrompt("", {
+        photos: [
+          {
+            fileId: "large-photo",
+            filename: "photo.jpg",
+            source: "standalone",
+          },
+        ],
+      }),
       deps,
     );
   });

@@ -357,6 +357,7 @@ export const beforeEach = bunTest.beforeEach;
 export const afterAll = bunTest.afterAll;
 export const afterEach = bunTest.afterEach;
 export type MockInstance = AnyMock;
+export type Mock = AnyMock;
 export { mock as bunMock, spyOn as bunSpyOn };
 
 export const shim = {

@@ -19,7 +19,7 @@ a human does first.
 | `scenarios/` | Regression scenarios the subagent runs before any feature check |
 | `.tmp/e2e/home/` | Runtime state: `settings.json`, `logs/` |
 | `.tmp/e2e/browser-profile/` | Persistent Telegram Web login |
-| `.tmp/e2e/output/` | Screenshots and console logs the subagent produces |
+| `e2e/output/` | Screenshots and console logs the subagent produces |
 
 ## One-time setup
 
@@ -87,8 +87,9 @@ the constants there. The selectors were last calibrated on 2026-07-27.
 
 `@playwright/mcp` is pinned in the subagent's `mcpServers` frontmatter because a
 newer release may require a newer Chromium revision than the one installed
-locally. The browser config (profile path, viewport, output dir) lives there
-too — there is no `.mcp.json` in this project.
+locally. Screenshots go to `e2e/output/` (gitignored). Claude sets `--output-dir`
+on the tester's `mcpServers`; OpenCode uses `.opencode/opencode.json`; OMP
+picks Codex `.codex/config.toml` over OpenCode for the same server name.
 
 `scenarios/` holds the regression scenarios. The subagent runs them before any
 feature check, so a change that breaks the basic loop is caught before anything

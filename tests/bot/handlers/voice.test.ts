@@ -12,6 +12,7 @@ const { t } = await loadSut<typeof import("#src/i18n/index.js")>(
 
 const mocked = vi.hoisted(() => ({
   getTtsModeMock: vi.fn(),
+  getPromptQueueEnabledMock: vi.fn(),
   fetchMock: vi.fn(),
   loggerDebugMock: vi.fn(),
   loggerInfoMock: vi.fn(),
@@ -76,6 +77,7 @@ const configMock = vi.hoisted(() => ({
 
 const settingsStoreMock = createSettingsStoreMock();
 settingsStoreMock.getTtsMode = mocked.getTtsModeMock;
+settingsStoreMock.getPromptQueueEnabled = mocked.getPromptQueueEnabledMock;
 
 vi.mock("#src/config.ts", () => ({
   config: configMock,
@@ -103,6 +105,8 @@ async function getSut() {
     import.meta.url,
   );
 }
+
+const loadVoiceModule = getSut;
 
 function createVoiceContext(): {
   ctx: Context;
@@ -151,7 +155,8 @@ function createVoiceDeps(overrides: Record<string, unknown> = {}): {
     isSttConfigured: vi.fn(() => true),
     downloadTelegramFile: downloadMock,
     transcribeAudio: transcribeMock,
-    processPrompt: processPromptMock,
+    processPrompt: (ctx, input, promptDeps, options) =>
+      processPromptMock(ctx, input.text, promptDeps, input.fileParts, options),
     ...overrides,
   };
 
@@ -162,6 +167,7 @@ describe("bot/handlers/voice-handler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocked.getTtsModeMock.mockReturnValue("off");
+    mocked.getPromptQueueEnabledMock.mockReturnValue(false);
     mocked.fetchMock.mockReset();
     configMock.stt.notePrompt = "";
     configMock.telegram.token = "test-telegram-token";
@@ -170,6 +176,54 @@ describe("bot/handlers/voice-handler", () => {
     configMock.telegram.proxySecret = "";
     configMock.stt.apiUrl = "";
     configMock.stt.apiKey = "";
+  });
+
+  it("edits the status message with quoted recognized text", async () => {
+    const { handleVoiceMessage } = await loadVoiceModule();
+    const { ctx, replyMock, editMessageTextMock } = createVoiceContext();
+    const { deps, processPromptMock } = createVoiceDeps({
+      transcribeAudio: vi.fn().mockResolvedValue({ text: "Line 1\nLine 2" }),
+    });
+
+    await handleVoiceMessage(ctx, deps);
+
+    expect(replyMock).toHaveBeenCalledWith(t("stt.recognizing"));
+    expect(editMessageTextMock).toHaveBeenCalledWith(
+      777,
+      101,
+      "🎤 Recognized:\n> Line 1\n> Line 2",
+      { parse_mode: "MarkdownV2" },
+    );
+    expect(processPromptMock).toHaveBeenCalledWith(ctx, "Line 1\nLine 2", deps, [], {
+      responseMode: "text_only",
+    });
+  });
+
+  it("transcribes and queues a voice message while the agent is busy", async () => {
+    mocked.getPromptQueueEnabledMock.mockReturnValue(true);
+    const { handleVoiceMessage } = await loadVoiceModule();
+    const { foregroundSessionState } = await import(
+      "../../../src/app/managers/foreground-session-state-manager.js"
+    );
+    const { promptQueue } = await import("../../../src/app/managers/prompt-queue-manager.js");
+    foregroundSessionState.__resetForTests();
+    promptQueue.__resetForTests();
+    foregroundSessionState.markBusy("session-1", "/repo");
+    const { ctx } = createVoiceContext();
+    const { deps, processPromptMock, transcribeMock } = createVoiceDeps();
+
+    await handleVoiceMessage(ctx, deps);
+
+    expect(transcribeMock).toHaveBeenCalledTimes(1);
+    expect(processPromptMock).not.toHaveBeenCalled();
+    expect(promptQueue.list()).toEqual([
+      expect.objectContaining({
+        text: "run tests",
+        displayText: "run tests",
+        responseMode: "text_only",
+      }),
+    ]);
+    expect(promptQueue.mediaSize()).toBe(0);
   });
 
   it("continues with prompt processing when recognized text message edit fails", async () => {

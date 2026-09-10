@@ -21,7 +21,7 @@ const configMock = vi.hoisted(() => ({
   tts: { apiUrl: "", apiKey: "" },
 }));
 vi.mock("#src/config.ts", () => ({ config: configMock }));
-const { __resetSettingsForTests, flushSettings, getCompactOutputMode, getPromptQueueEnabled, getResponseStreamingMode, getScheduledTasks, getSendDiffFileAttachments, getShowAssistantRunFooter, getShowThinkingContent, getTtsMode, loadSettings, setCompactOutputMode, setPromptQueueEnabled, setResponseStreamingMode, setScheduledTasks, setSendDiffFileAttachments, setShowAssistantRunFooter, setShowThinkingContent } = await loadSut<typeof import("#src/app/stores/settings-store.js")>(
+const { __resetSettingsForTests, flushSettings, getCompactOutputMode, getDeleteCompactProgressOnFinish, getPromptQueueEnabled, getResponseStreamingMode, getScheduledTasks, getSendDiffFileAttachments, getShowAssistantRunFooter, getShowThinkingContent, getTtsMode, loadSettings, setCompactOutputMode, setPromptQueueEnabled, setResponseStreamingMode, setScheduledTasks, setSendDiffFileAttachments, setShowAssistantRunFooter, setShowThinkingContent } = await loadSut<typeof import("#src/app/stores/settings-store.js")>(
   "#src/app/stores/settings-store.ts",
   import.meta.url,
 );
@@ -90,10 +90,12 @@ describe("app/stores/settings-store", () => {
     configMock.bot.initialSettingsPreset = {
       showAssistantRunFooter: false,
       compactOutputMode: true,
+      deleteCompactProgressOnFinish: true,
       ttsMode: "auto",
       responseStreamingMode: "draft",
       sendDiffFileAttachments: false,
       showThinkingContent: false,
+      promptQueueEnabled: true,
     };
     __resetSettingsForTests();
 
@@ -101,10 +103,12 @@ describe("app/stores/settings-store", () => {
 
     expect(getShowAssistantRunFooter()).toBe(false);
     expect(getCompactOutputMode()).toBe(true);
+    expect(getDeleteCompactProgressOnFinish()).toBe(true);
     expect(getTtsMode()).toBe("auto");
     expect(getResponseStreamingMode()).toBe("draft");
     expect(getSendDiffFileAttachments()).toBe(false);
     expect(getShowThinkingContent()).toBe(false);
+    expect(getPromptQueueEnabled()).toBe(true);
 
     configMock.bot.initialSettingsPreset = {};
   });
@@ -401,6 +405,16 @@ describe("app/stores/settings-store", () => {
       await expect(loadSettings()).rejects.toThrow(/settings\.json/);
 
       expect(await readFile(settingsPath(), "utf-8")).toBe(corruptedSettings);
+      expect(await readFile(backupPath(), "utf-8")).toBe(corruptedBackup);
+    });
+
+    it("refuses to start when settings.json is missing and its backup is unreadable", async () => {
+      const corruptedBackup = '{"compactOutputMode":';
+      await writeFile(backupPath(), corruptedBackup);
+
+      await expect(loadSettings()).rejects.toThrow(/settings\.json.*\.bak/s);
+
+      expect(await exists(settingsPath())).toBe(false);
       expect(await readFile(backupPath(), "utf-8")).toBe(corruptedBackup);
     });
 
