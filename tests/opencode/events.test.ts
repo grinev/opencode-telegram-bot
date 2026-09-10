@@ -457,4 +457,16 @@ describe("opencode/events", () => {
 
     expect(callback).not.toHaveBeenCalled();
   });
+
+  it("recognizes the aborted SSE reader rejection as an expected teardown error", () => {
+    expect(
+      sut.isEventStreamAbortError(new DOMException("The operation was aborted.", "AbortError")),
+    ).toBe(true);
+  });
+
+  it("does not classify real failures as abort teardown", () => {
+    expect(sut.isEventStreamAbortError(new Error("boom"))).toBe(false);
+    expect(sut.isEventStreamAbortError(undefined)).toBe(false);
+    expect(sut.isEventStreamAbortError({ name: "TypeError" })).toBe(false);
+  });
 });

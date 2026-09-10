@@ -302,6 +302,27 @@ describe("app/start-bot-app", () => {
     await appPromise;
   });
 
+  it("ignores the event stream abort rejection during teardown", async () => {
+    const { releaseStart, appPromise } = await startAppWithPendingBot();
+    const abortReason = new DOMException("The operation was aborted.", "AbortError");
+
+    expectHandler("unhandledRejection")(abortReason);
+    await flushBackgroundTasks();
+
+    expect(mocked.loggerDebugMock).toHaveBeenCalledWith(
+      "[App] Ignored event stream abort rejection",
+      abortReason,
+    );
+    expect(mocked.loggerErrorMock).not.toHaveBeenCalledWith(
+      "[App] Unhandled promise rejection",
+      abortReason,
+    );
+    expect(processExitSpy).not.toHaveBeenCalled();
+
+    releaseStart();
+    await appPromise;
+  });
+
   it("flushes settings before exiting on uncaught exception", async () => {
     let resolveFlush: () => void = () => undefined;
     mocked.flushSettingsMock.mockReturnValue(

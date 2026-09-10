@@ -2,6 +2,7 @@ import { cleanupBotRuntime, createBot } from "../../bot/index.js";
 import { createScheduledTaskDeliverySender } from "../../bot/messages/scheduled-task-delivery.js";
 import { config } from "../../config.js";
 import { opencodeAutoRestartService } from "../../opencode/auto-restart.js";
+import { isEventStreamAbortError } from "../../opencode/events.js";
 import {
   notifyOpencodeReadyIfHealthy,
   registerOpenCodeReadyRefreshHandler,
@@ -84,6 +85,14 @@ export async function startBotApp(): Promise<void> {
   // Keep the process alive: a single unhandled rejection must not take the bot
   // down while the user is away and there is no supervisor to restart it.
   const unhandledRejectionHandler = (reason: unknown): void => {
+    // The SDK's SSE client leaves the aborted reader.cancel() promise
+    // unhandled; aborting the event listener is expected teardown, not a
+    // failure (see isEventStreamAbortError).
+    if (isEventStreamAbortError(reason)) {
+      logger.debug("[App] Ignored event stream abort rejection", reason);
+      return;
+    }
+
     logger.error("[App] Unhandled promise rejection", reason);
   };
 

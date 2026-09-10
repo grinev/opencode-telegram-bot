@@ -439,6 +439,17 @@ export function stopEventListening(): void {
   logger.info("Event listener stopped");
 }
 
+/**
+ * True for the AbortError that the SDK's SSE client leaks when its fetch
+ * signal aborts: `reader.cancel()` rejects with the abort reason and the SDK
+ * never handles the returned promise. Aborting the listener (project switch,
+ * shutdown) is intentional, so the bot filters this specific rejection instead
+ * of reporting it as an application failure.
+ */
+export function isEventStreamAbortError(error: unknown): boolean {
+  return isRecord(error) && error.name === "AbortError";
+}
+
 export function __setSseIdleTimeoutForTests(timeoutMs: number): void {
   sseIdleTimeoutMs = timeoutMs;
 }
