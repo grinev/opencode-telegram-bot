@@ -14,6 +14,7 @@ export const ko: I18nDictionary = {
   "cmd.description.detach": "현재 세션에서 분리",
   "cmd.description.sessions": "세션 목록 보기",
   "cmd.description.messages": "세션 메시지 탐색",
+  "cmd.description.models": "모델 목록 보기",
   "cmd.description.settings": "봇 설정 변경",
   "cmd.description.projects": "프로젝트 목록 보기",
   "cmd.description.worktree": "git 워크트리 전환",

@@ -1,46 +1,20 @@
-import { CommandContext, Context } from "grammy";
-import { opencodeClient } from "../../opencode/client.js";
+import type { CommandContext, Context } from "grammy";
+import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { showModelSelectionMenu } from "../menus/model-selection-menu.js";
+import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 
-export async function modelsCommand(ctx: CommandContext<Context>) {
+export async function modelsCommand(ctx: CommandContext<Context>): Promise<void> {
   try {
-    const { data: providersData, error } = await opencodeClient.config.providers();
-
-    if (error || !providersData) {
-      await ctx.reply(t("legacy.models.fetch_error"));
+    if (isForegroundBusy()) {
+      await replyBusyBlocked(ctx);
       return;
     }
 
-    const providers = providersData.providers;
-
-    if (!providers || providers.length === 0) {
-      await ctx.reply(t("legacy.models.empty"));
-      return;
-    }
-
-    let message = t("legacy.models.header");
-
-    for (const provider of providers) {
-      message += `🔹 ${provider.id}\n`;
-
-      const models = Object.values(provider.models);
-      if (models.length === 0) {
-        message += t("legacy.models.no_provider_models");
-      } else {
-        for (const model of models) {
-          message += `  - ${model.id}\n`;
-        }
-      }
-      message += "\n";
-    }
-
-    message += t("legacy.models.env_hint");
-    message += "OPENCODE_MODEL_PROVIDER=<provider.id>\nOPENCODE_MODEL_ID=<model.id>";
-
-    await ctx.reply(message);
+    await showModelSelectionMenu(ctx);
   } catch (error) {
-    logger.error("[ModelsCommand] Error listing models:", error);
-    await ctx.reply(t("legacy.models.error"));
+    logger.error("[ModelsCommand] Error showing model menu:", error);
+    await ctx.reply(t("model.menu.error"));
   }
 }

@@ -14,6 +14,7 @@ export const ar: I18nDictionary = {
   "cmd.description.detach": "الخروج من الجلسة دون إيقافها",
   "cmd.description.sessions": "عرض الجلسات السابقة",
   "cmd.description.messages": "استعراض رسائل الجلسة",
+  "cmd.description.models": "عرض النماذج",
   "cmd.description.settings": "تغيير إعدادات البوت",
   "cmd.description.projects": "عرض المشاريع",
   "cmd.description.worktree": "التبديل بين نسخ العمل في Git",

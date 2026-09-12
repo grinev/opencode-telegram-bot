@@ -7,6 +7,7 @@ export const ru: I18nDictionary = {
   "cmd.description.detach": "Отсоединиться от текущей сессии",
   "cmd.description.sessions": "Список сессий",
   "cmd.description.messages": "Сообщения текущей сессии",
+  "cmd.description.models": "Список моделей",
   "cmd.description.settings": "Изменить настройки бота",
   "cmd.description.projects": "Список проектов",
   "cmd.description.worktree": "Переключить git worktree",

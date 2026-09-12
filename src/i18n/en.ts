@@ -5,6 +5,7 @@ export const en = {
   "cmd.description.detach": "Detach from current session",
   "cmd.description.sessions": "List sessions",
   "cmd.description.messages": "Browse session messages",
+  "cmd.description.models": "List models",
   "cmd.description.settings": "Change bot settings",
   "cmd.description.projects": "List projects",
   "cmd.description.worktree": "Switch git worktrees",

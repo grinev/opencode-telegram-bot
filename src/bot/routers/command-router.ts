@@ -9,6 +9,7 @@ import { openCommand } from "../commands/open-command.js";
 import { lsCommand } from "../commands/ls-command.js";
 import { sessionsCommand } from "../commands/sessions-command.js";
 import { messagesCommand } from "../commands/messages-command.js";
+import { modelsCommand } from "../commands/models.js";
 import { newCommand } from "../commands/new-command.js";
 import { abortCommand } from "../commands/abort-command.js";
 import { detachCommand } from "../commands/detach-command.js";
@@ -94,6 +95,7 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
   bot.command("ls", lsCommand);
   bot.command("sessions", sessionsCommand);
   bot.command("messages", messagesCommand);
+  bot.command("models", modelsCommand);
   bot.command("new", (ctx) => newCommand(ctx, { bot, ensureEventSubscription: deps.ensureEventSubscription }));
   bot.command("abort", abortCommand);
   bot.command("detach", detachCommand);

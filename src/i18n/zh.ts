@@ -7,6 +7,7 @@ export const zh: I18nDictionary = {
   "cmd.description.detach": "从当前会话分离",
   "cmd.description.sessions": "列出会话",
   "cmd.description.messages": "浏览会话消息",
+  "cmd.description.models": "列出模型",
   "cmd.description.settings": "更改机器人设置",
   "cmd.description.projects": "列出项目",
   "cmd.description.worktree": "切换 git worktree",
