@@ -197,6 +197,11 @@ describe("bot/handlers/media-group", () => {
 
   it("queues an album as one item while the agent is busy", async () => {
     vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    vi.spyOn(settingsStore, "getCurrentSession").mockReturnValue({
+      id: "session-1",
+      title: "Session",
+      directory: "/repo",
+    });
     foregroundSessionState.markBusy("session-1", "/repo");
     const first = createPhotoContext({
       messageId: 20,
@@ -355,6 +360,44 @@ describe("bot/handlers/media-group", () => {
       deps,
       expect.any(Array),
     );
+  });
+
+  it("does not let a later album submit before an earlier album finishes", async () => {
+    let releaseFirst: () => void = () => {};
+    const processPromptMock = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            releaseFirst = () => resolve(true);
+          }),
+      )
+      .mockResolvedValue(true);
+    const { deps } = createDeps({ processPrompt: processPromptMock });
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 1 });
+    const first = createPhotoContext({
+      messageId: 10,
+      smallFileId: "first-small",
+      largeFileId: "first-large",
+    });
+    const second = createPhotoContext({
+      messageId: 20,
+      smallFileId: "second-small",
+      largeFileId: "second-large",
+    });
+    second.ctx.message!.media_group_id = "album-2";
+
+    await addToHandler(handler, first.ctx);
+    await addToHandler(handler, second.ctx);
+    const flushing = handler.flushAll();
+
+    await vi.waitFor(() => expect(processPromptMock).toHaveBeenCalledTimes(1));
+    releaseFirst();
+    await flushing;
+
+    expect(processPromptMock).toHaveBeenCalledTimes(2);
+    expect(processPromptMock.mock.calls[0]?.[0]).toBe(first.ctx);
+    expect(processPromptMock.mock.calls[1]?.[0]).toBe(second.ctx);
   });
 
   it("rejects the whole media group when any file is unsupported", async () => {

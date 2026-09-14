@@ -19,6 +19,10 @@ import {
   rejectQueuedMediaBeforePreparation,
   tryEnqueuePromptIfBusy,
 } from "./prompt-queue-dispatch.js";
+import { telegramInputOrderManager } from "../../app/managers/telegram-input-order-manager.js";
+import { getCurrentSession } from "../../app/services/session-service.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
+import type { PromptTarget } from "./prompt.js";
 
 const DEFAULT_MEDIA_GROUP_DEBOUNCE_MS = 1_000;
 
@@ -62,6 +66,7 @@ type ValidMediaGroupItem =
 interface MediaGroupBatch {
   timer: ReturnType<typeof setTimeout>;
   items: PendingMediaGroupItem[];
+  target?: PromptTarget;
 }
 
 interface ValidatedMediaGroup {
@@ -86,6 +91,7 @@ export interface MediaGroupHandlerDeps extends ProcessPromptDeps {
     ctx: Context,
     input: IncomingPrompt,
     deps: ProcessPromptDeps,
+    options?: { target?: PromptTarget },
   ) => Promise<boolean>;
 }
 
@@ -121,6 +127,7 @@ export class MediaGroupAttachmentHandler {
     flushPendingPrompt(chatId);
 
     const key = this.getBatchKey(chatId, mediaGroupId);
+    telegramInputOrderManager.defer(chatId, item.messageId);
     const existingBatch = this.batches.get(key);
 
     if (existingBatch) {
@@ -130,9 +137,11 @@ export class MediaGroupAttachmentHandler {
       return;
     }
 
+    const target = this.captureTarget();
     this.batches.set(key, {
       items: [item],
       timer: this.createFlushTimer(key),
+      ...(target ? { target } : {}),
     });
   }
 
@@ -206,6 +215,12 @@ export class MediaGroupAttachmentHandler {
     logger.info(`[MediaGroup] Processing Telegram media group: key=${key}, items=${items.length}`);
 
     try {
+      const chatId = replyCtx.chat?.id;
+      const firstMessageId = items[0]?.messageId;
+      if (chatId !== undefined && firstMessageId !== undefined) {
+        await telegramInputOrderManager.waitForEarlier(chatId, firstMessageId);
+      }
+
       const unsupportedContexts = items
         .filter((item) => item.kind === "unsupported")
         .map((item) => item.ctx);
@@ -255,17 +270,40 @@ export class MediaGroupAttachmentHandler {
         await tryEnqueuePromptIfBusy(replyCtx, {
           ...createIncomingPrompt(promptText, { fileParts }),
           displayText: captions.join(" / ") || `[Album: ${items.length} files]`,
-          fileParts,
           ...(mediaBytes === undefined ? {} : { mediaBytes }),
+          ...(batch.target?.sessionId
+            ? { sessionId: batch.target.sessionId, directory: batch.target.directory }
+            : {}),
         })
       ) {
         return;
       }
-      await processPrompt(replyCtx, createIncomingPrompt(promptText, { fileParts }), this.deps);
+      await processPrompt(replyCtx, createIncomingPrompt(promptText, { fileParts }), this.deps, {
+        ...(batch.target ? { target: batch.target } : {}),
+      });
     } catch (err) {
       logger.error(`[MediaGroup] Failed to process media group: key=${key}`, err);
       await replyCtx.reply(t("bot.media_group_download_error"));
+    } finally {
+      const chatId = replyCtx.chat?.id;
+      if (chatId !== undefined) {
+        for (const item of items) {
+          telegramInputOrderManager.release(chatId, item.messageId);
+        }
+      }
     }
+  }
+
+  private captureTarget(): PromptTarget | undefined {
+    const project = getCurrentProject();
+    if (!project) {
+      return undefined;
+    }
+
+    return {
+      sessionId: getCurrentSession()?.id ?? null,
+      directory: project.worktree,
+    };
   }
 
   private async validateItems(

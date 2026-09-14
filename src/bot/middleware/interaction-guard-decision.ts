@@ -6,22 +6,52 @@ import type {
   GuardDecision,
   IncomingInputType,
   InteractionState,
-  InteractionKind,
 } from "../../app/types/interaction.js";
 import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
 import { attachManager } from "../../app/managers/attach-manager.js";
 import { QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../message-patterns.js";
 import type { LocalCommandRegistry } from "../../app/services/local-command-registry.js";
 
-const BUSY_ALLOWED_COMMANDS = ["/abort", "/detach", "/status", "/help", "/opencode_stop"] as const;
+const BUSY_ALLOWED_COMMANDS = [
+  "/abort",
+  "/detach",
+  "/status",
+  "/help",
+  "/opencode_stop",
+  "/settings",
+] as const;
 const BUSY_ALLOWED_COMMAND_SET = new Set<string>(BUSY_ALLOWED_COMMANDS);
 
-function isBusyAllowedCommand(command: string | undefined, localCommandRegistry?: LocalCommandRegistry): boolean {
-  return Boolean(command && (BUSY_ALLOWED_COMMAND_SET.has(command) || localCommandRegistry?.allowsWhenBusy(command)));
+function isBusyAllowedCommand(
+  command: string | undefined,
+  state: InteractionState | null,
+  localCommandRegistry?: LocalCommandRegistry,
+): boolean {
+  if (!command) {
+    return false;
+  }
+
+  if (localCommandRegistry?.allowsWhenBusy(command)) {
+    return true;
+  }
+
+  if (!BUSY_ALLOWED_COMMAND_SET.has(command)) {
+    return false;
+  }
+
+  return (
+    command !== "/settings" ||
+    !state ||
+    (state.kind === "inline" && state.metadata.menuKind === "settings")
+  );
 }
 
-function allowsBusyInteraction(kind: InteractionKind | undefined): boolean {
-  return kind === "question" || kind === "permission";
+function allowsBusyInteraction(state: InteractionState): boolean {
+  return (
+    state.kind === "question" ||
+    state.kind === "permission" ||
+    (state.kind === "inline" && state.metadata.menuKind === "settings")
+  );
 }
 
 // Removing a queued prompt only makes sense while the session is busy, so the
@@ -164,14 +194,14 @@ export function resolveInteractionGuardDecision(
       if (state && localCommandRegistry?.has(command)) {
         return createBusyBlockDecision(inputType, state, "command_not_allowed", command);
       }
-      if (isBusyAllowedCommand(command, localCommandRegistry)) {
+      if (isBusyAllowedCommand(command, state, localCommandRegistry)) {
         return createAllowDecision(inputType, state, command, true);
       }
 
       return createBusyBlockDecision(inputType, state, "command_not_allowed", command);
     }
 
-    if (state && allowsBusyInteraction(state.kind)) {
+    if (state && allowsBusyInteraction(state)) {
       if (state.expectedInput === "mixed") {
         if (inputType === "callback" || inputType === "text") {
           return createAllowDecision(inputType, state, command, true);

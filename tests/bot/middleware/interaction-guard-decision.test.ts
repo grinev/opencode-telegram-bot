@@ -299,13 +299,14 @@ describe("interaction guard", () => {
     expect(decision.inputType).toBe("other");
   });
 
-  it("allows abort, detach, status, help, and opencode_stop while busy without interaction", () => {
+  it("allows utilities and settings while busy without interaction", () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     expect(resolveInteractionGuardDecision(createContext({ text: "/abort" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/detach" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/status" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/help" })).allow).toBe(true);
+    expect(resolveInteractionGuardDecision(createContext({ text: "/settings" })).allow).toBe(true);
     expect(resolveInteractionGuardDecision(createContext({ text: "/opencode_stop" })).allow).toBe(
       true,
     );
@@ -319,6 +320,46 @@ describe("interaction guard", () => {
     expect(blockedDecision.allow).toBe(false);
     expect(blockedDecision.reason).toBe("command_not_allowed");
     expect(blockedDecision.busy).toBe(true);
+  });
+
+  it("allows settings callbacks while busy but keeps other inline menus guarded", () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: { menuKind: "settings", messageId: 10 },
+    });
+
+    const settingsDecision = resolveInteractionGuardDecision(
+      createContext({ callbackData: "settings:prompt_queue" }),
+    );
+    expect(settingsDecision.allow).toBe(true);
+    expect(settingsDecision.busy).toBe(true);
+
+    interactionManager.start({
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: { menuKind: "model", messageId: 11 },
+    });
+    const modelDecision = resolveInteractionGuardDecision(
+      createContext({ callbackData: "model:openai:gpt-5" }),
+    );
+    expect(modelDecision.allow).toBe(false);
+    expect(modelDecision.busy).toBe(true);
+  });
+
+  it("does not let settings replace a busy question interaction", () => {
+    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    interactionManager.start({
+      kind: "question",
+      expectedInput: "mixed",
+    });
+
+    const decision = resolveInteractionGuardDecision(createContext({ text: "/settings" }));
+
+    expect(decision.allow).toBe(false);
+    expect(decision.reason).toBe("command_not_allowed");
+    expect(decision.state?.kind).toBe("question");
   });
 
   it("allows opencode_stop during an active interaction without busy", () => {

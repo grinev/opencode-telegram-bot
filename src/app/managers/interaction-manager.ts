@@ -91,6 +91,13 @@ class InteractionManager {
     return cloneState(nextState);
   }
 
+  tryStart(options: StartInteractionOptions): InteractionState | null {
+    if (this.state) {
+      return null;
+    }
+    return this.start(options);
+  }
+
   get(): InteractionState | null {
     if (!this.state) {
       return null;
@@ -144,6 +151,25 @@ class InteractionManager {
     );
 
     return cloneState(this.state);
+  }
+
+  transitionIfMetadata(
+    key: string,
+    value: unknown,
+    options: TransitionInteractionOptions,
+  ): InteractionState | null {
+    if (!this.state || this.state.metadata[key] !== value) {
+      return null;
+    }
+    return this.transition(options);
+  }
+
+  clearIfMetadata(key: string, value: unknown, reason: InteractionClearReason): boolean {
+    if (!this.state || this.state.metadata[key] !== value) {
+      return false;
+    }
+    this.clear(reason);
+    return true;
   }
 
   clear(reason: InteractionClearReason = "manual"): void {

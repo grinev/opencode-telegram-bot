@@ -12,9 +12,13 @@ interface TelegramAudioApi {
 interface SendTtsResponseParams {
   api: TelegramAudioApi;
   sessionId: string;
+  promptMessageId?: string | undefined;
   chatId: number;
   text: string;
-  consumeResponseMode?: (sessionId: string) => "text_only" | "text_and_tts" | null;
+  consumeResponseMode?: (
+    sessionId: string,
+    messageId: string,
+  ) => "text_only" | "text_and_tts" | null;
   isTtsConfigured?: () => boolean;
   synthesizeSpeech?: (text: string) => Promise<TtsResult>;
 }
@@ -22,15 +26,21 @@ interface SendTtsResponseParams {
 export async function sendTtsResponseForSession({
   api,
   sessionId,
+  promptMessageId,
   chatId,
   text,
   consumeResponseMode: consumeResponseModeImpl = consumePromptResponseMode,
   isTtsConfigured,
   synthesizeSpeech,
 }: SendTtsResponseParams): Promise<boolean> {
+  if (!promptMessageId) {
+    return false;
+  }
+
   try {
     const prepared = await prepareTtsResponseForSession({
       sessionId,
+      promptMessageId,
       text,
       consumeResponseMode: consumeResponseModeImpl,
       isTtsConfigured,
