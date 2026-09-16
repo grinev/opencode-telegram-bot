@@ -77,6 +77,7 @@ import { opencodeStopCommand } from "../../../src/bot/commands/opencode-stop-com
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
+import { startInteractionForTest } from "../../helpers/interaction.js";
 
 function createContext(): Context {
   return {
@@ -188,7 +189,7 @@ describe("bot/commands/opencode-stop-command", () => {
       busy: true,
     });
     promptQueue.add(createIncomingPrompt("queued after hang"));
-    interactionManager.start({
+    startInteractionForTest({
       kind: "question",
       expectedInput: "mixed",
     });

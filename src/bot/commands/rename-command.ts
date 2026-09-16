@@ -21,8 +21,7 @@ export async function renameCommand(ctx: CommandContext<Context>): Promise<void>
 
     renameManager.startWaiting(currentSession.id, currentSession.directory, currentSession.title);
     renameManager.setMessageId(message.message_id);
-    interactionManager.start({
-      kind: "rename",
+    interactionManager.transition({
       expectedInput: "text",
       metadata: {
         sessionId: currentSession.id,

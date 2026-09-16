@@ -59,17 +59,8 @@ export function syncPermissionInteractionState(metadata: Record<string, unknown>
     ...metadata,
   };
 
-  const state = interactionManager.getSnapshot();
-  if (state?.kind === "permission") {
-    interactionManager.transition({
-      expectedInput: "callback",
-      metadata: nextMetadata,
-    });
-    return;
-  }
-
-  interactionManager.start({
-    kind: "permission",
+  // Pending prompts exist only while the slot holds permissions.
+  interactionManager.transition({
     expectedInput: "callback",
     metadata: nextMetadata,
   });
@@ -86,10 +77,7 @@ export async function showPermissionRequest(
 ): Promise<void> {
   logger.debug(`[PermissionHandler] Showing permission request: ${request.permission}`);
 
-  if (
-    generation !== permissionManager.getGeneration() ||
-    permissionManager.isResolved(request.id)
-  ) {
+  if (permissionManager.getDropReason(request, generation)) {
     logger.debug(`[PermissionHandler] Skipping stale or already resolved request: ${request.id}`);
     return;
   }
@@ -128,9 +116,15 @@ export async function showPermissionRequest(
     });
 
     logger.debug(`[PermissionHandler] Message sent, messageId=${message.message_id}`);
-    if (!permissionManager.startPermission(request, message.message_id, generation)) {
+    const result = permissionManager.startPermission(request, message.message_id, generation);
+    if (result !== "started") {
+      if (result === "question_active") {
+        // A poll took the slot while this prompt was being sent: it waits for the poll.
+        interactionManager.waitPermission(request);
+      }
+
       await bot.deleteMessage(chatId, message.message_id).catch((err) => {
-        logger.warn(`[PermissionHandler] Failed to delete stale permission message:`, err);
+        logger.warn(`[PermissionHandler] Failed to delete unregistered permission message:`, err);
       });
       return;
     }

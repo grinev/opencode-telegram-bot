@@ -74,13 +74,7 @@ const TEST_PERMISSION: PermissionRequest = {
 
 function activateInteractionState(): void {
   questionManager.startQuestions([TEST_QUESTION], "req-abort");
-  permissionManager.startPermission(TEST_PERMISSION, 101);
-  renameManager.startWaiting("session-1", "D:/repo", "Old title");
-  interactionManager.start({
-    kind: "rename",
-    expectedInput: "text",
-    metadata: { sessionId: "session-1" },
-  });
+  interactionManager.waitPermission(TEST_PERMISSION);
 }
 
 describe("bot/commands/abort", () => {
@@ -123,6 +117,7 @@ describe("bot/commands/abort", () => {
     expect(permissionManager.isActive()).toBe(false);
     expect(renameManager.isWaitingForName()).toBe(false);
     expect(interactionManager.getSnapshot()).toBeNull();
+    expect(interactionManager.getWaitingKind()).toBeNull();
     expect(mocked.abortMock).not.toHaveBeenCalled();
   });
 

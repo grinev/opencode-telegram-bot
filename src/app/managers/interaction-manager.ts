@@ -1,13 +1,16 @@
 import type {
+  ActiveInteraction,
   InteractionClearReason,
+  InteractionPayloads,
   InteractionState,
   StartInteractionOptions,
+  StatefulInteractionKind,
   TransitionInteractionOptions,
+  WaitingAgentRequest,
+  WaitingAgentRequestListener,
 } from "../types/interaction.js";
-import { permissionManager } from "./permission-manager.js";
-import { questionManager } from "./question-manager.js";
-import { renameManager } from "./rename-manager.js";
-import { taskCreationManager } from "./scheduled-task-creation-manager.js";
+import type { PermissionRequest } from "../types/permission.js";
+import type { Question } from "../types/question.js";
 import { logger } from "../../utils/logger.js";
 
 export const DEFAULT_ALLOWED_INTERACTION_COMMANDS = [
@@ -50,32 +53,46 @@ function normalizeAllowedCommands(commands?: string[]): string[] {
   return Array.from(normalized);
 }
 
-function cloneState(state: InteractionState): InteractionState {
+function toSnapshot(state: ActiveInteraction): InteractionState {
   return {
-    ...state,
+    kind: state.kind,
+    expectedInput: state.expectedInput,
     allowedCommands: [...state.allowedCommands],
     metadata: { ...state.metadata },
+    createdAt: state.createdAt,
+    expiresAt: state.expiresAt,
   };
 }
 
-class InteractionManager {
-  private state: InteractionState | null = null;
+function isAgentRequestKind(kind: InteractionState["kind"]): boolean {
+  return kind === "question" || kind === "permission";
+}
 
+class InteractionManager {
+  private state: ActiveInteraction | null = null;
+  private waiting: WaitingAgentRequest | null = null;
+  private generation = 0;
+  private onWaitingRequestReady: WaitingAgentRequestListener | null = null;
+
+  /**
+   * Opens the slot, replacing whatever it held. Replacing never releases the
+   * waiting request: only a clear does.
+   */
   start(options: StartInteractionOptions): InteractionState {
     const now = Date.now();
     let expiresAt: number | null = null;
 
     if (this.state) {
-      this.clear("state_replaced");
+      this.drop("state_replaced");
     }
 
-    if (typeof options.expiresInMs === "number") {
-      expiresAt = now + options.expiresInMs;
+    const { expiresInMs, ...rest } = options;
+    if (typeof expiresInMs === "number") {
+      expiresAt = now + expiresInMs;
     }
 
-    const nextState: InteractionState = {
-      kind: options.kind,
-      expectedInput: options.expectedInput,
+    const nextState: ActiveInteraction = {
+      ...rest,
       allowedCommands: normalizeAllowedCommands(options.allowedCommands),
       metadata: options.metadata ? { ...options.metadata } : {},
       createdAt: now,
@@ -88,7 +105,7 @@ class InteractionManager {
       `[InteractionManager] Started interaction: kind=${nextState.kind}, expectedInput=${nextState.expectedInput}, allowedCommands=${nextState.allowedCommands.join(",") || "none"}`,
     );
 
-    return cloneState(nextState);
+    return toSnapshot(nextState);
   }
 
   get(): InteractionState | null {
@@ -96,11 +113,22 @@ class InteractionManager {
       return null;
     }
 
-    return cloneState(this.state);
+    return toSnapshot(this.state);
   }
 
   getSnapshot(): InteractionState | null {
     return this.get();
+  }
+
+  /**
+   * Live data of the given kind, or null when the slot holds another kind.
+   */
+  getPayload<K extends StatefulInteractionKind>(kind: K): InteractionPayloads[K] | null {
+    if (!this.state || this.state.kind !== kind || !("payload" in this.state)) {
+      return null;
+    }
+
+    return this.state.payload as InteractionPayloads[K];
   }
 
   isActive(): boolean {
@@ -124,7 +152,6 @@ class InteractionManager {
 
     this.state = {
       ...this.state,
-      kind: options.kind ?? this.state.kind,
       expectedInput: options.expectedInput ?? this.state.expectedInput,
       allowedCommands:
         options.allowedCommands !== undefined
@@ -143,19 +170,138 @@ class InteractionManager {
       `[InteractionManager] Transitioned interaction: kind=${this.state.kind}, expectedInput=${this.state.expectedInput}, allowedCommands=${this.state.allowedCommands.join(",") || "none"}`,
     );
 
-    return cloneState(this.state);
+    return toSnapshot(this.state);
   }
 
+  /**
+   * Empties the slot. When a question or permission ends and a request of the
+   * other kind is waiting, that request is handed to the listener.
+   */
   clear(reason: InteractionClearReason = "manual"): void {
-    if (!this.state) {
+    const clearedKind = this.drop(reason);
+    if (!clearedKind || !isAgentRequestKind(clearedKind) || !this.waiting) {
+      return;
+    }
+
+    const request = this.waiting;
+    const generation = this.generation;
+    const listener = this.onWaitingRequestReady;
+    this.waiting = null;
+
+    if (!listener) {
+      logger.warn(
+        `[InteractionManager] No listener for the waiting request, dropping it: kind=${request.kind}`,
+      );
       return;
     }
 
     logger.info(
-      `[InteractionManager] Cleared interaction: reason=${reason}, kind=${this.state.kind}, expectedInput=${this.state.expectedInput}`,
+      `[InteractionManager] Releasing waiting request: kind=${request.kind}, after=${clearedKind}`,
+    );
+    setImmediate(() => listener(request, generation));
+  }
+
+  /**
+   * Clears the slot only if it holds the given kind.
+   */
+  clearKind(kind: InteractionState["kind"], reason: InteractionClearReason): void {
+    if (this.state?.kind === kind) {
+      this.clear(reason);
+    }
+  }
+
+  /**
+   * Drops the slot and the waiting request together, and marks permission
+   * prompts still being sent as stale.
+   */
+  reset(reason: InteractionClearReason): void {
+    this.waiting = null;
+    this.bumpGeneration();
+    this.drop(reason);
+  }
+
+  getGeneration(): number {
+    return this.generation;
+  }
+
+  bumpGeneration(): void {
+    this.generation++;
+  }
+
+  waitQuestion(questions: Question[], requestID: string, sessionId: string): void {
+    if (this.waiting?.kind === "question") {
+      logger.info(
+        `[InteractionManager] Replacing waiting poll: requestID=${this.waiting.requestID}`,
+      );
+    }
+
+    this.waiting = { kind: "question", questions, requestID, sessionId };
+    logger.info(`[InteractionManager] Poll is waiting: requestID=${requestID}`);
+  }
+
+  waitPermission(request: PermissionRequest): void {
+    const requests = this.waiting?.kind === "permission" ? this.waiting.requests : [];
+    if (!requests.some((waiting) => waiting.id === request.id)) {
+      requests.push(request);
+    }
+
+    this.waiting = { kind: "permission", requests };
+    logger.info(
+      `[InteractionManager] Permission is waiting: requestID=${request.id}, waiting=${requests.length}`,
+    );
+  }
+
+  dropWaitingPermission(requestID: string): void {
+    if (this.waiting?.kind !== "permission") {
+      return;
+    }
+
+    const requests = this.waiting.requests.filter((request) => request.id !== requestID);
+    if (requests.length === this.waiting.requests.length) {
+      return;
+    }
+
+    this.waiting = requests.length > 0 ? { kind: "permission", requests } : null;
+    logger.info(`[InteractionManager] Dropped waiting permission: requestID=${requestID}`);
+  }
+
+  dropWaitingQuestion(): boolean {
+    if (this.waiting?.kind !== "question") {
+      return false;
+    }
+
+    logger.info(`[InteractionManager] Dropped waiting poll: requestID=${this.waiting.requestID}`);
+    this.waiting = null;
+    return true;
+  }
+
+  getWaitingKind(): WaitingAgentRequest["kind"] | null {
+    return this.waiting?.kind ?? null;
+  }
+
+  setOnWaitingRequestReady(listener: WaitingAgentRequestListener | null): void {
+    this.onWaitingRequestReady = listener;
+  }
+
+  __resetForTests(): void {
+    this.state = null;
+    this.waiting = null;
+    this.generation = 0;
+    this.onWaitingRequestReady = null;
+  }
+
+  private drop(reason: InteractionClearReason): InteractionState["kind"] | null {
+    if (!this.state) {
+      return null;
+    }
+
+    const kind = this.state.kind;
+    logger.info(
+      `[InteractionManager] Cleared interaction: reason=${reason}, kind=${kind}, expectedInput=${this.state.expectedInput}`,
     );
 
     this.state = null;
+    return kind;
   }
 }
 
@@ -171,7 +317,7 @@ export type InteractionErrorScope =
 
 const SCOPE_TO_INTERACTION_KIND: Record<
   Exclude<InteractionErrorScope, "interaction" | "none">,
-  InteractionState["kind"]
+  StatefulInteractionKind
 > = {
   question: "question",
   permission: "permission",
@@ -191,24 +337,13 @@ export function clearInteractionErrorState(
 
   if (scope === "interaction") {
     interactionManager.clear(reason);
-    logger.debug(
-      `[InteractionCleanup] Cleared scoped state: reason=${reason}, scope=${scope}, interactionKind=${stateBefore?.kind || "none"}`,
-    );
-    return;
-  }
-
-  if (scope === "question") {
-    questionManager.clear();
-  } else if (scope === "permission") {
-    permissionManager.clear();
-  } else if (scope === "rename") {
-    renameManager.clear();
   } else {
-    taskCreationManager.clear();
-  }
+    if (scope === "permission") {
+      // Bump first, so a poll released by this clear carries the new generation.
+      interactionManager.bumpGeneration();
+    }
 
-  if (stateBefore && stateBefore.kind === SCOPE_TO_INTERACTION_KIND[scope]) {
-    interactionManager.clear(reason);
+    interactionManager.clearKind(SCOPE_TO_INTERACTION_KIND[scope], reason);
   }
 
   logger.debug(
@@ -217,32 +352,16 @@ export function clearInteractionErrorState(
 }
 
 export function clearAllInteractionState(reason: string): void {
-  const questionActive = questionManager.isActive();
-  const permissionActive = permissionManager.isActive();
-  const renameActive = renameManager.isWaitingForName();
-  const taskCreationActive = taskCreationManager.isActive();
   const interactionSnapshot = interactionManager.getSnapshot();
+  const waitingKind = interactionManager.getWaitingKind();
 
-  questionManager.clear();
-  permissionManager.clear();
-  renameManager.clear();
-  taskCreationManager.clear();
-  interactionManager.clear(reason);
-
-  const hasAnyActiveState =
-    questionActive ||
-    permissionActive ||
-    renameActive ||
-    taskCreationActive ||
-    interactionSnapshot !== null;
+  interactionManager.reset(reason);
 
   const message =
     `[InteractionCleanup] Cleared state: reason=${reason}, ` +
-    `questionActive=${questionActive}, permissionActive=${permissionActive}, ` +
-    `renameActive=${renameActive}, taskCreationActive=${taskCreationActive}, ` +
-    `interactionKind=${interactionSnapshot?.kind || "none"}`;
+    `interactionKind=${interactionSnapshot?.kind || "none"}, waiting=${waitingKind || "none"}`;
 
-  if (hasAnyActiveState) {
+  if (interactionSnapshot !== null || waitingKind !== null) {
     logger.info(message);
     return;
   }

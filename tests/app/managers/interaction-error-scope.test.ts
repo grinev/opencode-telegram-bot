@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearAllInteractionState,
   clearInteractionErrorState,
@@ -34,9 +34,12 @@ describe("app/managers/interaction-error-scope", () => {
     clearAllInteractionState("test_setup");
   });
 
+  afterEach(() => {
+    interactionManager.setOnWaitingRequestReady(null);
+  });
+
   it("clears only questionManager for the question scope", () => {
     questionManager.startQuestions([TEST_QUESTION], "req-1");
-    interactionManager.start({ kind: "question", expectedInput: "callback", metadata: {} });
 
     clearInteractionErrorState("question", "test_cleanup");
 
@@ -45,7 +48,6 @@ describe("app/managers/interaction-error-scope", () => {
   });
 
   it("keeps an unrelated interaction for the question scope", () => {
-    questionManager.startQuestions([TEST_QUESTION], "req-1");
     interactionManager.start({ kind: "inline", expectedInput: "callback", metadata: {} });
 
     clearInteractionErrorState("question", "test_cleanup");
@@ -54,9 +56,42 @@ describe("app/managers/interaction-error-scope", () => {
     expect(interactionManager.getSnapshot()?.kind).toBe("inline");
   });
 
+  it("keeps waiting permissions for the question scope and releases them", async () => {
+    const listener = vi.fn();
+    interactionManager.setOnWaitingRequestReady(listener);
+    questionManager.startQuestions([TEST_QUESTION], "req-1");
+    interactionManager.waitPermission(TEST_PERMISSION);
+    const generation = interactionManager.getGeneration();
+
+    clearInteractionErrorState("question", "test_cleanup");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(listener).toHaveBeenCalledWith(
+      { kind: "permission", requests: [TEST_PERMISSION] },
+      generation,
+    );
+  });
+
+  it("releases a waiting poll with the bumped generation for the permission scope", async () => {
+    const listener = vi.fn();
+    interactionManager.setOnWaitingRequestReady(listener);
+    permissionManager.startPermission(TEST_PERMISSION, 101);
+    interactionManager.waitQuestion([TEST_QUESTION], "req-1", "session-1");
+    const generation = interactionManager.getGeneration();
+
+    clearInteractionErrorState("permission", "test_cleanup");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(permissionManager.isActive()).toBe(false);
+    expect(interactionManager.getGeneration()).toBe(generation + 1);
+    expect(listener).toHaveBeenCalledWith(
+      { kind: "question", questions: [TEST_QUESTION], requestID: "req-1", sessionId: "session-1" },
+      generation + 1,
+    );
+  });
+
   it("clears only permissionManager for the permission scope", () => {
     permissionManager.startPermission(TEST_PERMISSION, 101);
-    interactionManager.start({ kind: "permission", expectedInput: "callback", metadata: {} });
 
     clearInteractionErrorState("permission", "test_cleanup");
 
@@ -66,7 +101,6 @@ describe("app/managers/interaction-error-scope", () => {
 
   it("clears renameManager and the matching interaction for the rename scope", () => {
     renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    interactionManager.start({ kind: "rename", expectedInput: "text", metadata: {} });
 
     clearInteractionErrorState("rename", "test_cleanup");
 
@@ -75,8 +109,7 @@ describe("app/managers/interaction-error-scope", () => {
   });
 
   it("keeps an unrelated interaction for the rename scope", () => {
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    interactionManager.start({ kind: "question", expectedInput: "callback", metadata: {} });
+    questionManager.startQuestions([TEST_QUESTION], "req-1");
 
     clearInteractionErrorState("rename", "test_cleanup");
 
@@ -86,7 +119,6 @@ describe("app/managers/interaction-error-scope", () => {
 
   it("clears taskCreationManager and the matching interaction for the taskCreation scope", () => {
     taskCreationManager.start("project-1", "D:/repo", { providerID: "p", modelID: "m", variant: null }, "build");
-    interactionManager.start({ kind: "task", expectedInput: "text", metadata: {} });
 
     clearInteractionErrorState("taskCreation", "test_cleanup");
 
@@ -104,11 +136,10 @@ describe("app/managers/interaction-error-scope", () => {
 
   it("does nothing for the none scope", () => {
     questionManager.startQuestions([TEST_QUESTION], "req-1");
-    interactionManager.start({ kind: "inline", expectedInput: "callback", metadata: {} });
 
     clearInteractionErrorState("none", "test_cleanup");
 
     expect(questionManager.isActive()).toBe(true);
-    expect(interactionManager.getSnapshot()?.kind).toBe("inline");
+    expect(interactionManager.getSnapshot()?.kind).toBe("question");
   });
 });

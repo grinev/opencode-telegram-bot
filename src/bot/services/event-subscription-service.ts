@@ -96,10 +96,9 @@ import { questionManager } from "../../app/managers/question-manager.js";
 import { permissionManager } from "../../app/managers/permission-manager.js";
 import { showCurrentQuestion } from "../menus/question-menu.js";
 import { showPermissionRequest, syncPermissionInteractionState } from "../menus/permission-menu.js";
-import {
-  clearAllInteractionState,
-  interactionManager,
-} from "../../app/managers/interaction-manager.js";
+import { interactionManager } from "../../app/managers/interaction-manager.js";
+import type { PermissionRequest } from "../../app/types/permission.js";
+import type { Question } from "../../app/types/question.js";
 import { stopEventListening, subscribeToEvents } from "../../opencode/events.js";
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
@@ -362,6 +361,104 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   setTelegramContext(bot: Bot<Context> | null, chatId: number | null): void {
     this.botInstance = bot;
     this.chatIdInstance = chatId;
+  }
+
+  /**
+   * Shows a poll, or leaves it waiting while permission prompts are on screen.
+   * `generation` is set for a poll released from the waiting place.
+   */
+  private async presentQuestion(
+    questions: Question[],
+    requestID: string,
+    sessionId: string,
+    generation: number | null,
+  ): Promise<void> {
+    if (!this.botInstance || !this.chatIdInstance) {
+      logger.error("Bot or chat ID not available for showing questions");
+      return;
+    }
+
+    if (getCurrentSession()?.id !== sessionId) {
+      return;
+    }
+
+    await Promise.all([
+      this.toolMessageBatcher.flushSession(sessionId, "question_asked"),
+      this.toolCallStreamer.flushSession(sessionId, "question_asked"),
+    ]);
+
+    // Decide and open the slot in one synchronous step: a permission or a
+    // reset may have landed during the flushes.
+    if (generation !== null && generation !== interactionManager.getGeneration()) {
+      logger.info(`[Bot] Dropping waiting poll after a reset: requestID=${requestID}`);
+      return;
+    }
+
+    if (getCurrentSession()?.id !== sessionId) {
+      return;
+    }
+
+    const previousMessageIds = questionManager.isActive() ? questionManager.getMessageIds() : [];
+    if (!questionManager.startQuestions(questions, requestID)) {
+      interactionManager.waitQuestion(questions, requestID, sessionId);
+      return;
+    }
+
+    if (isCompactProgressMode()) {
+      this.compactProgressStreamer.updateWaitingForQuestion(sessionId);
+    }
+
+    if (previousMessageIds.length > 0) {
+      logger.warn("[Bot] Replacing active poll with a new one");
+      for (const messageId of previousMessageIds) {
+        await this.botInstance.api.deleteMessage(this.chatIdInstance, messageId).catch(() => {});
+      }
+    }
+
+    logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
+    await showCurrentQuestion(this.botInstance.api, this.chatIdInstance);
+  }
+
+  /**
+   * Shows a permission prompt, or leaves it waiting while a poll is on screen.
+   */
+  private async presentPermission(request: PermissionRequest, generation: number): Promise<void> {
+    if (!this.botInstance || !this.chatIdInstance) {
+      logger.error("Bot or chat ID not available for showing permission request");
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    const isCurrent = currentSession?.id === request.sessionID;
+    const isSubagent = summaryAggregator.isSubagentSession(request.sessionID);
+    if (!currentSession || (!isCurrent && !isSubagent)) {
+      return;
+    }
+
+    await Promise.all([
+      this.toolMessageBatcher.flushSession(request.sessionID, "permission_asked"),
+      this.toolCallStreamer.flushSession(request.sessionID, "permission_asked"),
+    ]);
+
+    // Decide in one synchronous step: a poll or a reset may have landed during the flushes.
+    if (permissionManager.getDropReason(request, generation)) {
+      logger.debug(`[Bot] Dropping stale or resolved permission request: requestID=${request.id}`);
+      return;
+    }
+
+    if (interactionManager.getSnapshot()?.kind === "question") {
+      interactionManager.waitPermission(request);
+      return;
+    }
+
+    if (isCompactProgressMode()) {
+      this.compactProgressStreamer.updateWaitingForPermission(currentSession.id);
+    }
+
+    logger.info(
+      `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}, subagent=${isSubagent}`,
+    );
+    await showPermissionRequest(this.botInstance.api, this.chatIdInstance, request, generation);
   }
 
   private getLiveToolPrefix(callId: string): string {
@@ -910,45 +1007,20 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     });
 
     summaryAggregator.setOnQuestion(async (questions, requestID, sessionId) => {
-      if (!this.botInstance || !this.chatIdInstance) {
-        logger.error("Bot or chat ID not available for showing questions");
-        return;
-      }
-
-      const currentSession = getCurrentSession();
-      if (!currentSession || currentSession.id !== sessionId) {
-        return;
-      }
-
-      if (isCompactProgressMode()) {
-        this.compactProgressStreamer.updateWaitingForQuestion(sessionId);
-      }
-
-      await Promise.all([
-        this.toolMessageBatcher.flushSession(currentSession.id, "question_asked"),
-        this.toolCallStreamer.flushSession(currentSession.id, "question_asked"),
-      ]);
-
-      if (questionManager.isActive()) {
-        logger.warn("[Bot] Replacing active poll with a new one");
-
-        const previousMessageIds = questionManager.getMessageIds();
-        for (const messageId of previousMessageIds) {
-          await this.botInstance.api.deleteMessage(this.chatIdInstance, messageId).catch(() => {});
-        }
-
-        clearAllInteractionState("question_replaced_by_new_poll");
-      }
-
-      logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
-      questionManager.startQuestions(questions, requestID);
-      await showCurrentQuestion(this.botInstance.api, this.chatIdInstance);
+      await this.presentQuestion(questions, requestID, sessionId, null);
     });
 
     summaryAggregator.setOnQuestionError(async () => {
+      if (!questionManager.isActive()) {
+        interactionManager.dropWaitingQuestion();
+        return;
+      }
+
       logger.info("[Bot] Question tool failed, clearing active poll and deleting messages");
 
       const messageIds = questionManager.getMessageIds();
+      questionManager.clear();
+
       for (const messageId of messageIds) {
         if (this.chatIdInstance) {
           await this.botInstance?.api.deleteMessage(this.chatIdInstance, messageId).catch((err) => {
@@ -956,38 +1028,32 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           });
         }
       }
-
-      clearAllInteractionState("question_error");
     });
 
     summaryAggregator.setOnPermission(async (request) => {
-      const generation = permissionManager.getGeneration();
+      await this.presentPermission(request, permissionManager.getGeneration());
+    });
 
-      if (!this.botInstance || !this.chatIdInstance) {
-        logger.error("Bot or chat ID not available for showing permission request");
-        return;
-      }
+    interactionManager.setOnWaitingRequestReady((request, generation) => {
+      const present = async (): Promise<void> => {
+        if (request.kind === "question") {
+          await this.presentQuestion(
+            request.questions,
+            request.requestID,
+            request.sessionId,
+            generation,
+          );
+          return;
+        }
 
-      const currentSession = getCurrentSession();
-      const isCurrent = currentSession?.id === request.sessionID;
-      const isSubagent = summaryAggregator.isSubagentSession(request.sessionID);
-      if (!currentSession || (!isCurrent && !isSubagent)) {
-        return;
-      }
+        for (const permission of request.requests) {
+          await this.presentPermission(permission, generation);
+        }
+      };
 
-      if (isCompactProgressMode()) {
-        this.compactProgressStreamer.updateWaitingForPermission(currentSession.id);
-      }
-
-      await Promise.all([
-        this.toolMessageBatcher.flushSession(request.sessionID, "permission_asked"),
-        this.toolCallStreamer.flushSession(request.sessionID, "permission_asked"),
-      ]);
-
-      logger.info(
-        `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}, subagent=${isSubagent}`,
-      );
-      await showPermissionRequest(this.botInstance.api, this.chatIdInstance, request, generation);
+      present().catch((err) => {
+        logger.error(`[Bot] Failed to show waiting ${request.kind} request:`, err);
+      });
     });
 
     summaryAggregator.setOnPermissionReplied(async (_sessionId, requestID) => {

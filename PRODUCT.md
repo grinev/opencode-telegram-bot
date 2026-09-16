@@ -138,6 +138,7 @@ Text messages (non-commands) are treated as prompts for OpenCode only when no bl
 Interaction routing rules:
 
 - Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills, messages)
+- An agent question and agent permission requests are shown one after another: the one arriving second waits until the one on screen is answered or cancelled; `/abort`, `/detach` and `/opencode_stop` drop both
 - While an interaction is active, unrelated input is blocked with a contextual hint
 - Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`, `/opencode_stop`
 - Unknown slash commands return an explicit fallback message

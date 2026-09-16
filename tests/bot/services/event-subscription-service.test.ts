@@ -386,6 +386,26 @@ function emitPermissionReplied(
   } as unknown as Event);
 }
 
+function emitQuestionAsked(
+  summaryAggregator: { processEvent(event: Event): void },
+  requestID: string,
+): void {
+  summaryAggregator.processEvent({
+    type: "question.asked",
+    properties: {
+      id: requestID,
+      sessionID: "session-1",
+      questions: [
+        {
+          header: "Pick",
+          question: `Which option for ${requestID}?`,
+          options: [{ label: "A", description: "first" }],
+        },
+      ],
+    },
+  } as unknown as Event);
+}
+
 describe("bot/services/event-subscription-service", () => {
   let tempHome: string;
   let activeService: { cleanup(reason: string): void } | null = null;
@@ -1212,27 +1232,199 @@ describe("bot/services/event-subscription-service", () => {
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 
-  it("does not replace a newer interaction when a permission is resolved", async () => {
-    const { api, summaryAggregator } = await setupService(true);
-    const [{ permissionManager }, { interactionManager }] = await Promise.all([
+  async function loadInteractionModules() {
+    const [
+      { permissionManager },
+      { questionManager },
+      { interactionManager, clearAllInteractionState },
+    ] = await Promise.all([
       import("../../../src/app/managers/permission-manager.js"),
+      import("../../../src/app/managers/question-manager.js"),
       import("../../../src/app/managers/interaction-manager.js"),
     ]);
-    api.sendMessage
-      .mockResolvedValueOnce({ message_id: 510 })
-      .mockResolvedValueOnce({ message_id: 511 });
+    return { permissionManager, questionManager, interactionManager, clearAllInteractionState };
+  }
+
+  async function settle(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  }
+
+  async function showPollWithWaitingPermission(summaryAggregator: {
+    processEvent(event: Event): void;
+  }): Promise<void> {
+    const { questionManager, interactionManager } = await loadInteractionModules();
+
+    emitQuestionAsked(summaryAggregator, "question-1");
+    await vi.waitFor(() => {
+      expect(questionManager.getActiveMessageId()).not.toBeNull();
+    });
     emitPermissionAsked(summaryAggregator, "permission-1");
+    await vi.waitFor(() => {
+      expect(interactionManager.getWaitingKind()).toBe("permission");
+    });
+  }
+
+  it("leaves a poll waiting while permissions are on screen and shows it after the last one", async () => {
+    const { api, summaryAggregator } = await setupService(true);
+    const { permissionManager, questionManager, interactionManager } =
+      await loadInteractionModules();
+    api.sendMessage.mockResolvedValueOnce({ message_id: 510 });
+
+    emitPermissionAsked(summaryAggregator, "permission-1");
+    await vi.waitFor(() => {
+      expect(permissionManager.getPendingCount()).toBe(1);
+    });
+
+    emitQuestionAsked(summaryAggregator, "question-1");
+    await vi.waitFor(() => {
+      expect(interactionManager.getWaitingKind()).toBe("question");
+    });
+    expect(questionManager.isActive()).toBe(false);
+    expect(api.sendMessage).toHaveBeenCalledTimes(1);
+
+    emitPermissionReplied(summaryAggregator, "permission-1");
+
+    await vi.waitFor(() => {
+      expect(questionManager.getActiveMessageId()).not.toBeNull();
+    });
+    expect(questionManager.getRequestID()).toBe("question-1");
+    expect(interactionManager.getWaitingKind()).toBeNull();
+  });
+
+  it("leaves permissions waiting while a poll is on screen and shows them after cancel", async () => {
+    const { api, summaryAggregator } = await setupService(true);
+    const { permissionManager, questionManager, interactionManager } =
+      await loadInteractionModules();
+    let nextMessageId = 600;
+    api.sendMessage.mockImplementation(async () => ({ message_id: nextMessageId++ }));
+
+    await showPollWithWaitingPermission(summaryAggregator);
     emitPermissionAsked(summaryAggregator, "permission-2", ["D:/other/*"]);
+    await settle();
+    const sendsBefore = api.sendMessage.mock.calls.length;
+    expect(permissionManager.isActive()).toBe(false);
+
+    questionManager.cancel();
+
     await vi.waitFor(() => {
       expect(permissionManager.getPendingCount()).toBe(2);
     });
-    interactionManager.start({ kind: "rename", expectedInput: "text" });
+    expect(api.sendMessage).toHaveBeenCalledTimes(sendsBefore + 2);
+    expect(interactionManager.getSnapshot()?.kind).toBe("permission");
+  });
 
-    emitPermissionReplied(summaryAggregator, "permission-2");
+  it("never shows a waiting permission answered elsewhere", async () => {
+    const { api, summaryAggregator } = await setupService(true);
+    const { permissionManager, questionManager, interactionManager } =
+      await loadInteractionModules();
+
+    await showPollWithWaitingPermission(summaryAggregator);
+
+    emitPermissionReplied(summaryAggregator, "permission-1");
+    await vi.waitFor(() => {
+      expect(interactionManager.getWaitingKind()).toBeNull();
+    });
+    expect(questionManager.isActive()).toBe(true);
+    const sendsBefore = api.sendMessage.mock.calls.length;
+
+    questionManager.cancel();
+    await settle();
+
+    expect(api.sendMessage).toHaveBeenCalledTimes(sendsBefore);
+    expect(permissionManager.isActive()).toBe(false);
+    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("replaces the poll on screen without releasing the waiting permission", async () => {
+    const { summaryAggregator } = await setupService(true);
+    const { permissionManager, questionManager, interactionManager } =
+      await loadInteractionModules();
+
+    await showPollWithWaitingPermission(summaryAggregator);
+
+    emitQuestionAsked(summaryAggregator, "question-2");
+    await vi.waitFor(() => {
+      expect(questionManager.getRequestID()).toBe("question-2");
+    });
+    await settle();
+
+    expect(interactionManager.getWaitingKind()).toBe("permission");
+    expect(permissionManager.isActive()).toBe(false);
+  });
+
+  it("shows the waiting permission when the question tool fails", async () => {
+    const { summaryAggregator } = await setupService(true);
+    const { permissionManager, questionManager } = await loadInteractionModules();
+
+    await showPollWithWaitingPermission(summaryAggregator);
+
+    const aggregator = summaryAggregator as unknown as { onQuestionErrorCallback: () => void };
+    aggregator.onQuestionErrorCallback();
 
     await vi.waitFor(() => {
       expect(permissionManager.getPendingCount()).toBe(1);
     });
-    expect(interactionManager.getSnapshot()?.kind).toBe("rename");
+    expect(questionManager.isActive()).toBe(false);
+  });
+
+  it("drops a waiting poll when the question tool fails behind permissions", async () => {
+    const { summaryAggregator } = await setupService(true);
+    const { permissionManager, interactionManager } = await loadInteractionModules();
+
+    emitPermissionAsked(summaryAggregator, "permission-1");
+    await vi.waitFor(() => {
+      expect(permissionManager.getPendingCount()).toBe(1);
+    });
+    emitQuestionAsked(summaryAggregator, "question-1");
+    await vi.waitFor(() => {
+      expect(interactionManager.getWaitingKind()).toBe("question");
+    });
+
+    const aggregator = summaryAggregator as unknown as { onQuestionErrorCallback: () => void };
+    aggregator.onQuestionErrorCallback();
+
+    expect(interactionManager.getWaitingKind()).toBeNull();
+    expect(permissionManager.getPendingCount()).toBe(1);
+  });
+
+  it("drops a released request when a full reset lands before it is shown", async () => {
+    const { api, summaryAggregator } = await setupService(true);
+    const { permissionManager, questionManager, interactionManager, clearAllInteractionState } =
+      await loadInteractionModules();
+
+    await showPollWithWaitingPermission(summaryAggregator);
+    const sendsBefore = api.sendMessage.mock.calls.length;
+
+    questionManager.cancel();
+    clearAllInteractionState("abort_command");
+    await settle();
+
+    expect(api.sendMessage).toHaveBeenCalledTimes(sendsBefore);
+    expect(permissionManager.isActive()).toBe(false);
+    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("keeps the compact line on the poll while a permission waits behind it", async () => {
+    const { api, summaryAggregator } = await setupService(true);
+    const [settingsStore, { t }] = await Promise.all([
+      import("../../../src/app/stores/settings-store.js"),
+      import("../../../src/i18n/index.js"),
+    ]);
+    settingsStore.setCompactOutputMode(true);
+    const { questionManager } = await loadInteractionModules();
+    const waitingPermissionText = t("progress.compact.waiting_permission");
+    const hasWaitingPermissionLine = (): boolean =>
+      collectSentTexts(api).some((text) => text.includes(waitingPermissionText));
+
+    await showPollWithWaitingPermission(summaryAggregator);
+    await settle();
+
+    expect(hasWaitingPermissionLine()).toBe(false);
+
+    questionManager.cancel();
+
+    await vi.waitFor(() => {
+      expect(hasWaitingPermissionLine()).toBe(true);
+    });
   });
 });

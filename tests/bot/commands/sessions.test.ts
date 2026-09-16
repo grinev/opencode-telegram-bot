@@ -11,6 +11,7 @@ import { foregroundSessionState } from "../../../src/app/managers/foreground-ses
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { safeBackgroundTask } from "../../../src/utils/safe-background-task.js";
+import { startInteractionForTest } from "../../helpers/interaction.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -304,7 +305,7 @@ describe("bot/commands/sessions", () => {
     const pageTwoData = Array.from({ length: 12 }, (_, index) => createSession(index));
     mocked.sessionListMock.mockResolvedValueOnce({ data: pageTwoData, error: null });
 
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -340,7 +341,7 @@ describe("bot/commands/sessions", () => {
   it("returns page-empty callback message when requested page has no sessions", async () => {
     mocked.sessionListMock.mockResolvedValueOnce({ data: [], error: null });
 
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -365,7 +366,7 @@ describe("bot/commands/sessions", () => {
       error: new Error("session list failed"),
     });
 
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -392,7 +393,7 @@ describe("bot/commands/sessions", () => {
       error: new Error("session get failed"),
     });
 
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -417,7 +418,7 @@ describe("bot/commands/sessions", () => {
     });
     mocked.resolveProjectAgentMock.mockResolvedValueOnce("plan");
 
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -460,7 +461,7 @@ describe("bot/commands/sessions", () => {
     const session = createSession(0);
     mocked.sessionGetMock.mockResolvedValueOnce({ data: session, error: null });
 
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -480,7 +481,7 @@ describe("bot/commands/sessions", () => {
   it("puts the pulled model on the keyboard sent with the selection message", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
 
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -517,7 +518,7 @@ describe("bot/commands/sessions", () => {
   it("blocks session selection callback while foreground session is busy", async () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -655,7 +656,7 @@ describe("bot/commands/sessions", () => {
       data: createSession(0),
       error: null,
     });
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -719,7 +720,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("blocks background session open during non-inline interactions", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "question",
       expectedInput: "callback",
     });

@@ -27,9 +27,7 @@ interface KeyboardManagerPrivateState {
 
 export async function resetSingletonState(): Promise<void> {
   const [
-    { questionManager },
     { permissionManager },
-    { renameManager },
     { interactionManager },
     { summaryAggregator },
     { keyboardManager },
@@ -44,9 +42,7 @@ export async function resetSingletonState(): Promise<void> {
     { telegramOutageNoticeService },
     loggerModule,
   ] = await Promise.all([
-    import("../../src/app/managers/question-manager.js"),
     import("../../src/app/managers/permission-manager.js"),
-    import("../../src/app/managers/rename-manager.js"),
     import("../../src/app/managers/interaction-manager.js"),
     import("../../src/app/managers/summary-aggregation-manager.js"),
     import("../../src/bot/keyboards/keyboard-manager.js"),
@@ -64,10 +60,14 @@ export async function resetSingletonState(): Promise<void> {
 
   stopEventListening();
   __resetStreamThrottleForTests();
-  questionManager.clear();
-  permissionManager.clear();
-  renameManager.clear();
-  interactionManager.clear("test_reset");
+  // Test files that mock the interaction managers supply their own stubs,
+  // which have nothing to reset.
+  if (typeof interactionManager.__resetForTests === "function") {
+    interactionManager.__resetForTests();
+  }
+  if (typeof permissionManager.__resetForTests === "function") {
+    permissionManager.__resetForTests();
+  }
   summaryAggregator.clear();
   __resetMessageMergerForTests();
   promptQueue.__resetForTests();

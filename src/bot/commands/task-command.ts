@@ -38,8 +38,9 @@ function clearTaskInteraction(reason: string): void {
 }
 
 function clearTaskFlow(reason: string): void {
-  taskCreationManager.clear();
+  // Clear the slot first so the log keeps the specific reason.
   clearTaskInteraction(reason);
+  taskCreationManager.clear();
 }
 
 function isTaskLimitReached(): boolean {
@@ -305,8 +306,7 @@ export async function taskCommand(ctx: CommandContext<Context>): Promise<void> {
   const currentAgent = getStoredAgent();
 
   taskCreationManager.start(currentProject.id, currentProject.worktree, currentModel, currentAgent);
-  interactionManager.start({
-    kind: "task",
+  interactionManager.transition({
     expectedInput: "text",
     metadata: buildTaskInteractionMetadata(
       "awaiting_schedule",
@@ -359,7 +359,6 @@ export async function handleTaskTextInput(ctx: Context): Promise<boolean> {
 
     taskCreationManager.markScheduleParsing();
     interactionManager.transition({
-      kind: "task",
       expectedInput: "text",
       metadata: buildTaskInteractionMetadata(
         "parsing_schedule",
@@ -390,7 +389,6 @@ export async function handleTaskTextInput(ctx: Context): Promise<boolean> {
         previewMessage.message_id,
       );
       interactionManager.transition({
-        kind: "task",
         expectedInput: "mixed",
         metadata: buildTaskInteractionMetadata(
           "awaiting_prompt",
@@ -406,7 +404,6 @@ export async function handleTaskTextInput(ctx: Context): Promise<boolean> {
       await deleteMessageIfPresent(ctx, flowState.scheduleRequestMessageId);
       taskCreationManager.resetSchedule();
       interactionManager.transition({
-        kind: "task",
         expectedInput: "text",
         metadata: buildTaskInteractionMetadata(
           "awaiting_schedule",

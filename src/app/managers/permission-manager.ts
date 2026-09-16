@@ -3,16 +3,43 @@ import type {
   PermissionRequest,
   PermissionState,
 } from "../types/permission.js";
+import { interactionManager } from "./interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 
-class PermissionManager {
-  private state: PermissionState = {
+/**
+ * Why a sent permission message was not registered. A stale or resolved
+ * request is dropped; one refused because a poll holds the slot has to wait.
+ */
+export type StartPermissionResult = "started" | "stale" | "resolved" | "question_active";
+
+function createEmptyState(): PermissionState {
+  return {
     requestsByMessageId: new Map(),
     requestIdsByMessageId: new Map(),
     messageIdBySignature: new Map(),
   };
+}
+
+class PermissionManager {
   private resolvedRequestIDs = new Set<string>();
-  private generation = 0;
+  private resolvedGeneration = 0;
+
+  private get state(): PermissionState | null {
+    return interactionManager.getPayload("permission");
+  }
+
+  /**
+   * Resolved ids only matter within one generation; a reset forgets them.
+   */
+  private getResolvedRequestIDs(): Set<string> {
+    const generation = interactionManager.getGeneration();
+    if (generation !== this.resolvedGeneration) {
+      this.resolvedRequestIDs.clear();
+      this.resolvedGeneration = generation;
+    }
+
+    return this.resolvedRequestIDs;
+  }
 
   private getRequestSignature(request: PermissionRequest): string {
     return JSON.stringify({
@@ -23,41 +50,73 @@ class PermissionManager {
   }
 
   /**
+   * Check whether a request can still be shown in the given generation
+   */
+  getDropReason(
+    request: PermissionRequest,
+    generation: number = this.getGeneration(),
+  ): "stale" | "resolved" | null {
+    if (generation !== this.getGeneration()) {
+      return "stale";
+    }
+
+    return this.getResolvedRequestIDs().has(request.id) ? "resolved" : null;
+  }
+
+  /**
    * Register a new permission request message
    */
   startPermission(
     request: PermissionRequest,
     messageId: number,
-    generation: number = this.generation,
-  ): boolean {
+    generation: number = this.getGeneration(),
+  ): StartPermissionResult {
     logger.debug(
       `[PermissionManager] startPermission: id=${request.id}, permission=${request.permission}, messageId=${messageId}`,
     );
 
-    if (generation !== this.generation || this.resolvedRequestIDs.has(request.id)) {
+    const dropReason = this.getDropReason(request, generation);
+    if (dropReason) {
       logger.debug(
-        `[PermissionManager] Ignoring stale or already resolved request: id=${request.id}`,
+        `[PermissionManager] Ignoring ${dropReason} request: id=${request.id}`,
       );
-      return false;
+      return dropReason;
     }
 
-    const previous = this.state.requestsByMessageId.get(messageId);
+    if (interactionManager.getSnapshot()?.kind === "question") {
+      logger.info(
+        `[PermissionManager] Poll is on screen, not registering permission: id=${request.id}`,
+      );
+      return "question_active";
+    }
+
+    let state = this.state;
+    if (!state) {
+      state = createEmptyState();
+      interactionManager.start({
+        kind: "permission",
+        expectedInput: "callback",
+        payload: state,
+      });
+    }
+
+    const previous = state.requestsByMessageId.get(messageId);
     if (previous) {
       logger.warn(`[PermissionManager] Message ID already tracked, replacing: ${messageId}`);
       // Drop the replaced request's signature so it cannot later group new
       // requests behind a message that now shows something else.
-      this.state.messageIdBySignature.delete(this.getRequestSignature(previous));
+      state.messageIdBySignature.delete(this.getRequestSignature(previous));
     }
 
-    this.state.requestsByMessageId.set(messageId, request);
-    this.state.requestIdsByMessageId.set(messageId, [request.id]);
-    this.state.messageIdBySignature.set(this.getRequestSignature(request), messageId);
+    state.requestsByMessageId.set(messageId, request);
+    state.requestIdsByMessageId.set(messageId, [request.id]);
+    state.messageIdBySignature.set(this.getRequestSignature(request), messageId);
 
     logger.info(
-      `[PermissionManager] New permission request: type=${request.permission}, patterns=${request.patterns.join(", ")}, pending=${this.state.requestsByMessageId.size}`,
+      `[PermissionManager] New permission request: type=${request.permission}, patterns=${request.patterns.join(", ")}, pending=${state.requestsByMessageId.size}`,
     );
 
-    return true;
+    return "started";
   }
 
   /**
@@ -65,34 +124,39 @@ class PermissionManager {
    */
   addEquivalentRequest(
     request: PermissionRequest,
-    generation: number = this.generation,
+    generation: number = this.getGeneration(),
   ): GroupedPermissionMessage | null {
-    if (generation !== this.generation || this.resolvedRequestIDs.has(request.id)) {
+    if (this.getDropReason(request, generation)) {
       logger.debug(
         `[PermissionManager] Ignoring stale or already resolved equivalent request: id=${request.id}`,
       );
       return null;
     }
 
+    const state = this.state;
+    if (!state) {
+      return null;
+    }
+
     const signature = this.getRequestSignature(request);
-    const messageId = this.state.messageIdBySignature.get(signature);
+    const messageId = state.messageIdBySignature.get(signature);
     if (messageId === undefined) {
       return null;
     }
 
-    const visibleRequest = this.state.requestsByMessageId.get(messageId);
+    const visibleRequest = state.requestsByMessageId.get(messageId);
     if (!visibleRequest) {
       logger.warn(
         `[PermissionManager] Dropping orphan permission signature: messageId=${messageId}`,
       );
-      this.state.messageIdBySignature.delete(signature);
+      state.messageIdBySignature.delete(signature);
       return null;
     }
 
-    const requestIds = this.state.requestIdsByMessageId.get(messageId) ?? [];
+    const requestIds = state.requestIdsByMessageId.get(messageId) ?? [];
     if (!requestIds.includes(request.id)) {
       requestIds.push(request.id);
-      this.state.requestIdsByMessageId.set(messageId, requestIds);
+      state.requestIdsByMessageId.set(messageId, requestIds);
     }
 
     logger.info(
@@ -110,7 +174,7 @@ class PermissionManager {
       return null;
     }
 
-    return this.state.requestsByMessageId.get(messageId) ?? null;
+    return this.state?.requestsByMessageId.get(messageId) ?? null;
   }
 
   /**
@@ -128,7 +192,7 @@ class PermissionManager {
       return [];
     }
 
-    return [...(this.state.requestIdsByMessageId.get(messageId) ?? [])];
+    return [...(this.state?.requestIdsByMessageId.get(messageId) ?? [])];
   }
 
   /**
@@ -149,7 +213,7 @@ class PermissionManager {
    * Check if callback message ID belongs to active permission request
    */
   isActiveMessage(messageId: number | null): boolean {
-    return messageId !== null && this.state.requestsByMessageId.has(messageId);
+    return messageId !== null && (this.state?.requestsByMessageId.has(messageId) ?? false);
   }
 
   /**
@@ -168,51 +232,59 @@ class PermissionManager {
    * Get Telegram message IDs for all active requests
    */
   getMessageIds(): number[] {
-    return Array.from(this.state.requestsByMessageId.keys());
+    return Array.from(this.state?.requestsByMessageId.keys() ?? []);
   }
 
   /**
    * Remove permission request by Telegram message ID
    */
   removeByMessageId(messageId: number | null): PermissionRequest | null {
+    const state = this.state;
     const request = this.getRequest(messageId);
-    if (!request || messageId === null) {
+    if (!state || !request || messageId === null) {
       return null;
     }
 
-    this.state.requestsByMessageId.delete(messageId);
-    this.state.requestIdsByMessageId.delete(messageId);
-    this.state.messageIdBySignature.delete(this.getRequestSignature(request));
+    state.requestsByMessageId.delete(messageId);
+    state.requestIdsByMessageId.delete(messageId);
+    state.messageIdBySignature.delete(this.getRequestSignature(request));
 
     logger.debug(
-      `[PermissionManager] Removed permission request: id=${request.id}, messageId=${messageId}, pending=${this.state.requestsByMessageId.size}`,
+      `[PermissionManager] Removed permission request: id=${request.id}, messageId=${messageId}, pending=${state.requestsByMessageId.size}`,
     );
 
     return request;
   }
 
   /**
-   * Remove all Telegram messages tracking an OpenCode permission request ID
+   * Remove all Telegram messages tracking an OpenCode permission request ID,
+   * and drop the request if it is still waiting behind a poll
    */
   resolveRequest(requestID: string): number[] {
-    this.resolvedRequestIDs.add(requestID);
-    const removedMessageIds: number[] = [];
+    this.getResolvedRequestIDs().add(requestID);
+    interactionManager.dropWaitingPermission(requestID);
 
-    for (const [messageId, request] of this.state.requestsByMessageId) {
-      const requestIds = this.state.requestIdsByMessageId.get(messageId) ?? [request.id];
+    const state = this.state;
+    const removedMessageIds: number[] = [];
+    if (!state) {
+      return removedMessageIds;
+    }
+
+    for (const [messageId, request] of state.requestsByMessageId) {
+      const requestIds = state.requestIdsByMessageId.get(messageId) ?? [request.id];
       if (!requestIds.includes(requestID)) {
         continue;
       }
 
-      this.state.requestsByMessageId.delete(messageId);
-      this.state.requestIdsByMessageId.delete(messageId);
-      this.state.messageIdBySignature.delete(this.getRequestSignature(request));
+      state.requestsByMessageId.delete(messageId);
+      state.requestIdsByMessageId.delete(messageId);
+      state.messageIdBySignature.delete(this.getRequestSignature(request));
       removedMessageIds.push(messageId);
     }
 
     if (removedMessageIds.length > 0) {
       logger.debug(
-        `[PermissionManager] Removed resolved permission request: id=${requestID}, messages=${removedMessageIds.length}, pending=${this.state.requestsByMessageId.size}`,
+        `[PermissionManager] Removed resolved permission request: id=${requestID}, messages=${removedMessageIds.length}, pending=${state.requestsByMessageId.size}`,
       );
     }
 
@@ -220,42 +292,43 @@ class PermissionManager {
   }
 
   isResolved(requestID: string): boolean {
-    return this.resolvedRequestIDs.has(requestID);
+    return this.getResolvedRequestIDs().has(requestID);
   }
 
   getGeneration(): number {
-    return this.generation;
+    return interactionManager.getGeneration();
   }
 
   /**
    * Get number of active permission requests
    */
   getPendingCount(): number {
-    return this.state.requestsByMessageId.size;
+    return this.state?.requestsByMessageId.size ?? 0;
   }
 
   /**
    * Check if there are active permission requests
    */
   isActive(): boolean {
-    return this.state.requestsByMessageId.size > 0;
+    return this.getPendingCount() > 0;
   }
 
   /**
-   * Clear state after reply
+   * Drop every permission prompt and mark prompts still being sent as stale
    */
   clear(): void {
     logger.debug(
-      `[PermissionManager] Clearing permission state: pending=${this.state.requestsByMessageId.size}`,
+      `[PermissionManager] Clearing permission state: pending=${this.getPendingCount()}`,
     );
 
-    this.state = {
-      requestsByMessageId: new Map(),
-      requestIdsByMessageId: new Map(),
-      messageIdBySignature: new Map(),
-    };
+    // Bump first, so a poll released by this clear carries the new generation.
+    interactionManager.bumpGeneration();
+    interactionManager.clearKind("permission", "permission_cleared");
+  }
+
+  __resetForTests(): void {
     this.resolvedRequestIDs.clear();
-    this.generation++;
+    this.resolvedGeneration = 0;
   }
 }
 

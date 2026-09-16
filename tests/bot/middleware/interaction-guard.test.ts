@@ -12,6 +12,7 @@ import {
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { setIncomingPrompt } from "../../../src/bot/handlers/rich-message-handler.js";
 import * as settingsStore from "../../../src/app/stores/settings-store.js";
+import { startInteractionForTest } from "../../helpers/interaction.js";
 
 const mocked = vi.hoisted(() => ({
   reconcileForegroundBusyStateMock: vi.fn(),
@@ -82,7 +83,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks text and replies when callback is expected", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
     });
@@ -97,7 +98,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks callback and answers callback query when text is expected", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "rename",
       expectedInput: "text",
     });
@@ -115,7 +116,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows command from allowed list", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -131,7 +132,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("always allows /start even when command list is restricted", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -147,7 +148,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks disallowed command", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "inline",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -163,7 +164,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows permission-specific message for blocked text", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "permission",
       expectedInput: "callback",
     });
@@ -178,7 +179,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows permission-specific message for disallowed command", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "permission",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -194,7 +195,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows rename-specific message for disallowed command", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "rename",
       expectedInput: "text",
       allowedCommands: ["/status"],
@@ -210,7 +211,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks voice input while rename interaction expects text", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "rename",
       expectedInput: "text",
     });
@@ -225,7 +226,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows question-specific message for blocked text", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "question",
       expectedInput: "callback",
     });
@@ -240,7 +241,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows question-specific message for disallowed command", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "question",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -256,7 +257,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows task cancel callback while text is expected", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "task",
       expectedInput: "text",
     });
@@ -271,7 +272,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows task-specific message for disallowed command", async () => {
-    interactionManager.start({
+    startInteractionForTest({
       kind: "task",
       expectedInput: "text",
       allowedCommands: ["/status"],
@@ -331,7 +332,7 @@ describe("interactionGuardMiddleware", () => {
   it("does not pass media through a blocking interaction to the queue", async () => {
     vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
-    interactionManager.start({ kind: "permission", expectedInput: "callback" });
+    startInteractionForTest({ kind: "permission", expectedInput: "callback" });
     const ctx = createVoiceContext();
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
@@ -412,7 +413,7 @@ describe("interactionGuardMiddleware", () => {
 
   it("allows active question callback while busy", async () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
-    interactionManager.start({
+    startInteractionForTest({
       kind: "question",
       expectedInput: "mixed",
     });
@@ -428,7 +429,7 @@ describe("interactionGuardMiddleware", () => {
 
   it("allows active permission callback while busy", async () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
-    interactionManager.start({
+    startInteractionForTest({
       kind: "permission",
       expectedInput: "callback",
     });

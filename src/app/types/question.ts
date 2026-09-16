@@ -23,6 +23,5 @@ export interface QuestionState {
   customInputQuestionIndex: number | null;
   activeMessageId: number | null;
   messageIds: number[];
-  isActive: boolean;
   requestID: string | null;
 }

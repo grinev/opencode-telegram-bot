@@ -83,8 +83,9 @@ function clearTaskInteraction(reason: string): void {
 }
 
 function clearTaskFlow(reason: string): void {
-  taskCreationManager.clear();
+  // Clear the slot first so the log keeps the specific reason.
   clearTaskInteraction(reason);
+  taskCreationManager.clear();
 }
 
 function isTaskCallbackActive(flowState: TaskCreationState, messageId: number): boolean {
@@ -243,7 +244,6 @@ export async function handleTaskCallback(ctx: Context): Promise<boolean> {
 
   taskCreationManager.resetSchedule();
   interactionManager.transition({
-    kind: "task",
     expectedInput: "text",
     metadata: buildTaskInteractionMetadata(
       "awaiting_schedule",

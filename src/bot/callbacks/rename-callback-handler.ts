@@ -53,8 +53,8 @@ export async function handleRenameCancel(ctx: Context): Promise<boolean> {
     return true;
   }
 
-  renameManager.clear();
   clearRenameInteraction("rename_cancelled");
+  renameManager.clear();
 
   await cancelPrompt(ctx, "rename.cancelled");
 
@@ -84,8 +84,8 @@ export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
 
   const sessionInfo = renameManager.getSessionInfo();
   if (!sessionInfo) {
-    renameManager.clear();
     clearRenameInteraction("rename_missing_session_info");
+    renameManager.clear();
     // Answer here: returning false would send the new title to OpenCode as a prompt.
     await ctx.reply(t("rename.inactive"));
     return true;
@@ -133,7 +133,7 @@ export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
     await ctx.reply(t("rename.error"));
   }
 
-  renameManager.clear();
   clearRenameInteraction("rename_completed");
+  renameManager.clear();
   return true;
 }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearAllInteractionState } from "../../../src/app/managers/interaction-manager.js";
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { questionManager } from "../../../src/app/managers/question-manager.js";
@@ -30,20 +30,34 @@ describe("app/managers/interaction-cleanup", () => {
     clearAllInteractionState("test_setup");
   });
 
-  it("clears all interaction-related managers", () => {
+  afterEach(() => {
+    interactionManager.setOnWaitingRequestReady(null);
+  });
+
+  it("clears the slot and the waiting request together", async () => {
+    const listener = vi.fn();
+    interactionManager.setOnWaitingRequestReady(listener);
     questionManager.startQuestions([TEST_QUESTION], "req-1");
-    permissionManager.startPermission(TEST_PERMISSION, 101);
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    interactionManager.start({
-      kind: "rename",
-      expectedInput: "text",
-      metadata: { sessionId: "session-1" },
-    });
+    interactionManager.waitPermission(TEST_PERMISSION);
+    const generation = interactionManager.getGeneration();
 
     clearAllInteractionState("test_cleanup");
+    await new Promise((resolve) => setImmediate(resolve));
 
     expect(questionManager.isActive()).toBe(false);
     expect(permissionManager.isActive()).toBe(false);
+    expect(renameManager.isWaitingForName()).toBe(false);
+    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(interactionManager.getWaitingKind()).toBeNull();
+    expect(interactionManager.getGeneration()).toBe(generation + 1);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("clears a rename flow", () => {
+    renameManager.startWaiting("session-1", "D:/repo", "Old title");
+
+    clearAllInteractionState("test_cleanup");
+
     expect(renameManager.isWaitingForName()).toBe(false);
     expect(interactionManager.getSnapshot()).toBeNull();
   });
@@ -57,11 +71,7 @@ describe("app/managers/interaction-cleanup", () => {
 
     clearAllInteractionState("first_cleanup");
 
-    interactionManager.start({
-      kind: "question",
-      expectedInput: "callback",
-      metadata: { questionIndex: 0 },
-    });
+    questionManager.startQuestions([TEST_QUESTION], "req-2");
 
     expect(interactionManager.getSnapshot()?.kind).toBe("question");
   });

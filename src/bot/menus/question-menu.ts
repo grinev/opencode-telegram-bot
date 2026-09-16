@@ -52,17 +52,12 @@ export function syncQuestionInteractionState(
     metadata.messageId = messageId;
   }
 
-  const state = interactionManager.getSnapshot();
-  if (state?.kind === "question") {
-    interactionManager.transition({
-      expectedInput,
-      metadata,
-    });
+  // The slot is opened by questionManager.startQuestions; only refine it here.
+  if (interactionManager.getSnapshot()?.kind !== "question") {
     return;
   }
 
-  interactionManager.start({
-    kind: "question",
+  interactionManager.transition({
     expectedInput,
     metadata,
   });

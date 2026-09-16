@@ -189,6 +189,8 @@ describe("bot/rich-message-routing", () => {
       [{ header: "Q", question: "?", options: [] }],
       "req-1",
     );
+    // A text answer is accepted once the user picked "custom answer".
+    interactionManager.transition({ expectedInput: "mixed" });
     const { bot } = createRoutingBot();
 
     await bot.handleUpdate(richUpdate([{ type: "paragraph", text: "an answer" }]));

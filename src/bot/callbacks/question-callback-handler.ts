@@ -168,11 +168,8 @@ async function handleCustomAnswer(ctx: Context, questionIndex: number): Promise<
 
 async function handleCancelPoll(ctx: Context): Promise<void> {
   questionManager.cancel();
-  clearQuestionInteraction("question_cancelled");
 
   await cancelPrompt(ctx, "question.cancelled");
-
-  questionManager.clear();
 }
 
 export async function handleQuestionTextAnswer(ctx: Context): Promise<void> {

@@ -108,8 +108,7 @@ describe("bot/commands/rename", () => {
   it("renames session on valid text and clears states", async () => {
     renameManager.startWaiting("session-1", "D:/repo", "Old title");
     renameManager.setMessageId(555);
-    interactionManager.start({
-      kind: "rename",
+    interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -137,8 +136,7 @@ describe("bot/commands/rename", () => {
   it("keeps rename flow active on empty title", async () => {
     renameManager.startWaiting("session-1", "D:/repo", "Old title");
     renameManager.setMessageId(555);
-    interactionManager.start({
-      kind: "rename",
+    interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -156,8 +154,7 @@ describe("bot/commands/rename", () => {
   it("keeps rename flow active on a present empty rich title", async () => {
     renameManager.startWaiting("session-1", "D:/repo", "Old title");
     renameManager.setMessageId(555);
-    interactionManager.start({
-      kind: "rename",
+    interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -173,8 +170,7 @@ describe("bot/commands/rename", () => {
   it("rejects stale rename cancel callback", async () => {
     renameManager.startWaiting("session-1", "D:/repo", "Old title");
     renameManager.setMessageId(555);
-    interactionManager.start({
-      kind: "rename",
+    interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -194,8 +190,7 @@ describe("bot/commands/rename", () => {
   it("cancels active rename and clears states", async () => {
     renameManager.startWaiting("session-1", "D:/repo", "Old title");
     renameManager.setMessageId(555);
-    interactionManager.start({
-      kind: "rename",
+    interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -214,8 +209,7 @@ describe("bot/commands/rename", () => {
     // Waiting for a name, but the session behind it is gone.
     renameManager.startWaiting("", "D:/repo", "Old title");
     renameManager.setMessageId(555);
-    interactionManager.start({
-      kind: "rename",
+    interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -231,16 +225,33 @@ describe("bot/commands/rename", () => {
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 
-  it("clears stale rename manager state when interaction is missing", async () => {
+  it("closes the rename flow when another interaction takes the slot", async () => {
     renameManager.startWaiting("session-1", "D:/repo", "Old title");
     renameManager.setMessageId(555);
+    interactionManager.start({ kind: "inline", expectedInput: "callback" });
 
     const ctx = createRenameTextContext("New title");
     const handled = await handleRenameTextAnswer(ctx);
 
-    expect(handled).toBe(true);
-    expect(ctx.reply).toHaveBeenCalledWith(t("rename.inactive"));
+    expect(handled).toBe(false);
     expect(mocked.updateSessionMock).not.toHaveBeenCalled();
     expect(renameManager.isWaitingForName()).toBe(false);
+    expect(interactionManager.getSnapshot()?.kind).toBe("inline");
+  });
+
+  it("answers a preempted rename cancel button as inactive", async () => {
+    renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    renameManager.setMessageId(555);
+    interactionManager.start({ kind: "inline", expectedInput: "callback" });
+
+    const ctx = createRenameCallbackContext(555);
+    const handled = await handleRenameCancel(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("rename.inactive_callback"),
+      show_alert: true,
+    });
+    expect(interactionManager.getSnapshot()?.kind).toBe("inline");
   });
 });
