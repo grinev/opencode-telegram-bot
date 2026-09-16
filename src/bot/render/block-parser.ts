@@ -172,6 +172,7 @@ const INLINE_HTML_WRAPPERS = new Map<string, InlineHtmlWrapper>([
   // Telegram has no keyboard tag; monowidth is the closest thing it draws.
   ["kbd", "code"],
   ["code", "code"],
+  ["pre", "code"],
 ]);
 
 const INLINE_HTML_TAG_PATTERN = /^<(\/?)([a-z][a-z0-9-]*)(?:\s[^>]*?)?\/?>$/i;
@@ -188,6 +189,12 @@ function parseInlineHtmlTag(value: string): { name: string; closing: boolean } |
   return { name: name.toLowerCase(), closing: match[1] === "/" };
 }
 
+function extractHtmlAttribute(tagValue: string, attrName: string): string | null {
+  const pattern = new RegExp(`\\b${attrName}\\s*=\\s*(["'])([^"']*)\\1`, "i");
+  const match = pattern.exec(tagValue);
+  return match?.[2] ?? null;
+}
+
 /** An opened tag and the nodes it collects until its closing tag arrives. */
 interface InlineHtmlFrame {
   name: string;
@@ -195,11 +202,17 @@ interface InlineHtmlFrame {
   /** The tag as written, shown verbatim when it turns out never to close. */
   raw: string;
   nodes: InlineNode[];
+  /** URL for anchor tags */
+  url?: string;
 }
 
 function closeInlineHtmlFrame(frame: InlineHtmlFrame, closed: boolean): InlineNode[] {
   if (!closed) {
     return [{ type: "text", text: frame.raw }, ...frame.nodes];
+  }
+
+  if (frame.wrapper === "link" && frame.url) {
+    return [{ type: "link", text: frame.nodes, url: frame.url }];
   }
 
   return frame.wrapper === "code"
@@ -296,6 +309,16 @@ function parseInlineNodes(nodes: PhrasingContent[]): InlineNode[] | null {
         }
 
         if (!tag.closing) {
+          if (tag.name === "a") {
+            const href = extractHtmlAttribute(node.value, "href");
+            if (href) {
+              open.push({ name: tag.name, wrapper: "link", raw: node.value, nodes: [], url: href });
+            } else {
+              pushTextNode(target(), node.value);
+            }
+            break;
+          }
+
           const wrapper = INLINE_HTML_WRAPPERS.get(tag.name);
           if (wrapper) {
             open.push({ name: tag.name, wrapper, raw: node.value, nodes: [] });
@@ -436,6 +459,21 @@ function parseRootContent(node: RootContent, depth = 0): TelegramBlock[] {
       return parseTableBlock(node);
     case "thematicBreak":
       return [{ type: "rule" }];
+    case "html": {
+      const preMatch = node.value.match(/^<pre(?:\s[^>]*)?>([\s\S]*?)<\/pre>$/i);
+      if (preMatch) {
+        const langMatch = node.value.match(/class\s*=\s*(["'])language-(\w+)\1/i);
+        const language = langMatch?.[2];
+        return [{ type: "code", language: language ?? undefined, text: preMatch[1] ?? "" }];
+      }
+      const preCodeMatch = node.value.match(/^<pre><code(?:\s[^>]*)?>([\s\S]*?)<\/code><\/pre>$/i);
+      if (preCodeMatch) {
+        const langMatch = node.value.match(/class\s*=\s*(["'])language-(\w+)\1/i);
+        const language = langMatch?.[2];
+        return [{ type: "code", language: language ?? undefined, text: preCodeMatch[1] ?? "" }];
+      }
+      return createPlainBlock(extractBlockPlainText(node));
+    }
     default:
       return createPlainBlock(extractBlockPlainText(node));
   }
