@@ -371,7 +371,11 @@ export async function handleTaskTextInput(ctx: Context): Promise<boolean> {
     const parsingMessage = await ctx.reply(t("task.parse.in_progress"));
 
     try {
-      const parsedSchedule = await parseTaskSchedule(scheduleText, flowState.projectWorktree);
+      const parsedSchedule = await parseTaskSchedule(
+        scheduleText,
+        flowState.projectWorktree,
+        flowState.model,
+      );
       validateParsedSchedule(parsedSchedule);
       await deleteMessageIfPresent(ctx, parsingMessage.message_id);
       await deleteMessageIfPresent(ctx, flowState.scheduleRequestMessageId);

@@ -4,7 +4,7 @@ import {
   cleanupScheduledTaskSessionIgnores,
   registerScheduledTaskSessionIgnore,
 } from "./scheduled-task-session-ignore-service.js";
-import type { ParsedTaskSchedule } from "../types/scheduled-task.js";
+import type { ParsedTaskSchedule, ScheduledTaskModel } from "../types/scheduled-task.js";
 
 const SCHEDULE_PARSE_SESSION_TITLE = "Scheduled task schedule parser";
 
@@ -157,6 +157,7 @@ function buildSchedulePrompt(scheduleText: string, timezone: string): string {
 export async function parseTaskSchedule(
   scheduleText: string,
   directory: string,
+  model?: ScheduledTaskModel,
 ): Promise<ParsedTaskSchedule> {
   const trimmedScheduleText = scheduleText.trim();
   if (!trimmedScheduleText) {
@@ -190,13 +191,35 @@ export async function parseTaskSchedule(
     await registerScheduledTaskSessionIgnore(session.id);
     logger.debug(`[ScheduledTaskScheduleParser] Created temporary session: sessionId=${session.id}`);
 
-    const { data: response, error: promptError } = await opencodeClient.session.prompt({
+    const promptOptions: {
+      sessionID: string;
+      directory: string;
+      system: string;
+      parts: Array<{ type: "text"; text: string }>;
+      model?: { providerID: string; modelID: string };
+      variant?: string;
+    } = {
       sessionID: session.id,
       directory: session.directory,
       system:
         "You are a schedule parser. Your only job is to convert user schedule text into strict JSON output.",
       parts: [{ type: "text", text: buildSchedulePrompt(trimmedScheduleText, timezone) }],
-    });
+    };
+
+    if (model?.providerID && model.modelID) {
+      promptOptions.model = {
+        providerID: model.providerID,
+        modelID: model.modelID,
+      };
+    }
+
+    if (model?.variant) {
+      promptOptions.variant = model.variant;
+    }
+
+    const { data: response, error: promptError } = await opencodeClient.session.prompt(
+      promptOptions,
+    );
 
     if (promptError || !response) {
       throw promptError || new Error("Failed to parse schedule");

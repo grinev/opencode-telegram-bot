@@ -205,6 +205,7 @@ describe("bot/commands/task", () => {
     expect(mocked.parseTaskScheduleMock).toHaveBeenCalledWith(
       "every day at 17:00",
       "D:\\Projects\\Repo",
+      { providerID: "openai", modelID: "gpt-5", variant: "default" },
     );
     expect(ctx.reply).toHaveBeenNthCalledWith(1, t("task.parse.in_progress"));
     const previewCall = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[1] as [

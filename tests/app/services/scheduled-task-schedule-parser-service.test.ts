@@ -139,4 +139,66 @@ describe("app/services/scheduled-task-schedule-parser-service", () => {
     );
     expect(mocked.sessionDeleteMock).toHaveBeenCalledWith({ sessionID: "temp-session" });
   });
+
+  it("passes the provided model and variant to the parser prompt", async () => {
+    mocked.sessionPromptMock.mockResolvedValue({
+      data: {
+        parts: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              kind: "once",
+              runAt: "2026-03-16T12:00:00.000Z",
+              timezone: "UTC",
+              summary: "Tomorrow at 12:00",
+              nextRunAt: "2026-03-16T12:00:00.000Z",
+            }),
+          },
+        ],
+      },
+      error: null,
+    });
+
+    await parseTaskSchedule("tomorrow at 12:00", "D:/Projects/Repo", {
+      providerID: "lmstudio",
+      modelID: "qwen_qwen3_8-27b",
+      variant: "low",
+    });
+
+    expect(mocked.sessionPromptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: { providerID: "lmstudio", modelID: "qwen_qwen3_8-27b" },
+        variant: "low",
+      }),
+    );
+  });
+
+  it("omits model from the parser prompt when none is provided", async () => {
+    mocked.sessionPromptMock.mockResolvedValue({
+      data: {
+        parts: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              kind: "cron",
+              cron: "*/5 * * * *",
+              timezone: "UTC",
+              summary: "Every 5 minutes",
+              nextRunAt: "2026-03-15T10:05:00.000Z",
+            }),
+          },
+        ],
+      },
+      error: null,
+    });
+
+    await parseTaskSchedule("every 5 minutes", "D:/Projects/Repo");
+
+    const promptOptions = mocked.sessionPromptMock.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(promptOptions.model).toBeUndefined();
+    expect(promptOptions.variant).toBeUndefined();
+  });
 });
