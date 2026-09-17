@@ -9,6 +9,9 @@ import {
 import { handleInlineMenuCancel } from "../../../src/bot/callbacks/inline-menu-cancel-callback-handler.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
+
+const deps = createTestAppContainer();
 
 function createReplyContext(messageId: number = 1): Context {
   return {
@@ -94,7 +97,7 @@ describe("bot/menus/inline-menu", () => {
           recent: [],
         },
       },
-    });
+    }, deps);
 
     expect(ctx.reply).toHaveBeenCalledTimes(1);
 
@@ -128,7 +131,7 @@ describe("bot/menus/inline-menu", () => {
 
     const ctx = createCallbackContext("session:abc", 99);
 
-    const result = await ensureActiveInlineMenu(ctx, "session");
+    const result = await ensureActiveInlineMenu(ctx, "session", deps);
 
     expect(result).toBe(true);
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
@@ -146,7 +149,7 @@ describe("bot/menus/inline-menu", () => {
 
     const ctx = createCallbackContext("session:abc", 10);
 
-    const result = await ensureActiveInlineMenu(ctx, "session");
+    const result = await ensureActiveInlineMenu(ctx, "session", deps);
 
     expect(result).toBe(false);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -167,7 +170,7 @@ describe("bot/menus/inline-menu", () => {
 
     const ctx = createCallbackContext("inline:cancel:variant", 777);
 
-    const handled = await handleInlineMenuCancel(ctx);
+    const handled = await handleInlineMenuCancel(ctx, deps);
 
     expect(handled).toBe(true);
     expect(interactionManager.getSnapshot()).toBeNull();
@@ -187,7 +190,7 @@ describe("bot/menus/inline-menu", () => {
 
     const ctx = createCallbackContext("compact:cancel", 555);
 
-    const handled = await handleInlineMenuCancel(ctx);
+    const handled = await handleInlineMenuCancel(ctx, deps);
 
     expect(handled).toBe(true);
     expect(interactionManager.getSnapshot()).toBeNull();

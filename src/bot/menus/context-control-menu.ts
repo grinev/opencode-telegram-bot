@@ -2,7 +2,7 @@ import { Context, InlineKeyboard } from "grammy";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { replyWithInlineMenu } from "./inline-menu.js";
+import { replyWithInlineMenu, type InlineMenuDeps } from "./inline-menu.js";
 
 /**
  * Build inline keyboard with compact confirmation menu
@@ -21,7 +21,10 @@ export function buildCompactConfirmationMenu(): InlineKeyboard {
  * Shows inline menu with compact confirmation
  * @param ctx grammY context
  */
-export async function handleContextButtonPress(ctx: Context): Promise<void> {
+export async function handleContextButtonPress(
+  ctx: Context,
+  deps: InlineMenuDeps,
+): Promise<void> {
   logger.debug("[ContextHandler] Context button pressed");
 
   const session = getCurrentSession();
@@ -37,5 +40,5 @@ export async function handleContextButtonPress(ctx: Context): Promise<void> {
     menuKind: "context",
     text: t("context.confirm_text", { title: session.title }),
     keyboard,
-  });
+  }, deps);
 }

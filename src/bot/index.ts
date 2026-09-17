@@ -84,20 +84,17 @@ export function createBot(
   const botOptions = createTelegramBotOptions(config.telegram);
   const bot = new Bot(config.telegram.token, botOptions);
 
-  configureAttachPresentation(createAttachPresentation());
+  configureAttachPresentation(createAttachPresentation(container));
 
   container.setTelegramContext(bot, config.telegram.allowedUserId);
 
-  initializePromptQueueDispatch({
-    bot,
-    ensureEventSubscription: container.ensureEventSubscription,
-  });
+  initializePromptQueueDispatch({ ...container, bot });
 
   container.setReadyRestoreHandler(async (reason) => {
     const restored = await restoreAttachedCurrentSession({
+      ...container,
       bot,
       chatId: config.telegram.allowedUserId,
-      ensureEventSubscription: container.ensureEventSubscription,
       forceFullRestore: true,
     });
 
@@ -187,7 +184,8 @@ export function createBot(
   bot.use(staleUpdateMiddleware);
   bot.on("message:rich_message", normalizeRichMessage);
   bot.use((ctx, next) => ensureCommandsInitialized(ctx, next, localCommandRegistry));
-  bot.use((ctx, next) => interactionGuardMiddleware(ctx, next, localCommandRegistry));
+  const guardDeps = { ...container, localCommandRegistry };
+  bot.use((ctx, next) => interactionGuardMiddleware(ctx, next, guardDeps));
 
   registerCommandRouter(bot, { container, localCommandRegistry });
   registerCallbackRouter(bot, { container });
@@ -238,9 +236,9 @@ export function restoreFollowedSessionOnPollingStart(
     taskName: "bot.restoreAfterPollingStart",
     task: () =>
       restoreAttachedCurrentSession({
+        ...container,
         bot,
         chatId: config.telegram.allowedUserId,
-        ensureEventSubscription: container.ensureEventSubscription,
         forceFullRestore: true,
       }),
   });

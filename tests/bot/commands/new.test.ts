@@ -112,16 +112,18 @@ describe("bot/commands/new", () => {
     const ctx = createContext();
     await newCommand(ctx as never, createDeps());
 
-    expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
-      bot: expect.any(Object),
-      chatId: 123,
-      session: {
-        id: "session-2",
-        title: "Session Two",
-        directory: "/repo",
-      },
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
-    });
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bot: expect.any(Object),
+        chatId: 123,
+        session: {
+          id: "session-2",
+          title: "Session Two",
+          directory: "/repo",
+        },
+        ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      }),
+    );
     expect(ctx.reply).toHaveBeenCalledWith(
       t("new.created", { title: "Session Two" }),
       expect.objectContaining({

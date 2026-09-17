@@ -69,6 +69,12 @@ export type ExecuteCommandDeps = Pick<
   | "externalUserInputSuppressionManager"
   | "foregroundSessionState"
   | "interactionManager"
+  | "keyboardManager"
+  | "permissionManager"
+  | "pinnedMessageManager"
+  | "questionManager"
+  | "resetAggregator"
+  | "resetInteractions"
   | "summaryAggregator"
 > & {
   bot: Bot<Context>;
@@ -209,7 +215,7 @@ async function ensureSessionForProject(
     logger.warn(
       `[Commands] Session/project mismatch detected. sessionDirectory=${currentSession.directory}, projectDirectory=${projectDirectory}. Resetting session context.`,
     );
-    detachAttachedSession("session_mismatch_reset");
+    detachAttachedSession("session_mismatch_reset", deps);
     clearSession();
     deps.summaryAggregator.clear();
     deps.foregroundSessionState.clearAll("session_mismatch_reset");
@@ -265,10 +271,9 @@ export async function executeCommand(
   }
 
   await attachToSession({
-    bot: deps.bot,
+    ...deps,
     chatId: ctx.chat.id,
     session,
-    ensureEventSubscription: deps.ensureEventSubscription,
   });
 
   const sessionIsBusy = await isSessionBusy(session.id, session.directory);
@@ -285,7 +290,7 @@ export async function executeCommand(
       : undefined;
 
   deps.foregroundSessionState.markBusy(session.id, session.directory);
-  await markAttachedSessionBusy(session.id);
+  await markAttachedSessionBusy(session.id, deps);
   deps.assistantRunState.startRun(session.id, {
     startedAt: Date.now(),
     configuredAgent: currentAgent,
@@ -312,7 +317,7 @@ export async function executeCommand(
     onSuccess: ({ error }) => {
       if (error) {
         deps.foregroundSessionState.markIdle(session.id);
-        void markAttachedSessionIdle(session.id);
+        void markAttachedSessionIdle(session.id, deps);
         deps.assistantRunState.clearRun(session.id, "session_command_api_error");
         logger.error("[Commands] OpenCode API returned an error for session.command", {
           sessionId: session.id,
@@ -332,7 +337,7 @@ export async function executeCommand(
     },
     onError: (error) => {
       deps.foregroundSessionState.markIdle(session.id);
-      void markAttachedSessionIdle(session.id);
+      void markAttachedSessionIdle(session.id, deps);
       deps.assistantRunState.clearRun(session.id, "session_command_background_error");
       logger.error("[Commands] session.command background task failed", {
         sessionId: session.id,

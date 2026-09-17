@@ -18,14 +18,21 @@ import { attachToSession } from "../../app/services/attach-service.js";
 
 export type NewCommandDeps = Pick<
   AppContainer,
-  "ensureEventSubscription" | "keyboardManager" | "resetInteractions"
+  | "attachManager"
+  | "ensureEventSubscription"
+  | "foregroundSessionState"
+  | "keyboardManager"
+  | "permissionManager"
+  | "questionManager"
+  | "resetInteractions"
+  | "summaryAggregator"
 > & {
   bot: Bot<Context>;
 };
 
 export async function newCommand(ctx: CommandContext<Context>, deps: NewCommandDeps) {
   try {
-    if (isForegroundBusy()) {
+    if (isForegroundBusy(deps)) {
       await replyBusyBlocked(ctx);
       return;
     }
@@ -61,10 +68,9 @@ export async function newCommand(ctx: CommandContext<Context>, deps: NewCommandD
     await ingestSessionInfoForCache(session);
 
     await attachToSession({
-      bot: deps.bot,
+      ...deps,
       chatId: ctx.chat.id,
       session: sessionInfo,
-      ensureEventSubscription: deps.ensureEventSubscription,
     });
 
     // Get current state for keyboard

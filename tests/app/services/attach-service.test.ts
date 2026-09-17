@@ -10,6 +10,8 @@ import { attachManager } from "../../../src/app/managers/attach-manager.js";
 import { questionManager } from "../../../src/app/managers/question-manager.js";
 import { permissionManager } from "../../../src/app/managers/permission-manager.js";
 import { createAttachPresentation } from "../../../src/bot/services/attach-presentation.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -72,34 +74,6 @@ vi.mock("../../../src/opencode/events.js", () => ({
   stopEventListening: mocked.stopEventListeningMock,
 }));
 
-vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
-  summaryAggregator: {
-    setSession: mocked.setSessionSummaryMock,
-    setBotAndChatId: mocked.setBotAndChatIdMock,
-    clear: vi.fn(),
-  },
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    isInitialized: mocked.pinnedIsInitializedMock,
-    initialize: mocked.pinnedInitializeMock,
-    getState: mocked.pinnedGetStateMock,
-    onSessionChange: mocked.pinnedOnSessionChangeMock,
-    restoreExistingSession: mocked.pinnedRestoreExistingSessionMock,
-    loadContextFromHistory: mocked.pinnedLoadContextFromHistoryMock,
-    getContextInfo: mocked.pinnedGetContextInfoMock,
-    setAttachState: mocked.pinnedSetAttachStateMock,
-  },
-}));
-
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: mocked.keyboardInitializeMock,
-    updateContext: mocked.keyboardUpdateContextMock,
-  },
-}));
-
 vi.mock("../../../src/bot/menus/question-menu.js", () => ({
   showCurrentQuestion: mocked.showCurrentQuestionMock,
 }));
@@ -107,6 +81,30 @@ vi.mock("../../../src/bot/menus/question-menu.js", () => ({
 vi.mock("../../../src/bot/menus/permission-menu.js", () => ({
   showPermissionRequest: mocked.showPermissionRequestMock,
 }));
+
+function createDeps(): AppContainer {
+  return createTestAppContainer({
+    summaryAggregator: {
+      setSession: mocked.setSessionSummaryMock,
+      setBotAndChatId: mocked.setBotAndChatIdMock,
+      clear: vi.fn(),
+    } as unknown as AppContainer["summaryAggregator"],
+    pinnedMessageManager: {
+      isInitialized: mocked.pinnedIsInitializedMock,
+      initialize: mocked.pinnedInitializeMock,
+      getState: mocked.pinnedGetStateMock,
+      onSessionChange: mocked.pinnedOnSessionChangeMock,
+      restoreExistingSession: mocked.pinnedRestoreExistingSessionMock,
+      loadContextFromHistory: mocked.pinnedLoadContextFromHistoryMock,
+      getContextInfo: mocked.pinnedGetContextInfoMock,
+      setAttachState: mocked.pinnedSetAttachStateMock,
+    } as unknown as AppContainer["pinnedMessageManager"],
+    keyboardManager: {
+      initialize: mocked.keyboardInitializeMock,
+      updateContext: mocked.keyboardUpdateContextMock,
+    } as unknown as AppContainer["keyboardManager"],
+  });
+}
 
 function createBot(): Bot<Context> {
   return {
@@ -117,13 +115,16 @@ function createBot(): Bot<Context> {
 }
 
 describe("attach/service", () => {
+  let deps: AppContainer;
+
   beforeEach(async () => {
     const { __resetStreamThrottleForTests } = await import(
       "../../../src/bot/streaming/stream-throttle.js"
     );
     __resetStreamThrottleForTests();
     attachManager.__resetForTests();
-    configureAttachPresentation(createAttachPresentation());
+    deps = createDeps();
+    configureAttachPresentation(createAttachPresentation(deps));
     questionManager.clear();
     permissionManager.clear();
 
@@ -184,6 +185,7 @@ describe("attach/service", () => {
 
   it("follows an idle session and updates attach state", async () => {
     const result = await attachToSession({
+      ...deps,
       bot: createBot(),
       chatId: 777,
       session: mocked.currentSession!,
@@ -211,6 +213,7 @@ describe("attach/service", () => {
     const bot = createBot();
 
     await attachToSession({
+      ...deps,
       bot,
       chatId: 777,
       session: mocked.currentSession!,
@@ -218,6 +221,7 @@ describe("attach/service", () => {
     });
 
     const result = await attachToSession({
+      ...deps,
       bot,
       chatId: 777,
       session: mocked.currentSession!,
@@ -247,6 +251,7 @@ describe("attach/service", () => {
     });
 
     const result = await attachToSession({
+      ...deps,
       bot: createBot(),
       chatId: 777,
       session: mocked.currentSession!,
@@ -259,6 +264,7 @@ describe("attach/service", () => {
 
   it("restores the saved current session on startup", async () => {
     const restored = await restoreAttachedCurrentSession({
+      ...deps,
       bot: createBot(),
       chatId: 777,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
@@ -276,6 +282,7 @@ describe("attach/service", () => {
     });
 
     const restored = await restoreAttachedCurrentSession({
+      ...deps,
       bot: createBot(),
       chatId: 777,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
@@ -300,6 +307,7 @@ describe("attach/service", () => {
     };
 
     const restored = await restoreAttachedCurrentSession({
+      ...deps,
       bot: createBot(),
       chatId: 777,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
@@ -314,6 +322,7 @@ describe("attach/service", () => {
     mocked.healthMock.mockRejectedValueOnce(new Error("fetch failed"));
 
     const restored = await restoreAttachedCurrentSession({
+      ...deps,
       bot: createBot(),
       chatId: 777,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
@@ -331,6 +340,7 @@ describe("attach/service", () => {
     const bot = createBot();
 
     await attachToSession({
+      ...deps,
       bot,
       chatId: 777,
       session: mocked.currentSession!,
@@ -338,6 +348,7 @@ describe("attach/service", () => {
     });
 
     const result = await attachToSession({
+      ...deps,
       bot,
       chatId: 777,
       session: mocked.currentSession!,
@@ -360,7 +371,7 @@ describe("attach/service", () => {
     noteStreamActivity("session-1", Date.now() - 10 * 60_000);
     expect(getStreamThrottleMs("session-1")).toBe(5_000);
 
-    detachAttachedSession("detach_command");
+    detachAttachedSession("detach_command", deps);
 
     expect(mocked.stopEventListeningMock).not.toHaveBeenCalled();
     expect(attachManager.getSnapshot()).toBeNull();

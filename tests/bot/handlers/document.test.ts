@@ -22,6 +22,8 @@ import { isDocExtractorConfigured } from "../../../src/app/services/document-ext
 import { MAX_QUEUED_MEDIA_BYTES, promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import * as settingsStore from "../../../src/app/stores/settings-store.js";
+import { initializePromptQueueDispatch } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 function createDocumentContext(overrides: Partial<Context["message"]> = {}): {
   ctx: Context;
@@ -75,6 +77,7 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
   });
 
   const deps: DocumentHandlerDeps = {
+    ...createTestAppContainer(),
     bot: {} as DocumentHandlerDeps["bot"],
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
     downloadFile: downloadMock,
@@ -86,6 +89,7 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
         : processPromptMock(ctx, input.text, promptDeps),
     ...overrides,
   };
+  initializePromptQueueDispatch(deps);
 
   return { deps, processPromptMock, downloadMock, getCapabilitiesMock, getStoredModelMock };
 }

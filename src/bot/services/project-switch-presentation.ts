@@ -1,10 +1,18 @@
 import type { Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import type { ProjectSwitchPresentation } from "../../app/services/project-switch-service.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 
-export function createProjectSwitchPresentation(): ProjectSwitchPresentation {
+export type ProjectSwitchPresentationDeps = Pick<
+  AppContainer,
+  "keyboardManager" | "pinnedMessageManager"
+>;
+
+export function createProjectSwitchPresentation(
+  deps: ProjectSwitchPresentationDeps,
+): ProjectSwitchPresentation {
+  const { keyboardManager, pinnedMessageManager } = deps;
+
   return {
     async clearPinnedMessage() {
       await pinnedMessageManager.clear();

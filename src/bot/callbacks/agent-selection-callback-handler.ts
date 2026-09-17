@@ -18,7 +18,10 @@ import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-m
  * @param ctx grammY context
  * @returns true if handled, false otherwise
  */
-export type AgentSelectDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager">;
+export type AgentSelectDeps = Pick<
+  AppContainer,
+  "interactionManager" | "keyboardManager" | "pinnedMessageManager"
+>;
 
 export async function handleAgentSelect(ctx: Context, deps: AgentSelectDeps): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
@@ -27,7 +30,7 @@ export async function handleAgentSelect(ctx: Context, deps: AgentSelectDeps): Pr
     return false;
   }
 
-  const isActiveMenu = await ensureActiveInlineMenu(ctx, "agent");
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "agent", deps);
   if (!isActiveMenu) {
     return true;
   }
@@ -73,7 +76,7 @@ export async function handleAgentSelect(ctx: Context, deps: AgentSelectDeps): Pr
     );
     const displayName = getAgentDisplayName(agentName);
 
-    clearActiveInlineMenu("agent_selected");
+    clearActiveInlineMenu("agent_selected", deps);
 
     await switched(ctx, t("agent.changed_message", { name: displayName }), keyboard);
 
@@ -83,7 +86,7 @@ export async function handleAgentSelect(ctx: Context, deps: AgentSelectDeps): Pr
 
     return true;
   } catch (err) {
-    clearActiveInlineMenu("agent_select_error");
+    clearActiveInlineMenu("agent_select_error", deps);
     logger.error("[AgentHandler] Error handling agent select:", err);
     await failure(ctx, "agent.change_error_callback");
     return true;

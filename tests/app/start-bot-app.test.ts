@@ -231,7 +231,8 @@ describe("app/start-bot-app", () => {
     await flushBackgroundTasks();
 
     expect(mocked.registerOpenCodeReadyRefreshHandlerMock).toHaveBeenCalledTimes(1);
-    expect(mocked.notifyOpencodeReadyIfHealthyMock).toHaveBeenCalledWith("startup");
+    expect(mocked.registerOpenCodeReadyRefreshHandlerMock).toHaveBeenCalledWith(container);
+    expect(mocked.notifyOpencodeReadyIfHealthyMock).toHaveBeenCalledWith("startup", container);
   });
 
   it("runs startup health notification even when auto-restart handled startup", async () => {
@@ -240,7 +241,7 @@ describe("app/start-bot-app", () => {
     await startBotApp();
     await flushBackgroundTasks();
 
-    expect(mocked.notifyOpencodeReadyIfHealthyMock).toHaveBeenCalledWith("startup");
+    expect(mocked.notifyOpencodeReadyIfHealthyMock).toHaveBeenCalledWith("startup", container);
   });
 
   it("starts Telegram polling without waiting for OpenCode startup checks", async () => {
@@ -260,7 +261,7 @@ describe("app/start-bot-app", () => {
 
     resolveAutoRestart(false);
     await flushBackgroundTasks();
-    expect(mocked.notifyOpencodeReadyIfHealthyMock).toHaveBeenCalledWith("startup");
+    expect(mocked.notifyOpencodeReadyIfHealthyMock).toHaveBeenCalledWith("startup", container);
   });
 
   it("logs an unhandled rejection and keeps the process alive", async () => {

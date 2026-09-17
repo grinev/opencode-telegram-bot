@@ -18,7 +18,10 @@ import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-m
  * @param ctx grammY context
  * @returns true if handled, false otherwise
  */
-export type VariantSelectDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager">;
+export type VariantSelectDeps = Pick<
+  AppContainer,
+  "interactionManager" | "keyboardManager" | "pinnedMessageManager"
+>;
 
 export async function handleVariantSelect(ctx: Context, deps: VariantSelectDeps): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
@@ -27,7 +30,7 @@ export async function handleVariantSelect(ctx: Context, deps: VariantSelectDeps)
     return false;
   }
 
-  const isActiveMenu = await ensureActiveInlineMenu(ctx, "variant");
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "variant", deps);
   if (!isActiveMenu) {
     return true;
   }
@@ -90,7 +93,7 @@ export async function handleVariantSelect(ctx: Context, deps: VariantSelectDeps)
     // Send confirmation message with updated keyboard
     const displayName = formatVariantForDisplay(variantId);
 
-    clearActiveInlineMenu("variant_selected");
+    clearActiveInlineMenu("variant_selected", deps);
 
     // Send confirmation message with updated keyboard, then drop the inline menu
     await switched(ctx, t("variant.changed_message", { name: displayName }), keyboard);
@@ -98,7 +101,7 @@ export async function handleVariantSelect(ctx: Context, deps: VariantSelectDeps)
 
     return true;
   } catch (err) {
-    clearActiveInlineMenu("variant_select_error");
+    clearActiveInlineMenu("variant_select_error", deps);
     logger.error("[VariantHandler] Error handling variant select:", err);
     await failure(ctx, "variant.change_error_callback");
     return true;

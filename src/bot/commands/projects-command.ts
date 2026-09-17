@@ -1,4 +1,5 @@
 import type { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getProjects } from "../../app/services/project-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { syncSessionDirectoryCache } from "../../app/services/session-cache-service.js";
@@ -8,9 +9,17 @@ import { buildProjectsMenuView } from "../menus/project-selection-menu.js";
 import { replyWithInlineMenu } from "../menus/inline-menu.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 
-export async function projectsCommand(ctx: CommandContext<Context>) {
+export type ProjectsCommandDeps = Pick<
+  AppContainer,
+  "attachManager" | "foregroundSessionState" | "interactionManager"
+>;
+
+export async function projectsCommand(
+  ctx: CommandContext<Context>,
+  deps: ProjectsCommandDeps,
+) {
   try {
-    if (isForegroundBusy()) {
+    if (isForegroundBusy(deps)) {
       await replyBusyBlocked(ctx);
       return;
     }
@@ -29,7 +38,7 @@ export async function projectsCommand(ctx: CommandContext<Context>) {
       menuKind: "project",
       text,
       keyboard,
-    });
+    }, deps);
   } catch (error) {
     logger.error("[Bot] Error fetching projects:", error);
     await ctx.reply(t("projects.fetch_error"));

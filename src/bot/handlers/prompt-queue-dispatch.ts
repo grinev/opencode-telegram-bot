@@ -11,14 +11,13 @@ import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { getPromptQueueEnabled } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { sendBotText } from "../messages/telegram-text.js";
 import { isReplyKeyboardButtonText } from "../message-patterns.js";
 import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
 
-// `ensureEventSubscription` is not a singleton: createBot() passes it into every
-// router. The interaction guard is registered without deps, so the dispatcher
-// receives them once at startup instead.
+// The queue helpers are called from the guard and the media handlers without
+// deps, so the dispatcher receives them once at startup instead. Until then the
+// chat counts as not busy and nothing is queued.
 let promptDeps: ProcessPromptDeps | null = null;
 
 // Live context of the last queued message, replayed when the queue drains.
@@ -33,6 +32,10 @@ let dispatchInFlight = false;
 
 export function initializePromptQueueDispatch(deps: ProcessPromptDeps): void {
   promptDeps = deps;
+}
+
+function isBusy(): boolean {
+  return promptDeps !== null && isForegroundBusy(promptDeps);
 }
 
 /** Whether the text is user prompt content rather than a command or a button press. */
@@ -69,7 +72,7 @@ export function canQueueMediaPrompt(ctx: Context): boolean {
  * Returns false when queueing does not apply, so the caller keeps its old behaviour.
  */
 export async function tryEnqueuePrompt(ctx: Context, input: QueuedPromptInput): Promise<boolean> {
-  if (!getPromptQueueEnabled() || !ctx.chat || !isQueueablePrompt(input)) {
+  if (!promptDeps || !getPromptQueueEnabled() || !ctx.chat || !isQueueablePrompt(input)) {
     return false;
   }
 
@@ -105,7 +108,7 @@ export async function tryEnqueuePromptIfBusy(
   ctx: Context,
   input: QueuedPromptInput,
 ): Promise<boolean> {
-  return isForegroundBusy() && tryEnqueuePrompt(ctx, input);
+  return isBusy() && tryEnqueuePrompt(ctx, input);
 }
 
 /**
@@ -116,7 +119,7 @@ export async function rejectQueuedMediaBeforePreparation(
   ctx: Context,
   mediaBytes: number | undefined,
 ): Promise<boolean> {
-  if (!isForegroundBusy() || !getPromptQueueEnabled() || !ctx.chat) {
+  if (!isBusy() || !getPromptQueueEnabled() || !ctx.chat) {
     return false;
   }
   if (promptQueue.isFull()) {
@@ -149,7 +152,7 @@ export async function dispatchNextQueuedPrompt(): Promise<void> {
     promptQueue.size() === 0 ||
     !promptDeps ||
     !queuedPromptContext ||
-    isForegroundBusy()
+    isBusy()
   ) {
     return;
   }
@@ -168,7 +171,7 @@ export async function dispatchNextQueuedPrompt(): Promise<void> {
     const notification = buildExternalUserInputNotification(item.displayText);
     if (notification && ctx.chat) {
       try {
-        const keyboard = keyboardManager.getKeyboard();
+        const keyboard = deps.keyboardManager.getKeyboard();
         await sendBotText({
           api: ctx.api,
           chatId: ctx.chat.id,
@@ -202,7 +205,7 @@ export async function dispatchNextQueuedPrompt(): Promise<void> {
 }
 
 async function replyWithKeyboard(ctx: Context, text: string): Promise<void> {
-  const keyboard = keyboardManager.getKeyboard();
+  const keyboard = promptDeps?.keyboardManager.getKeyboard();
   await ctx.reply(text, keyboard ? { reply_markup: keyboard } : {}).catch((err) => {
     logger.error("[PromptQueue] Failed to send queue reply:", err);
   });

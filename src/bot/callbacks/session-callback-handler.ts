@@ -29,7 +29,15 @@ import {
 
 export type SessionSelectDeps = Pick<
   AppContainer,
-  "ensureEventSubscription" | "interactionManager" | "keyboardManager" | "resetInteractions"
+  | "attachManager"
+  | "ensureEventSubscription"
+  | "foregroundSessionState"
+  | "interactionManager"
+  | "keyboardManager"
+  | "permissionManager"
+  | "questionManager"
+  | "resetInteractions"
+  | "summaryAggregator"
 > & {
   bot: Bot<Context>;
 };
@@ -123,10 +131,9 @@ async function selectSessionById(
 
   try {
     await attachToSession({
-      bot: deps.bot,
+      ...deps,
       chatId: ctx.chat!.id,
       session: sessionInfo,
-      ensureEventSubscription: deps.ensureEventSubscription,
     });
   } catch (err) {
     if (loadingMessageId) {
@@ -222,7 +229,7 @@ export async function handleBackgroundSessionOpen(
     return false;
   }
 
-  if (isForegroundBusy()) {
+  if (isForegroundBusy(deps)) {
     await replyBusyBlocked(ctx);
     return true;
   }
@@ -255,7 +262,7 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
     return false;
   }
 
-  if (isForegroundBusy()) {
+  if (isForegroundBusy(deps)) {
     await replyBusyBlocked(ctx);
     return true;
   }
@@ -263,7 +270,7 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
   const page = parseSessionPageCallback(callbackQuery.data);
   const sessionId = parseSessionIdCallback(callbackQuery.data);
 
-  const isActiveMenu = await ensureActiveInlineMenu(ctx, "session");
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "session", deps);
   if (!isActiveMenu) {
     return true;
   }

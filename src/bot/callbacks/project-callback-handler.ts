@@ -1,17 +1,34 @@
 import type { Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getProjects } from "../../app/services/project-service.js";
-import { isForegroundBusy } from "../../app/services/run-control-service.js";
-import { switchToProject } from "../../app/services/project-switch-service.js";
+import {
+  isForegroundBusy,
+  type ForegroundBusyDeps,
+} from "../../app/services/run-control-service.js";
+import {
+  switchToProject,
+  type ProjectSwitchDeps,
+} from "../../app/services/project-switch-service.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { alert, failure } from "./feedback.js";
-import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/inline-menu.js";
+import {
+  appendInlineMenuCancelButton,
+  ensureActiveInlineMenu,
+  type InlineMenuDeps,
+} from "../menus/inline-menu.js";
 import { buildProjectsMenuView, parseProjectPageCallback } from "../menus/project-selection-menu.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
-import { createProjectSwitchPresentation } from "../services/project-switch-presentation.js";
+import {
+  createProjectSwitchPresentation,
+  type ProjectSwitchPresentationDeps,
+} from "../services/project-switch-presentation.js";
 
-export type ProjectSelectDeps = Pick<AppContainer, "ensureEventSubscription" | "resetInteractions">;
+export type ProjectSelectDeps = Pick<AppContainer, "ensureEventSubscription"> &
+  ForegroundBusyDeps &
+  InlineMenuDeps &
+  ProjectSwitchDeps &
+  ProjectSwitchPresentationDeps;
 
 export async function handleProjectSelect(ctx: Context, deps: ProjectSelectDeps): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
@@ -26,13 +43,13 @@ export async function handleProjectSelect(ctx: Context, deps: ProjectSelectDeps)
     return false;
   }
 
-  if (isForegroundBusy()) {
+  if (isForegroundBusy(deps)) {
     await replyBusyBlocked(ctx);
     return true;
   }
 
   if (page !== null) {
-    const isActiveMenu = await ensureActiveInlineMenu(ctx, "project");
+    const isActiveMenu = await ensureActiveInlineMenu(ctx, "project", deps);
     if (!isActiveMenu) {
       return true;
     }
@@ -59,7 +76,7 @@ export async function handleProjectSelect(ctx: Context, deps: ProjectSelectDeps)
 
   const projectId = callbackQuery.data.replace("project:", "");
 
-  const isActiveMenu = await ensureActiveInlineMenu(ctx, "project");
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "project", deps);
   if (!isActiveMenu) {
     return true;
   }
@@ -77,8 +94,8 @@ export async function handleProjectSelect(ctx: Context, deps: ProjectSelectDeps)
     logger.info(`[Bot] Project selected: ${projectName} (id: ${projectId})`);
 
     const keyboard = await switchToProject(ctx, selectedProject, "project_switched", {
-      ensureEventSubscription: deps.ensureEventSubscription,
-      presentation: createProjectSwitchPresentation(),
+      ...deps,
+      presentation: createProjectSwitchPresentation(deps),
     });
 
     await ctx.answerCallbackQuery();

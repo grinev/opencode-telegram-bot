@@ -13,26 +13,18 @@ import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-se
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
-import { summaryAggregator } from "../../app/managers/summary-aggregation-manager.js";
 import { stopEventListening } from "../../opencode/events.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
-import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { formatErrorDetails } from "../../utils/error-format.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
-import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
-import { attachManager } from "../../app/managers/attach-manager.js";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import {
   attachToSession,
   detachAttachedSession,
   markAttachedSessionBusy,
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
-import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
 import { promptAttachment } from "../../app/managers/prompt-attachment-manager.js";
 import { resolvePendingAttachment } from "../../app/services/prompt-attachment-service.js";
 import {
@@ -100,28 +92,43 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
   }
 }
 
-async function resetMismatchedSessionContext(): Promise<void> {
-  detachAttachedSession("session_mismatch_reset");
+async function resetMismatchedSessionContext(deps: ProcessPromptDeps): Promise<void> {
+  detachAttachedSession("session_mismatch_reset", deps);
   stopEventListening();
-  summaryAggregator.clear();
-  foregroundSessionState.clearAll("session_mismatch_reset");
-  assistantRunState.clearAll("session_mismatch_reset");
-  clearAllInteractionState("session_mismatch_reset");
+  deps.resetAggregator();
+  deps.foregroundSessionState.clearAll("session_mismatch_reset");
+  deps.assistantRunState.clearAll("session_mismatch_reset");
+  deps.resetInteractions("session_mismatch_reset");
   clearSession();
-  keyboardManager.clearContext();
+  deps.keyboardManager.clearContext();
 
-  if (!pinnedMessageManager.isInitialized()) {
+  if (!deps.pinnedMessageManager.isInitialized()) {
     return;
   }
 
   try {
-    await pinnedMessageManager.clear();
+    await deps.pinnedMessageManager.clear();
   } catch (err) {
     logger.error("[Bot] Failed to clear pinned message during session reset:", err);
   }
 }
 
-export interface ProcessPromptDeps {
+export interface ProcessPromptDeps
+  extends Pick<
+    AppContainer,
+    | "assistantRunState"
+    | "attachManager"
+    | "externalUserInputSuppressionManager"
+    | "foregroundSessionState"
+    | "interactionManager"
+    | "keyboardManager"
+    | "permissionManager"
+    | "pinnedMessageManager"
+    | "questionManager"
+    | "resetAggregator"
+    | "resetInteractions"
+    | "summaryAggregator"
+  > {
   bot: Bot<Context>;
   ensureEventSubscription: (directory: string) => Promise<void>;
   downloadFile?: (
@@ -159,7 +166,7 @@ async function retireAttachmentConfirmation(
  *
  * @param ctx - Grammy context
  * @param input - Text and attachment content of the prompt
- * @param deps - Dependencies (bot and event subscription)
+ * @param deps - Dependencies (bot, event subscription and app state)
  * @returns true if the prompt was dispatched, false if it was blocked/failed early.
  */
 export async function processUserPrompt(
@@ -168,7 +175,15 @@ export async function processUserPrompt(
   deps: ProcessPromptDeps,
   options: ProcessPromptOptions = {},
 ): Promise<boolean> {
-  const { bot, ensureEventSubscription } = deps;
+  const { bot } = deps;
+  const {
+    assistantRunState,
+    attachManager,
+    externalUserInputSuppressionManager,
+    foregroundSessionState,
+    interactionManager,
+    keyboardManager,
+  } = deps;
   const responseMode =
     options.responseMode ?? (getTtsMode() === "all" ? "text_and_tts" : "text_only");
 
@@ -197,7 +212,7 @@ export async function processUserPrompt(
     logger.warn(
       `[Bot] Session/project mismatch detected. sessionDirectory=${currentSession.directory}, projectDirectory=${currentProject.worktree}. Resetting session context.`,
     );
-    await resetMismatchedSessionContext();
+    await resetMismatchedSessionContext(deps);
     await ctx.reply(t("bot.session_reset_project_mismatch"));
     return false;
   }
@@ -234,10 +249,9 @@ export async function processUserPrompt(
   }
 
   await attachToSession({
-    bot,
+    ...deps,
     chatId: ctx.chat!.id,
     session: currentSession,
-    ensureEventSubscription,
   });
 
   if (createdNewSession) {
@@ -362,7 +376,7 @@ export async function processUserPrompt(
     );
 
     foregroundSessionState.markBusy(currentSession.id, currentSession.directory);
-    await markAttachedSessionBusy(currentSession.id);
+    await markAttachedSessionBusy(currentSession.id, deps);
     assistantRunState.startRun(currentSession.id, {
       startedAt: Date.now(),
       configuredAgent: currentAgent,
@@ -386,7 +400,7 @@ export async function processUserPrompt(
       onSuccess: ({ error }) => {
         if (error) {
           foregroundSessionState.markIdle(currentSession.id);
-          void markAttachedSessionIdle(currentSession.id);
+          void markAttachedSessionIdle(currentSession.id, deps);
           assistantRunState.clearRun(currentSession.id, "session_prompt_api_error");
           clearPromptResponseMode(currentSession.id);
           const details = formatErrorDetails(error, 6000);
@@ -408,7 +422,7 @@ export async function processUserPrompt(
       },
       onError: (error) => {
         foregroundSessionState.markIdle(currentSession.id);
-        void markAttachedSessionIdle(currentSession.id);
+        void markAttachedSessionIdle(currentSession.id, deps);
         assistantRunState.clearRun(currentSession.id, "session_prompt_background_error");
         clearPromptResponseMode(currentSession.id);
         const details = formatErrorDetails(error, 6000);
@@ -425,12 +439,12 @@ export async function processUserPrompt(
   } catch (err) {
     if (currentSession) {
       foregroundSessionState.markIdle(currentSession.id);
-      await markAttachedSessionIdle(currentSession.id);
+      await markAttachedSessionIdle(currentSession.id, deps);
       assistantRunState.clearRun(currentSession.id, "session_prompt_handler_error");
     }
     logger.error("Error in prompt handler:", err);
     if (interactionManager.getSnapshot()) {
-      clearAllInteractionState("message_handler_error");
+      deps.resetInteractions("message_handler_error");
     }
     await ctx.reply(t("error.generic"));
     return false;

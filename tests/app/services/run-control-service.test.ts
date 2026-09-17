@@ -5,7 +5,10 @@ const mocked = vi.hoisted(() => ({
   loggerWarnMock: vi.fn(),
 }));
 
-vi.mock("../../../src/app/services/busy-reconciliation-service.js", () => ({
+vi.mock("../../../src/app/services/busy-reconciliation-service.js", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../../../src/app/services/busy-reconciliation-service.js")
+  >()),
   reconcileBusyStateNow: mocked.reconcileBusyStateNowMock,
 }));
 
@@ -21,6 +24,9 @@ vi.mock("../../../src/utils/logger.js", () => ({
 import { attachManager } from "../../../src/app/managers/attach-manager.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { reconcileForegroundBusyState } from "../../../src/app/services/run-control-service.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
+
+const deps = createTestAppContainer();
 
 describe("app/services/run-control-service", () => {
   beforeEach(() => {
@@ -34,9 +40,9 @@ describe("app/services/run-control-service", () => {
   it("uses non-throttled reconciliation for foreground busy directories", async () => {
     foregroundSessionState.markBusy("session-1", "D:/repo");
 
-    await reconcileForegroundBusyState();
+    await reconcileForegroundBusyState(deps);
 
-    expect(mocked.reconcileBusyStateNowMock).toHaveBeenCalledWith("D:/repo");
+    expect(mocked.reconcileBusyStateNowMock).toHaveBeenCalledWith("D:/repo", deps);
     expect(mocked.reconcileBusyStateNowMock).toHaveBeenCalledTimes(1);
   });
 
@@ -46,10 +52,10 @@ describe("app/services/run-control-service", () => {
     const error = new Error("status failed");
     mocked.reconcileBusyStateNowMock.mockRejectedValueOnce(error).mockResolvedValueOnce(undefined);
 
-    await reconcileForegroundBusyState();
+    await reconcileForegroundBusyState(deps);
 
-    expect(mocked.reconcileBusyStateNowMock).toHaveBeenCalledWith("D:/repo-a");
-    expect(mocked.reconcileBusyStateNowMock).toHaveBeenCalledWith("D:/repo-b");
+    expect(mocked.reconcileBusyStateNowMock).toHaveBeenCalledWith("D:/repo-a", deps);
+    expect(mocked.reconcileBusyStateNowMock).toHaveBeenCalledWith("D:/repo-b", deps);
     expect(mocked.loggerWarnMock).toHaveBeenCalledWith(
       "[BusyGuard] Failed to reconcile foreground busy state",
       error,

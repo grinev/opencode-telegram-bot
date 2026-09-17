@@ -8,7 +8,7 @@ import {
 import type { ModelInfo } from "../../app/types/model.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { replyWithInlineMenu } from "./inline-menu.js";
+import { replyWithInlineMenu, type InlineMenuDeps } from "./inline-menu.js";
 
 /**
  * Build inline keyboard with available variants
@@ -56,7 +56,10 @@ export async function buildVariantSelectionMenu(
  * Show variant selection menu
  * @param ctx grammY context
  */
-export async function showVariantSelectionMenu(ctx: Context): Promise<void> {
+export async function showVariantSelectionMenu(
+  ctx: Context,
+  deps: InlineMenuDeps,
+): Promise<void> {
   try {
     const currentModel = getStoredModel();
 
@@ -84,7 +87,7 @@ export async function showVariantSelectionMenu(ctx: Context): Promise<void> {
       menuKind: "variant",
       text,
       keyboard,
-    });
+    }, deps);
   } catch (err) {
     logger.error("[VariantHandler] Error showing variant menu:", err);
     await ctx.reply(t("variant.menu.error"));
@@ -101,6 +104,7 @@ export async function showVariantSelectionMenu(ctx: Context): Promise<void> {
 export async function showVariantSelectionMenuAfterModelChange(
   ctx: Context,
   model: ModelInfo,
+  deps: InlineMenuDeps,
 ): Promise<void> {
   try {
     const currentVariant = model.variant || "default";
@@ -127,7 +131,7 @@ export async function showVariantSelectionMenuAfterModelChange(
       menuKind: "variant",
       text,
       keyboard,
-    });
+    }, deps);
   } catch (err) {
     logger.error("[VariantHandler] Error showing variant menu after model change:", err);
   }

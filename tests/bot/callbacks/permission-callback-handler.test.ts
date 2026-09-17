@@ -138,7 +138,7 @@ describe("bot permission menu/callbacks", () => {
     const botApi = createBotApi(500);
     const request = createPermissionRequest("perm-1");
 
-    await showPermissionRequest(botApi, 777, request);
+    await showPermissionRequest(botApi, 777, request, createDeps());
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     const call = defined(sendMessageMock.mock.calls[0]);
@@ -168,7 +168,7 @@ describe("bot permission menu/callbacks", () => {
   it("keeps multiple active permission requests without deleting previous messages", async () => {
     const botApi = createBotApi(500);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), createDeps());
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     sendMessageMock.mockResolvedValueOnce({ message_id: 501 });
@@ -177,6 +177,7 @@ describe("bot permission menu/callbacks", () => {
       botApi,
       777,
       createPermissionRequest("perm-2", { patterns: ["npm run build"] }),
+      createDeps(),
     );
 
     const deleteMessageMock = botApi.deleteMessage as unknown as ReturnType<typeof vi.fn>;
@@ -199,7 +200,12 @@ describe("bot permission menu/callbacks", () => {
     const botApi = createBotApi(502);
     permissionManager.resolveRequest("perm-resolved");
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-resolved"));
+    await showPermissionRequest(
+      botApi,
+      777,
+      createPermissionRequest("perm-resolved"),
+      createDeps(),
+    );
 
     expect(botApi.sendMessage).not.toHaveBeenCalled();
     expect(permissionManager.isActive()).toBe(false);
@@ -215,6 +221,7 @@ describe("bot permission menu/callbacks", () => {
       botApi,
       777,
       createPermissionRequest("perm-old-lifecycle"),
+      createDeps(),
       generation,
     );
 
@@ -236,6 +243,7 @@ describe("bot permission menu/callbacks", () => {
       botApi,
       777,
       createPermissionRequest("perm-old-session"),
+      createDeps(),
     );
     await vi.waitFor(() => {
       expect(botApi.sendMessage).toHaveBeenCalledTimes(1);
@@ -253,7 +261,7 @@ describe("bot permission menu/callbacks", () => {
   it("rejects callback from unknown permission message", async () => {
     const botApi = createBotApi(500);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), createDeps());
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     sendMessageMock.mockResolvedValueOnce({ message_id: 501 });
@@ -261,6 +269,7 @@ describe("bot permission menu/callbacks", () => {
       botApi,
       777,
       createPermissionRequest("perm-2", { patterns: ["npm run build"] }),
+      createDeps(),
     );
 
     const staleCtx = createPermissionCallbackContext("permission:once", 499);
@@ -280,7 +289,7 @@ describe("bot permission menu/callbacks", () => {
 
   it("handles valid permission reply and clears active states", async () => {
     const botApi = createBotApi(600);
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-valid"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-valid"), createDeps());
 
     const ctx = createPermissionCallbackContext("permission:always", 600);
     const handled = await handlePermissionCallback(ctx, createDeps());
@@ -304,8 +313,13 @@ describe("bot permission menu/callbacks", () => {
   it("deduplicates equivalent permission requests behind one Telegram message", async () => {
     const botApi = createBotApi(650);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-duplicate"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), createDeps());
+    await showPermissionRequest(
+      botApi,
+      777,
+      createPermissionRequest("perm-duplicate"),
+      createDeps(),
+    );
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     expect(sendMessageMock).toHaveBeenCalledTimes(1);
@@ -339,8 +353,13 @@ describe("bot permission menu/callbacks", () => {
   it("shows the grouped request count on the visible permission message", async () => {
     const botApi = createBotApi(651);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-duplicate"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), createDeps());
+    await showPermissionRequest(
+      botApi,
+      777,
+      createPermissionRequest("perm-duplicate"),
+      createDeps(),
+    );
 
     const editMessageTextMock = botApi.editMessageText as unknown as ReturnType<typeof vi.fn>;
     expect(editMessageTextMock).toHaveBeenCalledTimes(1);
@@ -355,7 +374,7 @@ describe("bot permission menu/callbacks", () => {
   it("refuses to group stale or already resolved equivalent requests", async () => {
     const botApi = createBotApi(652);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), createDeps());
     const generation = permissionManager.getGeneration();
 
     permissionManager.resolveRequest("perm-resolved");
@@ -372,12 +391,17 @@ describe("bot permission menu/callbacks", () => {
   it("does not group behind a message whose request was replaced", async () => {
     const botApi = createBotApi(653);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-replaced"));
+    await showPermissionRequest(
+      botApi,
+      777,
+      createPermissionRequest("perm-replaced"),
+      createDeps(),
+    );
     // Same Telegram message id, different scope: the replaced request's
     // signature must no longer group new requests behind it.
     permissionManager.startPermission(createPermissionRequest("perm-2", { patterns: ["ls"] }), 653);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-3"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-3"), createDeps());
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     expect(sendMessageMock).toHaveBeenCalledTimes(2);
@@ -387,8 +411,13 @@ describe("bot permission menu/callbacks", () => {
   it("resolves a grouped permission prompt by any grouped request id", async () => {
     const botApi = createBotApi(655);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-duplicate"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), createDeps());
+    await showPermissionRequest(
+      botApi,
+      777,
+      createPermissionRequest("perm-duplicate"),
+      createDeps(),
+    );
 
     expect(permissionManager.resolveRequest("perm-duplicate")).toEqual([655]);
     expect(permissionManager.isActive()).toBe(false);
@@ -407,8 +436,13 @@ describe("bot permission menu/callbacks", () => {
         },
       });
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-duplicate"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), createDeps());
+    await showPermissionRequest(
+      botApi,
+      777,
+      createPermissionRequest("perm-duplicate"),
+      createDeps(),
+    );
 
     const ctx = createPermissionCallbackContext("permission:always", 660);
     await handlePermissionCallback(ctx, createDeps());
@@ -421,7 +455,7 @@ describe("bot permission menu/callbacks", () => {
   it("keeps permission interaction active until all requests are replied", async () => {
     const botApi = createBotApi(700);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), createDeps());
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     sendMessageMock.mockResolvedValueOnce({ message_id: 701 });
@@ -429,6 +463,7 @@ describe("bot permission menu/callbacks", () => {
       botApi,
       777,
       createPermissionRequest("perm-2", { patterns: ["npm run build"] }),
+      createDeps(),
     );
 
     const firstCtx = createPermissionCallbackContext("permission:once", 700);
@@ -476,7 +511,7 @@ describe("bot permission menu/callbacks", () => {
 
   it("does not report an error when the permission request was already resolved", async () => {
     const botApi = createBotApi(750);
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-stale"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-stale"), createDeps());
     mocked.permissionReplyMock.mockResolvedValueOnce({
       error: {
         name: "NotFoundError",
@@ -495,7 +530,7 @@ describe("bot permission menu/callbacks", () => {
 
   it("keeps reporting non-stale permission reply errors", async () => {
     const botApi = createBotApi(751);
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-error"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-error"), createDeps());
     mocked.permissionReplyMock.mockResolvedValueOnce({
       error: { name: "ServerError", data: { message: "Permission service unavailable" } },
     });
@@ -514,7 +549,7 @@ describe("bot permission menu/callbacks", () => {
     } as unknown as Context["api"];
 
     await expect(
-      showPermissionRequest(botApi, 777, createPermissionRequest("perm-fail")),
+      showPermissionRequest(botApi, 777, createPermissionRequest("perm-fail"), createDeps()),
     ).rejects.toThrow("send failed");
 
     expect(permissionManager.isActive()).toBe(false);
@@ -531,6 +566,7 @@ describe("bot permission menu/callbacks", () => {
         permission: "external_directory",
         patterns: ["D:/data/my_project"],
       }),
+      createDeps(),
     );
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;

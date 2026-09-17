@@ -418,7 +418,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     }
 
     logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
-    await showCurrentQuestion(this.botInstance.api, this.chatIdInstance);
+    await showCurrentQuestion(this.botInstance.api, this.chatIdInstance, this.deps);
   }
 
   /**
@@ -460,7 +460,13 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     logger.info(
       `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}, subagent=${isSubagent}`,
     );
-    await showPermissionRequest(this.botInstance.api, this.chatIdInstance, request, generation);
+    await showPermissionRequest(
+      this.botInstance.api,
+      this.chatIdInstance,
+      request,
+      this.deps,
+      generation,
+    );
   }
 
   private getLiveToolPrefix(callId: string): string {
@@ -1062,7 +1068,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       const messageIds = this.deps.permissionManager.resolveRequest(requestID);
       const interaction = this.deps.interactionManager.getSnapshot();
       if (!this.deps.permissionManager.isActive() || !interaction || interaction.kind === "permission") {
-        syncPermissionInteractionState({ resolvedRequestID: requestID });
+        syncPermissionInteractionState(this.deps, { resolvedRequestID: requestID });
       }
 
       if (this.botInstance && this.chatIdInstance) {
@@ -1219,7 +1225,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
     this.deps.summaryAggregator.setOnSessionIdle(async (sessionId) => {
       resetStreamThrottle(sessionId);
-      await markAttachedSessionIdle(sessionId);
+      await markAttachedSessionIdle(sessionId, this.deps);
       // Dropped immediately when this session is no longer current: the early
       // returns below would otherwise leave a compact-progress timer armed.
       // A still-current session keeps the card until after in-flight completion
@@ -1289,7 +1295,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     });
 
     this.deps.summaryAggregator.setOnSessionError(async (sessionId, message) => {
-      await markAttachedSessionIdle(sessionId);
+      await markAttachedSessionIdle(sessionId, this.deps);
       this.clearToolElapsedState(sessionId, "session_error");
 
       if (!this.botInstance || !this.chatIdInstance) {
@@ -1414,7 +1420,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     logger.info(`[Bot] Subscribing to OpenCode events for project: ${directory}`);
     subscribeToEvents(directory, (event) => {
       if ((event as EventStreamItem).type === "server.heartbeat") {
-        void reconcileBusyState(directory);
+        void reconcileBusyState(directory, this.deps);
       }
 
       const attached = this.deps.attachManager.getSnapshot();
@@ -1424,7 +1430,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         eventSessionId === attached.sessionId &&
         this.shouldMarkAttachedBusyFromEvent(event as EventStreamItem)
       ) {
-        void markAttachedSessionBusy(attached.sessionId);
+        void markAttachedSessionBusy(attached.sessionId, this.deps);
       }
 
       if (event.type === "session.created" || event.type === "session.updated") {

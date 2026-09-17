@@ -3,7 +3,7 @@ import { fetchCurrentAgent, getAvailableAgents } from "../../app/services/agent-
 import { getAgentDisplayName } from "../../app/types/agent.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { replyWithInlineMenu } from "./inline-menu.js";
+import { replyWithInlineMenu, type InlineMenuDeps } from "./inline-menu.js";
 
 /**
  * Build inline keyboard with available agents
@@ -36,7 +36,7 @@ export async function buildAgentSelectionMenu(currentAgent?: string): Promise<In
  * Show agent selection menu
  * @param ctx grammY context
  */
-export async function showAgentSelectionMenu(ctx: Context): Promise<void> {
+export async function showAgentSelectionMenu(ctx: Context, deps: InlineMenuDeps): Promise<void> {
   try {
     const currentAgent = await fetchCurrentAgent();
     const keyboard = await buildAgentSelectionMenu(currentAgent);
@@ -54,7 +54,7 @@ export async function showAgentSelectionMenu(ctx: Context): Promise<void> {
       menuKind: "agent",
       text,
       keyboard,
-    });
+    }, deps);
   } catch (err) {
     logger.error("[AgentHandler] Error showing agent menu:", err);
     await ctx.reply(t("agent.menu.error"));

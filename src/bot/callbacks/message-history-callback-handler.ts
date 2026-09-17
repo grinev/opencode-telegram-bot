@@ -39,7 +39,15 @@ import {
 
 export type MessagesCallbackDeps = Pick<
   AppContainer,
-  "ensureEventSubscription" | "interactionManager" | "keyboardManager" | "resetInteractions"
+  | "attachManager"
+  | "ensureEventSubscription"
+  | "foregroundSessionState"
+  | "interactionManager"
+  | "keyboardManager"
+  | "permissionManager"
+  | "questionManager"
+  | "resetInteractions"
+  | "summaryAggregator"
 > & {
   bot: Bot<Context>;
 };
@@ -198,7 +206,7 @@ export async function handleMessagesCallback(
     return false;
   }
 
-  if (isForegroundBusy()) {
+  if (isForegroundBusy(deps)) {
     await replyBusyBlocked(ctx);
     return true;
   }
@@ -290,10 +298,9 @@ export async function handleMessagesCallback(
         await ingestSessionInfoForCache(forkedSession);
 
         await attachToSession({
-          bot: deps.bot,
+          ...deps,
           chatId: ctx.chat!.id,
           session: sessionInfo,
-          ensureEventSubscription: deps.ensureEventSubscription,
         });
 
         const successText = t("messages.fork_success", { text: selectedMessage.text });

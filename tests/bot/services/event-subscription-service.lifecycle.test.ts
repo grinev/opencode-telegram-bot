@@ -659,7 +659,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
 
       getEventDispatcher()({ type: "server.heartbeat", properties: {} });
 
-      expect(mocked.reconcileBusyState).toHaveBeenCalledWith("D:/repo");
+      expect(mocked.reconcileBusyState).toHaveBeenCalledWith("D:/repo", expect.anything());
     });
 
     it("marks the attached session busy while the agent is working", async () => {

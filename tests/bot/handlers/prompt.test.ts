@@ -11,6 +11,8 @@ import { attachManager } from "../../../src/app/managers/attach-manager.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { t } from "../../../src/i18n/index.js";
 import { logger } from "../../../src/utils/logger.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   resolvePendingAttachmentMock: vi.fn(),
@@ -74,41 +76,6 @@ vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   })),
 }));
 
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    isInitialized: vi.fn(() => true),
-    initialize: vi.fn(),
-    getState: vi.fn(() => ({ messageId: 1 })),
-    onSessionChange: vi.fn(),
-    clear: vi.fn(),
-    getContextInfo: vi.fn(() => null),
-  },
-}));
-
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: vi.fn(),
-    clearContext: vi.fn(),
-    updateAgent: vi.fn(),
-  },
-}));
-
-vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
-  summaryAggregator: {
-    setSession: mocked.setSessionSummaryMock,
-    setBotAndChatId: mocked.setBotAndChatIdMock,
-    clear: vi.fn(),
-  },
-}));
-
-vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
-  interactionManager: {
-    clear: mocked.interactionClearMock,
-    getSnapshot: vi.fn(() => null),
-  },
-  clearAllInteractionState: vi.fn(),
-}));
-
 vi.mock("../../../src/utils/safe-background-task.js", () => ({
   safeBackgroundTask: vi.fn((options) => {
     mocked.safeBackgroundTaskMock(options);
@@ -119,33 +86,11 @@ vi.mock("../../../src/utils/error-format.js", () => ({
   formatErrorDetails: vi.fn(() => "formatted error"),
 }));
 
-vi.mock("../../../src/app/managers/foreground-session-state-manager.js", () => ({
-  foregroundSessionState: {
-    markBusy: vi.fn(),
-    markIdle: vi.fn(),
-    clearAll: vi.fn(),
-  },
-}));
-
-vi.mock("../../../src/app/managers/assistant-run-state-manager.js", () => ({
-  assistantRunState: {
-    startRun: vi.fn(),
-    clearRun: vi.fn(),
-    clearAll: vi.fn(),
-  },
-}));
-
 vi.mock("../../../src/app/services/attach-service.js", () => ({
   attachToSession: mocked.attachToSessionMock,
   detachAttachedSession: vi.fn(),
   markAttachedSessionBusy: vi.fn().mockResolvedValue(undefined),
   markAttachedSessionIdle: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock("../../../src/app/managers/external-input-suppression-manager.js", () => ({
-  externalUserInputSuppressionManager: {
-    register: mocked.suppressionRegisterMock,
-  },
 }));
 
 // The resolver has its own suite; here only the wiring around it is under test.
@@ -163,6 +108,45 @@ function createContext(): Context {
 
 function createDeps(): ProcessPromptDeps {
   return {
+    ...createTestAppContainer({
+      pinnedMessageManager: {
+        isInitialized: vi.fn(() => true),
+        initialize: vi.fn(),
+        getState: vi.fn(() => ({ messageId: 1 })),
+        onSessionChange: vi.fn(),
+        clear: vi.fn(),
+        getContextInfo: vi.fn(() => null),
+      } as unknown as AppContainer["pinnedMessageManager"],
+      keyboardManager: {
+        initialize: vi.fn(),
+        clearContext: vi.fn(),
+        updateAgent: vi.fn(),
+      } as unknown as AppContainer["keyboardManager"],
+      summaryAggregator: {
+        setSession: mocked.setSessionSummaryMock,
+        setBotAndChatId: mocked.setBotAndChatIdMock,
+        clear: vi.fn(),
+      } as unknown as AppContainer["summaryAggregator"],
+      interactionManager: {
+        clear: mocked.interactionClearMock,
+        getSnapshot: vi.fn(() => null),
+      } as unknown as AppContainer["interactionManager"],
+      resetInteractions: vi.fn(),
+      resetAggregator: vi.fn(),
+      foregroundSessionState: {
+        markBusy: vi.fn(),
+        markIdle: vi.fn(),
+        clearAll: vi.fn(),
+      } as unknown as AppContainer["foregroundSessionState"],
+      assistantRunState: {
+        startRun: vi.fn(),
+        clearRun: vi.fn(),
+        clearAll: vi.fn(),
+      } as unknown as AppContainer["assistantRunState"],
+      externalUserInputSuppressionManager: {
+        register: mocked.suppressionRegisterMock,
+      } as unknown as AppContainer["externalUserInputSuppressionManager"],
+    }),
     bot: { api: { sendMessage: vi.fn().mockResolvedValue(undefined) } } as unknown as Bot<Context>,
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
   };
@@ -242,16 +226,18 @@ describe("bot/handlers/prompt", () => {
     const handled = await processUserPrompt(createContext(), "Review README", createDeps());
 
     expect(handled).toBe(true);
-    expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
-      bot: expect.any(Object),
-      chatId: 777,
-      session: {
-        id: "session-1",
-        title: "Session",
-        directory: "D:\\Projects\\Repo",
-      },
-      ensureEventSubscription: expect.any(Function),
-    });
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bot: expect.any(Object),
+        chatId: 777,
+        session: {
+          id: "session-1",
+          title: "Session",
+          directory: "D:\\Projects\\Repo",
+        },
+        ensureEventSubscription: expect.any(Function),
+      }),
+    );
     expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "Review README");
   });
 

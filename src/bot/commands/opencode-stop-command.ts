@@ -41,7 +41,7 @@ async function releaseLocalStateAfterServerStop(deps: OpencodeStopCommandDeps): 
   deps.foregroundSessionState.clearAll(STOP_REASON);
 
   if (attached) {
-    await markAttachedSessionIdle(attached.sessionId);
+    await markAttachedSessionIdle(attached.sessionId, deps);
   }
 
   for (const sessionId of sessionIds) {

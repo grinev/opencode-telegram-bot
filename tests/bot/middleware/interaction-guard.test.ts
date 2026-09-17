@@ -13,6 +13,11 @@ import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { setIncomingPrompt } from "../../../src/bot/handlers/rich-message-handler.js";
 import * as settingsStore from "../../../src/app/stores/settings-store.js";
 import { startInteractionForTest } from "../../helpers/interaction.js";
+import type { Bot } from "grammy";
+import { initializePromptQueueDispatch } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
+
+const deps = createTestAppContainer();
 
 const mocked = vi.hoisted(() => ({
   reconcileForegroundBusyStateMock: vi.fn(),
@@ -70,13 +75,14 @@ describe("interactionGuardMiddleware", () => {
     mocked.reconcileForegroundBusyStateMock.mockResolvedValue(undefined);
     mocked.getPromptQueueEnabled.mockReset().mockReturnValue(false);
     promptQueue.__resetForTests();
+    initializePromptQueueDispatch({ ...deps, bot: {} as Bot<Context> });
   });
 
   it("passes through when there is no active interaction", async () => {
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(ctx.reply).not.toHaveBeenCalled();
@@ -91,7 +97,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("inline.blocked.expected_choice"));
@@ -106,7 +112,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createCallbackContext("project:123");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -125,7 +131,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("/status");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(ctx.reply).not.toHaveBeenCalled();
@@ -141,7 +147,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("/start");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(ctx.reply).not.toHaveBeenCalled();
@@ -157,7 +163,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("/help");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("inline.blocked.command_not_allowed"));
@@ -172,7 +178,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("permission.blocked.expected_reply"));
@@ -188,7 +194,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("/new");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("permission.blocked.command_not_allowed"));
@@ -204,7 +210,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("/new");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.blocked.command_not_allowed"));
@@ -219,7 +225,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createVoiceContext();
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.blocked.expected_name"));
@@ -234,7 +240,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("question.blocked.expected_answer"));
@@ -250,7 +256,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("/new");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("question.blocked.command_not_allowed"));
@@ -265,7 +271,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createCallbackContext("task:cancel");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
@@ -281,7 +287,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("/new");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("task.blocked.command_not_allowed"));
@@ -293,7 +299,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("/new");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
@@ -305,7 +311,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(
@@ -323,7 +329,7 @@ describe("interactionGuardMiddleware", () => {
     } as unknown as Context;
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(ctx.reply).not.toHaveBeenCalled();
@@ -336,7 +342,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createVoiceContext();
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("permission.blocked.expected_reply"));
@@ -348,7 +354,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("🧠 openrouter\nopenai/gpt-4o");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
@@ -363,9 +369,10 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(mocked.reconcileForegroundBusyStateMock).toHaveBeenCalledTimes(1);
+    expect(mocked.reconcileForegroundBusyStateMock).toHaveBeenCalledWith(deps);
     expect(next).toHaveBeenCalledTimes(1);
     expect(ctx.reply).not.toHaveBeenCalled();
   });
@@ -376,7 +383,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(mocked.reconcileForegroundBusyStateMock).toHaveBeenCalledTimes(1);
     expect(next).not.toHaveBeenCalled();
@@ -389,7 +396,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createCallbackContext("project:123");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -404,7 +411,7 @@ describe("interactionGuardMiddleware", () => {
       const ctx = createTextContext(command);
       const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-      await interactionGuardMiddleware(ctx, next);
+      await interactionGuardMiddleware(ctx, next, deps);
 
       expect(next).toHaveBeenCalledTimes(1);
       expect(ctx.reply).not.toHaveBeenCalled();
@@ -421,7 +428,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createCallbackContext("question:select:0:1");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
@@ -437,7 +444,7 @@ describe("interactionGuardMiddleware", () => {
     const ctx = createCallbackContext("permission:allow:1");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
@@ -455,7 +462,7 @@ describe("interactionGuardMiddleware", () => {
     );
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(promptQueue.list()).toEqual([
@@ -483,7 +490,7 @@ describe("interactionGuardMiddleware", () => {
     );
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(promptQueue.size()).toBe(0);
@@ -513,7 +520,7 @@ describe("interactionGuardMiddleware", () => {
     );
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(promptQueue.mediaSize()).toBe(0);
@@ -533,7 +540,7 @@ describe("interactionGuardMiddleware", () => {
     setIncomingPrompt(ctx, createIncomingPrompt("overflow"));
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
-    await interactionGuardMiddleware(ctx, next);
+    await interactionGuardMiddleware(ctx, next, deps);
 
     expect(next).not.toHaveBeenCalled();
     expect(promptQueue.size()).toBe(MAX_QUEUED_PROMPTS);

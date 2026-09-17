@@ -326,16 +326,18 @@ describe("bot/commands/commands", () => {
     expect(ctx.reply).toHaveBeenCalledWith(`${t("commands.executing_prefix")}\n/poem`, {
       entities: [{ type: "code", offset: t("commands.executing_prefix").length + 1, length: 5 }],
     });
-    expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
-      bot: expect.any(Object),
-      chatId: 777,
-      session: {
-        id: "session-1",
-        title: "Session",
-        directory: "D:\\Projects\\Repo",
-      },
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
-    });
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bot: expect.any(Object),
+        chatId: 777,
+        session: {
+          id: "session-1",
+          title: "Session",
+          directory: "D:\\Projects\\Repo",
+        },
+        ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      }),
+    );
     expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "/poem");
     expect(mocked.sessionCommandMock).toHaveBeenCalledWith({
       sessionID: "session-1",

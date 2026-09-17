@@ -12,7 +12,7 @@ import type {
 import { config } from "../../config.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { replyWithInlineMenu } from "./inline-menu.js";
+import { replyWithInlineMenu, type InlineMenuDeps } from "./inline-menu.js";
 
 export const MODEL_SEARCH_CALLBACK = "model:search";
 export const MODEL_SEARCH_AGAIN_CALLBACK = "model:search:again";
@@ -322,7 +322,7 @@ export function buildProviderModelsMenuView(
 /**
  * Show model selection menu
  */
-export async function showModelSelectionMenu(ctx: Context): Promise<void> {
+export async function showModelSelectionMenu(ctx: Context, deps: InlineMenuDeps): Promise<void> {
   try {
     const currentModel = fetchCurrentModel();
     const modelLists = await getModelSelectionLists();
@@ -333,7 +333,7 @@ export async function showModelSelectionMenu(ctx: Context): Promise<void> {
       text,
       keyboard,
       metadata: { modelLists },
-    });
+    }, deps);
   } catch (err) {
     logger.error("[ModelHandler] Error showing model menu:", err);
     await ctx.reply(t("model.menu.error"));

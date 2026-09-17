@@ -1,4 +1,5 @@
 import type { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
@@ -19,9 +20,17 @@ async function loadCurrentWorktreeContext() {
   return { currentProject, context };
 }
 
-export async function worktreeCommand(ctx: CommandContext<Context>) {
+export type WorktreeCommandDeps = Pick<
+  AppContainer,
+  "attachManager" | "foregroundSessionState" | "interactionManager"
+>;
+
+export async function worktreeCommand(
+  ctx: CommandContext<Context>,
+  deps: WorktreeCommandDeps,
+) {
   try {
-    if (isForegroundBusy()) {
+    if (isForegroundBusy(deps)) {
       await replyBusyBlocked(ctx);
       return;
     }
@@ -54,7 +63,7 @@ export async function worktreeCommand(ctx: CommandContext<Context>) {
       menuKind: "worktree",
       text,
       keyboard,
-    });
+    }, deps);
   } catch (error) {
     logger.error("[Bot] Error loading worktrees:", error);
     await ctx.reply(t("worktree.fetch_error"));

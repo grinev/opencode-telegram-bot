@@ -10,9 +10,11 @@ import { t } from "../../i18n/index.js";
 export type DetachCommandDeps = Pick<
   AppContainer,
   | "assistantRunState"
+  | "attachManager"
   | "foregroundSessionState"
   | "keyboardManager"
   | "pinnedMessageManager"
+  | "resetAggregator"
   | "resetInteractions"
 >;
 
@@ -33,7 +35,7 @@ export async function detachCommand(
       return;
     }
 
-    detachAttachedSession("detach_command");
+    detachAttachedSession("detach_command", deps);
     clearPromptResponseMode(currentSession.id);
     deps.foregroundSessionState.markIdle(currentSession.id);
     deps.assistantRunState.clearRun(currentSession.id, "detach_command");

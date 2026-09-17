@@ -22,18 +22,6 @@ vi.mock("../../../src/app/services/attach-service.js", () => ({
   markAttachedSessionIdle: mocked.markAttachedSessionIdleMock,
 }));
 
-vi.mock("../../../src/app/managers/assistant-run-state-manager.js", () => ({
-  assistantRunState: {
-    clearRun: mocked.clearRunMock,
-  },
-}));
-
-vi.mock("../../../src/app/services/scheduled-task-runtime-service.js", () => ({
-  scheduledTaskRuntime: {
-    flushDeferredDeliveries: mocked.flushDeferredDeliveriesMock,
-  },
-}));
-
 import { attachManager } from "../../../src/app/managers/attach-manager.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import {
@@ -43,6 +31,17 @@ import {
   setPromptResponseModeClearerForReconciliation,
   setResponseStreamerForReconciliation,
 } from "../../../src/app/services/busy-reconciliation-service.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
+
+const deps = createTestAppContainer({
+  assistantRunState: {
+    clearRun: mocked.clearRunMock,
+  } as unknown as AppContainer["assistantRunState"],
+  scheduledTaskRuntime: {
+    flushDeferredDeliveries: mocked.flushDeferredDeliveriesMock,
+  } as unknown as AppContainer["scheduledTaskRuntime"],
+});
 
 function markForegroundBusyAt(
   sessionId: string,
@@ -78,10 +77,10 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo", 13_000);
+    await reconcileBusyStateNow("D:/repo", deps, 13_000);
 
     expect(foregroundSessionState.isBusy()).toBe(false);
-    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1", deps);
     expect(mocked.clearRunMock).toHaveBeenCalledWith("session-1", "status_reconcile_idle");
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
     expect(mocked.flushDeferredDeliveriesMock).toHaveBeenCalledTimes(1);
@@ -94,7 +93,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo", 11_000);
+    await reconcileBusyStateNow("D:/repo", deps, 11_000);
 
     expect(foregroundSessionState.isBusy()).toBe(true);
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
@@ -110,7 +109,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo", 13_000);
+    await reconcileBusyStateNow("D:/repo", deps, 13_000);
 
     expect(foregroundSessionState.isBusy()).toBe(true);
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
@@ -125,9 +124,9 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo", 13_000);
+    await reconcileBusyStateNow("D:/repo", deps, 13_000);
 
-    expect(mocked.markAttachedSessionBusyMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.markAttachedSessionBusyMock).toHaveBeenCalledWith("session-1", deps);
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
   });
 
@@ -139,9 +138,9 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo", 13_000);
+    await reconcileBusyStateNow("D:/repo", deps, 13_000);
 
-    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1", deps);
     expect(mocked.markAttachedSessionBusyMock).not.toHaveBeenCalled();
   });
 
@@ -154,10 +153,10 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo", 13_000);
+    await reconcileBusyStateNow("D:/repo", deps, 13_000);
 
     expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledTimes(1);
-    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1", deps);
     expect(foregroundSessionState.isBusy()).toBe(false);
   });
 
@@ -170,7 +169,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo", 11_000);
+    await reconcileBusyStateNow("D:/repo", deps, 11_000);
 
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
     expect(foregroundSessionState.isBusy()).toBe(true);
@@ -184,7 +183,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyStateNow("D:/repo", 13_000);
+    await reconcileBusyStateNow("D:/repo", deps, 13_000);
 
     expect(mocked.sessionStatusMock).not.toHaveBeenCalled();
     expect(mocked.markAttachedSessionBusyMock).not.toHaveBeenCalled();
@@ -197,7 +196,7 @@ describe("busy reconciliation", () => {
       error: new Error("server unavailable"),
     });
 
-    await reconcileBusyStateNow("D:/repo", 13_000);
+    await reconcileBusyStateNow("D:/repo", deps, 13_000);
 
     expect(foregroundSessionState.isBusy()).toBe(true);
     expect(mocked.markAttachedSessionIdleMock).not.toHaveBeenCalled();
@@ -205,7 +204,7 @@ describe("busy reconciliation", () => {
   });
 
   it("does not spend throttle interval when there are no tracked sessions", async () => {
-    await reconcileBusyState("D:/repo", 10_000);
+    await reconcileBusyState("D:/repo", deps, 10_000);
 
     expect(mocked.sessionStatusMock).not.toHaveBeenCalled();
 
@@ -216,7 +215,7 @@ describe("busy reconciliation", () => {
       error: null,
     });
 
-    await reconcileBusyState("D:/repo", 10_001);
+    await reconcileBusyState("D:/repo", deps, 10_001);
 
     expect(mocked.sessionStatusMock).toHaveBeenCalledTimes(1);
     expect(foregroundSessionState.isBusy()).toBe(false);
@@ -234,7 +233,7 @@ describe("busy reconciliation", () => {
     };
     setResponseStreamerForReconciliation(mockStreamer);
 
-    await reconcileBusyStateNow("D:/repo", 13_000);
+    await reconcileBusyStateNow("D:/repo", deps, 13_000);
 
     expect(mockStreamer.hasActiveStream).toHaveBeenCalledWith("session-1");
     expect(foregroundSessionState.isBusy()).toBe(true);
@@ -256,11 +255,11 @@ describe("busy reconciliation", () => {
     };
     setResponseStreamerForReconciliation(mockStreamer);
 
-    await reconcileBusyStateNow("D:/repo", 13_000);
+    await reconcileBusyStateNow("D:/repo", deps, 13_000);
 
     expect(mockStreamer.hasActiveStream).toHaveBeenCalledWith("session-1");
     expect(foregroundSessionState.isBusy()).toBe(false);
-    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1", deps);
     expect(mocked.clearRunMock).toHaveBeenCalledWith("session-1", "status_reconcile_idle");
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
     expect(mocked.flushDeferredDeliveriesMock).toHaveBeenCalledTimes(1);

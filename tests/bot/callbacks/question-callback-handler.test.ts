@@ -99,7 +99,7 @@ describe("bot question menu/callbacks", () => {
     const api = createApi([100]);
 
     questionManager.startQuestions([QUESTION_ONE], "req-1");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     expect(api.sendRichMessage).toHaveBeenNthCalledWith(
       1,
@@ -149,7 +149,7 @@ describe("bot question menu/callbacks", () => {
     } as unknown as Context["api"];
 
     questionManager.startQuestions([QUESTION_ONE], "req-fallback");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     expect(sendRichMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledTimes(1);
@@ -171,7 +171,7 @@ describe("bot question menu/callbacks", () => {
     };
 
     questionManager.startQuestions([question], "req-bare");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     const calls = (api.sendRichMessage as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     const message = defined(calls[0]?.[1]) as { blocks: unknown[] };
@@ -191,7 +191,7 @@ describe("bot question menu/callbacks", () => {
     };
 
     questionManager.startQuestions([longQuestion], "req-long");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     const calls = (api.sendRichMessage as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     const message = defined(calls[0]?.[1]) as { blocks: Array<{ text: unknown }> };
@@ -218,7 +218,7 @@ describe("bot question menu/callbacks", () => {
     const api = createApi([101, 102]);
 
     questionManager.startQuestions([QUESTION_ONE, QUESTION_TWO], "req-2");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     const customCtx = createCallbackContext("question:custom:0", 101, api);
     await handleQuestionCallback(customCtx, createDeps());
@@ -241,7 +241,7 @@ describe("bot question menu/callbacks", () => {
     const api = createApi([701, 702]);
 
     questionManager.startQuestions([QUESTION_ONE, QUESTION_TWO], "req-8");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     const selectCtx = createCallbackContext("question:select:0:0", 701, api);
     const handled = await handleQuestionCallback(selectCtx, createDeps());
@@ -256,7 +256,7 @@ describe("bot question menu/callbacks", () => {
     const api = createApi([200]);
 
     questionManager.startQuestions([QUESTION_ONE], "req-3");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     const staleCtx = createCallbackContext("question:select:0:0", 199, api);
     const handled = await handleQuestionCallback(staleCtx, createDeps());
@@ -273,7 +273,7 @@ describe("bot question menu/callbacks", () => {
     const api = createApi([250]);
 
     questionManager.startQuestions([QUESTION_ONE], "req-stale");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
     // Index past the last question: the message is still active, but there is
     // nothing to answer anymore.
     questionManager.nextQuestion();
@@ -292,7 +292,7 @@ describe("bot question menu/callbacks", () => {
     const api = createApi([300]);
 
     questionManager.startQuestions([QUESTION_ONE], "req-4");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     const cancelCtx = createCallbackContext("question:cancel:0", 300, api);
     const handled = await handleQuestionCallback(cancelCtx, createDeps());
@@ -310,7 +310,7 @@ describe("bot question menu/callbacks", () => {
     const api = createApi([400]);
 
     questionManager.startQuestions([MULTIPLE_QUESTION], "req-5");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     const submitCtx = createCallbackContext("question:submit:0", 400, api);
     const handled = await handleQuestionCallback(submitCtx, createDeps());
@@ -327,7 +327,7 @@ describe("bot question menu/callbacks", () => {
     const api = createApi([500]);
 
     questionManager.startQuestions([MULTIPLE_QUESTION], "req-6");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     const selectCtx = createCallbackContext("question:select:0:0", 500, api);
     const handled = await handleQuestionCallback(selectCtx, createDeps());
@@ -359,7 +359,7 @@ describe("bot question menu/callbacks", () => {
     const api = createApi([600]);
 
     questionManager.startQuestions([QUESTION_ONE], "req-7");
-    await showCurrentQuestion(api, 123);
+    await showCurrentQuestion(api, 123, createDeps());
 
     const textCtx = createTextContext("Typed without custom button", api);
     await handleQuestionTextAnswer(textCtx, createDeps());

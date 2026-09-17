@@ -60,6 +60,7 @@ vi.mock("../../src/app/stores/settings-store.js", async (importOriginal) => {
   };
 });
 
+import { initializePromptQueueDispatch } from "../../src/bot/handlers/prompt-queue-dispatch.js";
 import { normalizeRichMessage } from "../../src/bot/handlers/rich-message-handler.js";
 import { interactionGuardMiddleware } from "../../src/bot/middleware/interaction-guard.js";
 import { registerCommandRouter } from "../../src/bot/routers/command-router.js";
@@ -100,12 +101,13 @@ function createRoutingBot(): RoutingBot {
     return stubResponse as never;
   });
   bot.on("message:rich_message", normalizeRichMessage);
-  bot.use(interactionGuardMiddleware);
   const container = createTestAppContainer({
     ensureEventSubscription: vi.fn(),
     setTelegramContext: vi.fn(),
     resetRuntimeStreams: vi.fn(),
   });
+  initializePromptQueueDispatch({ ...container, bot });
+  bot.use((ctx, next) => interactionGuardMiddleware(ctx, next, container));
   registerCommandRouter(bot, { container });
   registerMessageRouter(bot, { container });
   return { bot, replies };

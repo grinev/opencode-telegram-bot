@@ -101,7 +101,7 @@ describe("bot/commands/detach", () => {
 
     await detachCommand(ctx as never, createDeps());
 
-    expect(mocked.detachAttachedSessionMock).toHaveBeenCalledWith("detach_command");
+    expect(mocked.detachAttachedSessionMock).toHaveBeenCalledWith("detach_command", expect.anything());
     expect(mocked.clearSessionMock).toHaveBeenCalledTimes(1);
     expect(mocked.clearAllInteractionStateMock).toHaveBeenCalledWith("detach_command");
     expect(mocked.foregroundMarkIdleMock).toHaveBeenCalledWith("session-1");

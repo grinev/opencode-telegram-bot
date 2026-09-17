@@ -204,8 +204,8 @@ export async function startBotApp(): Promise<void> {
 
   await loadSettings();
   await reconcileStoredModelSelection();
-  registerOpenCodeReadyRefreshHandler();
   const container = createAppContainer();
+  registerOpenCodeReadyRefreshHandler(container);
   const { opencodeAutoRestartService, scheduledTaskRuntime } = container;
   const localCommandRegistry = await LocalCommandRegistry.load({
     directoryPath: runtimePaths.localCommandsDirPath,
@@ -220,7 +220,7 @@ export async function startBotApp(): Promise<void> {
     taskName: "app.opencodeStartup",
     task: async () => {
       await opencodeAutoRestartService.start();
-      await notifyOpencodeReadyIfHealthy("startup");
+      await notifyOpencodeReadyIfHealthy("startup", container);
     },
   });
 

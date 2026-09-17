@@ -49,7 +49,10 @@ function isPermissionRequestNotFound(error: unknown): boolean {
   );
 }
 
-export type PermissionCallbackDeps = Pick<AppContainer, "permissionManager" | "summaryAggregator">;
+export type PermissionCallbackDeps = Pick<
+  AppContainer,
+  "interactionManager" | "permissionManager" | "summaryAggregator"
+>;
 
 export async function handlePermissionCallback(
   ctx: Context,
@@ -65,7 +68,7 @@ export async function handlePermissionCallback(
   logger.debug(`[PermissionHandler] Received callback: ${data}`);
 
   if (!deps.permissionManager.isActive()) {
-    clearPermissionInteraction("permission_inactive_callback");
+    clearPermissionInteraction("permission_inactive_callback", deps);
     await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
     return true;
   }
@@ -120,7 +123,7 @@ async function handlePermissionReply(
 
   if (!directory || !chatId) {
     deps.permissionManager.clear();
-    clearPermissionInteraction("permission_invalid_runtime_context");
+    clearPermissionInteraction("permission_invalid_runtime_context", deps);
 
     await ctx.answerCallbackQuery({
       text: t("permission.no_active_request_callback"),
@@ -197,11 +200,11 @@ async function handlePermissionReply(
   deps.permissionManager.removeByMessageId(callbackMessageId);
 
   if (!deps.permissionManager.isActive()) {
-    clearPermissionInteraction("permission_replied");
+    clearPermissionInteraction("permission_replied", deps);
     return;
   }
 
-  syncPermissionInteractionState({
+  syncPermissionInteractionState(deps, {
     lastRepliedRequestIDs: requestIDs,
   });
 }

@@ -9,7 +9,8 @@ const isForegroundBusyMock = vi.hoisted(() => vi.fn());
 const getKeyboardMock = vi.hoisted(() => vi.fn());
 const sendBotTextMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../../src/bot/handlers/prompt.js", () => ({
+vi.mock("../../../src/bot/handlers/prompt.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/bot/handlers/prompt.js")>()),
   processUserPrompt: processUserPromptMock,
 }));
 
@@ -19,10 +20,6 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
 
 vi.mock("../../../src/app/services/run-control-service.js", () => ({
   isForegroundBusy: isForegroundBusyMock,
-}));
-
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: { getKeyboard: getKeyboardMock },
 }));
 
 vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
@@ -37,8 +34,15 @@ import {
   shouldSuggestPromptQueue as shouldSuggestPromptQueueInput,
   tryEnqueuePrompt as tryEnqueueInput,
 } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
-const DEPS = { bot: {} as never, ensureEventSubscription: vi.fn() };
+const DEPS = {
+  ...createTestAppContainer({
+    keyboardManager: { getKeyboard: getKeyboardMock } as unknown as AppContainer["keyboardManager"],
+  }),
+  bot: {} as never,
+};
 const KEYBOARD = { keyboard: [] };
 
 let replyMock: ReturnType<typeof vi.fn>;
@@ -69,6 +73,7 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
     isForegroundBusyMock.mockReset().mockReturnValue(false);
     getKeyboardMock.mockReset().mockReturnValue(KEYBOARD);
     sendBotTextMock.mockReset().mockResolvedValue(undefined);
+    initializePromptQueueDispatch(DEPS);
   });
 
   describe("tryEnqueuePrompt", () => {
@@ -148,10 +153,6 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
   });
 
   describe("dispatchNextQueuedPrompt", () => {
-    beforeEach(() => {
-      initializePromptQueueDispatch(DEPS);
-    });
-
     it("does nothing when the queue is empty", async () => {
       await dispatchNextQueuedPrompt();
 

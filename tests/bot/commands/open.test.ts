@@ -225,13 +225,13 @@ describe("open command", () => {
   describe("handleOpenCallback", () => {
     it("should return false for non-open callback data", async () => {
       const ctx = createCallbackContext("project:abc");
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
       expect(result).toBe(false);
     });
 
     it("should return false when callback data is undefined", async () => {
       const ctx = { callbackQuery: {} } as unknown as Context;
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
       expect(result).toBe(false);
     });
 
@@ -239,7 +239,7 @@ describe("open command", () => {
       mocked.isForegroundBusyMock.mockReturnValue(true);
       const ctx = createCallbackContext("open:roots");
 
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.replyBusyBlockedMock).toHaveBeenCalledWith(ctx);
@@ -249,7 +249,7 @@ describe("open command", () => {
       mocked.ensureActiveInlineMenuMock.mockResolvedValue(false);
       const ctx = createCallbackContext("open:roots");
 
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       // Should NOT call editMessageText or navigateTo
@@ -260,7 +260,7 @@ describe("open command", () => {
       mocked.getBrowserRootsMock.mockReturnValue(["/home/user", "/opt/repos"]);
 
       const ctx = createCallbackContext("open:roots");
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
@@ -271,7 +271,7 @@ describe("open command", () => {
       mocked.isWithinAllowedRootMock.mockReturnValue(false);
 
       const ctx = createCallbackContext("open:nav:/etc/passwd");
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -288,7 +288,7 @@ describe("open command", () => {
       );
 
       const ctx = createCallbackContext(`open:nav:${targetPath}`);
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.scanDirectoryMock).toHaveBeenCalledWith(targetPath, 0);
@@ -302,7 +302,7 @@ describe("open command", () => {
       );
 
       const ctx = createCallbackContext(`open:nav:${parentPath}`);
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.scanDirectoryMock).toHaveBeenCalledWith(parentPath, 0);
@@ -315,7 +315,7 @@ describe("open command", () => {
       );
 
       const ctx = createCallbackContext(`open:pg:${currentPath}|1`);
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.scanDirectoryMock).toHaveBeenCalledWith(currentPath, 1);
@@ -325,7 +325,7 @@ describe("open command", () => {
       const dirPath = "/home/user/my-project";
 
       const ctx = createCallbackContext(`open:sel:${dirPath}`);
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       // Verify full selection flow: upsert first so getProjectByWorktree can
@@ -354,7 +354,7 @@ describe("open command", () => {
       mocked.getProjectByWorktreeMock.mockRejectedValue(new Error("not found"));
 
       const ctx = createCallbackContext("open:sel:/home/user/bad-dir");
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -367,7 +367,7 @@ describe("open command", () => {
       mocked.scanDirectoryMock.mockResolvedValue({ error: "Permission denied", code: "EACCES" });
 
       const ctx = createCallbackContext("open:nav:/root/forbidden");
-      const result = await handleOpenCallback(ctx);
+      const result = await handleOpenCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       // Navigation error is shown as callback query answer
@@ -401,7 +401,7 @@ describe("open command", () => {
       // Trying to handle the now-stale callback should not navigate
       // (decodePathFromCallback returns null for unknown index)
       const navCtx = createCallbackContext(callbackData);
-      const result = await handleOpenCallback(navCtx);
+      const result = await handleOpenCallback(navCtx, createDeps());
 
       // Should return false because the indexed path can't be resolved
       // and no other prefix matches
@@ -464,7 +464,7 @@ describe("open command", () => {
       mocked.scanDirectoryMock.mockResolvedValue(makeScanResult([], longPath));
 
       const navCtx = createCallbackContext(callbackData);
-      const result = await handleOpenCallback(navCtx);
+      const result = await handleOpenCallback(navCtx, createDeps());
 
       expect(result).toBe(true);
       // Prove the path was decoded correctly — scanDirectory received the original long path

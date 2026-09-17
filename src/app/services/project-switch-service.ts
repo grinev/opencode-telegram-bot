@@ -9,14 +9,12 @@ import type { ProjectInfo } from "../types/project.js";
 import type { ModelInfo } from "../types/model.js";
 import { setCurrentProject } from "../stores/settings-store.js";
 import { clearSession } from "./session-service.js";
-import { summaryAggregator } from "../managers/summary-aggregation-manager.js";
-import { detachAttachedSession } from "./attach-service.js";
+import { detachAttachedSession, type DetachSessionDeps } from "./attach-service.js";
 import { stopEventListening } from "../../opencode/events.js";
-import { backgroundSessionTracker } from "../managers/background-session-manager.js";
 import { getStoredAgent, resolveProjectAgent } from "./agent-selection-service.js";
 import { getStoredModel } from "./model-selection-service.js";
 import { formatVariantForButton } from "./variant-selection-service.js";
-import { clearAllInteractionState } from "../managers/interaction-manager.js";
+import type { AppContainer } from "../bootstrap/app-container.js";
 import { logger } from "../../utils/logger.js";
 import { config } from "../../config.js";
 
@@ -45,7 +43,10 @@ export interface ProjectSwitchPresentation {
   ): ProjectSwitchReplyMarkup;
 }
 
-interface SwitchToProjectOptions {
+export type ProjectSwitchDeps = DetachSessionDeps &
+  Pick<AppContainer, "backgroundSessionTracker" | "resetInteractions">;
+
+interface SwitchToProjectOptions extends ProjectSwitchDeps {
   ensureEventSubscription?: ((directory: string) => Promise<void>) | undefined;
   presentation: ProjectSwitchPresentation;
 }
@@ -56,13 +57,13 @@ export async function switchToProject(
   reason: string,
   options: SwitchToProjectOptions,
 ) {
-  detachAttachedSession(reason);
+  detachAttachedSession(reason, options);
   stopEventListening();
-  backgroundSessionTracker.clear();
+  options.backgroundSessionTracker.clear();
   setCurrentProject(project);
   clearSession();
-  summaryAggregator.clear();
-  clearAllInteractionState(reason);
+  options.resetAggregator();
+  options.resetInteractions(reason);
 
   try {
     await options.presentation.clearPinnedMessage();

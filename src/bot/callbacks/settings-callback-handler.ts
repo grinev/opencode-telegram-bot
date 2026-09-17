@@ -68,7 +68,7 @@ function getNextResponseStreamingMode(mode: ResponseStreamingMode): ResponseStre
   return mode === "edit" ? "draft" : "edit";
 }
 
-export type SettingsCallbackDeps = Pick<AppContainer, "pinnedMessageManager">;
+export type SettingsCallbackDeps = Pick<AppContainer, "interactionManager" | "pinnedMessageManager">;
 
 export async function handleSettingsCallback(
   ctx: Context,
@@ -80,7 +80,7 @@ export async function handleSettingsCallback(
     return false;
   }
 
-  const isActiveMenu = await ensureActiveInlineMenu(ctx, "settings");
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "settings", deps);
   if (!isActiveMenu) {
     return true;
   }

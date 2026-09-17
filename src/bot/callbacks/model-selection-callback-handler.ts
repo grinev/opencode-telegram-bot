@@ -336,7 +336,7 @@ async function applyModelSelectionAndNotify(
   const displayName = formatModelForDisplay(modelInfo.providerID, modelInfo.modelID);
 
   await switched(ctx, t("model.changed_message", { name: displayName }), keyboard);
-  await showVariantSelectionMenuAfterModelChange(ctx, modelInfo);
+  await showVariantSelectionMenuAfterModelChange(ctx, modelInfo, deps);
 }
 
 /**
@@ -365,7 +365,7 @@ export async function handleModelSelect(ctx: Context, deps: ModelSelectionDeps):
     return false;
   }
 
-  const isActiveMenu = await ensureActiveInlineMenu(ctx, "model");
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "model", deps);
   if (!isActiveMenu) {
     return true;
   }
@@ -380,17 +380,17 @@ export async function handleModelSelect(ctx: Context, deps: ModelSelectionDeps):
 
     if (!resolvedModelInfo) {
       logger.error(`[ModelHandler] Invalid callback data format: ${callbackQuery.data}`);
-      clearActiveInlineMenu("model_select_invalid_callback");
+      clearActiveInlineMenu("model_select_invalid_callback", deps);
       await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
       return true;
     }
 
-    clearActiveInlineMenu("model_selected");
+    clearActiveInlineMenu("model_selected", deps);
     await applyModelSelectionAndNotify(ctx, deps, resolvedModelInfo);
 
     return true;
   } catch (err) {
-    clearActiveInlineMenu("model_select_error");
+    clearActiveInlineMenu("model_select_error", deps);
     logger.error("[ModelHandler] Error handling model select:", err);
     await failure(ctx, "model.change_error_callback");
     return true;
@@ -414,7 +414,7 @@ export async function handleModelProvidersCallback(
     return false;
   }
 
-  const isActiveMenu = await ensureActiveInlineMenu(ctx, "model");
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "model", deps);
   if (!isActiveMenu) {
     return true;
   }
@@ -484,7 +484,7 @@ export async function handleModelProvidersCallback(
         return true;
       }
 
-      clearActiveInlineMenu("model_selected");
+      clearActiveInlineMenu("model_selected", deps);
       await applyModelSelectionAndNotify(ctx, deps, modelInfo);
       return true;
     }
@@ -514,7 +514,7 @@ export async function handleModelSearchCallback(
     return false;
   }
 
-  const isActive = await ensureActiveInlineMenu(ctx, "model");
+  const isActive = await ensureActiveInlineMenu(ctx, "model", deps);
   if (!isActive) {
     return true;
   }

@@ -204,7 +204,7 @@ describe("bot model selection", () => {
       mocked.getModelSelectionListsMock.mockResolvedValue(modelLists);
       const ctx = mockContext();
 
-      await showModelSelectionMenu(ctx);
+      await showModelSelectionMenu(ctx, createDeps());
 
       expect(mocked.replyWithInlineMenuMock).toHaveBeenCalledWith(
         ctx,
@@ -212,6 +212,7 @@ describe("bot model selection", () => {
           menuKind: "model",
           metadata: { modelLists },
         }),
+        expect.anything(),
       );
     });
   });
@@ -256,7 +257,7 @@ describe("bot model selection", () => {
         providerID: "fireworks",
         modelID: longModelID,
         variant: "default",
-      });
+      }, expect.anything());
 
       const replyOrder = defined(
         (ctx.reply as unknown as { mock: { invocationCallOrder: number[] } }).mock
@@ -542,7 +543,7 @@ describe("bot model selection", () => {
         providerID: "fireworks",
         modelID: longModelID,
         variant: "default",
-      });
+      }, expect.anything());
     });
 
     it("rejects stale short list callbacks instead of parsing them as legacy models", async () => {
@@ -786,7 +787,7 @@ describe("bot model selection", () => {
         providerID: "openai",
         modelID: "gpt-5",
         variant: "default",
-      });
+      }, expect.anything());
     });
 
     it("rejects a callback whose model cannot be resolved from the menu snapshot", async () => {

@@ -129,7 +129,7 @@ describe("bot/commands/settings-command", () => {
       reply: replyMock,
     } as unknown as Context;
 
-    await settingsCommand(ctx as never);
+    await settingsCommand(ctx as never, createDeps());
 
     expect(replyMock).toHaveBeenCalledTimes(1);
     const call = defined(replyMock.mock.calls[0]);
@@ -171,7 +171,7 @@ describe("bot/commands/settings-command", () => {
       reply: replyMock,
     } as unknown as Context;
 
-    await settingsCommand(ctx as never);
+    await settingsCommand(ctx as never, createDeps());
 
     const call = defined(replyMock.mock.calls[0]);
     const [, opts] = call;
@@ -211,7 +211,7 @@ describe("bot/commands/settings-command", () => {
       reply: replyMock,
     } as unknown as Context;
 
-    await settingsCommand(ctx as never);
+    await settingsCommand(ctx as never, createDeps());
 
     const call = defined(replyMock.mock.calls[0]);
     const [, opts] = call;

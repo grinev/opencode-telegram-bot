@@ -13,6 +13,8 @@ import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import * as settingsStore from "../../../src/app/stores/settings-store.js";
+import { initializePromptQueueDispatch } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 function createPhotoContext(caption = "Describe this"): { ctx: Context; replyMock: ReturnType<typeof vi.fn> } {
   const replyMock = vi.fn().mockResolvedValue({ message_id: 100 });
@@ -45,6 +47,7 @@ function createDeps(overrides: Partial<PhotoHandlerDeps> = {}): {
   });
   const getCapabilitiesMock = vi.fn().mockResolvedValue({ input: { image: true } });
   const deps: PhotoHandlerDeps = {
+    ...createTestAppContainer(),
     bot: {} as PhotoHandlerDeps["bot"],
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
     downloadFile: downloadMock,
@@ -53,6 +56,7 @@ function createDeps(overrides: Partial<PhotoHandlerDeps> = {}): {
     processPrompt: processPromptMock,
     ...overrides,
   };
+  initializePromptQueueDispatch(deps);
 
   return { deps, processPromptMock, downloadMock, getCapabilitiesMock };
 }

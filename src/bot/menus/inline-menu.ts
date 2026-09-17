@@ -1,5 +1,5 @@
 import { Context, InlineKeyboard } from "grammy";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import type { InteractionMetadata, InteractionState } from "../../app/types/interaction.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
@@ -21,6 +21,8 @@ const INLINE_MENU_KINDS = [
 ] as const;
 
 export type InlineMenuKind = (typeof INLINE_MENU_KINDS)[number];
+
+export type InlineMenuDeps = Pick<AppContainer, "interactionManager">;
 
 interface ActiveInlineMenuMetadata {
   menuKind: InlineMenuKind;
@@ -101,6 +103,7 @@ export function appendInlineMenuCancelButton(
 export async function replyWithInlineMenu(
   ctx: Context,
   options: InlineMenuReplyOptions,
+  deps: InlineMenuDeps,
 ): Promise<number> {
   const keyboard = appendInlineMenuCancelButton(options.keyboard, options.menuKind);
   const replyOptions: {
@@ -116,7 +119,7 @@ export async function replyWithInlineMenu(
 
   const message = await ctx.reply(options.text, replyOptions);
 
-  interactionManager.start({
+  deps.interactionManager.start({
     kind: "inline",
     expectedInput: "callback",
     metadata: {
@@ -136,8 +139,9 @@ export async function replyWithInlineMenu(
 export async function ensureActiveInlineMenu(
   ctx: Context,
   menuKind: InlineMenuKind,
+  deps: InlineMenuDeps,
 ): Promise<boolean> {
-  const activeMetadata = getActiveInlineMenuMetadata(interactionManager.getSnapshot());
+  const activeMetadata = getActiveInlineMenuMetadata(deps.interactionManager.getSnapshot());
   const callbackMessageId = getCallbackMessageId(ctx);
 
   const isActive =
@@ -161,9 +165,9 @@ export async function ensureActiveInlineMenu(
   return false;
 }
 
-export function clearActiveInlineMenu(reason: string): void {
-  const state = interactionManager.getSnapshot();
+export function clearActiveInlineMenu(reason: string, deps: InlineMenuDeps): void {
+  const state = deps.interactionManager.getSnapshot();
   if (state?.kind === "inline") {
-    interactionManager.clear(reason);
+    deps.interactionManager.clear(reason);
   }
 }

@@ -88,7 +88,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
         return;
       }
 
-      await showAgentSelectionMenu(ctx);
+      await showAgentSelectionMenu(ctx, container);
     } catch (err) {
       logger.error("[Bot] Error showing agent menu:", err);
       await ctx.reply(t("error.load_agents"));
@@ -103,7 +103,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
         return;
       }
 
-      await showModelSelectionMenu(ctx);
+      await showModelSelectionMenu(ctx, container);
     } catch (err) {
       logger.error("[Bot] Error showing model menu:", err);
       await ctx.reply(t("error.load_models"));
@@ -118,7 +118,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
         return;
       }
 
-      await handleContextButtonPress(ctx);
+      await handleContextButtonPress(ctx, container);
     } catch (err) {
       logger.error("[Bot] Error handling context button:", err);
       await ctx.reply(t("error.context_button"));
@@ -133,7 +133,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
         return;
       }
 
-      await showVariantSelectionMenu(ctx);
+      await showVariantSelectionMenu(ctx, container);
     } catch (err) {
       logger.error("[Bot] Error showing variant menu:", err);
       await ctx.reply(t("error.load_variants"));
@@ -151,39 +151,35 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     await next();
   });
 
-  const voicePromptDeps = { bot, ensureEventSubscription: container.ensureEventSubscription };
-  const catalogDeps = { ...container, bot };
+  const botDeps = { ...container, bot };
 
   bot.on("message:voice", async (ctx) => {
     logger.debug(`[Bot] Received voice message, chatId=${ctx.chat.id}`);
     container.setTelegramContext(bot, ctx.chat.id);
-    await handleVoiceMessage(ctx, voicePromptDeps);
+    await handleVoiceMessage(ctx, botDeps);
   });
 
   bot.on("message:audio", async (ctx) => {
     logger.debug(`[Bot] Received audio message, chatId=${ctx.chat.id}`);
     container.setTelegramContext(bot, ctx.chat.id);
-    await handleVoiceMessage(ctx, voicePromptDeps);
+    await handleVoiceMessage(ctx, botDeps);
   });
 
   bot.on(
     "message",
-    createMediaGroupAttachmentMiddleware({
-      bot,
-      ensureEventSubscription: container.ensureEventSubscription,
-    }),
+    createMediaGroupAttachmentMiddleware(botDeps),
   );
 
   bot.on("message:photo", async (ctx) => {
     logger.debug(`[Bot] Received photo message, chatId=${ctx.chat.id}`);
     container.setTelegramContext(bot, ctx.chat.id);
-    await handlePhotoMessage(ctx, { bot, ensureEventSubscription: container.ensureEventSubscription });
+    await handlePhotoMessage(ctx, botDeps);
   });
 
   bot.on("message:document", async (ctx) => {
     logger.debug(`[Bot] Received document message, chatId=${ctx.chat.id}`);
     container.setTelegramContext(bot, ctx.chat.id);
-    await handleDocumentMessage(ctx, { bot, ensureEventSubscription: container.ensureEventSubscription });
+    await handleDocumentMessage(ctx, botDeps);
   });
 
   bot.on("message:text", async (ctx) => {
@@ -219,13 +215,12 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
       return;
     }
 
-    const promptDeps = { bot, ensureEventSubscription: container.ensureEventSubscription };
-    const handledCatalogTextArgs = await handleCatalogTextArguments(ctx, catalogDeps);
+    const handledCatalogTextArgs = await handleCatalogTextArguments(ctx, botDeps);
     if (handledCatalogTextArgs) {
       return;
     }
 
-    queuePromptForMerging(ctx, input, promptDeps, config.bot.messageMergeWindowMs);
+    queuePromptForMerging(ctx, input, botDeps, config.bot.messageMergeWindowMs);
 
     logger.debug(
       `[Bot] message:text handler completed (merge window=${config.bot.messageMergeWindowMs}ms)`,

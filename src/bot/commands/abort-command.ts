@@ -14,7 +14,7 @@ type SessionState = "idle" | "busy" | "not-found";
 
 export type AbortCommandDeps = Pick<
   AppContainer,
-  "assistantRunState" | "foregroundSessionState" | "resetInteractions"
+  "assistantRunState" | "attachManager" | "foregroundSessionState" | "resetInteractions"
 >;
 
 interface AbortCurrentOperationOptions {
@@ -30,7 +30,7 @@ async function releaseAbortBusyState(
 ): Promise<void> {
   deps.foregroundSessionState.markIdle(sessionId);
   deps.assistantRunState.clearRun(sessionId, reason);
-  await markAttachedSessionIdle(sessionId);
+  await markAttachedSessionIdle(sessionId, deps);
   clearPromptResponseMode(sessionId);
 }
 

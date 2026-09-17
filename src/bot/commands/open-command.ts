@@ -8,14 +8,17 @@ import { logger } from "../../utils/logger.js";
 import { buildOpenRootsKeyboard, clearOpenPathIndex, renderOpenBrowseView } from "../menus/file-browser-menu.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 
-export type OpenCommandDeps = Pick<AppContainer, "interactionManager">;
+export type OpenCommandDeps = Pick<
+  AppContainer,
+  "attachManager" | "foregroundSessionState" | "interactionManager"
+>;
 
 export async function openCommand(
   ctx: CommandContext<Context>,
   deps: OpenCommandDeps,
 ): Promise<void> {
   try {
-    if (isForegroundBusy()) {
+    if (isForegroundBusy(deps)) {
       await replyBusyBlocked(ctx);
       return;
     }

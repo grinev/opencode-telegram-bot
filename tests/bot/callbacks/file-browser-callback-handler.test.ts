@@ -68,15 +68,16 @@ describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
 
   it("stores the file, closes the menu and confirms with a cancel button", async () => {
     const ctx = createContext(`${LS_CALLBACK_ATTACH_PREFIX}${FILE_PATH}`);
+    const deps = createDeps();
 
-    expect(await handleLsCallback(ctx, createDeps())).toBe(true);
+    expect(await handleLsCallback(ctx, deps)).toBe(true);
 
     expect(promptAttachment.get()).toEqual({
       absolutePath: FILE_PATH,
       worktree: PROJECT_ROOT,
       confirmationMessageId: 43,
     });
-    expect(mocked.clearActiveInlineMenuMock).toHaveBeenCalledWith("ls_attached");
+    expect(mocked.clearActiveInlineMenuMock).toHaveBeenCalledWith("ls_attached", deps);
     expect(ctx.deleteMessage).toHaveBeenCalled();
 
     const [[text, options]] = (ctx.reply as unknown as ReturnType<typeof vi.fn>).mock.calls as [

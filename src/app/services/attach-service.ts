@@ -1,14 +1,11 @@
 import type { Bot, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { isOpencodeServerHealthy } from "../../opencode/ready-refresh.js";
-import { summaryAggregator } from "../managers/summary-aggregation-manager.js";
-import { questionManager } from "../managers/question-manager.js";
-import { permissionManager } from "../managers/permission-manager.js";
+import type { AppContainer } from "../bootstrap/app-container.js";
 import type { PermissionRequest } from "../types/permission.js";
 import type { SessionInfo } from "../types/session.js";
 import { getCurrentSession } from "./session-service.js";
 import { getCurrentProject } from "../stores/settings-store.js";
-import { attachManager } from "../managers/attach-manager.js";
 import { resetStreamThrottle } from "../../bot/streaming/stream-throttle.js";
 import { logger } from "../../utils/logger.js";
 import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";
@@ -37,7 +34,16 @@ export function configureAttachPresentation(deps: AttachPresentationDeps | null)
   attachPresentation = deps;
 }
 
-export interface AttachSessionDeps {
+export type AttachStateDeps = Pick<AppContainer, "attachManager">;
+
+export type DetachSessionDeps = Pick<AppContainer, "attachManager" | "resetAggregator">;
+
+type AttachRestoreDeps = Pick<
+  AppContainer,
+  "attachManager" | "permissionManager" | "questionManager" | "summaryAggregator"
+>;
+
+export interface AttachSessionDeps extends AttachRestoreDeps {
   bot: Bot<Context>;
   chatId: number;
   session: SessionInfo;
@@ -52,7 +58,7 @@ export interface AttachSessionResult {
   restoredPermissions: number;
 }
 
-export interface RestoreAttachedCurrentSessionDeps {
+export interface RestoreAttachedCurrentSessionDeps extends AttachRestoreDeps {
   bot: Bot<Context>;
   chatId: number;
   ensureEventSubscription: (directory: string) => Promise<void>;
@@ -66,16 +72,17 @@ function getAttachBusyStatus(
   return statuses?.[sessionId]?.type === "busy";
 }
 
-async function syncPinnedAttachState(): Promise<void> {
+async function syncPinnedAttachState(deps: AttachStateDeps): Promise<void> {
   if (!attachPresentation) {
     return;
   }
 
-  const attached = attachManager.getSnapshot();
+  const attached = deps.attachManager.getSnapshot();
   await attachPresentation.syncAttachState(attached !== null, attached?.busy ?? false);
 }
 
 async function restorePendingQuestion(
+  deps: AttachRestoreDeps,
   bot: Bot<Context>,
   chatId: number,
   sessionId: string,
@@ -99,7 +106,7 @@ async function restorePendingQuestion(
     return false;
   }
 
-  questionManager.startQuestions(pendingQuestion.questions, pendingQuestion.id);
+  deps.questionManager.startQuestions(pendingQuestion.questions, pendingQuestion.id);
   await attachPresentation.showCurrentQuestion(bot.api, chatId);
   return true;
 }
@@ -137,6 +144,7 @@ async function restorePendingPermissions(
 
 export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSessionResult> {
   const { bot, chatId, session, ensureEventSubscription, forceFullRestore = false } = deps;
+  const { attachManager, permissionManager, questionManager, summaryAggregator } = deps;
   const alreadyAttached = attachManager.isAttachedSession(session.id, session.directory);
 
   await attachPresentation?.ensurePinnedSession({
@@ -175,7 +183,7 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
     attachManager.markIdle(session.id);
   }
 
-  await syncPinnedAttachState();
+  await syncPinnedAttachState(deps);
 
   let restoredQuestion = false;
   let restoredPermissions = 0;
@@ -185,7 +193,7 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
     !questionManager.isActive() &&
     !permissionManager.isActive()
   ) {
-    restoredQuestion = await restorePendingQuestion(bot, chatId, session.id, session.directory);
+    restoredQuestion = await restorePendingQuestion(deps, bot, chatId, session.id, session.directory);
 
     if (!restoredQuestion) {
       restoredPermissions = await restorePendingPermissions(
@@ -230,13 +238,7 @@ export async function restoreAttachedCurrentSession(
       return false;
     }
 
-    await attachToSession({
-      bot: deps.bot,
-      chatId: deps.chatId,
-      session: currentSession,
-      ensureEventSubscription: deps.ensureEventSubscription,
-      forceFullRestore: deps.forceFullRestore,
-    });
+    await attachToSession({ ...deps, session: currentSession });
     logger.info(
       `[Attach] Restored followed session on startup: session=${currentSession.id}, directory=${currentSession.directory}`,
     );
@@ -247,33 +249,39 @@ export async function restoreAttachedCurrentSession(
   }
 }
 
-export function detachAttachedSession(reason: string): void {
-  if (!attachManager.isAttached()) {
+export function detachAttachedSession(reason: string, deps: DetachSessionDeps): void {
+  if (!deps.attachManager.isAttached()) {
     return;
   }
 
-  const attachedSessionId = attachManager.getSnapshot()?.sessionId;
+  const attachedSessionId = deps.attachManager.getSnapshot()?.sessionId;
   if (attachedSessionId) {
     resetStreamThrottle(attachedSessionId);
   }
 
-  summaryAggregator.clear();
-  attachManager.clear(reason);
-  void syncPinnedAttachState();
+  deps.resetAggregator();
+  deps.attachManager.clear(reason);
+  void syncPinnedAttachState(deps);
 }
 
-export async function markAttachedSessionBusy(sessionId: string): Promise<void> {
-  if (!attachManager.markBusy(sessionId)) {
+export async function markAttachedSessionBusy(
+  sessionId: string,
+  deps: AttachStateDeps,
+): Promise<void> {
+  if (!deps.attachManager.markBusy(sessionId)) {
     return;
   }
 
-  await syncPinnedAttachState();
+  await syncPinnedAttachState(deps);
 }
 
-export async function markAttachedSessionIdle(sessionId: string): Promise<void> {
-  if (!attachManager.markIdle(sessionId)) {
+export async function markAttachedSessionIdle(
+  sessionId: string,
+  deps: AttachStateDeps,
+): Promise<void> {
+  if (!deps.attachManager.markIdle(sessionId)) {
     return;
   }
 
-  await syncPinnedAttachState();
+  await syncPinnedAttachState(deps);
 }

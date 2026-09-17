@@ -6,7 +6,8 @@ const processUserPromptMock = vi.hoisted(() => vi.fn());
 const processUserPromptInputMock = vi.hoisted(() => vi.fn());
 const loggerErrorMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../../src/bot/handlers/prompt.js", () => ({
+vi.mock("../../../src/bot/handlers/prompt.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/bot/handlers/prompt.js")>()),
   processUserPrompt: (
     ctx: Context,
     input: { text: string; fileParts: unknown[]; photos: unknown[] },
@@ -26,8 +27,9 @@ import {
   flushPendingPrompt,
   __resetMessageMergerForTests,
 } from "../../../src/bot/handlers/message-merger.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
-const DEPS = { bot: {} as never, ensureEventSubscription: vi.fn() };
+const DEPS = { ...createTestAppContainer(), bot: {} as never };
 const LARGE_TEXT = "x".repeat(4000);
 
 function makeContext(chatId: number): Context {

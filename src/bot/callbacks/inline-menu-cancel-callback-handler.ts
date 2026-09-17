@@ -5,12 +5,16 @@ import {
   INLINE_MENU_CANCEL_PREFIX,
   isInlineMenuKind,
   LEGACY_CONTEXT_CANCEL_CALLBACK,
+  type InlineMenuDeps,
   type InlineMenuKind,
 } from "../menus/inline-menu.js";
 import { logger } from "../../utils/logger.js";
 import { cancelMenu } from "./feedback.js";
 
-export async function handleInlineMenuCancel(ctx: Context): Promise<boolean> {
+export async function handleInlineMenuCancel(
+  ctx: Context,
+  deps: InlineMenuDeps,
+): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data) {
     return false;
@@ -31,12 +35,12 @@ export async function handleInlineMenuCancel(ctx: Context): Promise<boolean> {
     return false;
   }
 
-  const isActive = await ensureActiveInlineMenu(ctx, menuKind);
+  const isActive = await ensureActiveInlineMenu(ctx, menuKind, deps);
   if (!isActive) {
     return true;
   }
 
-  clearActiveInlineMenu(`inline_menu_cancel:${menuKind}`);
+  clearActiveInlineMenu(`inline_menu_cancel:${menuKind}`, deps);
 
   await cancelMenu(ctx);
 

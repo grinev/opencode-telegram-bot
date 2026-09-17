@@ -10,14 +10,17 @@ import { logger } from "../../utils/logger.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { buildMessagesListKeyboard, formatMessagesSelectText } from "../menus/message-history-menu.js";
 
-export type MessagesCommandDeps = Pick<AppContainer, "interactionManager">;
+export type MessagesCommandDeps = Pick<
+  AppContainer,
+  "attachManager" | "foregroundSessionState" | "interactionManager"
+>;
 
 export async function messagesCommand(
   ctx: CommandContext<Context>,
   deps: MessagesCommandDeps,
 ): Promise<void> {
   try {
-    if (isForegroundBusy()) {
+    if (isForegroundBusy(deps)) {
       await replyBusyBlocked(ctx);
       return;
     }

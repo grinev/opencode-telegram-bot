@@ -236,7 +236,7 @@ describe("bot/commands/sessions", () => {
     mocked.sessionListMock.mockResolvedValueOnce({ data: sessions, error: null });
 
     const ctx = createCommandContext();
-    await sessionsCommand(ctx as never);
+    await sessionsCommand(ctx as never, createDeps());
 
     expect(mocked.sessionListMock).toHaveBeenCalledWith({
       directory: "/repo",
@@ -255,7 +255,7 @@ describe("bot/commands/sessions", () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCommandContext();
-    await sessionsCommand(ctx as never);
+    await sessionsCommand(ctx as never, createDeps());
 
     expect(mocked.sessionListMock).not.toHaveBeenCalled();
     expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
@@ -393,16 +393,18 @@ describe("bot/commands/sessions", () => {
     expect(handled).toBe(true);
     expect(mocked.resolveProjectAgentMock).toHaveBeenCalledOnce();
     expect(mocked.keyboardUpdateAgentMock).toHaveBeenCalledWith("plan");
-    expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
-      bot: expect.any(Object),
-      chatId: 111,
-      session: {
-        id: "session-1",
-        title: "Session 1",
-        directory: "/repo",
-      },
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
-    });
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bot: expect.any(Object),
+        chatId: 111,
+        session: {
+          id: "session-1",
+          title: "Session 1",
+          directory: "/repo",
+        },
+        ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      }),
+    );
     expect((ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([
       111,
       t("sessions.selected", { title: "Session 1" }),
@@ -526,16 +528,18 @@ describe("bot/commands/sessions", () => {
       title: "Session 1",
       directory: "/repo",
     });
-    expect(mocked.attachToSessionMock).toHaveBeenCalledWith({
-      bot: expect.any(Object),
-      chatId: 111,
-      session: {
-        id: "session-1",
-        title: "Session 1",
-        directory: "/repo",
-      },
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
-    });
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bot: expect.any(Object),
+        chatId: 111,
+        session: {
+          id: "session-1",
+          title: "Session 1",
+          directory: "/repo",
+        },
+        ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      }),
+    );
     expect(ctx.editMessageReplyMarkup).toHaveBeenCalledOnce();
     expect(ctx.deleteMessage).not.toHaveBeenCalled();
     expect((ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([

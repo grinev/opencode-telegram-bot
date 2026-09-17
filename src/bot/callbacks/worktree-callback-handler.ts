@@ -1,15 +1,25 @@
 import type { Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getProjectByWorktree } from "../../app/services/project-service.js";
-import { isForegroundBusy } from "../../app/services/run-control-service.js";
-import { switchToProject } from "../../app/services/project-switch-service.js";
+import {
+  isForegroundBusy,
+  type ForegroundBusyDeps,
+} from "../../app/services/run-control-service.js";
+import {
+  switchToProject,
+  type ProjectSwitchDeps,
+} from "../../app/services/project-switch-service.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { upsertSessionDirectory } from "../../app/services/session-cache-service.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { alert, failure } from "./feedback.js";
-import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/inline-menu.js";
+import {
+  appendInlineMenuCancelButton,
+  ensureActiveInlineMenu,
+  type InlineMenuDeps,
+} from "../menus/inline-menu.js";
 import {
   buildWorktreeMenuView,
   parseWorktreeIndexCallback,
@@ -17,12 +27,16 @@ import {
   WORKTREE_CALLBACK_PREFIX,
 } from "../menus/worktree-selection-menu.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
-import { createProjectSwitchPresentation } from "../services/project-switch-presentation.js";
+import {
+  createProjectSwitchPresentation,
+  type ProjectSwitchPresentationDeps,
+} from "../services/project-switch-presentation.js";
 
-export type WorktreeCallbackDeps = Pick<
-  AppContainer,
-  "ensureEventSubscription" | "resetInteractions"
->;
+export type WorktreeCallbackDeps = Pick<AppContainer, "ensureEventSubscription"> &
+  ForegroundBusyDeps &
+  InlineMenuDeps &
+  ProjectSwitchDeps &
+  ProjectSwitchPresentationDeps;
 
 async function loadCurrentWorktreeContext() {
   const currentProject = getCurrentProject();
@@ -43,7 +57,7 @@ export async function handleWorktreeCallback(
     return false;
   }
 
-  if (isForegroundBusy()) {
+  if (isForegroundBusy(deps)) {
     await replyBusyBlocked(ctx);
     return true;
   }
@@ -51,7 +65,7 @@ export async function handleWorktreeCallback(
   const page = parseWorktreePageCallback(callbackQuery.data);
   const index = parseWorktreeIndexCallback(callbackQuery.data);
 
-  const isActiveMenu = await ensureActiveInlineMenu(ctx, "worktree");
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "worktree", deps);
   if (!isActiveMenu) {
     return true;
   }
@@ -107,8 +121,8 @@ export async function handleWorktreeCallback(
     const projectInfo = await getProjectByWorktree(selectedWorktree.path);
     const selectedProjectInfo = { ...projectInfo, name: selectedWorktree.path };
     const replyKeyboard = await switchToProject(ctx, selectedProjectInfo, "worktree_switched", {
-      ensureEventSubscription: deps.ensureEventSubscription,
-      presentation: createProjectSwitchPresentation(),
+      ...deps,
+      presentation: createProjectSwitchPresentation(deps),
     });
 
     await ctx.answerCallbackQuery();

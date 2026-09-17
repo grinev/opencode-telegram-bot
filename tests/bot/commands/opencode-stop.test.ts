@@ -189,7 +189,7 @@ describe("bot/commands/opencode-stop-command", () => {
     expect(promptQueue.size()).toBe(0);
     expect(interactionManager.isActive()).toBe(false);
 
-    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1", expect.anything());
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-2");
   });

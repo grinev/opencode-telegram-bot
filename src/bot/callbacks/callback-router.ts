@@ -86,7 +86,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
     ],
     [
       "compact",
-      { name: "compact", handlers: [handleCompactConfirm], errorScope: "interaction" },
+      { name: "compact", handlers: [(ctx) => handleCompactConfirm(ctx, container)], errorScope: "interaction" },
     ],
     [
       "ls",
@@ -250,7 +250,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
         return;
       }
 
-      const handledInlineCancel = await handleInlineMenuCancel(ctx);
+      const handledInlineCancel = await handleInlineMenuCancel(ctx, container);
       if (handledInlineCancel) {
         clearOpenPathIndex();
         clearLsPathIndex();

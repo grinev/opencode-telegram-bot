@@ -1,10 +1,17 @@
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import type { AttachPresentationDeps } from "../../app/services/attach-service.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import { showPermissionRequest } from "../menus/permission-menu.js";
-import { showCurrentQuestion } from "../menus/question-menu.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
+import { showPermissionRequest, type PermissionMenuDeps } from "../menus/permission-menu.js";
+import { showCurrentQuestion, type QuestionMenuDeps } from "../menus/question-menu.js";
 
-export function createAttachPresentation(): AttachPresentationDeps {
+type AttachPresentationFactoryDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager"> &
+  PermissionMenuDeps &
+  QuestionMenuDeps;
+
+export function createAttachPresentation(
+  deps: AttachPresentationFactoryDeps,
+): AttachPresentationDeps {
+  const { keyboardManager, pinnedMessageManager } = deps;
+
   return {
     async ensurePinnedSession({ api, chatId, session, forceFullRestore = false }) {
       if (!pinnedMessageManager.isInitialized()) {
@@ -41,7 +48,8 @@ export function createAttachPresentation(): AttachPresentationDeps {
 
       await pinnedMessageManager.setAttachState(attached, busy);
     },
-    showCurrentQuestion,
-    showPermissionRequest,
+    showCurrentQuestion: (api, chatId) => showCurrentQuestion(api, chatId, deps),
+    showPermissionRequest: (api, chatId, request) =>
+      showPermissionRequest(api, chatId, request, deps),
   };
 }

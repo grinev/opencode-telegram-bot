@@ -1,10 +1,8 @@
 import { Context, InlineKeyboard } from "grammy";
-import { questionManager } from "../../app/managers/question-manager.js";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
-import { summaryAggregator } from "../../app/managers/summary-aggregation-manager.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { t } from "../../i18n/index.js";
@@ -16,6 +14,17 @@ const TELEGRAM_MESSAGE_LIMIT = 4096;
 const TRUNCATION_SUFFIX = "…";
 const QUESTION_EMOJI = "❓";
 
+export type QuestionInteractionDeps = Pick<AppContainer, "interactionManager">;
+
+type QuestionDataDeps = Pick<AppContainer, "questionManager">;
+
+export type QuestionStateDeps = Pick<AppContainer, "interactionManager" | "questionManager">;
+
+export type QuestionMenuDeps = Pick<
+  AppContainer,
+  "interactionManager" | "questionManager" | "summaryAggregator"
+>;
+
 function getCallbackMessageId(ctx: Context): number | null {
   const message = ctx.callbackQuery?.message;
   if (!message || !("message_id" in message)) {
@@ -26,10 +35,10 @@ function getCallbackMessageId(ctx: Context): number | null {
   return typeof messageId === "number" ? messageId : null;
 }
 
-export function clearQuestionInteraction(reason: string): void {
-  const state = interactionManager.getSnapshot();
+export function clearQuestionInteraction(reason: string, deps: QuestionInteractionDeps): void {
+  const state = deps.interactionManager.getSnapshot();
   if (state?.kind === "question") {
-    interactionManager.clear(reason);
+    deps.interactionManager.clear(reason);
   }
 }
 
@@ -37,13 +46,14 @@ export function syncQuestionInteractionState(
   expectedInput: "callback" | "mixed",
   questionIndex: number,
   messageId: number | null,
+  deps: QuestionStateDeps,
 ): void {
   const metadata: Record<string, unknown> = {
     questionIndex,
     inputMode: expectedInput === "mixed" ? "custom" : "options",
   };
 
-  const requestID = questionManager.getRequestID();
+  const requestID = deps.questionManager.getRequestID();
   if (requestID) {
     metadata.requestID = requestID;
   }
@@ -53,27 +63,32 @@ export function syncQuestionInteractionState(
   }
 
   // The slot is opened by questionManager.startQuestions; only refine it here.
-  if (interactionManager.getSnapshot()?.kind !== "question") {
+  if (deps.interactionManager.getSnapshot()?.kind !== "question") {
     return;
   }
 
-  interactionManager.transition({
+  deps.interactionManager.transition({
     expectedInput,
     metadata,
   });
 }
 
-export async function updateQuestionMessage(ctx: Context): Promise<void> {
+export async function updateQuestionMessage(
+  ctx: Context,
+  deps: QuestionDataDeps,
+): Promise<void> {
+  const { questionManager } = deps;
   const question = questionManager.getCurrentQuestion();
   if (!question) {
     logger.debug("[QuestionHandler] updateQuestionMessage: no current question");
     return;
   }
 
-  const part = formatQuestionDetailsPart(question);
+  const part = formatQuestionDetailsPart(question, deps);
   const keyboard = buildQuestionKeyboard(
     question,
     questionManager.getSelectedOptions(questionManager.getCurrentIndex()),
+    deps,
   );
 
   logger.debug("[QuestionHandler] Updating question message");
@@ -103,20 +118,26 @@ export async function updateQuestionMessage(ctx: Context): Promise<void> {
   }
 }
 
-export async function showCurrentQuestion(bot: Context["api"], chatId: number): Promise<void> {
+export async function showCurrentQuestion(
+  bot: Context["api"],
+  chatId: number,
+  deps: QuestionMenuDeps,
+): Promise<void> {
+  const { questionManager, summaryAggregator } = deps;
   const question = questionManager.getCurrentQuestion();
 
   if (!question) {
-    await showPollSummary(bot, chatId);
+    await showPollSummary(bot, chatId, deps);
     return;
   }
 
   logger.debug(`[QuestionHandler] Showing question: ${question.header} - ${question.question}`);
 
-  const part = formatQuestionDetailsPart(question);
+  const part = formatQuestionDetailsPart(question, deps);
   const keyboard = buildQuestionKeyboard(
     question,
     questionManager.getSelectedOptions(questionManager.getCurrentIndex()),
+    deps,
   );
 
   logger.debug(`[QuestionHandler] Sending message with keyboard, chatId=${chatId}`);
@@ -139,33 +160,39 @@ export async function showCurrentQuestion(bot: Context["api"], chatId: number): 
       "callback",
       questionManager.getCurrentIndex(),
       questionManager.getActiveMessageId(),
+      deps,
     );
 
     summaryAggregator.stopTypingIndicator();
   } catch (err) {
     questionManager.clear();
-    clearQuestionInteraction("question_message_send_failed");
+    clearQuestionInteraction("question_message_send_failed", deps);
 
     logger.error("[QuestionHandler] Failed to send question message:", err);
     throw err;
   }
 }
 
-export async function showNextQuestion(ctx: Context): Promise<void> {
-  questionManager.nextQuestion();
+export async function showNextQuestion(ctx: Context, deps: QuestionMenuDeps): Promise<void> {
+  deps.questionManager.nextQuestion();
 
   if (!ctx.chat) {
     return;
   }
 
-  if (questionManager.hasNextQuestion()) {
-    await showCurrentQuestion(ctx.api, ctx.chat.id);
+  if (deps.questionManager.hasNextQuestion()) {
+    await showCurrentQuestion(ctx.api, ctx.chat.id, deps);
   } else {
-    await showPollSummary(ctx.api, ctx.chat.id);
+    await showPollSummary(ctx.api, ctx.chat.id, deps);
   }
 }
 
-async function showPollSummary(bot: Context["api"], chatId: number): Promise<void> {
+async function showPollSummary(
+  bot: Context["api"],
+  chatId: number,
+  deps: QuestionStateDeps,
+): Promise<void> {
+  const { questionManager } = deps;
   const answers = questionManager.getAllAnswers();
   const totalQuestions = questionManager.getTotalQuestions();
 
@@ -174,7 +201,7 @@ async function showPollSummary(bot: Context["api"], chatId: number): Promise<voi
   );
 
   // Send all answers to the OpenCode API
-  await sendAllAnswersToAgent(bot, chatId);
+  await sendAllAnswersToAgent(bot, chatId, deps);
 
   if (answers.length === 0) {
     await bot.sendMessage(chatId, t("question.completed_no_answers"));
@@ -183,12 +210,17 @@ async function showPollSummary(bot: Context["api"], chatId: number): Promise<voi
     await bot.sendMessage(chatId, summary);
   }
 
-  clearQuestionInteraction("question_completed");
+  clearQuestionInteraction("question_completed", deps);
   questionManager.clear();
   logger.debug("[QuestionHandler] Poll completed and cleared");
 }
 
-async function sendAllAnswersToAgent(bot: Context["api"], chatId: number): Promise<void> {
+async function sendAllAnswersToAgent(
+  bot: Context["api"],
+  chatId: number,
+  deps: QuestionDataDeps,
+): Promise<void> {
+  const { questionManager } = deps;
   const currentProject = getCurrentProject();
   const currentSession = getCurrentSession();
   const requestID = questionManager.getRequestID();
@@ -351,9 +383,9 @@ function formatQuestionDetailsPart(question: {
   question: string;
   options: Array<{ label: string; description: string }>;
   multiple?: boolean;
-}): TelegramRenderedPart {
-  const currentIndex = questionManager.getCurrentIndex();
-  const totalQuestions = questionManager.getTotalQuestions();
+}, deps: QuestionDataDeps): TelegramRenderedPart {
+  const currentIndex = deps.questionManager.getCurrentIndex();
+  const totalQuestions = deps.questionManager.getTotalQuestions();
   const progressText = totalQuestions > 0 ? `${currentIndex + 1}/${totalQuestions}` : "";
 
   const headerTitle = [QUESTION_EMOJI, progressText, question.header].filter(Boolean).join(" ");
@@ -393,10 +425,11 @@ function isHighSurrogate(codeUnit: number): boolean {
 function buildQuestionKeyboard(
   question: { options: Array<{ label: string; description: string }>; multiple?: boolean },
   selectedOptions: Set<number>,
+  deps: QuestionDataDeps,
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
 
-  const questionIndex = questionManager.getCurrentIndex();
+  const questionIndex = deps.questionManager.getCurrentIndex();
 
   logger.debug(`[QuestionHandler] Building keyboard for question ${questionIndex}`);
 

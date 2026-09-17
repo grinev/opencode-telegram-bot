@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import { projectsCommand } from "../../../src/bot/commands/projects-command.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { t } from "../../../src/i18n/index.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: null as { id: string; worktree: string; name?: string } | null,
@@ -77,7 +78,7 @@ describe("bot/commands/projects command", () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createContext();
-    await projectsCommand(ctx as never);
+    await projectsCommand(ctx as never, createTestAppContainer());
 
     expect(mocked.syncSessionDirectoryCacheMock).not.toHaveBeenCalled();
     expect(mocked.getProjectsMock).not.toHaveBeenCalled();
@@ -104,7 +105,7 @@ describe("bot/commands/projects command", () => {
     });
 
     const ctx = createContext();
-    await projectsCommand(ctx as never);
+    await projectsCommand(ctx as never, createTestAppContainer());
 
     const keyboard = mocked.replyWithInlineMenuMock.mock.calls[0]?.[1]?.keyboard as {
       inline_keyboard: Array<Array<{ text: string }>>;

@@ -85,14 +85,14 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
   bot.command("start", (ctx) => startCommand(ctx, container));
   bot.command("help", helpCommand);
   bot.command("status", (ctx) => statusCommand(ctx, container));
-  bot.command("settings", settingsCommand);
+  bot.command("settings", (ctx) => settingsCommand(ctx, container));
   bot.command("opencode_start", (ctx) => opencodeStartCommand(ctx, container));
   bot.command("opencode_stop", (ctx) => opencodeStopCommand(ctx, container));
-  bot.command("projects", projectsCommand);
-  bot.command("worktree", worktreeCommand);
+  bot.command("projects", (ctx) => projectsCommand(ctx, container));
+  bot.command("worktree", (ctx) => worktreeCommand(ctx, container));
   bot.command("open", (ctx) => openCommand(ctx, container));
   bot.command("ls", (ctx) => lsCommand(ctx, container));
-  bot.command("sessions", sessionsCommand);
+  bot.command("sessions", (ctx) => sessionsCommand(ctx, container));
   bot.command("messages", (ctx) => messagesCommand(ctx, container));
   bot.command("new", (ctx) => newCommand(ctx, botDeps));
   bot.command("abort", (ctx) => abortCommand(ctx, container));

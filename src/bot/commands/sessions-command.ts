@@ -1,4 +1,5 @@
 import { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { replyWithInlineMenu } from "../menus/inline-menu.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
@@ -8,9 +9,17 @@ import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
 import { buildSessionSelectionMenuView, loadSessionPage } from "../menus/session-selection-menu.js";
 
-export async function sessionsCommand(ctx: CommandContext<Context>) {
+export type SessionsCommandDeps = Pick<
+  AppContainer,
+  "attachManager" | "foregroundSessionState" | "interactionManager"
+>;
+
+export async function sessionsCommand(
+  ctx: CommandContext<Context>,
+  deps: SessionsCommandDeps,
+) {
   try {
-    if (isForegroundBusy()) {
+    if (isForegroundBusy(deps)) {
       await replyBusyBlocked(ctx);
       return;
     }
@@ -43,7 +52,7 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
       menuKind: "session",
       text,
       keyboard,
-    });
+    }, deps);
   } catch (error) {
     logger.error("[Sessions] Error fetching sessions:", error);
     await ctx.reply(t("sessions.fetch_error"));

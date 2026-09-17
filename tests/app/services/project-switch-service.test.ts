@@ -32,27 +32,6 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
 vi.mock("../../../src/app/services/session-service.js", () => ({
   clearSession: mocked.clearSessionMock,
 }));
-vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
-  summaryAggregator: { clear: mocked.summaryAggregatorClearMock },
-}));
-vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
-  interactionManager: { clear: vi.fn() },
-  clearAllInteractionState: mocked.clearAllInteractionStateMock,
-}));
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    clear: mocked.pinnedClearMock,
-    refreshContextLimit: mocked.pinnedRefreshMock,
-    getContextLimit: mocked.pinnedGetLimitMock,
-  },
-}));
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: mocked.keyboardInitMock,
-    updateContext: mocked.keyboardUpdateMock,
-    updateAgent: mocked.keyboardUpdateAgentMock,
-  },
-}));
 vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   getStoredAgent: mocked.getStoredAgentMock,
   resolveProjectAgent: mocked.resolveProjectAgentMock,
@@ -72,6 +51,23 @@ vi.mock("../../../src/utils/logger.js", () => ({
 
 import { switchToProject } from "../../../src/app/services/project-switch-service.js";
 import { createProjectSwitchPresentation } from "../../../src/bot/services/project-switch-presentation.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
+
+const deps = createTestAppContainer({
+  resetAggregator: mocked.summaryAggregatorClearMock,
+  resetInteractions: mocked.clearAllInteractionStateMock,
+  pinnedMessageManager: {
+    clear: mocked.pinnedClearMock,
+    refreshContextLimit: mocked.pinnedRefreshMock,
+    getContextLimit: mocked.pinnedGetLimitMock,
+  } as unknown as AppContainer["pinnedMessageManager"],
+  keyboardManager: {
+    initialize: mocked.keyboardInitMock,
+    updateContext: mocked.keyboardUpdateMock,
+    updateAgent: mocked.keyboardUpdateAgentMock,
+  } as unknown as AppContainer["keyboardManager"],
+});
 
 function createCtx(chatId: number = 123): Context {
   return {
@@ -84,7 +80,9 @@ const testProject = { id: "proj-1", worktree: "/home/user/my-app", name: "My App
 
 function switchTestProject(ctx: Context) {
   return switchToProject(ctx, testProject, "test_reason", {
-    presentation: createProjectSwitchPresentation(),
+    ...deps,
+    ensureEventSubscription: undefined,
+    presentation: createProjectSwitchPresentation(deps),
   });
 }
 

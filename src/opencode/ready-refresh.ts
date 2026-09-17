@@ -1,8 +1,10 @@
 import { reconcileStoredModelSelection } from "../app/services/model-selection-service.js";
 import { warmupSessionDirectoryCache } from "../app/services/session-cache-service.js";
 import { logger } from "../utils/logger.js";
+import type { AppContainer } from "../app/bootstrap/app-container.js";
 import { opencodeClient } from "./client.js";
-import { opencodeReadyLifecycle } from "./ready-lifecycle.js";
+
+export type ReadyRefreshDeps = Pick<AppContainer, "opencodeReadyLifecycle">;
 
 let readyRefreshRegistered = false;
 
@@ -31,9 +33,12 @@ export async function refreshSessionCacheAfterOpencodeReady(reason: string): Pro
   }
 }
 
-export async function refreshSessionCacheIfOpencodeReady(reason: string): Promise<boolean> {
+export async function refreshSessionCacheIfOpencodeReady(
+  reason: string,
+  deps: ReadyRefreshDeps,
+): Promise<boolean> {
   if (!(await isOpencodeServerHealthy())) {
-    opencodeReadyLifecycle.notifyUnavailable(reason);
+    deps.opencodeReadyLifecycle.notifyUnavailable(reason);
     logger.warn(
       `[OpenCodeReady] OpenCode server is not running; skipping session cache refresh: reason=${reason}`,
     );
@@ -44,21 +49,24 @@ export async function refreshSessionCacheIfOpencodeReady(reason: string): Promis
   return true;
 }
 
-export function registerOpenCodeReadyRefreshHandler(): void {
+export function registerOpenCodeReadyRefreshHandler(deps: ReadyRefreshDeps): void {
   if (readyRefreshRegistered) {
     return;
   }
 
   readyRefreshRegistered = true;
-  opencodeReadyLifecycle.onReady((reason) => refreshSessionCacheAfterOpencodeReady(reason));
+  deps.opencodeReadyLifecycle.onReady((reason) => refreshSessionCacheAfterOpencodeReady(reason));
 }
 
-export async function notifyOpencodeReadyIfHealthy(reason: string): Promise<boolean> {
+export async function notifyOpencodeReadyIfHealthy(
+  reason: string,
+  deps: ReadyRefreshDeps,
+): Promise<boolean> {
   if (!(await isOpencodeServerHealthy())) {
-    opencodeReadyLifecycle.notifyUnavailable(reason);
+    deps.opencodeReadyLifecycle.notifyUnavailable(reason);
     logger.warn(`[OpenCodeReady] OpenCode server is not running: reason=${reason}`);
     return false;
   }
 
-  return opencodeReadyLifecycle.notifyReady(reason);
+  return deps.opencodeReadyLifecycle.notifyReady(reason);
 }

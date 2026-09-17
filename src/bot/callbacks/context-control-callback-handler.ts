@@ -5,21 +5,28 @@ import { getCurrentSession } from "../../app/services/session-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { alert, failure } from "./feedback.js";
-import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-menu.js";
+import {
+  clearActiveInlineMenu,
+  ensureActiveInlineMenu,
+  type InlineMenuDeps,
+} from "../menus/inline-menu.js";
 
 /**
  * Handle compact confirmation callback
  * Calls OpenCode API to compact the session
  * @param ctx grammY context
  */
-export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
+export async function handleCompactConfirm(
+  ctx: Context,
+  deps: InlineMenuDeps,
+): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
 
   if (!callbackQuery?.data || callbackQuery.data !== "compact:confirm") {
     return false;
   }
 
-  const isActiveMenu = await ensureActiveInlineMenu(ctx, "context");
+  const isActiveMenu = await ensureActiveInlineMenu(ctx, "context", deps);
   if (!isActiveMenu) {
     return true;
   }
@@ -30,7 +37,7 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
     const session = getCurrentSession();
 
     if (!session) {
-      clearActiveInlineMenu("context_session_missing");
+      clearActiveInlineMenu("context_session_missing", deps);
       await alert(ctx, "context.no_active_session");
       await ctx.deleteMessage().catch(() => {});
       return true;
@@ -38,7 +45,7 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
 
     // Answer callback query and delete menu immediately
     await ctx.answerCallbackQuery({ text: t("context.callback_compacting") });
-    clearActiveInlineMenu("context_compact_confirmed");
+    clearActiveInlineMenu("context_compact_confirmed", deps);
     await ctx.deleteMessage().catch(() => {});
 
     // Send progress message
@@ -78,7 +85,7 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
 
     return true;
   } catch (err) {
-    clearActiveInlineMenu("context_compact_error");
+    clearActiveInlineMenu("context_compact_error", deps);
     logger.error("[ContextHandler] Compact exception:", err);
     await failure(ctx, "context.error");
     await ctx.deleteMessage().catch(() => {});

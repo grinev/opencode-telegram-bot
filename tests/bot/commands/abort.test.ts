@@ -99,7 +99,7 @@ describe("bot/commands/abort", () => {
   function expectAbortStateReleased(reason: string): void {
     expect(foregroundSessionState.isBusy()).toBe(false);
     expect(mocked.clearRunMock).toHaveBeenCalledWith("session-1", reason);
-    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1", expect.anything());
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
   }
 

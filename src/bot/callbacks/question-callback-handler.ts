@@ -10,7 +10,10 @@ import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { alert, cancelPrompt } from "./feedback.js";
 
-export type QuestionCallbackDeps = Pick<AppContainer, "questionManager">;
+export type QuestionCallbackDeps = Pick<
+  AppContainer,
+  "interactionManager" | "questionManager" | "summaryAggregator"
+>;
 
 function getCallbackMessageId(ctx: Context): number | null {
   const message = ctx.callbackQuery?.message;
@@ -36,7 +39,7 @@ export async function handleQuestionCallback(
   logger.debug(`[QuestionHandler] Received callback: ${data}`);
 
   if (!deps.questionManager.isActive()) {
-    clearQuestionInteraction("question_inactive_callback");
+    clearQuestionInteraction("question_inactive_callback", deps);
     await ctx.answerCallbackQuery({ text: t("question.inactive_callback"), show_alert: true });
     return true;
   }
@@ -122,6 +125,7 @@ async function handleSelectOption(
       "callback",
       questionIndex,
       deps.questionManager.getActiveMessageId(),
+      deps,
     );
   }
 
@@ -129,7 +133,7 @@ async function handleSelectOption(
 
   if (question.multiple) {
     logger.debug("[QuestionHandler] Multiple choice mode, updating message");
-    await updateQuestionMessage(ctx);
+    await updateQuestionMessage(ctx, deps);
     await ctx.answerCallbackQuery();
   } else {
     logger.debug("[QuestionHandler] Single choice mode, moving to next question");
@@ -139,7 +143,7 @@ async function handleSelectOption(
     logger.debug(`[QuestionHandler] Selected answer for question ${questionIndex}: ${answer}`);
 
     await ctx.deleteMessage().catch(() => {});
-    await showNextQuestion(ctx);
+    await showNextQuestion(ctx, deps);
   }
 }
 
@@ -154,6 +158,7 @@ async function handleSubmitAnswer(
       "callback",
       questionIndex,
       deps.questionManager.getActiveMessageId(),
+      deps,
     );
   }
 
@@ -171,7 +176,7 @@ async function handleSubmitAnswer(
 
   await ctx.answerCallbackQuery();
   await ctx.deleteMessage().catch(() => {});
-  await showNextQuestion(ctx);
+  await showNextQuestion(ctx, deps);
 }
 
 async function handleCustomAnswer(
@@ -180,7 +185,12 @@ async function handleCustomAnswer(
   questionIndex: number,
 ): Promise<void> {
   deps.questionManager.startCustomInput(questionIndex);
-  syncQuestionInteractionState("mixed", questionIndex, deps.questionManager.getActiveMessageId());
+  syncQuestionInteractionState(
+    "mixed",
+    questionIndex,
+    deps.questionManager.getActiveMessageId(),
+    deps,
+  );
 
   await ctx.answerCallbackQuery({
     text: t("question.enter_custom_callback"),
@@ -223,5 +233,5 @@ export async function handleQuestionTextAnswer(
     await ctx.api.deleteMessage(ctx.chat.id, activeMessageId).catch(() => {});
   }
 
-  await showNextQuestion(ctx);
+  await showNextQuestion(ctx, deps);
 }

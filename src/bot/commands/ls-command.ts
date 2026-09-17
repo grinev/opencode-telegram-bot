@@ -8,13 +8,16 @@ import { clearLsPathIndex, renderLsBrowseView } from "../menus/file-browser-menu
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { rememberLsDirectory, resolveInitialLsDirectory } from "../callbacks/file-browser-callback-handler.js";
 
-export type LsCommandDeps = Pick<AppContainer, "interactionManager">;
+export type LsCommandDeps = Pick<
+  AppContainer,
+  "attachManager" | "foregroundSessionState" | "interactionManager"
+>;
 
 export async function lsCommand(
   ctx: CommandContext<Context>,
   deps: LsCommandDeps,
 ): Promise<void> {
-  if (isForegroundBusy()) {
+  if (isForegroundBusy(deps)) {
     await replyBusyBlocked(ctx);
     return;
   }

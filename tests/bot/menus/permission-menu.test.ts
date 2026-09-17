@@ -8,6 +8,9 @@ import { permissionManager } from "../../../src/app/managers/permission-manager.
 import { questionManager } from "../../../src/app/managers/question-manager.js";
 import type { PermissionRequest } from "../../../src/app/types/permission.js";
 import { showPermissionRequest } from "../../../src/bot/menus/permission-menu.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
+
+const deps = createTestAppContainer();
 
 const PERMISSION: PermissionRequest = {
   id: "perm-1",
@@ -44,7 +47,7 @@ describe("bot/menus/permission-menu", () => {
   it("shows the prompt and opens the permission slot", async () => {
     const { api, deleteMessage } = createApi(() => {});
 
-    await showPermissionRequest(api, 42, PERMISSION);
+    await showPermissionRequest(api, 42, PERMISSION, deps);
 
     expect(permissionManager.getRequestID(201)).toBe("perm-1");
     expect(interactionManager.getSnapshot()?.kind).toBe("permission");
@@ -59,7 +62,7 @@ describe("bot/menus/permission-menu", () => {
       );
     });
 
-    await showPermissionRequest(api, 42, PERMISSION);
+    await showPermissionRequest(api, 42, PERMISSION, deps);
 
     expect(deleteMessage).toHaveBeenCalledWith(42, 201);
     expect(permissionManager.isActive()).toBe(false);
@@ -76,7 +79,7 @@ describe("bot/menus/permission-menu", () => {
       clearAllInteractionState("abort_command");
     });
 
-    await showPermissionRequest(api, 42, PERMISSION);
+    await showPermissionRequest(api, 42, PERMISSION, deps);
 
     expect(deleteMessage).toHaveBeenCalledWith(42, 201);
     expect(permissionManager.isActive()).toBe(false);
@@ -92,7 +95,7 @@ describe("bot/menus/permission-menu", () => {
       permissionManager.resolveRequest("perm-1");
     });
 
-    await showPermissionRequest(api, 42, PERMISSION);
+    await showPermissionRequest(api, 42, PERMISSION, deps);
 
     expect(deleteMessage).toHaveBeenCalledWith(42, 201);
     expect(interactionManager.getWaitingKind()).toBeNull();
@@ -103,7 +106,7 @@ describe("bot/menus/permission-menu", () => {
     const generation = permissionManager.getGeneration();
     clearAllInteractionState("abort_command");
 
-    await showPermissionRequest(api, 42, PERMISSION, generation);
+    await showPermissionRequest(api, 42, PERMISSION, deps, generation);
 
     expect(sendMessage).not.toHaveBeenCalled();
   });

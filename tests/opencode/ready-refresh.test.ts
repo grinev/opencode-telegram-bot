@@ -34,10 +34,14 @@ vi.mock("../../src/utils/logger.js", () => ({
   },
 }));
 
+import { opencodeReadyLifecycle } from "../../src/opencode/ready-lifecycle.js";
 import {
   refreshSessionCacheAfterOpencodeReady,
   refreshSessionCacheIfOpencodeReady,
+  type ReadyRefreshDeps,
 } from "../../src/opencode/ready-refresh.js";
+
+const deps: ReadyRefreshDeps = { opencodeReadyLifecycle };
 
 describe("opencode/ready-refresh", () => {
   beforeEach(() => {
@@ -54,7 +58,7 @@ describe("opencode/ready-refresh", () => {
   it("skips refresh with a short warning when OpenCode server is unavailable", async () => {
     mocked.healthMock.mockRejectedValueOnce(new Error("fetch failed"));
 
-    const refreshed = await refreshSessionCacheIfOpencodeReady("startup");
+    const refreshed = await refreshSessionCacheIfOpencodeReady("startup", deps);
 
     expect(refreshed).toBe(false);
     expect(mocked.warmupSessionDirectoryCacheMock).not.toHaveBeenCalled();
@@ -67,7 +71,7 @@ describe("opencode/ready-refresh", () => {
   it("refreshes cache when OpenCode server is healthy", async () => {
     mocked.healthMock.mockResolvedValueOnce({ data: { healthy: true }, error: null });
 
-    const refreshed = await refreshSessionCacheIfOpencodeReady("startup");
+    const refreshed = await refreshSessionCacheIfOpencodeReady("startup", deps);
 
     expect(refreshed).toBe(true);
     expect(mocked.warmupSessionDirectoryCacheMock).toHaveBeenCalledTimes(1);

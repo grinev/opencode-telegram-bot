@@ -17,6 +17,8 @@ import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { MAX_QUEUED_MEDIA_BYTES } from "../../../src/app/managers/prompt-queue-manager.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import * as settingsStore from "../../../src/app/stores/settings-store.js";
+import { initializePromptQueueDispatch } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 function createBaseContext(message: Record<string, unknown>): {
   ctx: Context;
@@ -119,6 +121,7 @@ function createDeps(overrides: Partial<MediaGroupHandlerDeps> = {}): {
   });
 
   const deps: MediaGroupHandlerDeps = {
+    ...createTestAppContainer(),
     bot: {} as MediaGroupHandlerDeps["bot"],
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
     downloadFile: downloadMock,
@@ -128,6 +131,7 @@ function createDeps(overrides: Partial<MediaGroupHandlerDeps> = {}): {
       processPromptMock(ctx, input.text, promptDeps, input.fileParts),
     ...overrides,
   };
+  initializePromptQueueDispatch(deps);
 
   return { deps, processPromptMock, downloadMock, getCapabilitiesMock };
 }

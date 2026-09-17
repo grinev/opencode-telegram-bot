@@ -26,6 +26,9 @@ vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
 }));
 
 import { showVariantSelectionMenuAfterModelChange } from "../../../src/bot/menus/variant-selection-menu.js";
+import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
+
+const deps = { interactionManager };
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 
@@ -53,7 +56,7 @@ describe("bot/menus/variant-selection-menu — after a model change", () => {
     mocked.getAvailableVariantsMock.mockResolvedValue([{ id: "default" }]);
     const ctx = mockContext();
 
-    await showVariantSelectionMenuAfterModelChange(ctx, model);
+    await showVariantSelectionMenuAfterModelChange(ctx, model, deps);
 
     expect(mocked.replyWithInlineMenuMock).not.toHaveBeenCalled();
     expect(ctx.reply).not.toHaveBeenCalled();
@@ -67,7 +70,7 @@ describe("bot/menus/variant-selection-menu — after a model change", () => {
     ]);
     const ctx = mockContext();
 
-    await showVariantSelectionMenuAfterModelChange(ctx, model);
+    await showVariantSelectionMenuAfterModelChange(ctx, model, deps);
 
     expect(mocked.replyWithInlineMenuMock).not.toHaveBeenCalled();
     expect(ctx.reply).not.toHaveBeenCalled();
@@ -81,7 +84,7 @@ describe("bot/menus/variant-selection-menu — after a model change", () => {
     ]);
     const ctx = mockContext();
 
-    await showVariantSelectionMenuAfterModelChange(ctx, model);
+    await showVariantSelectionMenuAfterModelChange(ctx, model, deps);
 
     expect(mocked.getAvailableVariantsMock).toHaveBeenCalledWith("openai", "gpt-5");
 
@@ -99,7 +102,7 @@ describe("bot/menus/variant-selection-menu — after a model change", () => {
     mocked.getAvailableVariantsMock.mockRejectedValue(new Error("providers unavailable"));
     const ctx = mockContext();
 
-    await showVariantSelectionMenuAfterModelChange(ctx, model);
+    await showVariantSelectionMenuAfterModelChange(ctx, model, deps);
 
     expect(mocked.replyWithInlineMenuMock).not.toHaveBeenCalled();
     expect(ctx.reply).not.toHaveBeenCalled();
