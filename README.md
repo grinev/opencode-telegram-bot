@@ -231,6 +231,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `TELEGRAM_PROXY_SECRET`                    | Shared secret sent as `X-Proxy-Secret` header on every Bot API request and file download (used with `TELEGRAM_API_ROOT`) | No | —                        |
 | `TELEGRAM_FORCE_IPV4`                      | Force IPv4 for direct Telegram API and file requests; useful when IPv6 DNS works but outbound IPv6 is broken           |    No    | `false`                  |
 | `OPENCODE_API_URL`                         | OpenCode server URL                                                                                                   |    No    | `http://localhost:4096`  |
+| `OPENCODE_API_V2_ENABLED`                  | Use the OpenCode 2 server API (`true`, `1`, `yes`, or `on`)                                                              |    No    | `false`                 |
 | `OPENCODE_AUTO_RESTART_ENABLED`            | Automatically restart a local OpenCode server when health-checks fail                                                 |    No    | `false`                  |
 | `OPENCODE_MONITOR_INTERVAL_SEC`            | Health monitor interval in seconds when OpenCode auto-restart is enabled                                              |    No    | `300`                    |
 | `OPENCODE_SERVER_USERNAME`                 | Server auth username                                                                                                  |    No    | `opencode`               |
@@ -415,6 +416,31 @@ The API contract is:
 - **Response:** JSON `{ "text": "extracted content..." }`
 
 If the extractor is not configured and the model doesn't support documents, the bot replies with a notice and forwards only the caption text.
+
+### OpenCode 2 server
+
+Enable the V2 API transport in your `.env` or process environment:
+
+```dotenv
+OPENCODE_API_V2_ENABLED=true
+OPENCODE_API_URL=http://localhost:4096
+```
+
+Use the server's base URL, without `/api`. If the server requires authentication,
+set the existing `OPENCODE_SERVER_USERNAME` and `OPENCODE_SERVER_PASSWORD` values
+for that server. The flag changes the API transport; it does not install or upgrade
+OpenCode. This also works with Docker's existing `env_file` configuration.
+
+V2 uses the official `@opencode/client` and adapts sessions, prompts and attachments,
+streamed responses and tool activity, models, agents, commands, skills, MCP, forms,
+and permission requests to the bot. Server health supports both the current
+`/api/info` route and the `/api/status` route used by OpenCode 2.0.4. Quiet SSE
+connections stay alive while transport keepalives arrive.
+
+The flag accepts `true`, `1`, `yes`, or `on` (case-insensitive). When it is absent,
+empty, false, or invalid, the bot uses the legacy API. Restart the bot after changing
+the flag. Local server control still uses the `opencode` executable on `PATH` and
+the host/port configured by `OPENCODE_API_URL`.
 
 ### Model Configuration
 

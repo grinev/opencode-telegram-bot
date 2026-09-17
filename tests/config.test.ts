@@ -18,6 +18,20 @@ describe("config boolean env parsing", () => {
     vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
     vi.stubEnv("OPENCODE_AUTO_RESTART_ENABLED", "");
     vi.stubEnv("OPENCODE_MONITOR_INTERVAL_SEC", "");
+    vi.stubEnv("OPENCODE_API_V2_ENABLED", "");
+  });
+
+  it.each(["", "false", "0", "no", "off", "invalid"])(
+    "keeps the legacy API for V2 flag %j",
+    async (value) => {
+      vi.stubEnv("OPENCODE_API_V2_ENABLED", value);
+      expect((await loadConfig()).opencode.apiV2Enabled).toBe(false);
+    },
+  );
+
+  it.each(["true", "1", "yes", "on", " TRUE "])("enables the V2 API for flag %j", async (value) => {
+    vi.stubEnv("OPENCODE_API_V2_ENABLED", value);
+    expect((await loadConfig()).opencode.apiV2Enabled).toBe(true);
   });
 
   it("tracks background sessions by default", async () => {

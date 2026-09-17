@@ -9,12 +9,16 @@ type EventStreamSource = "global" | "legacy";
 type EventStreamSubscription = {
   source: EventStreamSource;
   stream: AsyncGenerator<unknown, unknown, unknown>;
+  lastActivity?: () => number;
 };
 type EventSubscriptionResult = {
   stream?: AsyncGenerator<unknown, unknown, unknown> | null;
 };
 type OptionalGlobalEventApi = {
-  event?: (options?: { signal?: AbortSignal }) => Promise<EventSubscriptionResult>;
+  event?: (options?: {
+    signal?: AbortSignal;
+    onActivity?: () => void;
+  }) => Promise<EventSubscriptionResult>;
 };
 type OptionalGlobalEventClient = {
   global?: OptionalGlobalEventApi;
@@ -90,6 +94,7 @@ function createAttemptAbortController(parentSignal: AbortSignal): {
 function readStreamWithIdleTimeout(
   stream: AsyncGenerator<unknown, unknown, unknown>,
   signal: AbortSignal,
+  lastActivity?: () => number,
 ): Promise<StreamReadResult> {
   return new Promise((resolve) => {
     let settled = false;
@@ -105,7 +110,12 @@ function readStreamWithIdleTimeout(
     };
 
     const onAbort = () => finish({ type: "aborted" });
-    const timeout = setTimeout(() => finish({ type: "timeout" }), sseIdleTimeoutMs);
+    const checkIdle = () => {
+      const remaining = lastActivity ? sseIdleTimeoutMs - (Date.now() - lastActivity()) : 0;
+      if (remaining > 0) timeout = setTimeout(checkIdle, remaining);
+      else finish({ type: "timeout" });
+    };
+    let timeout = setTimeout(checkIdle, sseIdleTimeoutMs);
 
     if (signal.aborted) {
       finish({ type: "aborted" });
@@ -180,25 +190,40 @@ async function subscribeToGlobalEventStream(signal: AbortSignal): Promise<EventS
     throw new Error("Global event subscription is not available");
   }
 
-  const result = await globalEvents.event({ signal });
+  let activity = Date.now();
+  const result = await globalEvents.event({
+    signal,
+    onActivity: () => {
+      activity = Date.now();
+    },
+  });
   if (!result.stream) {
     throw new Error(FATAL_NO_STREAM_ERROR);
   }
 
-  return { source: "global", stream: result.stream };
+  return { source: "global", stream: result.stream, lastActivity: () => activity };
 }
 
 async function subscribeToLegacyEventStream(
   directory: string,
   signal: AbortSignal,
 ): Promise<EventStreamSubscription> {
-  const result = await opencodeClient.event.subscribe({ directory }, { signal });
+  let activity = Date.now();
+  const result = await opencodeClient.event.subscribe(
+    { directory },
+    {
+      signal,
+      onActivity: () => {
+        activity = Date.now();
+      },
+    },
+  );
 
   if (!result.stream) {
     throw new Error(FATAL_NO_STREAM_ERROR);
   }
 
-  return { source: "legacy", stream: result.stream };
+  return { source: "legacy", stream: result.stream, lastActivity: () => activity };
 }
 
 export async function subscribeToEvents(directory: string, callback: EventCallback): Promise<void> {
@@ -267,6 +292,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
             const readResult = await readStreamWithIdleTimeout(
               eventStream,
               attemptAbort.controller.signal,
+              subscription.lastActivity,
             );
 
             if (readResult.type === "aborted") {

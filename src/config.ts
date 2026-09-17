@@ -204,6 +204,7 @@ export function buildTelegramConfig(): {
 export const config = {
   telegram: buildTelegramConfig(),
   opencode: {
+    apiV2Enabled: getOptionalBooleanEnvVar("OPENCODE_API_V2_ENABLED", false),
     apiUrl: getEnvVar("OPENCODE_API_URL", false) || "http://localhost:4096",
     username: getEnvVar("OPENCODE_SERVER_USERNAME", false) || "opencode",
     password: getEnvVar("OPENCODE_SERVER_PASSWORD", false),

@@ -33,6 +33,7 @@ No public inbound ports are required for normal usage.
 - Start OpenCode server from the app (`opencode serve`)
 - Stop OpenCode server from the app
 - Optionally monitor and auto-restart a local OpenCode server
+- Opt in to the OpenCode 2 server API with `OPENCODE_API_V2_ENABLED=true`; the legacy API remains the default
 
 ### Project management
 
@@ -164,6 +165,7 @@ Agent picker behavior:
 
 - [x] Single-user access control by allowed Telegram user ID
 - [x] OpenCode server control from Telegram (`/status`, `/opencode_start`, `/opencode_stop`)
+- [x] Optional OpenCode 2 API transport, including streaming, session operations, attachments, forms, and permissions
 - [x] Project and session management from Telegram (`/projects`, `/worktree`, `/sessions`, `/new`)
 - [x] Automatic tracking of the current OpenCode CLI session, including continuing it from Telegram, live updates, and external text input notifications
 - [x] Remote task execution, interruption, and local detachment support (`/abort`, `/detach`)

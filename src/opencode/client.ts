@@ -1,5 +1,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
 import { config } from "../config.js";
+import type { BotOpenCodeClient } from "./types.js";
+import { createV2Client } from "./v2-client.js";
 
 const getAuth = () => {
   if (!config.opencode.password) {
@@ -9,7 +11,11 @@ const getAuth = () => {
   return `Basic ${Buffer.from(credentials).toString("base64")}`;
 };
 
-export const opencodeClient = createOpencodeClient({
+const options = {
   baseUrl: config.opencode.apiUrl,
-  headers: config.opencode.password ? { Authorization: getAuth() } : undefined,
-});
+  headers: config.opencode.password ? { Authorization: getAuth()! } : undefined,
+};
+
+export const opencodeClient: BotOpenCodeClient = config.opencode.apiV2Enabled
+  ? createV2Client(options)
+  : createOpencodeClient(options);

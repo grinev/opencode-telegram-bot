@@ -93,6 +93,29 @@ describe("opencode/events", () => {
     vi.useRealTimers();
   });
 
+  it("keeps a quiet V2 stream connected while transport keepalives arrive", async () => {
+    vi.useFakeTimers();
+    __setSseIdleTimeoutForTests(100);
+    let onActivity: (() => void) | undefined;
+    globalEventMock.mockImplementation(
+      (options: { signal: AbortSignal; onActivity?: () => void }) => {
+        onActivity = options.onActivity;
+        return { stream: createAbortableStream(options.signal) };
+      },
+    );
+    const subscription = subscribeToEvents("D:/repo", vi.fn());
+    await vi.advanceTimersByTimeAsync(50);
+    onActivity?.();
+    await vi.advanceTimersByTimeAsync(75);
+    onActivity?.();
+    await vi.advanceTimersByTimeAsync(75);
+    expect(globalEventMock).toHaveBeenCalledTimes(1);
+    expect(subscribeMock).not.toHaveBeenCalled();
+    stopEventListening();
+    await vi.advanceTimersByTimeAsync(10);
+    await subscription;
+  });
+
   it("subscribes to stream and forwards events to callback", async () => {
     const eventA = { type: "session.status", properties: { sessionID: "s1" } } as Event;
     const eventB = { type: "session.idle", properties: { sessionID: "s1" } } as Event;
