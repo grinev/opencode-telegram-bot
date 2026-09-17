@@ -17,6 +17,7 @@ const mockStt = vi.hoisted(() => ({
   model: "whisper-large-v3-turbo",
   language: "",
   requestFormat: "multipart" as "multipart" | "json",
+  domainFile: "",
 }));
 
 vi.mock("#src/config.ts", () => ({
@@ -55,6 +56,7 @@ describe("isSttConfigured", () => {
     mockStt.model = "whisper-large-v3-turbo";
     mockStt.language = "";
     mockStt.requestFormat = "multipart";
+    mockStt.domainFile = "";
   });
 
   it("returns false when both apiUrl and apiKey are empty", () => {
@@ -85,6 +87,7 @@ describe("transcribeAudio", () => {
     mockStt.model = "whisper-large-v3-turbo";
     mockStt.language = "";
     mockStt.requestFormat = "multipart";
+    mockStt.domainFile = "";
     vi.restoreAllMocks();
   });
 
@@ -238,5 +241,47 @@ describe("transcribeAudio", () => {
     };
     expect(parsedBody.input_audio.format).toBe("mp3");
     expect(parsedBody.language).toBe("ru");
+  });
+
+  it("sends domain hotwords as prompt and applies corrections", async () => {
+    const domainPath = `.tmp/stt-domain-service-${process.pid}.json`;
+    await Bun.write(
+      domainPath,
+      JSON.stringify({
+        hotwords: ["rudabook", "mergea"],
+        corrections: { rutabug: "rudabook" },
+      }),
+    );
+    mockStt.domainFile = domainPath;
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ text: "language Spanish<asr_text>Mergea el rebase de rutabug" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await transcribeAudio(Buffer.from("fake-audio-data"), "voice.oga");
+
+    expect(result).toEqual({ text: "Mergea el rebase de rudabook" });
+
+    const formData = defined(fetchSpy.mock.calls[0]?.[1])?.body as FormData;
+    expect(formData.get("prompt")).toBe("Technical terms: rudabook, mergea.");
+
+    await Bun.file(domainPath).delete();
+  });
+
+  it("does not send a prompt when the domain file has no hotwords", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ text: "Hola" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await transcribeAudio(Buffer.from("fake-audio-data"), "voice.oga");
+
+    const formData = defined(fetchSpy.mock.calls[0]?.[1])?.body as FormData;
+    expect(formData.get("prompt")).toBeNull();
   });
 });

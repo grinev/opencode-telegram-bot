@@ -1,5 +1,6 @@
 import { config } from "../../config.js";
 import { logger } from "../../utils/logger.js";
+import { applySttCorrections, buildSttPrompt, loadSttDomain } from "./stt-domain.js";
 
 const STT_REQUEST_TIMEOUT_MS = 60_000;
 
@@ -49,6 +50,8 @@ export async function transcribeAudio(audioBuffer: Buffer, filename: string): Pr
 
   const url = `${config.stt.apiUrl}/audio/transcriptions`;
   const useJsonFormat = config.stt.requestFormat === "json";
+  const domain = await loadSttDomain(config.stt.domainFile);
+  const hotwordPrompt = buildSttPrompt(domain.hotwords);
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${config.stt.apiKey}`,
@@ -119,6 +122,13 @@ export async function transcribeAudio(audioBuffer: Buffer, filename: string): Pr
       formData.append("language", config.stt.language);
     }
 
+    if (hotwordPrompt) {
+      // `prompt` is a standard field for Whisper-compatible APIs; llama.cpp
+      // forwards it to Qwen3-ASR as vocabulary/context biasing.
+      formData.append("prompt", hotwordPrompt);
+      logger.debug(`[STT] Biasing prompt: ${hotwordPrompt.length} chars`);
+    }
+
     body = formData;
 
     logger.debug(
@@ -156,9 +166,13 @@ export async function transcribeAudio(audioBuffer: Buffer, filename: string): Pr
       .replace(/<\|im_end\|>\s*$/, "")
       .trim();
 
-    logger.debug(`[STT] Transcription result: ${cleanText.length} chars (raw: ${data.text.length})`);
+    const text = applySttCorrections(cleanText, domain.corrections);
 
-    return { text: cleanText };
+    logger.debug(
+      `[STT] Transcription result: ${text.length} chars (raw: ${data.text.length}, corrected: ${text !== cleanText})`,
+    );
+
+    return { text };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error(`STT request timed out after ${STT_REQUEST_TIMEOUT_MS}ms`);

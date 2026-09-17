@@ -275,6 +275,15 @@ Important:
 - **`vi.mock(path, factory)` only intercepts dynamic imports.** Bun evaluates static `import` statements before any code runs, so `mock.module("node:fs", ...)` called in the test body never applies to a static `import "node:fs"` in the source. Vitest works around this by patching Node's module loader; bun does not. **This fork avoids the issue entirely** by not using `node:fs` (or any other `node:*` module) in the source — all file I/O goes through `Bun.file` / `Bun.write` / `Bun.Glob`, child processes through `Bun.spawn` / `Bun.spawnSync`, crypto through `Bun.CryptoHasher` / `crypto.randomUUID()` (global), HTTP through the global `fetch`, etc. Tests that still mock via `vi.mock("node:fs", ...)` should be migrated to `vi.stubGlobal("Bun", { ... })` or to dynamic `await import()` of the source file.
 - **`vi.resetModules()` is a no-op.** Bun has no public module cache reset API. Tests that rely on `resetModules` + `await import(...)` to re-evaluate a module (e.g. `tests/config.test.ts`) will not get a fresh module on the second import. The same source-side refactor (factory function returning a fresh `config` on every call) is the only portable fix.
 
+## STT / voice pipeline (fork addition)
+
+Voice notes flow: Telegram OGG/OPUS → download → `ffmpeg` to 16 kHz mono WAV → `POST {STT_API_URL}/audio/transcriptions` (multipart) → recognized text shown in chat + sent to OpenCode.
+
+- **Local ASR server**: container `llama-asr` (:8080) runs llama.cpp (Vulkan) with Qwen3-ASR-1.7B Q8_0 + mmproj Q8_0. Configured via systemd drop-in `~/.config/systemd/user/opencode-telegram-bot.service.d/stt-local.conf`.
+- **Domain glossary** (`STT_DOMAIN_FILE`, optional): JSON file with `hotwords` (sent as the transcription `prompt` field to bias the model) and `corrections` (post-transcription replacements; case-insensitive, word-boundary, accent-tolerant, longest keys first). Reloaded on every transcription — edits don't need a bot restart. Live file: `~/.config/opencode-telegram-bot/stt-domain.json`.
+- **Accuracy** (measured 2026-09-17 on an edge-tts mixed es/en test set, key terms scored): 49% without biasing → 86% with hotwords (Qwen3-ASR-1.7B). Whisper large-v3-turbo (legacy `whisper-server.service` on :21000, unused by the bot) was rejected: it translates code-switched speech and hallucinates.
+- **Deploy**: the systemd service runs from `/home/ovreuc/opencode-telegram-bot-deploy` (separate checkout pinned to a commit — NOT this dev tree). Update with `git fetch origin && git checkout <sha>` + `systemctl --user restart opencode-telegram-bot.service`.
+
 ## OpenCode SDK quick reference
 
 ```typescript

@@ -261,6 +261,7 @@ The first time you start the bot, the configuration wizard runs and writes `.env
 | `STT_LANGUAGE`                             | Optional language hint (empty = provider auto-detect)                                                                 |    No    | —                        |
 | `STT_REQUEST_FORMAT`                       | STT request format: `multipart` (standard OpenAI/Groq Whisper) or `json` (base64 `input_audio` body, e.g. OpenRouter) |    No    | `multipart`              |
 | `STT_NOTE_PROMPT`                          | Optional note prepended to the LLM prompt as `[Note: ...]` for voice transcriptions; empty / `false` / `0` disable it |    No    | —                        |
+| `STT_DOMAIN_FILE`                          | Optional JSON glossary to improve transcription: `hotwords` bias the ASR prompt (product/technical terms) and `corrections` fix recurring misheard tokens |    No    | —                        |
 | `DOC_EXTRACTOR_URL`                        | Document text extraction API URL (enables PDF/DOCX/PPTX extraction)                                                    |    No    | —                        |
 | `DOC_EXTRACTOR_API_KEY`                    | API key for the document extractor (optional for self-hosted extractors)                                                |    No    | —                        |
 | `LOCAL_VISION_API_URL`                     | OpenAI-compatible local vision model base URL. Used as fallback when the active model doesn't support image input: the bot describes your photo locally and sends the description as text | No | `http://127.0.0.1:8082/v1` |
@@ -389,6 +390,20 @@ If `STT_API_URL` and `STT_API_KEY` are set, the bot will:
 4. Send the recognized text to OpenCode as a normal prompt
 
 If `STT_NOTE_PROMPT` is set to a non-empty value other than `false` or `0`, the bot prepends `[Note: ...]` to the transcription before sending it to the LLM. The recognized text shown in Telegram stays unchanged.
+
+`STT_DOMAIN_FILE` points to a JSON glossary that improves recognition of domain vocabulary (product names, technical/English terms in mixed-language speech):
+
+```json
+{
+  "hotwords": ["rudabook", "primigenum", "mergea", "schedules", "GPU"],
+  "corrections": { "rutabug": "rudabook", "esquetules": "schedules" }
+}
+```
+
+- `hotwords` are sent as the `prompt` field of the transcription request (`multipart` format only) to bias the ASR model towards this vocabulary.
+- `corrections` are applied to the recognized text after transcription (case-insensitive, word boundaries, accent-tolerant, longest keys first) and are reflected in the chat message.
+
+The file is optional and reloaded on every transcription, so edits apply without restarting the bot.
 
 If TTS credentials are configured, you can choose spoken reply behavior in `/settings`: `off` disables audio replies, `all` sends audio for every assistant reply, and `auto` sends audio only after voice/audio prompts. The preference is stored in `settings.json` and persists across restarts.
 

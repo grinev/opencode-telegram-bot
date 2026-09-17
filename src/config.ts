@@ -366,6 +366,8 @@ export function createConfig(env: EnvRecord) {
       model: getEnvVar(env, "STT_MODEL", false) || "whisper-large-v3-turbo",
       language: getEnvVar(env, "STT_LANGUAGE", false),
       notePrompt: getEnvVar(env, "STT_NOTE_PROMPT", false),
+      // Optional JSON glossary (hotwords + corrections) for ASR biasing.
+      domainFile: getEnvVar(env, "STT_DOMAIN_FILE", false),
       // "multipart" (default) = standard OpenAI/Groq Whisper form-data upload.
       // "json" = base64 audio in an `input_audio` JSON body (e.g. OpenRouter).
       requestFormat: getOptionalSttRequestFormatEnvVar(env, "STT_REQUEST_FORMAT", "multipart"),
