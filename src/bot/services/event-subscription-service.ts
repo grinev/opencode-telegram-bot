@@ -40,6 +40,7 @@ import {
   setResponseStreamerForReconciliation,
 } from "../../app/services/busy-reconciliation-service.js";
 import { finalizeAssistantResponse } from "../streaming/finalize-assistant-response.js";
+import { planCjkCorrection } from "./cjk-correction-service.js";
 import { sendTtsResponseForSession } from "../handlers/tts-response-handler.js";
 import { deliverThinkingMessage } from "../messages/thinking-message.js";
 import { shouldSuppressUserAbortSessionError } from "../../app/managers/abort-suppression-manager.js";
@@ -652,12 +653,24 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             await this.finalizeCompactProgress(sessionId);
           }
 
+          const cjkCorrection = await planCjkCorrection(
+            sessionId,
+            {
+              directory: currentSession.directory,
+              agent: completionInfo.agent,
+              providerID: completionInfo.providerID,
+              modelID: completionInfo.modelID,
+            },
+            messageText,
+          );
+          const assistantText = cjkCorrection.replacementText ?? messageText;
+
           const assistantResponseMode = this.getAssistantResponseStreamMode(sessionId, messageId);
 
           await finalizeAssistantResponse({
             sessionId,
             messageId,
-            messageText,
+            messageText: assistantText,
             responseStreamer: {
               complete: (completeSessionId, completeMessageId, payload, options) =>
                 this.completeAssistantResponse(
@@ -690,12 +703,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             },
           });
 
-          await sendTtsResponseForSession({
-            api: botApi,
-            sessionId,
-            chatId,
-            text: messageText,
-          });
+          if (!cjkCorrection.correctionRequested && cjkCorrection.replacementText === null) {
+            await sendTtsResponseForSession({
+              api: botApi,
+              sessionId,
+              chatId,
+              text: cjkCorrection.sanitizedText,
+            });
+          }
         } catch (err) {
           clearPromptResponseMode(sessionId);
           this.clearThinkingStream(sessionId, messageId, "assistant_finalize_failed");

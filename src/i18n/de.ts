@@ -685,4 +685,6 @@ export const de: I18nDictionary = {
   "local_command.empty_output": "The command produced no output.",
   "local_command.failed": "Command failed with exit code {exitCode}: {stderr}",
   "local_command.timeout": "The command timed out.",
+  "cjk_guard.blocked_notice": "⚠️ Das Modell konnte nicht auf Spanisch antworten. Bitte sende deine Anfrage erneut.",
+  "cjk_guard.correcting_notice": "⚠️ Antwort in einem anderen Alphabet (CJK) erkannt. Das Modell wird gebeten, sie auf Spanisch neu zu schreiben…",
 };

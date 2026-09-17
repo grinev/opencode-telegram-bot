@@ -48,6 +48,37 @@ describe("bot/messages/telegram-text", () => {
     });
   });
 
+  it("strips CJK characters before sending", async () => {
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
+
+    await sendBotText({
+      api: { sendMessage },
+      chatId: 100,
+      text: "Hola 你好 mundo",
+    });
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0]?.[1]).toBe("Hola  mundo");
+  });
+
+  it("rebuilds rendered parts carrying CJK as plain text", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 42 });
+    const sendRichMessage = vi.fn();
+
+    await sendRenderedBotPart({
+      api: { sendMessage, sendRichMessage },
+      chatId: 100,
+      part: {
+        blocks: [{ type: "paragraph", text: "你好" }],
+        fallbackText: "Hola 你好",
+        source: "blocks",
+      },
+    });
+
+    expect(sendRichMessage).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls[0]?.[1]).toBe("Hola ");
+  });
+
   it("uses MarkdownV2 mode when requested", async () => {
     const sendMessage = vi.fn().mockResolvedValue(undefined);
 

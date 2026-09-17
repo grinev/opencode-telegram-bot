@@ -1,12 +1,13 @@
 import { config } from "../../config.js";
 import { logger } from "../../utils/logger.js";
 import { chunkPlainText, chunkTelegramRenderedBlocks } from "../render/chunker.js";
+import { sanitizeCjkText } from "../render/cjk-guard.js";
 import { renderTelegramBlocks, renderTelegramParts, toRenderedBlocks } from "../render/pipeline.js";
 import type { TelegramRenderedBlock, TelegramRenderedPart } from "../render/types.js";
 import type { StreamingMessagePayload } from "../streaming/response-streamer.js";
 
 export function createPlainRenderedParts(text: string): TelegramRenderedPart[] {
-  return chunkPlainText(text);
+  return chunkPlainText(sanitizeCjkText(text).text);
 }
 
 function useAssistantEntitiesFormat(): boolean {
@@ -18,14 +19,16 @@ function renderAssistantBlocksSafe(text: string): TelegramRenderedBlock[] {
     return [];
   }
 
+  const safeText = sanitizeCjkText(text).text;
+
   try {
-    return renderTelegramBlocks(text);
+    return renderTelegramBlocks(safeText);
   } catch (error) {
     logger.warn(
       "[AssistantRender] Block rendering failed, falling back to plain streaming block",
       error,
     );
-    return toRenderedBlocks([{ type: "plain", text }]);
+    return toRenderedBlocks([{ type: "plain", text: safeText }]);
   }
 }
 
@@ -94,7 +97,8 @@ export function buildStreamingBlocks(messageText: string): TelegramRenderedBlock
 
   const unstableTail = stableBoundary > 0 ? messageText.slice(stableBoundary) : messageText;
   if (unstableTail) {
-    blocks.push(...toRenderedBlocks([{ type: "plain", text: unstableTail }]));
+    const safeTail = sanitizeCjkText(unstableTail).text;
+    blocks.push(...toRenderedBlocks([{ type: "plain", text: safeTail }]));
   }
 
   return blocks;

@@ -666,4 +666,6 @@ export const ru: I18nDictionary = {
   "local_command.empty_output": "Команда не вернула вывод.",
   "local_command.failed": "Команда завершилась с кодом {exitCode}: {stderr}",
   "local_command.timeout": "Время выполнения команды истекло.",
+  "cjk_guard.blocked_notice": "⚠️ Модель не смогла ответить на испанском. Отправьте запрос ещё раз.",
+  "cjk_guard.correcting_notice": "⚠️ Обнаружен ответ другим алфавитом (CJK). Прошу модель переписать его на испанском…",
 };

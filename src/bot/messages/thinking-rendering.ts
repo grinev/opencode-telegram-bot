@@ -1,6 +1,7 @@
 import type { MessageEntity } from "grammy/types";
 
 import { t } from "../../i18n/index.js";
+import { sanitizeCjkText } from "../render/cjk-guard.js";
 import { PLAIN_MAX_PART_CHARS } from "../render/limits.js";
 import { splitTextIntoChunks } from "../render/text-splitter.js";
 import type { TelegramRenderedPart } from "../render/types.js";
@@ -39,15 +40,17 @@ function createThinkingPart(
     return { blocks: [], fallbackText: header, source: "plain" };
   }
 
+  const safeText = sanitizeCjkText(text).text;
+
   const entity: MessageEntity = {
     type: collapsed ? "expandable_blockquote" : "blockquote",
     offset: header.length + 1,
-    length: text.length,
+    length: safeText.length,
   };
 
   return {
     blocks: [],
-    fallbackText: `${header}\n${text}`,
+    fallbackText: `${header}\n${safeText}`,
     source: "plain",
     entities: [entity],
   };

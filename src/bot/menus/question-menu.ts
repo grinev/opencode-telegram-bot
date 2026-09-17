@@ -9,6 +9,7 @@ import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { t } from "../../i18n/index.js";
 import { editRenderedBotPart, sendRenderedBotPart } from "../messages/telegram-text.js";
+import { sanitizeCjkText } from "../render/cjk-guard.js";
 import type { TelegramRenderedPart, TelegramRichBlock } from "../render/types.js";
 
 const MAX_BUTTON_LENGTH = 60;
@@ -361,9 +362,10 @@ function formatQuestionDetailsPart(question: {
   const totalQuestions = questionManager.getTotalQuestions();
   const progressText = totalQuestions > 0 ? `${currentIndex + 1}/${totalQuestions}` : "";
 
-  const headerTitle = [QUESTION_EMOJI, progressText, question.header].filter(Boolean).join(" ");
+  const safeHeader = sanitizeCjkText(question.header).text;
+  const headerTitle = [QUESTION_EMOJI, progressText, safeHeader].filter(Boolean).join(" ");
   const multiple = question.multiple ? t("question.multi_hint") : "";
-  const questionText = `${question.question}${multiple}`;
+  const questionText = `${sanitizeCjkText(question.question).text}${multiple}`;
 
   const segments: QuestionSegment[] = [];
   if (headerTitle) {
@@ -373,9 +375,11 @@ function formatQuestionDetailsPart(question: {
     segments.push({ rest: questionText });
   }
   for (const option of question.options) {
+    const label = sanitizeCjkText(option.label).text;
+    const description = sanitizeCjkText(option.description).text;
     segments.push({
-      label: option.label || undefined,
-      rest: option.description ? `${option.label ? " — " : ""}${option.description}` : "",
+      label: label || undefined,
+      rest: description ? `${label ? " — " : ""}${description}` : "",
     });
   }
 
