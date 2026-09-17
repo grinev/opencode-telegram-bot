@@ -1,4 +1,5 @@
 import { Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import {
@@ -10,8 +11,6 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { failure, notify, switched } from "./feedback.js";
 import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 
 /**
@@ -19,7 +18,9 @@ import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-m
  * @param ctx grammY context
  * @returns true if handled, false otherwise
  */
-export async function handleVariantSelect(ctx: Context): Promise<boolean> {
+export type VariantSelectDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager">;
+
+export async function handleVariantSelect(ctx: Context, deps: VariantSelectDeps): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
 
   if (!callbackQuery?.data || !callbackQuery.data.startsWith("variant:")) {
@@ -35,11 +36,11 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
 
   try {
     if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
 
-    if (pinnedMessageManager.getContextLimit() === 0) {
-      await pinnedMessageManager.refreshContextLimit();
+    if (deps.pinnedMessageManager.getContextLimit() === 0) {
+      await deps.pinnedMessageManager.refreshContextLimit();
     }
 
     // Parse callback data: "variant:variantId"
@@ -61,21 +62,21 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
     const updatedModel = getStoredModel();
 
     // Update keyboard manager state
-    keyboardManager.updateModel(updatedModel);
-    keyboardManager.updateVariant(variantId);
+    deps.keyboardManager.updateModel(updatedModel);
+    deps.keyboardManager.updateVariant(variantId);
 
     // Build keyboard with correct context info
     const currentAgent = await resolveProjectAgent(getStoredAgent());
     const contextInfo =
-      pinnedMessageManager.getContextInfo() ??
-      (pinnedMessageManager.getContextLimit() > 0
-        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
+      deps.pinnedMessageManager.getContextInfo() ??
+      (deps.pinnedMessageManager.getContextLimit() > 0
+        ? { tokensUsed: 0, tokensLimit: deps.pinnedMessageManager.getContextLimit() }
         : null);
 
-    keyboardManager.updateAgent(currentAgent);
+    deps.keyboardManager.updateAgent(currentAgent);
 
     if (contextInfo) {
-      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+      deps.keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
     }
 
     const variantName = formatVariantForButton(variantId);
@@ -93,7 +94,7 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
 
     // Send confirmation message with updated keyboard, then drop the inline menu
     await switched(ctx, t("variant.changed_message", { name: displayName }), keyboard);
-    await pinnedMessageManager.refresh();
+    await deps.pinnedMessageManager.refresh();
 
     return true;
   } catch (err) {

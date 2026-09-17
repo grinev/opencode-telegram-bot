@@ -1,44 +1,44 @@
 import { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
 import {
   findServerPid,
   killServerProcess,
   resolveLocalOpencodeTarget,
 } from "../../opencode/process.js";
-import { opencodeReadyLifecycle } from "../../opencode/ready-lifecycle.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { isContainerRuntime } from "../../runtime/container.js";
 import { editBotText } from "../messages/telegram-text.js";
-import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
-import { attachManager } from "../../app/managers/attach-manager.js";
 import { promptQueue } from "../../app/managers/prompt-queue-manager.js";
-import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
 import { markAttachedSessionIdle } from "../../app/services/attach-service.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
 
-export interface OpencodeStopCommandDeps {
-  clearRuntimeState: (reason: string) => void;
-}
+export type OpencodeStopCommandDeps = Pick<
+  AppContainer,
+  | "attachManager"
+  | "foregroundSessionState"
+  | "opencodeReadyLifecycle"
+  | "resetInteractions"
+  | "resetRuntimeStreams"
+>;
 
 const STOP_REASON = "opencode_stop";
 
-async function releaseLocalStateAfterServerStop(
-  clearRuntimeState: (reason: string) => void,
-): Promise<void> {
+async function releaseLocalStateAfterServerStop(deps: OpencodeStopCommandDeps): Promise<void> {
   const sessionIds = new Set<string>();
 
-  for (const session of foregroundSessionState.getBusySessions()) {
+  for (const session of deps.foregroundSessionState.getBusySessions()) {
     sessionIds.add(session.sessionId);
   }
 
-  const attached = attachManager.getSnapshot();
+  const attached = deps.attachManager.getSnapshot();
   if (attached) {
     sessionIds.add(attached.sessionId);
   }
 
-  clearRuntimeState(STOP_REASON);
-  foregroundSessionState.clearAll(STOP_REASON);
+  deps.resetRuntimeStreams(STOP_REASON);
+  deps.foregroundSessionState.clearAll(STOP_REASON);
 
   if (attached) {
     await markAttachedSessionIdle(attached.sessionId);
@@ -49,8 +49,8 @@ async function releaseLocalStateAfterServerStop(
   }
 
   promptQueue.clear(STOP_REASON);
-  clearAllInteractionState(STOP_REASON);
-  opencodeReadyLifecycle.notifyUnavailable(STOP_REASON);
+  deps.resetInteractions(STOP_REASON);
+  deps.opencodeReadyLifecycle.notifyUnavailable(STOP_REASON);
 }
 
 /**
@@ -92,7 +92,7 @@ export async function opencodeStopCommand(
       return;
     }
 
-    await releaseLocalStateAfterServerStop(deps.clearRuntimeState);
+    await releaseLocalStateAfterServerStop(deps);
 
     await editBotText({
       api: ctx.api,

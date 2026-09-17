@@ -7,6 +7,7 @@ import { showPermissionRequest } from "../../../src/bot/menus/permission-menu.js
 import { handlePermissionCallback } from "../../../src/bot/callbacks/permission-callback-handler.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   permissionReplyMock: vi.fn(),
@@ -112,6 +113,10 @@ async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function createDeps() {
+  return createTestAppContainer();
 }
 
 describe("bot permission menu/callbacks", () => {
@@ -259,7 +264,7 @@ describe("bot permission menu/callbacks", () => {
     );
 
     const staleCtx = createPermissionCallbackContext("permission:once", 499);
-    const handled = await handlePermissionCallback(staleCtx);
+    const handled = await handlePermissionCallback(staleCtx, createDeps());
 
     expect(handled).toBe(true);
     expect(staleCtx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -278,7 +283,7 @@ describe("bot permission menu/callbacks", () => {
     await showPermissionRequest(botApi, 777, createPermissionRequest("perm-valid"));
 
     const ctx = createPermissionCallbackContext("permission:always", 600);
-    const handled = await handlePermissionCallback(ctx);
+    const handled = await handlePermissionCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("permission.reply.always") });
@@ -309,7 +314,7 @@ describe("bot permission menu/callbacks", () => {
     expect(permissionManager.getRequestIDs(650)).toEqual(["perm-1", "perm-duplicate"]);
 
     const ctx = createPermissionCallbackContext("permission:always", 650);
-    const handled = await handlePermissionCallback(ctx);
+    const handled = await handlePermissionCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("permission.reply.always") });
@@ -406,7 +411,7 @@ describe("bot permission menu/callbacks", () => {
     await showPermissionRequest(botApi, 777, createPermissionRequest("perm-duplicate"));
 
     const ctx = createPermissionCallbackContext("permission:always", 660);
-    await handlePermissionCallback(ctx);
+    await handlePermissionCallback(ctx, createDeps());
     await flushMicrotasks();
 
     expect(mocked.permissionReplyMock).toHaveBeenCalledTimes(2);
@@ -427,7 +432,7 @@ describe("bot permission menu/callbacks", () => {
     );
 
     const firstCtx = createPermissionCallbackContext("permission:once", 700);
-    const firstHandled = await handlePermissionCallback(firstCtx);
+    const firstHandled = await handlePermissionCallback(firstCtx, createDeps());
 
     expect(firstHandled).toBe(true);
     expect(firstCtx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("permission.reply.once") });
@@ -450,7 +455,7 @@ describe("bot permission menu/callbacks", () => {
     expect(stateAfterFirstReply?.metadata.pendingCount).toBe(1);
 
     const secondCtx = createPermissionCallbackContext("permission:reject", 701);
-    const secondHandled = await handlePermissionCallback(secondCtx);
+    const secondHandled = await handlePermissionCallback(secondCtx, createDeps());
 
     expect(secondHandled).toBe(true);
     expect(secondCtx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -480,7 +485,7 @@ describe("bot permission menu/callbacks", () => {
     });
 
     const ctx = createPermissionCallbackContext("permission:always", 750);
-    await handlePermissionCallback(ctx);
+    await handlePermissionCallback(ctx, createDeps());
     await flushMicrotasks();
 
     expect(ctx.api.sendMessage).not.toHaveBeenCalled();
@@ -496,7 +501,7 @@ describe("bot permission menu/callbacks", () => {
     });
 
     const ctx = createPermissionCallbackContext("permission:once", 751);
-    await handlePermissionCallback(ctx);
+    await handlePermissionCallback(ctx, createDeps());
     await flushMicrotasks();
 
     expect(ctx.api.sendMessage).toHaveBeenCalledWith(777, t("permission.send_reply_error"));

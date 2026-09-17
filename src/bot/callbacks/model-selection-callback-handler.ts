@@ -1,4 +1,5 @@
 import { Context, InlineKeyboard } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
 import {
   fetchCurrentModel,
@@ -11,13 +12,10 @@ import {
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { formatModelForDisplay } from "../../app/types/model.js";
 import type { ModelInfo, ProviderInfo } from "../../app/types/model.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { cancelMenu, failure, switched } from "./feedback.js";
 import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import {
   appendInlineMenuCancelButton,
   clearActiveInlineMenu,
@@ -55,6 +53,11 @@ interface ModelListMetadata {
   recent: ModelInfo[];
 }
 
+export type ModelSelectionDeps = Pick<
+  AppContainer,
+  "interactionManager" | "keyboardManager" | "pinnedMessageManager"
+>;
+
 function parseModelItems(value: unknown): ModelInfo[] {
   if (!Array.isArray(value)) {
     return [];
@@ -82,8 +85,8 @@ function parseModelItems(value: unknown): ModelInfo[] {
   });
 }
 
-function parseModelSearchMetadata(): ModelSearchMetadata | null {
-  const state = interactionManager.getSnapshot();
+function parseModelSearchMetadata(deps: ModelSelectionDeps): ModelSearchMetadata | null {
+  const state = deps.interactionManager.getSnapshot();
   if (!state || state.kind !== "custom") {
     return null;
   }
@@ -101,8 +104,8 @@ function parseModelSearchMetadata(): ModelSearchMetadata | null {
   return { flow, stage, messageId, models: parseModelItems(state.metadata.models) };
 }
 
-function parseModelListMetadata(): ModelListMetadata | null {
-  const state = interactionManager.getSnapshot();
+function parseModelListMetadata(deps: ModelSelectionDeps): ModelListMetadata | null {
+  const state = deps.interactionManager.getSnapshot();
   if (!state || state.kind !== "inline" || state.metadata.menuKind !== "model") {
     return null;
   }
@@ -139,7 +142,7 @@ function parseCallbackIndex(data: string, prefix: string): number | null {
   return parseNonNegativeIndex(data.slice(prefix.length));
 }
 
-function resolveModelListCallback(data: string): ModelInfo | null {
+function resolveModelListCallback(deps: ModelSelectionDeps, data: string): ModelInfo | null {
   if (!data.startsWith(MODEL_LIST_CALLBACK_PREFIX)) {
     return null;
   }
@@ -158,7 +161,7 @@ function resolveModelListCallback(data: string): ModelInfo | null {
     return null;
   }
 
-  const lists = parseModelListMetadata();
+  const lists = parseModelListMetadata(deps);
   if (!lists) {
     return null;
   }
@@ -241,8 +244,8 @@ interface ProviderBrowserMetadata {
   models: ModelInfo[];
 }
 
-function parseProviderBrowserMetadata(): ProviderBrowserMetadata | null {
-  const state = interactionManager.getSnapshot();
+function parseProviderBrowserMetadata(deps: ModelSelectionDeps): ProviderBrowserMetadata | null {
+  const state = deps.interactionManager.getSnapshot();
   if (!state || state.kind !== "inline" || state.metadata.menuKind !== "model") {
     return null;
   }
@@ -255,10 +258,13 @@ function parseProviderBrowserMetadata(): ProviderBrowserMetadata | null {
   };
 }
 
-function updateModelMenuMetadata(metadata: Record<string, unknown>): void {
-  const state = interactionManager.getSnapshot();
+function updateModelMenuMetadata(
+  deps: ModelSelectionDeps,
+  metadata: Record<string, unknown>,
+): void {
+  const state = deps.interactionManager.getSnapshot();
 
-  interactionManager.transition({
+  deps.interactionManager.transition({
     expectedInput: "callback",
     metadata: {
       ...metadata,
@@ -278,38 +284,46 @@ async function renderModelMenuScreen(
   });
 }
 
-async function showProvidersScreen(ctx: Context, page: number): Promise<void> {
+async function showProvidersScreen(
+  ctx: Context,
+  deps: ModelSelectionDeps,
+  page: number,
+): Promise<void> {
   const providers = await getProviders();
   const view = buildProvidersMenuView(providers, page);
 
   await renderModelMenuScreen(ctx, view);
-  updateModelMenuMetadata({ providers, providersPage: view.page });
+  updateModelMenuMetadata(deps, { providers, providersPage: view.page });
 }
 
 /**
  * Shared logic for applying a model selection and updating UI.
  * Used by both the regular inline menu flow and the search results flow.
  */
-async function applyModelSelectionAndNotify(ctx: Context, modelInfo: ModelInfo): Promise<void> {
+async function applyModelSelectionAndNotify(
+  ctx: Context,
+  deps: ModelSelectionDeps,
+  modelInfo: ModelInfo,
+): Promise<void> {
   if (ctx.chat) {
-    keyboardManager.initialize(ctx.api, ctx.chat.id);
+    deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
   }
 
   selectModel(modelInfo);
-  keyboardManager.updateModel(modelInfo);
-  await pinnedMessageManager.refreshContextLimit();
+  deps.keyboardManager.updateModel(modelInfo);
+  await deps.pinnedMessageManager.refreshContextLimit();
 
   const currentAgent = await resolveProjectAgent(getStoredAgent());
   const contextInfo =
-    pinnedMessageManager.getContextInfo() ??
-    (pinnedMessageManager.getContextLimit() > 0
-      ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
+    deps.pinnedMessageManager.getContextInfo() ??
+    (deps.pinnedMessageManager.getContextLimit() > 0
+      ? { tokensUsed: 0, tokensLimit: deps.pinnedMessageManager.getContextLimit() }
       : null);
 
-  keyboardManager.updateAgent(currentAgent);
+  deps.keyboardManager.updateAgent(currentAgent);
 
   if (contextInfo) {
-    keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+    deps.keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
   }
 
   const variantName = formatVariantForButton(modelInfo.variant || "default");
@@ -330,7 +344,7 @@ async function applyModelSelectionAndNotify(ctx: Context, modelInfo: ModelInfo):
  * Skips search-related callbacks (handled separately).
  * @returns true if handled, false otherwise
  */
-export async function handleModelSelect(ctx: Context): Promise<boolean> {
+export async function handleModelSelect(ctx: Context, deps: ModelSelectionDeps): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
 
   if (!callbackQuery?.data || !callbackQuery.data.startsWith("model:")) {
@@ -359,7 +373,7 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
   logger.debug(`[ModelHandler] Received callback: ${callbackQuery.data}`);
 
   try {
-    const modelInfo = resolveModelListCallback(callbackQuery.data);
+    const modelInfo = resolveModelListCallback(deps, callbackQuery.data);
     const shouldUseLegacyFallback = !isShortModelCallback(callbackQuery.data);
     const resolvedModelInfo =
       modelInfo ?? (shouldUseLegacyFallback ? parseLegacyModelCallback(callbackQuery.data) : null);
@@ -372,7 +386,7 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     }
 
     clearActiveInlineMenu("model_selected");
-    await applyModelSelectionAndNotify(ctx, resolvedModelInfo);
+    await applyModelSelectionAndNotify(ctx, deps, resolvedModelInfo);
 
     return true;
   } catch (err) {
@@ -391,7 +405,10 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
  * - model:pick:<index> — select a model from the current provider page
  * @returns true if handled, false otherwise
  */
-export async function handleModelProvidersCallback(ctx: Context): Promise<boolean> {
+export async function handleModelProvidersCallback(
+  ctx: Context,
+  deps: ModelSelectionDeps,
+): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data || !isProviderBrowserCallback(data)) {
     return false;
@@ -410,19 +427,19 @@ export async function handleModelProvidersCallback(ctx: Context): Promise<boolea
       const view = await buildModelRootMenuView(fetchCurrentModel(), modelLists);
 
       await renderModelMenuScreen(ctx, view);
-      updateModelMenuMetadata({ modelLists });
+      updateModelMenuMetadata(deps, { modelLists });
       return true;
     }
 
     const providersPage = parseProvidersPageCallback(data);
     if (providersPage !== null) {
-      await showProvidersScreen(ctx, providersPage);
+      await showProvidersScreen(ctx, deps, providersPage);
       return true;
     }
 
     const providerCallback = parseProviderCallback(data);
     if (providerCallback) {
-      const meta = parseProviderBrowserMetadata();
+      const meta = parseProviderBrowserMetadata(deps);
       const provider = meta?.providers[providerCallback.providerIndex];
 
       if (!provider) {
@@ -444,7 +461,7 @@ export async function handleModelProvidersCallback(ctx: Context): Promise<boolea
       );
 
       await renderModelMenuScreen(ctx, view);
-      updateModelMenuMetadata({
+      updateModelMenuMetadata(deps, {
         providers: meta.providers,
         providersPage: meta.providersPage,
         models: view.pageModels.map((model) => ({
@@ -458,7 +475,7 @@ export async function handleModelProvidersCallback(ctx: Context): Promise<boolea
 
     const modelIndex = parseProviderModelCallback(data);
     if (modelIndex !== null) {
-      const meta = parseProviderBrowserMetadata();
+      const meta = parseProviderBrowserMetadata(deps);
       const modelInfo = meta?.models[modelIndex];
 
       if (!modelInfo) {
@@ -468,7 +485,7 @@ export async function handleModelProvidersCallback(ctx: Context): Promise<boolea
       }
 
       clearActiveInlineMenu("model_selected");
-      await applyModelSelectionAndNotify(ctx, modelInfo);
+      await applyModelSelectionAndNotify(ctx, deps, modelInfo);
       return true;
     }
 
@@ -484,7 +501,10 @@ export async function handleModelProvidersCallback(ctx: Context): Promise<boolea
  * Handle the search button callback (model:search) from the inline menu.
  * Transitions the interaction to text-input mode and prompts the user.
  */
-export async function handleModelSearchCallback(ctx: Context): Promise<boolean> {
+export async function handleModelSearchCallback(
+  ctx: Context,
+  deps: ModelSelectionDeps,
+): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data) {
     return false;
@@ -503,8 +523,8 @@ export async function handleModelSearchCallback(ctx: Context): Promise<boolean> 
   await ctx.deleteMessage().catch(() => {});
 
   // Start a new interaction for search text input
-  // interactionManager.start() clears any existing interaction automatically
-  interactionManager.start({
+  // deps.interactionManager.start() clears any existing interaction automatically
+  deps.interactionManager.start({
     kind: "custom",
     expectedInput: "text",
     metadata: {
@@ -523,8 +543,11 @@ export async function handleModelSearchCallback(ctx: Context): Promise<boolean> 
  * Handle text input for model search.
  * Searches the full provider catalog and shows results (or "not found").
  */
-export async function handleModelSearchTextInput(ctx: Context): Promise<boolean> {
-  const meta = parseModelSearchMetadata();
+export async function handleModelSearchTextInput(
+  ctx: Context,
+  deps: ModelSelectionDeps,
+): Promise<boolean> {
+  const meta = parseModelSearchMetadata(deps);
   if (!meta || meta.stage !== "input") {
     return false;
   }
@@ -562,7 +585,7 @@ export async function handleModelSearchTextInput(ctx: Context): Promise<boolean>
     const sent = await ctx.reply(replyText, { reply_markup: keyboard });
 
     // Transition to results stage (callback-only)
-    interactionManager.transition({
+    deps.interactionManager.transition({
       expectedInput: "callback",
       metadata: {
         flow: "model-search",
@@ -580,7 +603,7 @@ export async function handleModelSearchTextInput(ctx: Context): Promise<boolean>
   } catch (err) {
     logger.error("[ModelHandler] Model search error:", err);
     await ctx.reply(t("model.search.error"));
-    interactionManager.clear("model_search_error");
+    deps.interactionManager.clear("model_search_error");
     return true;
   }
 }
@@ -591,13 +614,16 @@ export async function handleModelSearchTextInput(ctx: Context): Promise<boolean>
  * - model:search:again — delegates to handleModelSearchCallback
  * - model:provider:model — selects the model from search results
  */
-export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
+export async function handleModelSearchResults(
+  ctx: Context,
+  deps: ModelSelectionDeps,
+): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data) {
     return false;
   }
 
-  const meta = parseModelSearchMetadata();
+  const meta = parseModelSearchMetadata(deps);
   if (!meta || meta.stage !== "results") {
     return false;
   }
@@ -613,7 +639,7 @@ export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
 
   // Cancel
   if (data === MODEL_SEARCH_CANCEL_CALLBACK) {
-    interactionManager.clear("model_search_cancelled");
+    deps.interactionManager.clear("model_search_cancelled");
     await cancelMenu(ctx);
     return true;
   }
@@ -623,7 +649,7 @@ export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
     await ctx.answerCallbackQuery().catch(() => {});
     await ctx.deleteMessage().catch(() => {});
 
-    interactionManager.start({
+    deps.interactionManager.start({
       kind: "custom",
       expectedInput: "text",
       metadata: {
@@ -646,8 +672,8 @@ export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
       return true;
     }
 
-    interactionManager.clear("model_search_selected");
-    await applyModelSelectionAndNotify(ctx, modelInfo);
+    deps.interactionManager.clear("model_search_selected");
+    await applyModelSelectionAndNotify(ctx, deps, modelInfo);
     return true;
   }
 
@@ -664,8 +690,8 @@ export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
       return true;
     }
 
-    interactionManager.clear("model_search_selected");
-    await applyModelSelectionAndNotify(ctx, modelInfo);
+    deps.interactionManager.clear("model_search_selected");
+    await applyModelSelectionAndNotify(ctx, deps, modelInfo);
     return true;
   }
 

@@ -27,6 +27,7 @@ import {
   SETTINGS_THINKING_CONTENT_CALLBACK,
   SETTINGS_TTS_CALLBACK,
 } from "../../../src/bot/menus/settings-menu.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   getCompactOutputModeMock: vi.fn(),
@@ -76,12 +77,14 @@ vi.mock("../../../src/app/services/tts-service.js", () => ({
   isTtsConfigured: mocked.isTtsConfiguredMock,
 }));
 
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    initialize: vi.fn(),
-    applyPinnedDashboardEnabled: mocked.applyPinnedDashboardEnabledMock,
-  },
-}));
+function createDeps() {
+  return createTestAppContainer({
+    pinnedMessageManager: {
+      initialize: vi.fn(),
+      applyPinnedDashboardEnabled: mocked.applyPinnedDashboardEnabledMock,
+    } as never,
+  });
+}
 
 describe("bot/commands/settings-command", () => {
   beforeEach(() => {
@@ -276,7 +279,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_COMPACT_OUTPUT_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setCompactOutputModeMock).toHaveBeenCalledWith(true);
@@ -313,7 +316,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setDeleteCompactProgressOnFinishMock).toHaveBeenCalledWith(true);
@@ -333,7 +336,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_THINKING_CONTENT_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setShowThinkingContentMock).toHaveBeenCalledWith(false);
@@ -354,7 +357,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_DIFF_FILES_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setSendDiffFileAttachmentsMock).toHaveBeenCalledWith(false);
@@ -375,7 +378,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_RESPONSE_STREAMING_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setResponseStreamingModeMock).toHaveBeenCalledWith("draft");
@@ -396,7 +399,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_ASSISTANT_FOOTER_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setShowAssistantRunFooterMock).toHaveBeenCalledWith(false);
@@ -417,7 +420,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_PROMPT_QUEUE_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setPromptQueueEnabledMock).toHaveBeenCalledWith(true);
@@ -438,7 +441,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_TTS_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setTtsModeMock).toHaveBeenCalledWith("all");
@@ -457,7 +460,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_TTS_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setTtsModeMock).not.toHaveBeenCalled();
@@ -476,7 +479,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_TTS_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setTtsModeMock).toHaveBeenCalledWith("off");
@@ -492,7 +495,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.applyPinnedDashboardEnabledMock).toHaveBeenCalledWith(false);
@@ -510,7 +513,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setPinnedDashboardEnabledMock).not.toHaveBeenCalled();
@@ -521,7 +524,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
   it("ignores unrelated callbacks", async () => {
     const ctx = createCallbackContext("unknown:data");
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(false);
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
@@ -531,7 +534,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     activateSettingsMenu();
     const ctx = createCallbackContext(`${SETTINGS_CALLBACK_PREFIX}unknown`);
 
-    const result = await handleSettingsCallback(ctx);
+    const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("callback.processing_error") });

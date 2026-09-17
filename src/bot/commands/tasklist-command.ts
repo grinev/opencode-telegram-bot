@@ -1,6 +1,6 @@
 import { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { t } from "../../i18n/index.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { listScheduledTasks } from "../../app/stores/scheduled-task-store.js";
 import type { ScheduledTask } from "../../app/types/scheduled-task.js";
 import { buildTaskListKeyboard } from "../menus/scheduled-task-menu.js";
@@ -19,7 +19,12 @@ function sortTasks(tasks: ScheduledTask[]): ScheduledTask[] {
   });
 }
 
-export async function taskListCommand(ctx: CommandContext<Context>): Promise<void> {
+export type TaskListCommandDeps = Pick<AppContainer, "interactionManager">;
+
+export async function taskListCommand(
+  ctx: CommandContext<Context>,
+  deps: TaskListCommandDeps,
+): Promise<void> {
   try {
     const tasks = sortTasks(listScheduledTasks());
     if (tasks.length === 0) {
@@ -31,7 +36,7 @@ export async function taskListCommand(ctx: CommandContext<Context>): Promise<voi
       reply_markup: buildTaskListKeyboard(tasks),
     });
 
-    interactionManager.start({
+    deps.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {

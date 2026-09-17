@@ -5,6 +5,7 @@ import { handleTaskCallback } from "../../../src/bot/callbacks/scheduled-task-ca
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { taskCreationManager } from "../../../src/app/managers/scheduled-task-creation-manager.js";
 import { t } from "../../../src/i18n/index.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -85,12 +86,6 @@ vi.mock("../../../src/app/stores/scheduled-task-store.js", () => ({
   listScheduledTasks: mocked.listScheduledTasksMock,
 }));
 
-vi.mock("../../../src/app/services/scheduled-task-runtime-service.js", () => ({
-  scheduledTaskRuntime: {
-    registerTask: mocked.registerTaskMock,
-  },
-}));
-
 function createCommandContext(): Context {
   return {
     chat: { id: 777 },
@@ -130,6 +125,12 @@ function createCallbackContext(data: string, messageId: number): Context {
   } as unknown as Context;
 }
 
+function createDeps() {
+  return createTestAppContainer({
+    scheduledTaskRuntime: { registerTask: mocked.registerTaskMock } as never,
+  });
+}
+
 describe("bot/commands/task", () => {
   beforeEach(() => {
     interactionManager.clear("test_setup");
@@ -164,7 +165,7 @@ describe("bot/commands/task", () => {
   it("starts scheduled task creation flow", async () => {
     const ctx = createCommandContext();
 
-    await taskCommand(ctx as never);
+    await taskCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("task.prompt.schedule"), {
       reply_markup: expect.any(Object),
@@ -188,7 +189,7 @@ describe("bot/commands/task", () => {
 
     const ctx = createCommandContext();
 
-    await taskCommand(ctx as never);
+    await taskCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("task.limit_reached", { limit: "1" }));
     expect(taskCreationManager.isActive()).toBe(false);
@@ -196,10 +197,10 @@ describe("bot/commands/task", () => {
   });
 
   it("parses schedule and switches flow to prompt input", async () => {
-    await taskCommand(createCommandContext() as never);
+    await taskCommand(createCommandContext() as never, createDeps());
 
     const ctx = createTextContext("every day at 17:00", [201, 202]);
-    const handled = await handleTaskTextInput(ctx);
+    const handled = await handleTaskTextInput(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.parseTaskScheduleMock).toHaveBeenCalledWith(
@@ -231,11 +232,11 @@ describe("bot/commands/task", () => {
   });
 
   it("saves scheduled task after receiving prompt text", async () => {
-    await taskCommand(createCommandContext() as never);
-    await handleTaskTextInput(createTextContext("every day at 17:00", [201, 202]));
+    await taskCommand(createCommandContext() as never, createDeps());
+    await handleTaskTextInput(createTextContext("every day at 17:00", [201, 202]), createDeps());
 
     const ctx = createTextContext("Send me a daily summary", [301]);
-    const handled = await handleTaskTextInput(ctx);
+    const handled = await handleTaskTextInput(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.addScheduledTaskMock).toHaveBeenCalledTimes(1);
@@ -276,14 +277,14 @@ describe("bot/commands/task", () => {
   });
 
   it("stops task save when limit is reached before final step", async () => {
-    await taskCommand(createCommandContext() as never);
-    await handleTaskTextInput(createTextContext("every day at 17:00", [201, 202]));
+    await taskCommand(createCommandContext() as never, createDeps());
+    await handleTaskTextInput(createTextContext("every day at 17:00", [201, 202]), createDeps());
 
     mocked.taskLimit = 1;
     mocked.listScheduledTasksMock.mockReturnValue([{ id: "task-1" }]);
 
     const ctx = createTextContext("Send me a daily summary", [301]);
-    const handled = await handleTaskTextInput(ctx);
+    const handled = await handleTaskTextInput(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.addScheduledTaskMock).not.toHaveBeenCalled();
@@ -294,11 +295,11 @@ describe("bot/commands/task", () => {
   });
 
   it("restarts schedule step when retry button is pressed", async () => {
-    await taskCommand(createCommandContext() as never);
-    await handleTaskTextInput(createTextContext("every day at 17:00", [201, 202]));
+    await taskCommand(createCommandContext() as never, createDeps());
+    await handleTaskTextInput(createTextContext("every day at 17:00", [201, 202]), createDeps());
 
     const ctx = createCallbackContext("task:retry-schedule", 202);
-    const handled = await handleTaskCallback(ctx);
+    const handled = await handleTaskCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -318,10 +319,10 @@ describe("bot/commands/task", () => {
   });
 
   it("cancels task flow from schedule message", async () => {
-    await taskCommand(createCommandContext() as never);
+    await taskCommand(createCommandContext() as never, createDeps());
 
     const ctx = createCallbackContext("task:cancel", 100);
-    const handled = await handleTaskCallback(ctx);
+    const handled = await handleTaskCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -333,7 +334,7 @@ describe("bot/commands/task", () => {
   });
 
   it("rejects schedules more frequent than every 5 minutes", async () => {
-    await taskCommand(createCommandContext() as never);
+    await taskCommand(createCommandContext() as never, createDeps());
     mocked.parseTaskScheduleMock.mockResolvedValue({
       kind: "cron",
       cron: "*/2 * * * *",
@@ -343,7 +344,7 @@ describe("bot/commands/task", () => {
     });
 
     const ctx = createTextContext("every 2 minutes", [201, 202]);
-    const handled = await handleTaskTextInput(ctx);
+    const handled = await handleTaskTextInput(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.addScheduledTaskMock).not.toHaveBeenCalled();

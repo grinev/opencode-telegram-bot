@@ -5,6 +5,7 @@ import { promptAttachment } from "../../../src/app/managers/prompt-attachment-ma
 import { handleLsCallback } from "../../../src/bot/callbacks/file-browser-callback-handler.js";
 import { LS_CALLBACK_ATTACH_PREFIX } from "../../../src/bot/menus/file-browser-menu.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const PROJECT_ROOT = "D:\\Repo";
 const FILE_PATH = "D:\\Repo\\src\\index.ts";
@@ -52,6 +53,10 @@ function createContext(data: string): Context {
   } as unknown as Context;
 }
 
+function createDeps() {
+  return createTestAppContainer();
+}
+
 describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
   beforeEach(() => {
     promptAttachment.__resetForTests();
@@ -64,7 +69,7 @@ describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
   it("stores the file, closes the menu and confirms with a cancel button", async () => {
     const ctx = createContext(`${LS_CALLBACK_ATTACH_PREFIX}${FILE_PATH}`);
 
-    expect(await handleLsCallback(ctx)).toBe(true);
+    expect(await handleLsCallback(ctx, createDeps())).toBe(true);
 
     expect(promptAttachment.get()).toEqual({
       absolutePath: FILE_PATH,
@@ -82,7 +87,7 @@ describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
   });
 
   it("enters the waiting-for-prompt mode", async () => {
-    await handleLsCallback(createContext(`${LS_CALLBACK_ATTACH_PREFIX}${FILE_PATH}`));
+    await handleLsCallback(createContext(`${LS_CALLBACK_ATTACH_PREFIX}${FILE_PATH}`), createDeps());
 
     const state = interactionManager.getSnapshot();
     expect(state).toMatchObject({
@@ -95,7 +100,7 @@ describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
   it("rejects a path outside the project root", async () => {
     const ctx = createContext(`${LS_CALLBACK_ATTACH_PREFIX}D:\\Other\\secret.ts`);
 
-    expect(await handleLsCallback(ctx)).toBe(true);
+    expect(await handleLsCallback(ctx, createDeps())).toBe(true);
     expect(promptAttachment.get()).toBeNull();
     expect(ctx.reply).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -108,7 +113,7 @@ describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
     mocked.ensureActiveInlineMenuMock.mockResolvedValue(false);
     const ctx = createContext(`${LS_CALLBACK_ATTACH_PREFIX}${FILE_PATH}`);
 
-    expect(await handleLsCallback(ctx)).toBe(true);
+    expect(await handleLsCallback(ctx, createDeps())).toBe(true);
     expect(promptAttachment.get()).toBeNull();
     expect(ctx.reply).not.toHaveBeenCalled();
   });
@@ -117,7 +122,7 @@ describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
     mocked.isForegroundBusyMock.mockReturnValue(true);
     const ctx = createContext(`${LS_CALLBACK_ATTACH_PREFIX}${FILE_PATH}`);
 
-    expect(await handleLsCallback(ctx)).toBe(true);
+    expect(await handleLsCallback(ctx, createDeps())).toBe(true);
     expect(promptAttachment.get()).toBeNull();
   });
 });

@@ -13,7 +13,12 @@ import { attachManager } from "../managers/attach-manager.js";
 import { backgroundSessionTracker } from "../managers/background-session-manager.js";
 import { externalUserInputSuppressionManager } from "../managers/external-input-suppression-manager.js";
 import { foregroundSessionState } from "../managers/foreground-session-state-manager.js";
-import { clearAllInteractionState, interactionManager } from "../managers/interaction-manager.js";
+import {
+  clearAllInteractionState,
+  clearInteractionErrorState,
+  interactionManager,
+  type InteractionErrorScope,
+} from "../managers/interaction-manager.js";
 import { permissionManager } from "../managers/permission-manager.js";
 import { questionManager } from "../managers/question-manager.js";
 import { renameManager } from "../managers/rename-manager.js";
@@ -56,6 +61,8 @@ export interface AppContainer {
 
   /** Drops the open interaction and anything waiting behind it. */
   resetInteractions(reason: string): void;
+  /** Drops only what a failed handler in the given scope may have left behind. */
+  resetInteractionError(scope: InteractionErrorScope, reason: string): void;
   /** Clears the summary aggregator's render state. */
   resetAggregator(): void;
   /** Clears response streams, tool trackers, background tracking and run state. */
@@ -118,6 +125,7 @@ export function createAppContainer(): AppContainer {
     },
 
     resetInteractions: (reason) => clearAllInteractionState(reason),
+    resetInteractionError: (scope, reason) => clearInteractionErrorState(scope, reason),
     resetAggregator: () => summaryAggregator.clear(),
     resetRuntimeStreams: (reason) => eventSubscriptionService.clearRuntimeState(reason),
 

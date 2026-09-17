@@ -12,6 +12,7 @@ import {
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -66,13 +67,6 @@ vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: mocked.getStoredModelMock,
 }));
 
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    updateAgent: mocked.keyboardUpdateAgentMock,
-    updateModel: mocked.keyboardUpdateModelMock,
-  },
-}));
-
 vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   ingestSessionInfoForCache: mocked.ingestSessionInfoForCacheMock,
   __resetSessionDirectoryCacheForTests: vi.fn(),
@@ -117,12 +111,18 @@ function createCallbackContext(data: string, messageId: number): Context {
 }
 
 const testDeps = {
+  ...createTestAppContainer({
+    ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
+    keyboardManager: {
+      updateAgent: mocked.keyboardUpdateAgentMock,
+      updateModel: mocked.keyboardUpdateModelMock,
+    } as never,
+  }),
   bot: {
     api: {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 999 }),
     },
   },
-  ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
 } as unknown as MessagesCallbackDeps;
 
 function makeUserMessage(id: string, text: string, created: number) {
@@ -171,7 +171,7 @@ describe("bot/commands/messages", () => {
     mocked.currentProject = null;
 
     const ctx = createCommandContext(100);
-    await messagesCommand(ctx as never);
+    await messagesCommand(ctx as never, testDeps);
 
     expect(ctx.reply).toHaveBeenCalledWith(t("messages.project_not_selected"));
     expect(mocked.sessionMessagesMock).not.toHaveBeenCalled();
@@ -181,7 +181,7 @@ describe("bot/commands/messages", () => {
     mocked.currentSession = null;
 
     const ctx = createCommandContext(101);
-    await messagesCommand(ctx as never);
+    await messagesCommand(ctx as never, testDeps);
 
     expect(ctx.reply).toHaveBeenCalledWith(t("messages.session_not_selected"));
     expect(mocked.sessionMessagesMock).not.toHaveBeenCalled();
@@ -195,7 +195,7 @@ describe("bot/commands/messages", () => {
     };
 
     const ctx = createCommandContext(102);
-    await messagesCommand(ctx as never);
+    await messagesCommand(ctx as never, testDeps);
 
     expect(ctx.reply).toHaveBeenCalledWith(t("messages.session_project_mismatch"));
     expect(mocked.sessionMessagesMock).not.toHaveBeenCalled();
@@ -218,7 +218,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCommandContext(200);
-    await messagesCommand(ctx as never);
+    await messagesCommand(ctx as never, testDeps);
 
     expect(mocked.sessionMessagesMock).toHaveBeenCalledWith({
       sessionID: "session-1",
@@ -260,7 +260,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCommandContext(201);
-    await messagesCommand(ctx as never);
+    await messagesCommand(ctx as never, testDeps);
 
     expect(ctx.reply).toHaveBeenCalledWith(t("messages.empty"));
   });
@@ -290,7 +290,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCommandContext(202);
-    await messagesCommand(ctx as never);
+    await messagesCommand(ctx as never, testDeps);
 
     const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,

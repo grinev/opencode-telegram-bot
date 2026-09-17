@@ -34,25 +34,6 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
   clearSession: vi.fn(),
 }));
 
-vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
-  summaryAggregator: { clear: vi.fn() },
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    clear: vi.fn().mockResolvedValue(undefined),
-    refreshContextLimit: vi.fn().mockResolvedValue(undefined),
-    getContextLimit: vi.fn(() => 0),
-  },
-}));
-
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: vi.fn(),
-    updateContext: vi.fn(),
-  },
-}));
-
 vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   getStoredAgent: vi.fn(() => "build"),
 }));
@@ -63,11 +44,6 @@ vi.mock("../../../src/app/services/model-selection-service.js", () => ({
 
 vi.mock("../../../src/app/services/variant-selection-service.js", () => ({
   formatVariantForButton: vi.fn(() => "Default"),
-}));
-
-vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
-  interactionManager: { clear: vi.fn() },
-  clearAllInteractionState: vi.fn(),
 }));
 
 vi.mock("../../../src/bot/keyboards/main-reply-keyboard.js", () => ({

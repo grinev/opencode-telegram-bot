@@ -1,4 +1,5 @@
 import type { Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { isTtsConfigured } from "../../app/services/tts-service.js";
 import {
   getCompactOutputMode,
@@ -25,7 +26,6 @@ import {
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/inline-menu.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import {
   buildSettingsMenuView,
   SETTINGS_ASSISTANT_FOOTER_CALLBACK,
@@ -68,7 +68,12 @@ function getNextResponseStreamingMode(mode: ResponseStreamingMode): ResponseStre
   return mode === "edit" ? "draft" : "edit";
 }
 
-export async function handleSettingsCallback(ctx: Context): Promise<boolean> {
+export type SettingsCallbackDeps = Pick<AppContainer, "pinnedMessageManager">;
+
+export async function handleSettingsCallback(
+  ctx: Context,
+  deps: SettingsCallbackDeps,
+): Promise<boolean> {
   const callbackData = ctx.callbackQuery?.data;
 
   if (!callbackData?.startsWith(SETTINGS_CALLBACK_PREFIX)) {
@@ -155,9 +160,9 @@ export async function handleSettingsCallback(ctx: Context): Promise<boolean> {
       const nextEnabled = !getPinnedDashboardEnabled();
       const chatId = ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id;
       if (ctx.api && chatId !== undefined) {
-        pinnedMessageManager.initialize(ctx.api, chatId);
+        deps.pinnedMessageManager.initialize(ctx.api, chatId);
       }
-      await pinnedMessageManager.applyPinnedDashboardEnabled(nextEnabled);
+      await deps.pinnedMessageManager.applyPinnedDashboardEnabled(nextEnabled);
       setPinnedDashboardEnabled(nextEnabled);
       const { text, keyboard } = buildSettingsMenuView();
       await ctx.answerCallbackQuery({ text: t("settings.saved") });

@@ -1,4 +1,5 @@
 import type { Bot, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
 import type { CommandCatalogItem } from "../../app/services/command-catalog-service.js";
 import {
@@ -8,25 +9,19 @@ import {
 } from "../../app/services/session-service.js";
 import type { SessionInfo } from "../../app/types/session.js";
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import type { InteractionState } from "../../app/types/interaction.js";
-import { summaryAggregator } from "../../app/managers/summary-aggregation-manager.js";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { cancelMenu } from "./feedback.js";
-import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
-import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
-import { attachManager } from "../../app/managers/attach-manager.js";
 import {
   attachToSession,
   detachAttachedSession,
   markAttachedSessionBusy,
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
-import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
 import { opencodeClient } from "../../opencode/client.js";
 import {
   buildCommandsConfirmKeyboard,
@@ -66,10 +61,18 @@ export interface ExecuteCommandParams {
   argumentsText: string;
 }
 
-export interface ExecuteCommandDeps {
+export type ExecuteCommandDeps = Pick<
+  AppContainer,
+  | "assistantRunState"
+  | "attachManager"
+  | "ensureEventSubscription"
+  | "externalUserInputSuppressionManager"
+  | "foregroundSessionState"
+  | "interactionManager"
+  | "summaryAggregator"
+> & {
   bot: Bot<Context>;
-  ensureEventSubscription: (directory: string) => Promise<void>;
-}
+};
 
 function getCallbackMessageId(ctx: Context): number | null {
   const message = ctx.callbackQuery?.message;
@@ -164,10 +167,13 @@ export function parseCommandsMetadata(state: InteractionState | null): CommandsM
   return null;
 }
 
-export function clearCommandsInteraction(reason: string): void {
-  const metadata = parseCommandsMetadata(interactionManager.getSnapshot());
+export function clearCommandsInteraction(
+  deps: Pick<AppContainer, "interactionManager">,
+  reason: string,
+): void {
+  const metadata = parseCommandsMetadata(deps.interactionManager.getSnapshot());
   if (metadata) {
-    interactionManager.clear(reason);
+    deps.interactionManager.clear(reason);
   }
 }
 
@@ -194,6 +200,7 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
 
 async function ensureSessionForProject(
   ctx: Context,
+  deps: ExecuteCommandDeps,
   projectDirectory: string,
 ): Promise<SessionInfo | null> {
   let currentSession = getCurrentSession();
@@ -204,9 +211,9 @@ async function ensureSessionForProject(
     );
     detachAttachedSession("session_mismatch_reset");
     clearSession();
-    summaryAggregator.clear();
-    foregroundSessionState.clearAll("session_mismatch_reset");
-    assistantRunState.clearAll("session_mismatch_reset");
+    deps.summaryAggregator.clear();
+    deps.foregroundSessionState.clearAll("session_mismatch_reset");
+    deps.assistantRunState.clearAll("session_mismatch_reset");
     await ctx.reply(t("bot.session_reset_project_mismatch"));
     currentSession = null;
   }
@@ -252,7 +259,7 @@ export async function executeCommand(
   const executingMessage = formatExecutingCommandMessage(params.commandName, args);
   await ctx.reply(executingMessage.text, { entities: executingMessage.entities });
 
-  const session = await ensureSessionForProject(ctx, params.projectDirectory);
+  const session = await ensureSessionForProject(ctx, deps, params.projectDirectory);
   if (!session) {
     return;
   }
@@ -277,15 +284,15 @@ export async function executeCommand(
       ? `${storedModel.providerID}/${storedModel.modelID}`
       : undefined;
 
-  foregroundSessionState.markBusy(session.id, session.directory);
+  deps.foregroundSessionState.markBusy(session.id, session.directory);
   await markAttachedSessionBusy(session.id);
-  assistantRunState.startRun(session.id, {
+  deps.assistantRunState.startRun(session.id, {
     startedAt: Date.now(),
     configuredAgent: currentAgent,
     configuredProviderID: storedModel.providerID,
     configuredModelID: storedModel.modelID,
   });
-  externalUserInputSuppressionManager.register(
+  deps.externalUserInputSuppressionManager.register(
     session.id,
     args ? `/${params.commandName} ${args}` : `/${params.commandName}`,
   );
@@ -304,16 +311,16 @@ export async function executeCommand(
       }),
     onSuccess: ({ error }) => {
       if (error) {
-        foregroundSessionState.markIdle(session.id);
+        deps.foregroundSessionState.markIdle(session.id);
         void markAttachedSessionIdle(session.id);
-        assistantRunState.clearRun(session.id, "session_command_api_error");
+        deps.assistantRunState.clearRun(session.id, "session_command_api_error");
         logger.error("[Commands] OpenCode API returned an error for session.command", {
           sessionId: session.id,
           command: params.commandName,
           args,
         });
         logger.error("[Commands] session.command error details:", error);
-        if (attachManager.isAttachedSession(session.id)) {
+        if (deps.attachManager.isAttachedSession(session.id)) {
           void ctx.api.sendMessage(ctx.chat!.id, t("commands.execute_error")).catch(() => {});
         }
         return;
@@ -324,16 +331,16 @@ export async function executeCommand(
       );
     },
     onError: (error) => {
-      foregroundSessionState.markIdle(session.id);
+      deps.foregroundSessionState.markIdle(session.id);
       void markAttachedSessionIdle(session.id);
-      assistantRunState.clearRun(session.id, "session_command_background_error");
+      deps.assistantRunState.clearRun(session.id, "session_command_background_error");
       logger.error("[Commands] session.command background task failed", {
         sessionId: session.id,
         command: params.commandName,
         args,
       });
       logger.error("[Commands] session.command background failure details:", error);
-      if (attachManager.isAttachedSession(session.id)) {
+      if (deps.attachManager.isAttachedSession(session.id)) {
         void ctx.api.sendMessage(ctx.chat!.id, t("commands.execute_error")).catch(() => {});
       }
     },
@@ -349,7 +356,7 @@ export async function handleCommandsCallback(
     return false;
   }
 
-  const metadata = parseCommandsMetadata(interactionManager.getSnapshot());
+  const metadata = parseCommandsMetadata(deps.interactionManager.getSnapshot());
   const callbackMessageId = getCallbackMessageId(ctx);
 
   if (!metadata || callbackMessageId === null || metadata.messageId !== callbackMessageId) {
@@ -359,7 +366,7 @@ export async function handleCommandsCallback(
 
   try {
     if (data === COMMANDS_CALLBACK_CANCEL) {
-      clearCommandsInteraction("commands_cancelled");
+      clearCommandsInteraction(deps, "commands_cancelled");
       await cancelMenu(ctx);
       return true;
     }
@@ -370,7 +377,7 @@ export async function handleCommandsCallback(
         return true;
       }
 
-      clearCommandsInteraction("commands_execute_clicked");
+      clearCommandsInteraction(deps, "commands_execute_clicked");
       await ctx.answerCallbackQuery({ text: t("commands.execute_callback") });
       await ctx.deleteMessage().catch(() => {});
 
@@ -407,7 +414,7 @@ export async function handleCommandsCallback(
         reply_markup: keyboard,
       });
 
-      interactionManager.transition({
+      deps.interactionManager.transition({
         expectedInput: "callback",
         metadata: {
           flow: "commands",
@@ -439,7 +446,7 @@ export async function handleCommandsCallback(
       reply_markup: buildCommandsConfirmKeyboard(),
     });
 
-    interactionManager.transition({
+    deps.interactionManager.transition({
       expectedInput: "mixed",
       metadata: {
         flow: "commands",
@@ -453,7 +460,7 @@ export async function handleCommandsCallback(
     return true;
   } catch (error) {
     logger.error("[Commands] Error handling command callback:", error);
-    clearCommandsInteraction("commands_callback_error");
+    clearCommandsInteraction(deps, "commands_callback_error");
     await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     return true;
   }

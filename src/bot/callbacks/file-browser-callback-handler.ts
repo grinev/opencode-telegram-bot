@@ -1,4 +1,5 @@
 import { InlineKeyboard, type Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import {
   getProjectRoot,
   isPathWithinDirectory,
@@ -17,7 +18,6 @@ import { ensureActiveInlineMenu, clearActiveInlineMenu } from "../menus/inline-m
 import { sendDownloadedFile } from "../messages/send-downloaded-file.js";
 import { switchToProject } from "../../app/services/project-switch-service.js";
 import { createProjectSwitchPresentation } from "../services/project-switch-presentation.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { promptAttachment } from "../../app/managers/prompt-attachment-manager.js";
 import { toRelativePath } from "../../app/services/prompt-attachment-service.js";
 import { ATTACHMENT_CANCEL_CALLBACK } from "./prompt-attachment-callback-handler.js";
@@ -43,6 +43,8 @@ import {
   renderLsFileDetailsView,
   renderOpenBrowseView,
 } from "../menus/file-browser-menu.js";
+
+export type LsCallbackDeps = Pick<AppContainer, "interactionManager">;
 
 export interface OpenCallbackDeps {
   ensureEventSubscription?: (directory: string) => Promise<void>;
@@ -186,7 +188,7 @@ async function selectDirectory(
   }
 }
 
-export async function handleLsCallback(ctx: Context): Promise<boolean> {
+export async function handleLsCallback(ctx: Context, deps: LsCallbackDeps): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data || !data.startsWith(LS_CALLBACK_PREFIX)) {
     return false;
@@ -239,7 +241,7 @@ export async function handleLsCallback(ctx: Context): Promise<boolean> {
         await alert(ctx, "ls.access_denied");
         return true;
       }
-      await attachFileAndClose(ctx, attachPath);
+      await attachFileAndClose(ctx, deps, attachPath);
       return true;
     }
 
@@ -294,7 +296,11 @@ async function showLsFileDetails(ctx: Context, filePath: string, page: number): 
   await ctx.editMessageText(view.text, { parse_mode: "HTML", reply_markup: view.keyboard });
 }
 
-async function attachFileAndClose(ctx: Context, filePath: string): Promise<void> {
+async function attachFileAndClose(
+  ctx: Context,
+  deps: LsCallbackDeps,
+  filePath: string,
+): Promise<void> {
   const projectRoot = getProjectRoot();
   if (!projectRoot) {
     await ctx.answerCallbackQuery({ text: t("bot.project_not_selected") });
@@ -316,7 +322,7 @@ async function attachFileAndClose(ctx: Context, filePath: string): Promise<void>
 
   // Wait for the prompt the file belongs to: "mixed" lets the text and the cancel button
   // through while blocking commands, menus, and non-text messages.
-  interactionManager.start({
+  deps.interactionManager.start({
     kind: "custom",
     expectedInput: "mixed",
     metadata: { flow: "attachment" },

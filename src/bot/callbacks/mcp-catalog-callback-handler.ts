@@ -1,11 +1,11 @@
 import type { Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import type { McpCatalogServerItem } from "../../app/services/mcp-catalog-service.js";
 import {
   loadMcpCatalog,
   parseMcpCatalogServers,
   toggleMcpCatalogServer,
 } from "../../app/services/mcp-catalog-service.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import type { InteractionState } from "../../app/types/interaction.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
@@ -99,20 +99,22 @@ function parseMcpsMetadata(state: InteractionState | null): McpsMetadata | null 
   return null;
 }
 
-function clearMcpsInteraction(reason: string): void {
-  const metadata = parseMcpsMetadata(interactionManager.getSnapshot());
+export type McpsCallbackDeps = Pick<AppContainer, "interactionManager">;
+
+function clearMcpsInteraction(deps: McpsCallbackDeps, reason: string): void {
+  const metadata = parseMcpsMetadata(deps.interactionManager.getSnapshot());
   if (metadata) {
-    interactionManager.clear(reason);
+    deps.interactionManager.clear(reason);
   }
 }
 
-export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
+export async function handleMcpsCallback(ctx: Context, deps: McpsCallbackDeps): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data || !data.startsWith(MCPS_CALLBACK_PREFIX)) {
     return false;
   }
 
-  const metadata = parseMcpsMetadata(interactionManager.getSnapshot());
+  const metadata = parseMcpsMetadata(deps.interactionManager.getSnapshot());
   const callbackMessageId = getCallbackMessageId(ctx);
 
   if (!metadata || callbackMessageId === null || metadata.messageId !== callbackMessageId) {
@@ -122,7 +124,7 @@ export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
 
   try {
     if (data === MCPS_CALLBACK_CANCEL) {
-      clearMcpsInteraction("mcps_cancelled");
+      clearMcpsInteraction(deps, "mcps_cancelled");
       await cancelMenu(ctx);
       return true;
     }
@@ -138,7 +140,7 @@ export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
       await ctx.answerCallbackQuery();
       await ctx.editMessageText(t("mcps.select"), { reply_markup: keyboard });
 
-      interactionManager.transition({
+      deps.interactionManager.transition({
         expectedInput: "callback",
         metadata: {
           flow: "mcps",
@@ -176,7 +178,7 @@ export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
         await ctx.editMessageText(t("mcps.select"), {
           reply_markup: buildMcpsListKeyboard(updatedServers),
         });
-        interactionManager.transition({
+        deps.interactionManager.transition({
           expectedInput: "callback",
           metadata: {
             flow: "mcps",
@@ -193,7 +195,7 @@ export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
         reply_markup: buildMcpsDetailKeyboard(updatedServer),
       });
 
-      interactionManager.transition({
+      deps.interactionManager.transition({
         expectedInput: "callback",
         metadata: {
           flow: "mcps",
@@ -226,7 +228,7 @@ export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
         reply_markup: buildMcpsDetailKeyboard(server),
       });
 
-      interactionManager.transition({
+      deps.interactionManager.transition({
         expectedInput: "callback",
         metadata: {
           flow: "mcps",
@@ -245,7 +247,7 @@ export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
     return true;
   } catch (error) {
     logger.error("[Mcps] Error handling MCP callback:", error);
-    clearMcpsInteraction("mcps_callback_error");
+    clearMcpsInteraction(deps, "mcps_callback_error");
     await ctx.answerCallbackQuery({ text: t("mcps.toggle_error") }).catch(() => {});
     return true;
   }

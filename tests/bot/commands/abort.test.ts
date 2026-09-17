@@ -17,6 +17,7 @@ import {
   __resetUserAbortErrorSuppressionForTests,
   shouldSuppressUserAbortSessionError,
 } from "../../../src/app/managers/abort-suppression-manager.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentSession: null as { id: string; title: string; directory: string } | null,
@@ -37,12 +38,6 @@ vi.mock("../../../src/opencode/client.js", () => ({
       abort: mocked.abortMock,
       status: mocked.statusMock,
     },
-  },
-}));
-
-vi.mock("../../../src/app/managers/assistant-run-state-manager.js", () => ({
-  assistantRunState: {
-    clearRun: mocked.clearRunMock,
   },
 }));
 
@@ -71,6 +66,12 @@ const TEST_PERMISSION: PermissionRequest = {
   metadata: {},
   always: [],
 };
+
+function createDeps() {
+  return createTestAppContainer({
+    assistantRunState: { clearRun: mocked.clearRunMock } as never,
+  });
+}
 
 function activateInteractionState(): void {
   questionManager.startQuestions([TEST_QUESTION], "req-abort");
@@ -110,7 +111,7 @@ describe("bot/commands/abort", () => {
       reply: replyMock,
     } as unknown as Context;
 
-    await abortCommand(ctx as never);
+    await abortCommand(ctx as never, createDeps());
 
     expect(replyMock).toHaveBeenCalledWith(t("stop.no_active_session"));
     expect(questionManager.isActive()).toBe(false);
@@ -150,7 +151,7 @@ describe("bot/commands/abort", () => {
       },
     } as unknown as Context;
 
-    await abortCommand(ctx as never);
+    await abortCommand(ctx as never, createDeps());
 
     expect(replyMock).toHaveBeenCalledWith(t("stop.in_progress"));
     expect(mocked.abortMock).toHaveBeenCalled();
@@ -183,7 +184,7 @@ describe("bot/commands/abort", () => {
       api: { editMessageText: vi.fn().mockResolvedValue(undefined) },
     } as unknown as Context;
 
-    await abortCommand(ctx as never);
+    await abortCommand(ctx as never, createDeps());
 
     expect(promptQueue.size()).toBe(0);
   });
@@ -207,7 +208,7 @@ describe("bot/commands/abort", () => {
       api: { editMessageText: vi.fn().mockResolvedValue(undefined) },
     } as unknown as Context;
 
-    await abortCommand(ctx as never);
+    await abortCommand(ctx as never, createDeps());
 
     expect(promptAttachment.get()).toBeNull();
   });
@@ -236,7 +237,7 @@ describe("bot/commands/abort", () => {
       },
     } as unknown as Context;
 
-    await abortCommand(ctx as never);
+    await abortCommand(ctx as never, createDeps());
 
     expect(shouldSuppressUserAbortSessionError("session-1", "Model not found")).toBe(false);
     expect(shouldSuppressUserAbortSessionError("session-1", " Aborted ")).toBe(true);
@@ -272,7 +273,7 @@ describe("bot/commands/abort", () => {
       },
     } as unknown as Context;
 
-    await abortCurrentOperation(ctx as never, { notifyUser: false });
+    await abortCurrentOperation(ctx as never, createDeps(), { notifyUser: false });
 
     expect(mocked.abortMock).toHaveBeenCalled();
     expect(replyMock).not.toHaveBeenCalled();
@@ -304,7 +305,7 @@ describe("bot/commands/abort", () => {
       },
     } as unknown as Context;
 
-    await abortCommand(ctx as never);
+    await abortCommand(ctx as never, createDeps());
 
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.warn_unconfirmed"));
     expectAbortStateReleased("abort_unconfirmed");
@@ -329,7 +330,7 @@ describe("bot/commands/abort", () => {
       },
     } as unknown as Context;
 
-    await abortCommand(ctx as never);
+    await abortCommand(ctx as never, createDeps());
 
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.warn_maybe_finished"));
     expectAbortStateReleased("abort_maybe_finished");
@@ -356,7 +357,7 @@ describe("bot/commands/abort", () => {
       },
     } as unknown as Context;
 
-    await abortCommand(ctx as never);
+    await abortCommand(ctx as never, createDeps());
 
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.warn_timeout"));
     expectAbortStateReleased("abort_error");
@@ -381,7 +382,7 @@ describe("bot/commands/abort", () => {
       },
     } as unknown as Context;
 
-    await abortCommand(ctx as never);
+    await abortCommand(ctx as never, createDeps());
 
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.warn_local_only"));
     expectAbortStateReleased("abort_error");

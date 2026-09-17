@@ -1,4 +1,5 @@
 import { Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import {
   applyAgentConfiguredSettings,
   selectAgent,
@@ -10,8 +11,6 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { failure, switched } from "./feedback.js";
 import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 
 /**
@@ -19,7 +18,9 @@ import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-m
  * @param ctx grammY context
  * @returns true if handled, false otherwise
  */
-export async function handleAgentSelect(ctx: Context): Promise<boolean> {
+export type AgentSelectDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager">;
+
+export async function handleAgentSelect(ctx: Context, deps: AgentSelectDeps): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
 
   if (!callbackQuery?.data || !callbackQuery.data.startsWith("agent:")) {
@@ -35,11 +36,11 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
 
   try {
     if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
 
-    if (pinnedMessageManager.getContextLimit() === 0) {
-      await pinnedMessageManager.refreshContextLimit();
+    if (deps.pinnedMessageManager.getContextLimit() === 0) {
+      await deps.pinnedMessageManager.refreshContextLimit();
     }
 
     const agentName = callbackQuery.data.replace("agent:", "");
@@ -47,21 +48,21 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
     selectAgent(agentName);
     const settingsApplied = await applyAgentConfiguredSettings(agentName);
 
-    keyboardManager.updateAgent(agentName);
+    deps.keyboardManager.updateAgent(agentName);
 
     const currentModel = getStoredModel();
     const contextInfo =
-      pinnedMessageManager.getContextInfo() ??
-      (pinnedMessageManager.getContextLimit() > 0
-        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
+      deps.pinnedMessageManager.getContextInfo() ??
+      (deps.pinnedMessageManager.getContextLimit() > 0
+        ? { tokensUsed: 0, tokensLimit: deps.pinnedMessageManager.getContextLimit() }
         : null);
 
-    keyboardManager.updateModel(currentModel);
+    deps.keyboardManager.updateModel(currentModel);
     if (contextInfo) {
-      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+      deps.keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
     }
 
-    const state = keyboardManager.getState();
+    const state = deps.keyboardManager.getState();
     const variantName =
       state?.variantName ?? formatVariantForButton(currentModel.variant || "default");
     const keyboard = createMainKeyboard(
@@ -77,7 +78,7 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
     await switched(ctx, t("agent.changed_message", { name: displayName }), keyboard);
 
     if (settingsApplied) {
-      await pinnedMessageManager.refresh();
+      await deps.pinnedMessageManager.refresh();
     }
 
     return true;

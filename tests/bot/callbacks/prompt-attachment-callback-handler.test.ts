@@ -6,6 +6,7 @@ import {
   ATTACHMENT_CANCEL_CALLBACK,
   handlePromptAttachmentCancel,
 } from "../../../src/bot/callbacks/prompt-attachment-callback-handler.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 vi.mock("../../../src/utils/logger.js", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -19,6 +20,10 @@ function createContext(data: string): Context {
   } as unknown as Context;
 }
 
+function createDeps() {
+  return createTestAppContainer();
+}
+
 describe("bot/callbacks/prompt-attachment-callback-handler", () => {
   beforeEach(() => {
     promptAttachment.__resetForTests();
@@ -28,7 +33,7 @@ describe("bot/callbacks/prompt-attachment-callback-handler", () => {
   it("ignores callbacks that belong to other handlers", async () => {
     const ctx = createContext("ls:download:/repo/a.ts");
 
-    expect(await handlePromptAttachmentCancel(ctx)).toBe(false);
+    expect(await handlePromptAttachmentCancel(ctx, createDeps())).toBe(false);
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
   });
 
@@ -42,7 +47,7 @@ describe("bot/callbacks/prompt-attachment-callback-handler", () => {
 
     const ctx = createContext(ATTACHMENT_CANCEL_CALLBACK);
 
-    expect(await handlePromptAttachmentCancel(ctx)).toBe(true);
+    expect(await handlePromptAttachmentCancel(ctx, createDeps())).toBe(true);
     expect(promptAttachment.get()).toBeNull();
     expect(interactionManager.getSnapshot()).toBeNull();
   });
@@ -51,7 +56,7 @@ describe("bot/callbacks/prompt-attachment-callback-handler", () => {
     promptAttachment.set("/repo/src/index.ts", "/repo");
     const ctx = createContext(ATTACHMENT_CANCEL_CALLBACK);
 
-    await handlePromptAttachmentCancel(ctx);
+    await handlePromptAttachmentCancel(ctx, createDeps());
 
     expect(ctx.editMessageText).toHaveBeenCalledTimes(1);
     // A single argument means no reply_markup is carried over.

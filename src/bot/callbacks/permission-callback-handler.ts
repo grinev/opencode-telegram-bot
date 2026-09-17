@@ -1,10 +1,9 @@
 import type { Context } from "grammy";
-import { permissionManager } from "../../app/managers/permission-manager.js";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import type { PermissionReply } from "../../app/types/permission.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
-import { summaryAggregator } from "../../app/managers/summary-aggregation-manager.js";
 import { clearPermissionInteraction, syncPermissionInteractionState } from "../menus/permission-menu.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
@@ -50,7 +49,12 @@ function isPermissionRequestNotFound(error: unknown): boolean {
   );
 }
 
-export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
+export type PermissionCallbackDeps = Pick<AppContainer, "permissionManager" | "summaryAggregator">;
+
+export async function handlePermissionCallback(
+  ctx: Context,
+  deps: PermissionCallbackDeps,
+): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data) return false;
 
@@ -60,19 +64,19 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
 
   logger.debug(`[PermissionHandler] Received callback: ${data}`);
 
-  if (!permissionManager.isActive()) {
+  if (!deps.permissionManager.isActive()) {
     clearPermissionInteraction("permission_inactive_callback");
     await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
     return true;
   }
 
   const callbackMessageId = getCallbackMessageId(ctx);
-  if (!permissionManager.isActiveMessage(callbackMessageId)) {
+  if (!deps.permissionManager.isActiveMessage(callbackMessageId)) {
     await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
     return true;
   }
 
-  const requestIDs = permissionManager.getRequestIDs(callbackMessageId);
+  const requestIDs = deps.permissionManager.getRequestIDs(callbackMessageId);
   if (requestIDs.length === 0) {
     await ctx.answerCallbackQuery({ text: t("permission.inactive_callback"), show_alert: true });
     return true;
@@ -90,7 +94,7 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
   }
 
   try {
-    await handlePermissionReply(ctx, action, requestIDs, callbackMessageId);
+    await handlePermissionReply(ctx, deps, action, requestIDs, callbackMessageId);
   } catch (err) {
     logger.error("[PermissionHandler] Error handling callback:", err);
     await ctx.answerCallbackQuery({
@@ -104,6 +108,7 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
 
 async function handlePermissionReply(
   ctx: Context,
+  deps: PermissionCallbackDeps,
   reply: PermissionReply,
   requestIDs: string[],
   callbackMessageId: number | null,
@@ -114,7 +119,7 @@ async function handlePermissionReply(
   const directory = currentSession?.directory ?? currentProject?.worktree;
 
   if (!directory || !chatId) {
-    permissionManager.clear();
+    deps.permissionManager.clear();
     clearPermissionInteraction("permission_invalid_runtime_context");
 
     await ctx.answerCallbackQuery({
@@ -133,7 +138,7 @@ async function handlePermissionReply(
   await ctx.answerCallbackQuery({ text: replyLabels[reply] });
   await ctx.deleteMessage().catch(() => {});
 
-  summaryAggregator.stopTypingIndicator();
+  deps.summaryAggregator.stopTypingIndicator();
 
   logger.info(
     `[PermissionHandler] Sending permission reply: ${reply}, requestIDs=${requestIDs.join(",")}`,
@@ -189,9 +194,9 @@ async function handlePermissionReply(
     },
   });
 
-  permissionManager.removeByMessageId(callbackMessageId);
+  deps.permissionManager.removeByMessageId(callbackMessageId);
 
-  if (!permissionManager.isActive()) {
+  if (!deps.permissionManager.isActive()) {
     clearPermissionInteraction("permission_replied");
     return;
   }

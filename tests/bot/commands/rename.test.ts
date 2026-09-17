@@ -8,6 +8,7 @@ import {
 import { renameManager } from "../../../src/app/managers/rename-manager.js";
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentSession: {
@@ -31,13 +32,6 @@ vi.mock("../../../src/opencode/client.js", () => ({
 vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
   setCurrentSession: mocked.setCurrentSessionMock,
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    isInitialized: vi.fn(() => false),
-    onSessionChange: mocked.pinnedOnSessionChangeMock,
-  },
 }));
 
 function createRenameCommandContext(messageId: number): Context {
@@ -70,6 +64,15 @@ function createRenameCallbackContext(messageId: number): Context {
   } as unknown as Context;
 }
 
+function createDeps() {
+  return createTestAppContainer({
+    pinnedMessageManager: {
+      isInitialized: vi.fn(() => false),
+      onSessionChange: mocked.pinnedOnSessionChangeMock,
+    } as never,
+  });
+}
+
 describe("bot/commands/rename", () => {
   beforeEach(() => {
     renameManager.clear();
@@ -93,7 +96,7 @@ describe("bot/commands/rename", () => {
   it("starts rename flow and interaction state", async () => {
     const ctx = createRenameCommandContext(555);
 
-    await renameCommand(ctx as never);
+    await renameCommand(ctx as never, createDeps());
 
     expect(renameManager.isWaitingForName()).toBe(true);
     expect(renameManager.getMessageId()).toBe(555);
@@ -114,7 +117,7 @@ describe("bot/commands/rename", () => {
     });
 
     const ctx = createRenameTextContext("  New title  ");
-    const handled = await handleRenameTextAnswer(ctx);
+    const handled = await handleRenameTextAnswer(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.updateSessionMock).toHaveBeenCalledWith({
@@ -142,7 +145,7 @@ describe("bot/commands/rename", () => {
     });
 
     const ctx = createRenameTextContext("   ");
-    const handled = await handleRenameTextAnswer(ctx);
+    const handled = await handleRenameTextAnswer(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.empty_title"));
@@ -160,7 +163,7 @@ describe("bot/commands/rename", () => {
     });
 
     const ctx = createRenameTextContext("");
-    const handled = await handleRenameTextAnswer(ctx);
+    const handled = await handleRenameTextAnswer(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.empty_title"));
@@ -176,7 +179,7 @@ describe("bot/commands/rename", () => {
     });
 
     const ctx = createRenameCallbackContext(999);
-    const handled = await handleRenameCancel(ctx);
+    const handled = await handleRenameCancel(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -196,7 +199,7 @@ describe("bot/commands/rename", () => {
     });
 
     const ctx = createRenameCallbackContext(555);
-    const handled = await handleRenameCancel(ctx);
+    const handled = await handleRenameCancel(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalled();
@@ -215,7 +218,7 @@ describe("bot/commands/rename", () => {
     });
 
     const ctx = createRenameTextContext("New title");
-    const handled = await handleRenameTextAnswer(ctx);
+    const handled = await handleRenameTextAnswer(ctx, createDeps());
 
     // `true` keeps the text from falling through to the prompt pipeline.
     expect(handled).toBe(true);
@@ -231,7 +234,7 @@ describe("bot/commands/rename", () => {
     interactionManager.start({ kind: "inline", expectedInput: "callback" });
 
     const ctx = createRenameTextContext("New title");
-    const handled = await handleRenameTextAnswer(ctx);
+    const handled = await handleRenameTextAnswer(ctx, createDeps());
 
     expect(handled).toBe(false);
     expect(mocked.updateSessionMock).not.toHaveBeenCalled();
@@ -245,7 +248,7 @@ describe("bot/commands/rename", () => {
     interactionManager.start({ kind: "inline", expectedInput: "callback" });
 
     const ctx = createRenameCallbackContext(555);
-    const handled = await handleRenameCancel(ctx);
+    const handled = await handleRenameCancel(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({

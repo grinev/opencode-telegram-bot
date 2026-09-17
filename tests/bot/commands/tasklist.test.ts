@@ -5,6 +5,7 @@ import { handleTaskListCallback } from "../../../src/bot/callbacks/scheduled-tas
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   listScheduledTasksMock: vi.fn(),
@@ -17,12 +18,6 @@ vi.mock("../../../src/app/stores/scheduled-task-store.js", () => ({
   listScheduledTasks: mocked.listScheduledTasksMock,
   getScheduledTask: mocked.getScheduledTaskMock,
   removeScheduledTask: mocked.removeScheduledTaskMock,
-}));
-
-vi.mock("../../../src/app/services/scheduled-task-runtime-service.js", () => ({
-  scheduledTaskRuntime: {
-    removeTask: mocked.runtimeRemoveTaskMock,
-  },
 }));
 
 function createTask(id: string, overrides: Partial<Record<string, unknown>> = {}) {
@@ -75,6 +70,12 @@ function createCallbackContext(data: string, messageId: number): Context {
   } as unknown as Context;
 }
 
+function createDeps() {
+  return createTestAppContainer({
+    scheduledTaskRuntime: { removeTask: mocked.runtimeRemoveTaskMock } as never,
+  });
+}
+
 describe("bot/commands/tasklist", () => {
   beforeEach(() => {
     interactionManager.clear("test_setup");
@@ -89,7 +90,7 @@ describe("bot/commands/tasklist", () => {
     mocked.listScheduledTasksMock.mockReturnValue([]);
 
     const ctx = createCommandContext();
-    await taskListCommand(ctx as never);
+    await taskListCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("tasklist.empty"));
     expect(interactionManager.getSnapshot()).toBeNull();
@@ -113,7 +114,7 @@ describe("bot/commands/tasklist", () => {
     ]);
 
     const ctx = createCommandContext(123);
-    await taskListCommand(ctx as never);
+    await taskListCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledTimes(1);
 
@@ -162,7 +163,7 @@ describe("bot/commands/tasklist", () => {
     );
 
     const ctx = createCallbackContext("tasklist:open:task-1", 300);
-    const handled = await handleTaskListCallback(ctx);
+    const handled = await handleTaskListCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.editMessageText).toHaveBeenCalledTimes(1);
@@ -202,7 +203,7 @@ describe("bot/commands/tasklist", () => {
     });
 
     const ctx = createCallbackContext("tasklist:cancel", 400);
-    const handled = await handleTaskListCallback(ctx);
+    const handled = await handleTaskListCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(interactionManager.getSnapshot()).toBeNull();
@@ -225,7 +226,7 @@ describe("bot/commands/tasklist", () => {
     });
 
     const ctx = createCallbackContext("tasklist:delete:task-2", 500);
-    const handled = await handleTaskListCallback(ctx);
+    const handled = await handleTaskListCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.removeScheduledTaskMock).toHaveBeenCalledWith("task-2");
@@ -249,7 +250,7 @@ describe("bot/commands/tasklist", () => {
     });
 
     const ctx = createCallbackContext("tasklist:open:task-1", 601);
-    const handled = await handleTaskListCallback(ctx);
+    const handled = await handleTaskListCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -277,7 +278,7 @@ describe("bot/commands/tasklist", () => {
     );
 
     const ctx = createCallbackContext("tasklist:open:task-long", 700);
-    await handleTaskListCallback(ctx);
+    await handleTaskListCallback(ctx, createDeps());
 
     const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [string];
     expect(text).toContain("...");
@@ -303,7 +304,7 @@ describe("bot/commands/tasklist", () => {
     );
 
     const ctx = createCallbackContext("tasklist:open:task-short", 800);
-    await handleTaskListCallback(ctx);
+    await handleTaskListCallback(ctx, createDeps());
 
     const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [string];
     expect(text).toContain(shortPrompt);
@@ -330,7 +331,7 @@ describe("bot/commands/tasklist", () => {
     );
 
     const ctx = createCallbackContext("tasklist:open:task-ar", 900);
-    await handleTaskListCallback(ctx);
+    await handleTaskListCallback(ctx, createDeps());
 
     const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [string];
     expect(text).toContain("...");

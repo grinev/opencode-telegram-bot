@@ -50,14 +50,6 @@ vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
   ensureActiveInlineMenu: mocked.ensureActiveInlineMenuMock,
 }));
 
-vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
-  interactionManager: {
-    start: mocked.interactionStartMock,
-    getSnapshot: vi.fn(() => null),
-    clear: vi.fn(),
-  },
-}));
-
 vi.mock("../../../src/app/services/run-control-service.js", () => ({
   isForegroundBusy: mocked.isForegroundBusyMock,
 }));
@@ -87,6 +79,7 @@ vi.mock("../../../src/utils/logger.js", () => ({
 import { openCommand } from "../../../src/bot/commands/open-command.js";
 import { handleOpenCallback } from "../../../src/bot/callbacks/file-browser-callback-handler.js";
 import { clearOpenPathIndex } from "../../../src/bot/menus/file-browser-menu.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 // --- Context factories ---
 
@@ -133,6 +126,16 @@ function makeScanResult(
 
 // --- Tests ---
 
+function createDeps() {
+  return createTestAppContainer({
+    interactionManager: {
+      start: mocked.interactionStartMock,
+      getSnapshot: vi.fn(() => null),
+      clear: vi.fn(),
+    } as never,
+  });
+}
+
 describe("open command", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -166,7 +169,7 @@ describe("open command", () => {
       mocked.scanDirectoryMock.mockResolvedValue(makeScanResult(entries, "/home/user"));
 
       const ctx = createCommandContext();
-      await openCommand(ctx as never);
+      await openCommand(ctx as never, createDeps());
 
       expect(mocked.scanDirectoryMock).toHaveBeenCalledWith("/home/user", 0);
       expect(ctx.reply).toHaveBeenCalledTimes(1);
@@ -184,7 +187,7 @@ describe("open command", () => {
       mocked.isForegroundBusyMock.mockReturnValue(true);
 
       const ctx = createCommandContext();
-      await openCommand(ctx as never);
+      await openCommand(ctx as never, createDeps());
 
       expect(mocked.replyBusyBlockedMock).toHaveBeenCalledWith(ctx);
       expect(mocked.scanDirectoryMock).not.toHaveBeenCalled();
@@ -194,7 +197,7 @@ describe("open command", () => {
       vi.stubEnv("OPENCODE_TELEGRAM_CONTAINER", "1");
 
       const ctx = createCommandContext();
-      await openCommand(ctx as never);
+      await openCommand(ctx as never, createDeps());
 
       expect(ctx.reply).toHaveBeenCalledWith(t("runtime.container.command_unavailable"));
       expect(mocked.scanDirectoryMock).not.toHaveBeenCalled();
@@ -204,7 +207,7 @@ describe("open command", () => {
       mocked.scanDirectoryMock.mockResolvedValue({ error: "Permission denied", code: "EACCES" });
 
       const ctx = createCommandContext();
-      await openCommand(ctx as never);
+      await openCommand(ctx as never, createDeps());
 
       expect(ctx.reply).toHaveBeenCalledWith(t("open.scan_error", { error: "Permission denied" }));
     });
@@ -213,7 +216,7 @@ describe("open command", () => {
       mocked.scanDirectoryMock.mockRejectedValue(new Error("unexpected"));
 
       const ctx = createCommandContext();
-      await openCommand(ctx as never);
+      await openCommand(ctx as never, createDeps());
 
       expect(ctx.reply).toHaveBeenCalledWith(t("open.open_error"));
     });
@@ -381,7 +384,7 @@ describe("open command", () => {
 
       // openCommand builds keyboard with encoded paths
       const ctx = createCommandContext();
-      await openCommand(ctx as never);
+      await openCommand(ctx as never, createDeps());
 
       // Extract callback_data from the keyboard built by ctx.reply
       const replyCall = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]);
@@ -413,7 +416,7 @@ describe("open command", () => {
       mocked.scanDirectoryMock.mockResolvedValue(makeScanResult(entries, "/home/user"));
 
       const ctx = createCommandContext();
-      await openCommand(ctx as never);
+      await openCommand(ctx as never, createDeps());
 
       const replyCall = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]);
       const keyboard = replyCall[1]?.reply_markup;
@@ -430,7 +433,7 @@ describe("open command", () => {
       mocked.scanDirectoryMock.mockResolvedValue(makeScanResult(entries, "/home/user"));
 
       const ctx = createCommandContext();
-      await openCommand(ctx as never);
+      await openCommand(ctx as never, createDeps());
 
       const replyCall = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]);
       const keyboard = replyCall[1]?.reply_markup;
@@ -449,7 +452,7 @@ describe("open command", () => {
 
       // Build keyboard to get encoded callback_data
       const cmdCtx = createCommandContext();
-      await openCommand(cmdCtx as never);
+      await openCommand(cmdCtx as never, createDeps());
 
       const replyCall = defined((cmdCtx.reply as ReturnType<typeof vi.fn>).mock.calls[0]);
       const callbackData = replyCall[1]?.reply_markup?.inline_keyboard?.[0]?.[0]

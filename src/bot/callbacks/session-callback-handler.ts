@@ -1,4 +1,5 @@
 import type { Bot, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { resolveProjectAgent } from "../../app/services/agent-selection-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
@@ -6,8 +7,6 @@ import { setCurrentSession } from "../../app/services/session-service.js";
 import { applySessionSettings } from "../../app/services/session-settings-service.js";
 import type { SessionInfo } from "../../app/types/session.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
-import { clearAllInteractionState, interactionManager } from "../../app/managers/interaction-manager.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
@@ -28,10 +27,12 @@ import {
   loadSessionPage,
 } from "../menus/session-selection-menu.js";
 
-export interface SessionSelectDeps {
+export type SessionSelectDeps = Pick<
+  AppContainer,
+  "ensureEventSubscription" | "interactionManager" | "keyboardManager" | "resetInteractions"
+> & {
   bot: Bot<Context>;
-  ensureEventSubscription: (directory: string) => Promise<void>;
-}
+};
 
 interface SelectSessionByIdOptions {
   source: "menu" | "background_notification";
@@ -79,7 +80,7 @@ async function selectSessionById(
   const currentProject = getCurrentProject();
 
   if (!currentProject) {
-    clearAllInteractionState("session_select_project_missing");
+    deps.resetInteractions("session_select_project_missing");
     await alert(ctx, "sessions.select_project_first");
     return;
   }
@@ -106,7 +107,7 @@ async function selectSessionById(
   // Pull before attaching: the pinned message is rendered inside attachToSession
   // and reads the stored model, so its Model line comes out already pulled.
   applySessionSettings(session);
-  clearAllInteractionState("session_switched");
+  deps.resetInteractions("session_switched");
 
   await ctx.answerCallbackQuery();
 
@@ -143,12 +144,12 @@ async function selectSessionById(
     const chatId = ctx.chat.id;
     const currentAgent = await resolveProjectAgent();
 
-    keyboardManager.updateAgent(currentAgent);
-    keyboardManager.updateModel(getStoredModel());
+    deps.keyboardManager.updateAgent(currentAgent);
+    deps.keyboardManager.updateModel(getStoredModel());
 
-    const contextInfo = keyboardManager.getContextInfo();
+    const contextInfo = deps.keyboardManager.getContextInfo();
     if (contextInfo) {
-      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+      deps.keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
     }
 
     if (loadingMessageId) {
@@ -159,7 +160,7 @@ async function selectSessionById(
       }
     }
 
-    const keyboard = keyboardManager.getKeyboard();
+    const keyboard = deps.keyboardManager.getKeyboard();
     try {
       await ctx.api.sendMessage(
         chatId,
@@ -202,8 +203,8 @@ async function selectSessionById(
   }
 }
 
-function shouldBlockBackgroundSessionOpen(): boolean {
-  const activeInteraction = interactionManager.getSnapshot();
+function shouldBlockBackgroundSessionOpen(deps: SessionSelectDeps): boolean {
+  const activeInteraction = deps.interactionManager.getSnapshot();
   return activeInteraction !== null && activeInteraction.kind !== "inline";
 }
 
@@ -226,7 +227,7 @@ export async function handleBackgroundSessionOpen(
     return true;
   }
 
-  if (shouldBlockBackgroundSessionOpen()) {
+  if (shouldBlockBackgroundSessionOpen(deps)) {
     await ctx.answerCallbackQuery({ text: t("interaction.blocked.finish_current") }).catch(() => {});
     return true;
   }
@@ -271,7 +272,7 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
     const currentProject = getCurrentProject();
 
     if (!currentProject) {
-      clearAllInteractionState("session_select_project_missing");
+      deps.resetInteractions("session_select_project_missing");
       await alert(ctx, "sessions.select_project_first");
       return true;
     }
@@ -311,7 +312,7 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
       postSelectAction: "preview",
     });
   } catch (error) {
-    clearAllInteractionState("session_select_error");
+    deps.resetInteractions("session_select_error");
     logger.error("[Sessions] Error selecting session:", error);
     await failure(ctx, "sessions.select_error");
   }

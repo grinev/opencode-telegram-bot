@@ -1,6 +1,6 @@
 import type { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getBrowserRoots } from "../../app/services/file-browser-service.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { t } from "../../i18n/index.js";
 import { isContainerRuntime } from "../../runtime/container.js";
@@ -8,7 +8,12 @@ import { logger } from "../../utils/logger.js";
 import { buildOpenRootsKeyboard, clearOpenPathIndex, renderOpenBrowseView } from "../menus/file-browser-menu.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 
-export async function openCommand(ctx: CommandContext<Context>): Promise<void> {
+export type OpenCommandDeps = Pick<AppContainer, "interactionManager">;
+
+export async function openCommand(
+  ctx: CommandContext<Context>,
+  deps: OpenCommandDeps,
+): Promise<void> {
   try {
     if (isForegroundBusy()) {
       await replyBusyBlocked(ctx);
@@ -42,7 +47,7 @@ export async function openCommand(ctx: CommandContext<Context>): Promise<void> {
 
     const message = await ctx.reply(text, { reply_markup: keyboard });
 
-    interactionManager.start({
+    deps.interactionManager.start({
       kind: "inline",
       expectedInput: "callback",
       metadata: {

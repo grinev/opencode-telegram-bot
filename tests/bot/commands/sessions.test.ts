@@ -12,6 +12,7 @@ import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { safeBackgroundTask } from "../../../src/utils/safe-background-task.js";
 import { startInteractionForTest } from "../../helpers/interaction.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -22,7 +23,6 @@ const mocked = vi.hoisted(() => ({
   sessionGetMock: vi.fn(),
   sessionMessagesMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
-  clearSummaryMock: vi.fn(),
   clearInteractionMock: vi.fn(),
   keyboardInitializeMock: vi.fn(),
   keyboardGetKeyboardMock: vi.fn(() => ({ inline_keyboard: [] })),
@@ -36,11 +36,6 @@ const mocked = vi.hoisted(() => ({
     variant: "default",
   })),
   keyboardGetContextInfoMock: vi.fn(() => null),
-  pinnedIsInitializedMock: vi.fn(() => false),
-  pinnedInitializeMock: vi.fn(),
-  pinnedOnSessionChangeMock: vi.fn(),
-  pinnedLoadContextFromHistoryMock: vi.fn(),
-  pinnedGetContextInfoMock: vi.fn(() => null),
   resolveProjectAgentMock: vi.fn(async () => "build"),
   attachToSessionMock: vi.fn(),
   ensureEventSubscriptionMock: vi.fn(),
@@ -64,32 +59,6 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
   setCurrentSession: mocked.setCurrentSessionMock,
 }));
 
-vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
-  summaryAggregator: {
-    clear: mocked.clearSummaryMock,
-  },
-}));
-
-vi.mock("../../../src/app/managers/interaction-manager.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../src/app/managers/interaction-manager.js")>();
-
-  return {
-    ...actual,
-    clearAllInteractionState: mocked.clearInteractionMock,
-  };
-});
-
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: mocked.keyboardInitializeMock,
-    getKeyboard: mocked.keyboardGetKeyboardMock,
-    getContextInfo: mocked.keyboardGetContextInfoMock,
-    updateAgent: mocked.keyboardUpdateAgentMock,
-    updateModel: mocked.keyboardUpdateModelMock,
-    updateContext: mocked.keyboardUpdateContextMock,
-  },
-}));
-
 vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   resolveProjectAgent: mocked.resolveProjectAgentMock,
 }));
@@ -100,16 +69,6 @@ vi.mock("../../../src/app/services/model-selection-service.js", () => ({
 
 vi.mock("../../../src/app/services/session-settings-service.js", () => ({
   applySessionSettings: mocked.applySessionSettingsMock,
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    isInitialized: mocked.pinnedIsInitializedMock,
-    initialize: mocked.pinnedInitializeMock,
-    onSessionChange: mocked.pinnedOnSessionChangeMock,
-    loadContextFromHistory: mocked.pinnedLoadContextFromHistoryMock,
-    getContextInfo: mocked.pinnedGetContextInfoMock,
-  },
 }));
 
 vi.mock("../../../src/app/services/attach-service.js", () => ({
@@ -212,8 +171,19 @@ function createCallbackContext(data: string, messageId: number): Context {
 
 function createDeps() {
   return {
+    ...createTestAppContainer({
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      resetInteractions: mocked.clearInteractionMock,
+      keyboardManager: {
+        initialize: mocked.keyboardInitializeMock,
+        getKeyboard: mocked.keyboardGetKeyboardMock,
+        getContextInfo: mocked.keyboardGetContextInfoMock,
+        updateAgent: mocked.keyboardUpdateAgentMock,
+        updateModel: mocked.keyboardUpdateModelMock,
+        updateContext: mocked.keyboardUpdateContextMock,
+      } as never,
+    }),
     bot: { api: {} } as Bot<Context>,
-    ensureEventSubscription: mocked.ensureEventSubscriptionMock,
   };
 }
 
@@ -238,7 +208,6 @@ describe("bot/commands/sessions", () => {
     mocked.sessionGetMock.mockReset();
     mocked.sessionMessagesMock.mockReset();
     mocked.setCurrentSessionMock.mockReset();
-    mocked.clearSummaryMock.mockReset();
     mocked.clearInteractionMock.mockReset();
     mocked.keyboardInitializeMock.mockReset();
     mocked.keyboardGetKeyboardMock.mockReset();
@@ -249,15 +218,6 @@ describe("bot/commands/sessions", () => {
     mocked.keyboardUpdateModelMock.mockReset();
     mocked.keyboardUpdateContextMock.mockReset();
     mocked.applySessionSettingsMock.mockReset();
-    mocked.pinnedIsInitializedMock.mockReset();
-    mocked.pinnedIsInitializedMock.mockReturnValue(false);
-    mocked.pinnedInitializeMock.mockReset();
-    mocked.pinnedOnSessionChangeMock.mockReset();
-    mocked.pinnedOnSessionChangeMock.mockResolvedValue(undefined);
-    mocked.pinnedLoadContextFromHistoryMock.mockReset();
-    mocked.pinnedLoadContextFromHistoryMock.mockResolvedValue(undefined);
-    mocked.pinnedGetContextInfoMock.mockReset();
-    mocked.pinnedGetContextInfoMock.mockReturnValue(null);
     mocked.resolveProjectAgentMock.mockReset();
     mocked.resolveProjectAgentMock.mockResolvedValue("build");
     mocked.attachToSessionMock.mockReset();

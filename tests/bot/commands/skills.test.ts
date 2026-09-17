@@ -11,7 +11,9 @@ import {
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 import type { ProcessPromptDeps } from "../../../src/bot/handlers/prompt.js";
+import type { ExecuteCommandDeps } from "../../../src/bot/callbacks/command-catalog-callback-handler.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -37,6 +39,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
 vi.mock("../../../src/bot/handlers/prompt.js", () => ({
   processUserPrompt: (ctx: Context, input: { text: string }, deps: ProcessPromptDeps) =>
     mocked.processUserPromptMock(ctx, input.text, deps),
+  clearPromptResponseMode: vi.fn(),
 }));
 
 function createCommandContext(messageId: number): Context {
@@ -88,10 +91,10 @@ function createTextContext(text: string): Context {
   } as unknown as Context;
 }
 
-function createDeps(): ProcessPromptDeps {
+function createDeps(): ExecuteCommandDeps {
   return {
+    ...createTestAppContainer({ ensureEventSubscription: vi.fn() }),
     bot: {} as Bot<Context>,
-    ensureEventSubscription: vi.fn(),
   };
 }
 
@@ -119,7 +122,7 @@ describe("bot/commands/skills", () => {
     });
 
     const ctx = createCommandContext(123);
-    await skillsCommand(ctx as never);
+    await skillsCommand(ctx as never, createDeps());
 
     expect(mocked.commandListMock).toHaveBeenCalledWith({ directory: "D:/Projects/Repo" });
     expect(ctx.reply).toHaveBeenCalledTimes(1);
@@ -152,7 +155,7 @@ describe("bot/commands/skills", () => {
     });
 
     const ctx = createCommandContext(124);
-    await skillsCommand(ctx as never);
+    await skillsCommand(ctx as never, createDeps());
 
     const state = interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");

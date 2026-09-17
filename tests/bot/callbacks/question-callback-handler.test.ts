@@ -10,6 +10,7 @@ import {
 import type { Question } from "../../../src/app/types/question.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const QUESTION_ONE: Question = {
   header: "Q1",
@@ -82,6 +83,10 @@ function createTextContext(text: string, api: Context["api"]): Context {
     api,
     reply: vi.fn().mockResolvedValue(undefined),
   } as unknown as Context;
+}
+
+function createDeps() {
+  return createTestAppContainer();
 }
 
 describe("bot question menu/callbacks", () => {
@@ -216,13 +221,13 @@ describe("bot question menu/callbacks", () => {
     await showCurrentQuestion(api, 123);
 
     const customCtx = createCallbackContext("question:custom:0", 101, api);
-    await handleQuestionCallback(customCtx);
+    await handleQuestionCallback(customCtx, createDeps());
 
     expect(questionManager.isWaitingForCustomInput(0)).toBe(true);
     expect(interactionManager.getSnapshot()?.expectedInput).toBe("mixed");
 
     const textCtx = createTextContext("My custom answer", api);
-    await handleQuestionTextAnswer(textCtx);
+    await handleQuestionTextAnswer(textCtx, createDeps());
 
     expect(questionManager.getCustomAnswer(0)).toBe("My custom answer");
     expect(questionManager.getCurrentIndex()).toBe(1);
@@ -239,7 +244,7 @@ describe("bot question menu/callbacks", () => {
     await showCurrentQuestion(api, 123);
 
     const selectCtx = createCallbackContext("question:select:0:0", 701, api);
-    const handled = await handleQuestionCallback(selectCtx);
+    const handled = await handleQuestionCallback(selectCtx, createDeps());
 
     expect(handled).toBe(true);
     expect(selectCtx.deleteMessage).toHaveBeenCalledOnce();
@@ -254,7 +259,7 @@ describe("bot question menu/callbacks", () => {
     await showCurrentQuestion(api, 123);
 
     const staleCtx = createCallbackContext("question:select:0:0", 199, api);
-    const handled = await handleQuestionCallback(staleCtx);
+    const handled = await handleQuestionCallback(staleCtx, createDeps());
 
     expect(handled).toBe(true);
     expect(staleCtx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -274,7 +279,7 @@ describe("bot question menu/callbacks", () => {
     questionManager.nextQuestion();
 
     const ctx = createCallbackContext("question:select:0:0", 250, api);
-    const handled = await handleQuestionCallback(ctx);
+    const handled = await handleQuestionCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -290,7 +295,7 @@ describe("bot question menu/callbacks", () => {
     await showCurrentQuestion(api, 123);
 
     const cancelCtx = createCallbackContext("question:cancel:0", 300, api);
-    const handled = await handleQuestionCallback(cancelCtx);
+    const handled = await handleQuestionCallback(cancelCtx, createDeps());
 
     expect(handled).toBe(true);
     expect(cancelCtx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("common.cancelled") });
@@ -308,7 +313,7 @@ describe("bot question menu/callbacks", () => {
     await showCurrentQuestion(api, 123);
 
     const submitCtx = createCallbackContext("question:submit:0", 400, api);
-    const handled = await handleQuestionCallback(submitCtx);
+    const handled = await handleQuestionCallback(submitCtx, createDeps());
 
     expect(handled).toBe(true);
     expect(submitCtx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -325,7 +330,7 @@ describe("bot question menu/callbacks", () => {
     await showCurrentQuestion(api, 123);
 
     const selectCtx = createCallbackContext("question:select:0:0", 500, api);
-    const handled = await handleQuestionCallback(selectCtx);
+    const handled = await handleQuestionCallback(selectCtx, createDeps());
 
     expect(handled).toBe(true);
     expect(api.editMessageText).toHaveBeenCalledWith(
@@ -357,7 +362,7 @@ describe("bot question menu/callbacks", () => {
     await showCurrentQuestion(api, 123);
 
     const textCtx = createTextContext("Typed without custom button", api);
-    await handleQuestionTextAnswer(textCtx);
+    await handleQuestionTextAnswer(textCtx, createDeps());
 
     expect(textCtx.reply).toHaveBeenCalledWith(t("question.use_custom_button_first"));
     expect(questionManager.getCurrentIndex()).toBe(0);

@@ -41,12 +41,6 @@ vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
   editBotText: mocked.editBotTextMock,
 }));
 
-vi.mock("../../../src/opencode/ready-lifecycle.js", () => ({
-  opencodeReadyLifecycle: {
-    notifyReady: mocked.notifyReadyMock,
-  },
-}));
-
 vi.mock("../../../src/utils/logger.js", () => ({
   logger: {
     debug: mocked.loggerDebugMock,
@@ -57,6 +51,7 @@ vi.mock("../../../src/utils/logger.js", () => ({
 }));
 
 import { opencodeStartCommand } from "../../../src/bot/commands/opencode-start-command.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 function createContext(): Context {
   return {
@@ -64,6 +59,12 @@ function createContext(): Context {
     api: {},
     reply: vi.fn().mockResolvedValue({ message_id: 10 }),
   } as unknown as Context;
+}
+
+function createDeps() {
+  return createTestAppContainer({
+    opencodeReadyLifecycle: { notifyReady: mocked.notifyReadyMock } as never,
+  });
 }
 
 function createChildProcess(pid: number): ChildProcess {
@@ -101,7 +102,7 @@ describe("bot/commands/opencode-start-command", () => {
     const ctx = createContext();
     vi.stubEnv("OPENCODE_TELEGRAM_CONTAINER", "1");
 
-    await opencodeStartCommand(ctx as never);
+    await opencodeStartCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("runtime.container.command_unavailable"));
     expect(mocked.resolveLocalOpencodeTargetMock).not.toHaveBeenCalled();
@@ -113,7 +114,7 @@ describe("bot/commands/opencode-start-command", () => {
     mocked.config.opencode.apiUrl = "https://example.com";
     mocked.resolveLocalOpencodeTargetMock.mockReturnValue(null);
 
-    await opencodeStartCommand(ctx as never);
+    await opencodeStartCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("opencode_start.remote_configured"));
     expect(mocked.startLocalOpencodeServerMock).not.toHaveBeenCalled();
@@ -123,7 +124,7 @@ describe("bot/commands/opencode-start-command", () => {
     const ctx = createContext();
     mocked.healthMock.mockResolvedValue({ data: { healthy: true, version: "1.2.3" }, error: null });
 
-    await opencodeStartCommand(ctx as never);
+    await opencodeStartCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(
       t("opencode_start.already_running", { version: "1.2.3" }),
@@ -141,7 +142,7 @@ describe("bot/commands/opencode-start-command", () => {
       .mockResolvedValueOnce({ data: { healthy: true, version: "1.2.3" }, error: null })
       .mockResolvedValueOnce({ data: { healthy: true, version: "1.2.3" }, error: null });
 
-    await opencodeStartCommand(ctx as never);
+    await opencodeStartCommand(ctx as never, createDeps());
 
     expect(mocked.startLocalOpencodeServerMock).toHaveBeenCalledWith({
       host: "localhost",
@@ -166,7 +167,7 @@ describe("bot/commands/opencode-start-command", () => {
       .mockResolvedValueOnce({ data: { healthy: true, version: "1.2.3" }, error: null })
       .mockResolvedValueOnce({ data: { healthy: true, version: "1.2.3" }, error: null });
 
-    await opencodeStartCommand(ctx as never);
+    await opencodeStartCommand(ctx as never, createDeps());
 
     expect(mocked.loggerErrorMock).toHaveBeenCalledWith(
       "[Bot] Error in /opencode-start command:",
@@ -182,7 +183,7 @@ describe("bot/commands/opencode-start-command", () => {
     mocked.startLocalOpencodeServerMock.mockReturnValue(childProcess);
     mocked.healthMock.mockRejectedValue(new Error("offline"));
 
-    const commandPromise = opencodeStartCommand(ctx as never);
+    const commandPromise = opencodeStartCommand(ctx as never, createDeps());
     await vi.advanceTimersByTimeAsync(10_500);
     await commandPromise;
 
@@ -202,7 +203,7 @@ describe("bot/commands/opencode-start-command", () => {
     mocked.startLocalOpencodeServerMock.mockReturnValue(childProcess);
     mocked.healthMock.mockReturnValue(new Promise(() => {}));
 
-    const commandPromise = opencodeStartCommand(ctx as never);
+    const commandPromise = opencodeStartCommand(ctx as never, createDeps());
     await vi.advanceTimersByTimeAsync(20_000);
     await commandPromise;
 

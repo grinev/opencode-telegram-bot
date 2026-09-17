@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import { detachCommand } from "../../../src/bot/commands/detach-command.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: { id: "project-1", worktree: "D:/repo" } as { id: string; worktree: string } | null,
@@ -35,43 +36,28 @@ vi.mock("../../../src/app/services/attach-service.js", () => ({
   detachAttachedSession: mocked.detachAttachedSessionMock,
 }));
 
-vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
-  interactionManager: { clear: vi.fn() },
-  clearAllInteractionState: mocked.clearAllInteractionStateMock,
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    isInitialized: mocked.pinnedIsInitializedMock,
-    clear: mocked.pinnedClearMock,
-    refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
-    getContextLimit: mocked.pinnedGetContextLimitMock,
-  },
-}));
-
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: mocked.keyboardInitializeMock,
-    updateContext: mocked.keyboardUpdateContextMock,
-    getKeyboard: mocked.keyboardGetKeyboardMock,
-  },
-}));
-
-vi.mock("../../../src/app/managers/foreground-session-state-manager.js", () => ({
-  foregroundSessionState: {
-    markIdle: mocked.foregroundMarkIdleMock,
-  },
-}));
-
-vi.mock("../../../src/app/managers/assistant-run-state-manager.js", () => ({
-  assistantRunState: {
-    clearRun: mocked.assistantClearRunMock,
-  },
-}));
-
 vi.mock("../../../src/bot/handlers/prompt.js", () => ({
   clearPromptResponseMode: mocked.clearPromptResponseModeMock,
 }));
+
+function createDeps() {
+  return createTestAppContainer({
+    resetInteractions: mocked.clearAllInteractionStateMock,
+    pinnedMessageManager: {
+      isInitialized: mocked.pinnedIsInitializedMock,
+      clear: mocked.pinnedClearMock,
+      refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
+      getContextLimit: mocked.pinnedGetContextLimitMock,
+    } as never,
+    keyboardManager: {
+      initialize: mocked.keyboardInitializeMock,
+      updateContext: mocked.keyboardUpdateContextMock,
+      getKeyboard: mocked.keyboardGetKeyboardMock,
+    } as never,
+    foregroundSessionState: { markIdle: mocked.foregroundMarkIdleMock } as never,
+    assistantRunState: { clearRun: mocked.assistantClearRunMock } as never,
+  });
+}
 
 function createContext(): Context {
   return {
@@ -113,7 +99,7 @@ describe("bot/commands/detach", () => {
   it("detaches selected session locally without stopping the OpenCode session", async () => {
     const ctx = createContext();
 
-    await detachCommand(ctx as never);
+    await detachCommand(ctx as never, createDeps());
 
     expect(mocked.detachAttachedSessionMock).toHaveBeenCalledWith("detach_command");
     expect(mocked.clearSessionMock).toHaveBeenCalledTimes(1);
@@ -142,7 +128,7 @@ describe("bot/commands/detach", () => {
     };
     const ctx = createContext();
 
-    await detachCommand(ctx as never);
+    await detachCommand(ctx as never, createDeps());
 
     expect(mocked.clearSessionMock).toHaveBeenCalledTimes(1);
     expect(mocked.foregroundMarkIdleMock).toHaveBeenCalledWith("session-idle");
@@ -157,7 +143,7 @@ describe("bot/commands/detach", () => {
     mocked.currentSession = null;
     const ctx = createContext();
 
-    await detachCommand(ctx as never);
+    await detachCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("detach.no_active_session"));
     expect(mocked.detachAttachedSessionMock).not.toHaveBeenCalled();
@@ -168,7 +154,7 @@ describe("bot/commands/detach", () => {
     mocked.currentProject = null;
     const ctx = createContext();
 
-    await detachCommand(ctx as never);
+    await detachCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("detach.project_not_selected"));
     expect(mocked.detachAttachedSessionMock).not.toHaveBeenCalled();

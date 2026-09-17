@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import { t } from "../../../src/i18n/index.js";
 import { handleProjectSelect } from "../../../src/bot/callbacks/project-callback-handler.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   getProjectsMock: vi.fn(),
@@ -20,11 +21,6 @@ vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
   replyWithInlineMenu: vi.fn(),
 }));
 
-vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
-  interactionManager: { clear: vi.fn() },
-  clearAllInteractionState: mocked.clearAllInteractionStateMock,
-}));
-
 function createCallbackContext(data: string): Context {
   return {
     callbackQuery: { data } as Context["callbackQuery"],
@@ -32,6 +28,12 @@ function createCallbackContext(data: string): Context {
     editMessageText: vi.fn().mockResolvedValue(undefined),
     reply: vi.fn().mockResolvedValue(undefined),
   } as unknown as Context;
+}
+
+function createDeps() {
+  return createTestAppContainer({
+    resetInteractions: mocked.clearAllInteractionStateMock,
+  });
 }
 
 describe("bot/commands/projects handleProjectSelect", () => {
@@ -48,7 +50,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
     const pageLoadError = new Error("failed to load page");
     mocked.getProjectsMock.mockRejectedValue(pageLoadError);
 
-    const handled = await handleProjectSelect(ctx);
+    const handled = await handleProjectSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -68,7 +70,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
       },
     ]);
 
-    const handled = await handleProjectSelect(ctx);
+    const handled = await handleProjectSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.clearAllInteractionStateMock).toHaveBeenCalledWith("project_select_error");
@@ -80,7 +82,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("project:abc");
-    const handled = await handleProjectSelect(ctx);
+    const handled = await handleProjectSelect(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.getProjectsMock).not.toHaveBeenCalled();
@@ -93,7 +95,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("permission:once");
-    const handled = await handleProjectSelect(ctx);
+    const handled = await handleProjectSelect(ctx, createDeps());
 
     expect(handled).toBe(false);
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();
@@ -104,7 +106,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
     foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("question:select:0:1");
-    const handled = await handleProjectSelect(ctx);
+    const handled = await handleProjectSelect(ctx, createDeps());
 
     expect(handled).toBe(false);
     expect(ctx.answerCallbackQuery).not.toHaveBeenCalled();

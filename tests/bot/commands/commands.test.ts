@@ -17,6 +17,7 @@ import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { logger } from "../../../src/utils/logger.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -78,14 +79,6 @@ vi.mock("../../../src/opencode/client.js", () => ({
   },
 }));
 
-vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
-  summaryAggregator: {
-    setSession: mocked.setSessionSummaryMock,
-    setBotAndChatId: mocked.setBotAndChatIdMock,
-    clear: mocked.clearSummaryMock,
-  },
-}));
-
 vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   getStoredAgent: vi.fn(() => "build"),
   resolveProjectAgent: vi.fn(async (agentName?: string) => agentName ?? "build"),
@@ -103,12 +96,6 @@ vi.mock("../../../src/utils/safe-background-task.js", () => ({
   safeBackgroundTask: vi.fn((options) => {
     mocked.safeBackgroundTaskMock(options);
   }),
-}));
-
-vi.mock("../../../src/app/managers/external-input-suppression-manager.js", () => ({
-  externalUserInputSuppressionManager: {
-    register: mocked.suppressionRegisterMock,
-  },
 }));
 
 vi.mock("../../../src/app/services/attach-service.js", () => ({
@@ -169,8 +156,18 @@ function createTextContext(text: string): Context {
 
 function createDeps(): ExecuteCommandDeps {
   return {
+    ...createTestAppContainer({
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      summaryAggregator: {
+        setSession: mocked.setSessionSummaryMock,
+        setBotAndChatId: mocked.setBotAndChatIdMock,
+        clear: mocked.clearSummaryMock,
+      } as never,
+      externalUserInputSuppressionManager: {
+        register: mocked.suppressionRegisterMock,
+      } as never,
+    }),
     bot: {} as Bot<Context>,
-    ensureEventSubscription: mocked.ensureEventSubscriptionMock,
   };
 }
 
@@ -251,7 +248,7 @@ describe("bot/commands/commands", () => {
     });
 
     const ctx = createCommandContext(123);
-    await commandsCommand(ctx as never);
+    await commandsCommand(ctx as never, createDeps());
 
     expect(mocked.commandListMock).toHaveBeenCalledWith({ directory: "D:/Projects/Repo" });
     expect(ctx.reply).toHaveBeenCalledTimes(1);
@@ -591,7 +588,7 @@ describe("bot/commands/commands", () => {
     });
 
     const ctx = createCommandContext(700);
-    await commandsCommand(ctx as never);
+    await commandsCommand(ctx as never, createDeps());
 
     expect(mocked.commandListMock).toHaveBeenCalledWith({ directory: "D:/Projects/Repo" });
 
@@ -622,7 +619,7 @@ describe("bot/commands/commands", () => {
     });
 
     const ctx = createCommandContext(750);
-    await commandsCommand(ctx as never);
+    await commandsCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledTimes(1);
 

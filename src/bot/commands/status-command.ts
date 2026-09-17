@@ -1,4 +1,5 @@
 import { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
@@ -6,15 +7,15 @@ import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { fetchCurrentAgent } from "../../app/services/agent-selection-service.js";
 import { fetchCurrentModel } from "../../app/services/model-selection-service.js";
 import { getAgentDisplayName } from "../../app/types/agent.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { logger } from "../../utils/logger.js";
 import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";
 import { t } from "../../i18n/index.js";
 import { sendBotText } from "../messages/telegram-text.js";
 import { getBotVersion } from "../../runtime/bot-version.js";
 
-export async function statusCommand(ctx: CommandContext<Context>) {
+export type StatusCommandDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager">;
+
+export async function statusCommand(ctx: CommandContext<Context>, deps: StatusCommandDeps) {
   try {
     const { data, error } = await opencodeClient.global.health();
 
@@ -81,21 +82,21 @@ export async function statusCommand(ctx: CommandContext<Context>) {
     }
 
     if (ctx.chat) {
-      if (!pinnedMessageManager.isInitialized()) {
-        pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
+      if (!deps.pinnedMessageManager.isInitialized()) {
+        deps.pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
       }
       // Fetch context limit if not yet loaded (e.g. fresh bot start)
-      if (pinnedMessageManager.getContextLimit() === 0) {
-        await pinnedMessageManager.refreshContextLimit();
+      if (deps.pinnedMessageManager.getContextLimit() === 0) {
+        await deps.pinnedMessageManager.refreshContextLimit();
       }
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
     // Sync current context (tokens used + limit) into keyboard state
-    const contextInfo = pinnedMessageManager.getContextInfo();
+    const contextInfo = deps.pinnedMessageManager.getContextInfo();
     if (contextInfo) {
-      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+      deps.keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
     }
-    const keyboard = keyboardManager.getKeyboard();
+    const keyboard = deps.keyboardManager.getKeyboard();
     if (ctx.chat) {
       await sendBotText({
         api: ctx.api,

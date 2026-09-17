@@ -33,12 +33,6 @@ vi.mock("../../../src/opencode/process.js", () => ({
   killServerProcess: mocked.killServerProcessMock,
 }));
 
-vi.mock("../../../src/opencode/ready-lifecycle.js", () => ({
-  opencodeReadyLifecycle: {
-    notifyUnavailable: mocked.notifyUnavailableMock,
-  },
-}));
-
 vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
   editBotText: mocked.editBotTextMock,
 }));
@@ -49,19 +43,6 @@ vi.mock("../../../src/utils/logger.js", () => ({
     info: mocked.loggerInfoMock,
     warn: vi.fn(),
     error: mocked.loggerErrorMock,
-  },
-}));
-
-vi.mock("../../../src/app/managers/foreground-session-state-manager.js", () => ({
-  foregroundSessionState: {
-    getBusySessions: mocked.getBusySessionsMock,
-    clearAll: mocked.clearAllForegroundMock,
-  },
-}));
-
-vi.mock("../../../src/app/managers/attach-manager.js", () => ({
-  attachManager: {
-    getSnapshot: mocked.attachGetSnapshotMock,
   },
 }));
 
@@ -78,6 +59,7 @@ import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { startInteractionForTest } from "../../helpers/interaction.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 function createContext(): Context {
   return {
@@ -88,7 +70,15 @@ function createContext(): Context {
 }
 
 function createDeps() {
-  return { clearRuntimeState: mocked.clearRuntimeStateMock };
+  return createTestAppContainer({
+    resetRuntimeStreams: mocked.clearRuntimeStateMock,
+    foregroundSessionState: {
+      getBusySessions: mocked.getBusySessionsMock,
+      clearAll: mocked.clearAllForegroundMock,
+    } as never,
+    attachManager: { getSnapshot: mocked.attachGetSnapshotMock } as never,
+    opencodeReadyLifecycle: { notifyUnavailable: mocked.notifyUnavailableMock } as never,
+  });
 }
 
 describe("bot/commands/opencode-stop-command", () => {

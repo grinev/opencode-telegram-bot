@@ -37,27 +37,8 @@ vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
   clearActiveInlineMenu: mocked.clearActiveInlineMenuMock,
 }));
 
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: mocked.keyboardInitializeMock,
-    updateAgent: mocked.keyboardUpdateAgentMock,
-    updateModel: mocked.keyboardUpdateModelMock,
-    updateContext: mocked.keyboardUpdateContextMock,
-    getState: mocked.keyboardGetStateMock,
-  },
-}));
-
 vi.mock("../../../src/bot/keyboards/main-reply-keyboard.js", () => ({
   createMainKeyboard: mocked.createMainKeyboardMock,
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
-    getContextInfo: mocked.pinnedGetContextInfoMock,
-    getContextLimit: mocked.pinnedGetContextLimitMock,
-    refresh: mocked.pinnedRefreshMock,
-  },
 }));
 
 vi.mock("../../../src/bot/callbacks/feedback.js", () => ({
@@ -73,6 +54,25 @@ import { buildAgentSelectionMenu } from "../../../src/bot/menus/agent-selection-
 import { handleAgentSelect } from "../../../src/bot/callbacks/agent-selection-callback-handler.js";
 import { t } from "../../../src/i18n/index.js";
 import { getAgentDisplayName } from "../../../src/app/types/agent.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
+
+function createDeps() {
+  return createTestAppContainer({
+    keyboardManager: {
+      initialize: mocked.keyboardInitializeMock,
+      updateAgent: mocked.keyboardUpdateAgentMock,
+      updateModel: mocked.keyboardUpdateModelMock,
+      updateContext: mocked.keyboardUpdateContextMock,
+      getState: mocked.keyboardGetStateMock,
+    } as never,
+    pinnedMessageManager: {
+      refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
+      getContextInfo: mocked.pinnedGetContextInfoMock,
+      getContextLimit: mocked.pinnedGetContextLimitMock,
+      refresh: mocked.pinnedRefreshMock,
+    } as never,
+  });
+}
 
 function mockContext(overrides: Record<string, unknown> = {}) {
   return {
@@ -145,7 +145,7 @@ describe("bot agent selection", () => {
       callbackQuery: { data: "agent:plan" },
     });
 
-    const result = await handleAgentSelect(ctx);
+    const result = await handleAgentSelect(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.selectAgentMock).toHaveBeenCalledWith("plan");
@@ -172,7 +172,7 @@ describe("bot agent selection", () => {
       callbackQuery: { data: "agent:plan" },
     });
 
-    await handleAgentSelect(ctx);
+    await handleAgentSelect(ctx, createDeps());
 
     expect(mocked.pinnedRefreshMock).toHaveBeenCalledOnce();
     expect(mocked.showVariantMenuAfterModelChangeMock).not.toHaveBeenCalled();
@@ -183,7 +183,7 @@ describe("bot agent selection", () => {
       callbackQuery: { data: "agent:plan" },
     });
 
-    await handleAgentSelect(ctx);
+    await handleAgentSelect(ctx, createDeps());
 
     expect(mocked.pinnedRefreshMock).not.toHaveBeenCalled();
     expect(mocked.showVariantMenuAfterModelChangeMock).not.toHaveBeenCalled();

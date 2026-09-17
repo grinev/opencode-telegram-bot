@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
 import { startCommand } from "../../../src/bot/commands/start-command.js";
 import { t } from "../../../src/i18n/index.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   abortCurrentOperationMock: vi.fn(),
@@ -56,26 +57,25 @@ vi.mock("../../../src/app/services/variant-selection-service.js", () => ({
   formatVariantForButton: mocked.formatVariantForButtonMock,
 }));
 
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    isInitialized: mocked.pinnedIsInitializedMock,
-    initialize: mocked.pinnedInitializeMock,
-    getContextLimit: mocked.pinnedGetContextLimitMock,
-    refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
-    getContextInfo: mocked.pinnedGetContextInfoMock,
-    clear: mocked.pinnedClearMock,
-  },
-}));
-
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: mocked.keyboardInitializeMock,
-    updateAgent: mocked.keyboardUpdateAgentMock,
-    updateModel: mocked.keyboardUpdateModelMock,
-    updateContext: mocked.keyboardUpdateContextMock,
-    clearContext: mocked.keyboardClearContextMock,
-  },
-}));
+function createDeps() {
+  return createTestAppContainer({
+    pinnedMessageManager: {
+      isInitialized: mocked.pinnedIsInitializedMock,
+      initialize: mocked.pinnedInitializeMock,
+      getContextLimit: mocked.pinnedGetContextLimitMock,
+      refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
+      getContextInfo: mocked.pinnedGetContextInfoMock,
+      clear: mocked.pinnedClearMock,
+    } as never,
+    keyboardManager: {
+      initialize: mocked.keyboardInitializeMock,
+      updateAgent: mocked.keyboardUpdateAgentMock,
+      updateModel: mocked.keyboardUpdateModelMock,
+      updateContext: mocked.keyboardUpdateContextMock,
+      clearContext: mocked.keyboardClearContextMock,
+    } as never,
+  });
+}
 
 function createStartContext(): Context {
   return {
@@ -130,10 +130,11 @@ describe("bot/commands/start-command", () => {
 
   it("stops active flow, resets project/session, and sends welcome message", async () => {
     const ctx = createStartContext();
+    const deps = createDeps();
 
-    await startCommand(ctx);
+    await startCommand(ctx, deps);
 
-    expect(mocked.abortCurrentOperationMock).toHaveBeenCalledWith(ctx, { notifyUser: false });
+    expect(mocked.abortCurrentOperationMock).toHaveBeenCalledWith(ctx, deps, { notifyUser: false });
     expect(mocked.clearSessionMock).toHaveBeenCalledTimes(1);
     expect(mocked.clearProjectMock).toHaveBeenCalledTimes(1);
     expect(mocked.keyboardClearContextMock).toHaveBeenCalledTimes(1);

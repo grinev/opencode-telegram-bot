@@ -1,12 +1,16 @@
 import { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
-import { renameManager } from "../../app/managers/rename-manager.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { buildRenameCancelKeyboard } from "../menus/rename-menu.js";
 
-export async function renameCommand(ctx: CommandContext<Context>): Promise<void> {
+export type RenameCommandDeps = Pick<AppContainer, "interactionManager" | "renameManager">;
+
+export async function renameCommand(
+  ctx: CommandContext<Context>,
+  deps: RenameCommandDeps,
+): Promise<void> {
   try {
     const currentSession = getCurrentSession();
 
@@ -19,9 +23,13 @@ export async function renameCommand(ctx: CommandContext<Context>): Promise<void>
       reply_markup: buildRenameCancelKeyboard(),
     });
 
-    renameManager.startWaiting(currentSession.id, currentSession.directory, currentSession.title);
-    renameManager.setMessageId(message.message_id);
-    interactionManager.transition({
+    deps.renameManager.startWaiting(
+      currentSession.id,
+      currentSession.directory,
+      currentSession.title,
+    );
+    deps.renameManager.setMessageId(message.message_id);
+    deps.interactionManager.transition({
       expectedInput: "text",
       metadata: {
         sessionId: currentSession.id,

@@ -54,17 +54,19 @@ vi.mock("../../../src/app/services/project-switch-service.js", () => ({
   switchToProject: mocked.switchToProjectMock,
 }));
 
-vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
-  interactionManager: { clear: vi.fn() },
-  clearAllInteractionState: mocked.clearAllInteractionStateMock,
-}));
-
 vi.mock("../../../src/utils/logger.js", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 import { worktreeCommand } from "../../../src/bot/commands/worktree-command.js";
 import { handleWorktreeCallback } from "../../../src/bot/callbacks/worktree-callback-handler.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
+
+function createDeps() {
+  return createTestAppContainer({
+    resetInteractions: mocked.clearAllInteractionStateMock,
+  });
+}
 
 function createCommandContext(): Context {
   return {
@@ -172,7 +174,7 @@ describe("bot/commands/worktree", () => {
     });
 
     const ctx = createCallbackContext("worktree:1");
-    const handled = await handleWorktreeCallback(ctx);
+    const handled = await handleWorktreeCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.upsertSessionDirectoryMock).toHaveBeenCalledWith(
@@ -205,7 +207,7 @@ describe("bot/commands/worktree", () => {
     });
 
     const ctx = createCallbackContext("worktree:0");
-    const handled = await handleWorktreeCallback(ctx);
+    const handled = await handleWorktreeCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({

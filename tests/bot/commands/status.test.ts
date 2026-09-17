@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
 import { statusCommand } from "../../../src/bot/commands/status-command.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const botVersion = (JSON.parse(readFileSync("package.json", "utf-8")) as { version: string })
   .version;
@@ -65,27 +66,26 @@ vi.mock("../../../src/app/services/worktree-service.js", () => ({
   getGitWorktreeContext: mocked.getGitWorktreeContextMock,
 }));
 
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: mocked.keyboardInitializeMock,
-    updateContext: mocked.keyboardUpdateContextMock,
-    getKeyboard: mocked.keyboardGetKeyboardMock,
-  },
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    isInitialized: mocked.pinnedIsInitializedMock,
-    initialize: mocked.pinnedInitializeMock,
-    getContextLimit: mocked.pinnedGetContextLimitMock,
-    refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
-    getContextInfo: mocked.pinnedGetContextInfoMock,
-  },
-}));
-
 vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
   sendBotText: mocked.sendBotTextMock,
 }));
+
+function createDeps() {
+  return createTestAppContainer({
+    keyboardManager: {
+      initialize: mocked.keyboardInitializeMock,
+      updateContext: mocked.keyboardUpdateContextMock,
+      getKeyboard: mocked.keyboardGetKeyboardMock,
+    } as never,
+    pinnedMessageManager: {
+      isInitialized: mocked.pinnedIsInitializedMock,
+      initialize: mocked.pinnedInitializeMock,
+      getContextLimit: mocked.pinnedGetContextLimitMock,
+      refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
+      getContextInfo: mocked.pinnedGetContextInfoMock,
+    } as never,
+  });
+}
 
 describe("bot/commands/status-command", () => {
   beforeEach(() => {
@@ -131,7 +131,7 @@ describe("bot/commands/status-command", () => {
       reply: vi.fn(),
     } as unknown as Context;
 
-    await statusCommand(ctx as never);
+    await statusCommand(ctx as never, createDeps());
 
     const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
     expect(message).toContain(`Bot version: ${botVersion}`);
@@ -163,7 +163,7 @@ describe("bot/commands/status-command", () => {
       reply: vi.fn(),
     } as unknown as Context;
 
-    await statusCommand(ctx as never);
+    await statusCommand(ctx as never, createDeps());
 
     const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
     expect(message).toContain("Project: /repo-main: feature/mobile");
@@ -184,7 +184,7 @@ describe("bot/commands/status-command", () => {
       reply,
     } as unknown as Context;
 
-    await statusCommand(ctx as never);
+    await statusCommand(ctx as never, createDeps());
 
     expect(mocked.loggerErrorMock).not.toHaveBeenCalled();
     expect(mocked.loggerWarnMock).toHaveBeenCalledTimes(1);
@@ -208,7 +208,7 @@ describe("bot/commands/status-command", () => {
       reply,
     } as unknown as Context;
 
-    await statusCommand(ctx as never);
+    await statusCommand(ctx as never, createDeps());
 
     expect(mocked.loggerWarnMock).not.toHaveBeenCalled();
     expect(mocked.loggerErrorMock).toHaveBeenCalledTimes(1);
@@ -238,7 +238,7 @@ describe("bot/commands/status-command", () => {
       reply: vi.fn(),
     } as unknown as Context;
 
-    await statusCommand(ctx as never);
+    await statusCommand(ctx as never, createDeps());
 
     const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
     expect(message).toContain("Model: 🧠 openai/gpt-5 (low)");
@@ -258,7 +258,7 @@ describe("bot/commands/status-command", () => {
       reply: vi.fn(),
     } as unknown as Context;
 
-    await statusCommand(ctx as never);
+    await statusCommand(ctx as never, createDeps());
 
     const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
     expect(message).toContain("Model: 🧠 openai/gpt-5 (default)");
@@ -277,7 +277,7 @@ describe("bot/commands/status-command", () => {
       reply: vi.fn(),
     } as unknown as Context;
 
-    await statusCommand(ctx as never);
+    await statusCommand(ctx as never, createDeps());
 
     const message = mocked.sendBotTextMock.mock.calls[0]?.[0]?.text as string;
     expect(message).toContain("Model: 🧠 openai/gpt-5");

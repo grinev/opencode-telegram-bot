@@ -1,17 +1,25 @@
 import { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { clearSession, getCurrentSession } from "../../app/services/session-service.js";
 import { detachAttachedSession } from "../../app/services/attach-service.js";
-import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
-import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 
-export async function detachCommand(ctx: CommandContext<Context>): Promise<void> {
+export type DetachCommandDeps = Pick<
+  AppContainer,
+  | "assistantRunState"
+  | "foregroundSessionState"
+  | "keyboardManager"
+  | "pinnedMessageManager"
+  | "resetInteractions"
+>;
+
+export async function detachCommand(
+  ctx: CommandContext<Context>,
+  deps: DetachCommandDeps,
+): Promise<void> {
   try {
     const currentProject = getCurrentProject();
     if (!currentProject) {
@@ -27,28 +35,28 @@ export async function detachCommand(ctx: CommandContext<Context>): Promise<void>
 
     detachAttachedSession("detach_command");
     clearPromptResponseMode(currentSession.id);
-    foregroundSessionState.markIdle(currentSession.id);
-    assistantRunState.clearRun(currentSession.id, "detach_command");
-    clearAllInteractionState("detach_command");
+    deps.foregroundSessionState.markIdle(currentSession.id);
+    deps.assistantRunState.clearRun(currentSession.id, "detach_command");
+    deps.resetInteractions("detach_command");
     clearSession();
 
-    if (pinnedMessageManager.isInitialized()) {
+    if (deps.pinnedMessageManager.isInitialized()) {
       try {
-        await pinnedMessageManager.clear();
+        await deps.pinnedMessageManager.clear();
       } catch (error) {
         logger.error("[Detach] Failed to clear pinned message:", error);
       }
     }
 
     if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
 
-    await pinnedMessageManager.refreshContextLimit();
-    const contextLimit = pinnedMessageManager.getContextLimit();
-    keyboardManager.updateContext(0, contextLimit);
+    await deps.pinnedMessageManager.refreshContextLimit();
+    const contextLimit = deps.pinnedMessageManager.getContextLimit();
+    deps.keyboardManager.updateContext(0, contextLimit);
 
-    const keyboard = keyboardManager.getKeyboard();
+    const keyboard = deps.keyboardManager.getKeyboard();
 
     logger.info(
       `[Detach] Detached from session: id=${currentSession.id}, title="${currentSession.title}", project=${currentProject.worktree}`,

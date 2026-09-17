@@ -73,6 +73,8 @@ export async function ensureCommandsInitialized(
 
 export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps): void {
   const registry = deps.localCommandRegistry ?? LocalCommandRegistry.empty();
+  const { container } = deps;
+  const botDeps = { ...container, bot };
   bot.use(async (ctx, next) => {
     if (ctx.chat && ctx.message?.text?.startsWith("/")) {
       flushPendingPrompt(ctx.chat.id);
@@ -80,31 +82,27 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
     await next();
   });
 
-  bot.command("start", startCommand);
+  bot.command("start", (ctx) => startCommand(ctx, container));
   bot.command("help", helpCommand);
-  bot.command("status", statusCommand);
+  bot.command("status", (ctx) => statusCommand(ctx, container));
   bot.command("settings", settingsCommand);
-  bot.command("opencode_start", opencodeStartCommand);
-  bot.command("opencode_stop", (ctx) =>
-    opencodeStopCommand(ctx, { clearRuntimeState: deps.container.resetRuntimeStreams }),
-  );
+  bot.command("opencode_start", (ctx) => opencodeStartCommand(ctx, container));
+  bot.command("opencode_stop", (ctx) => opencodeStopCommand(ctx, container));
   bot.command("projects", projectsCommand);
   bot.command("worktree", worktreeCommand);
-  bot.command("open", openCommand);
-  bot.command("ls", lsCommand);
+  bot.command("open", (ctx) => openCommand(ctx, container));
+  bot.command("ls", (ctx) => lsCommand(ctx, container));
   bot.command("sessions", sessionsCommand);
-  bot.command("messages", messagesCommand);
-  bot.command("new", (ctx) =>
-    newCommand(ctx, { bot, ensureEventSubscription: deps.container.ensureEventSubscription }),
-  );
-  bot.command("abort", abortCommand);
-  bot.command("detach", detachCommand);
-  bot.command("task", taskCommand);
-  bot.command("tasklist", taskListCommand);
-  bot.command("rename", renameCommand);
-  bot.command("commands", commandsCommand);
-  bot.command("skills", skillsCommand);
-  bot.command("mcps", mcpsCommand);
+  bot.command("messages", (ctx) => messagesCommand(ctx, container));
+  bot.command("new", (ctx) => newCommand(ctx, botDeps));
+  bot.command("abort", (ctx) => abortCommand(ctx, container));
+  bot.command("detach", (ctx) => detachCommand(ctx, container));
+  bot.command("task", (ctx) => taskCommand(ctx, container));
+  bot.command("tasklist", (ctx) => taskListCommand(ctx, container));
+  bot.command("rename", (ctx) => renameCommand(ctx, container));
+  bot.command("commands", (ctx) => commandsCommand(ctx, container));
+  bot.command("skills", (ctx) => skillsCommand(ctx, container));
+  bot.command("mcps", (ctx) => mcpsCommand(ctx, container));
   for (const definition of registry.definitions()) {
     bot.command(definition.command, async (ctx) => {
       const result = await registry.execute(definition.command);

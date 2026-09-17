@@ -44,27 +44,8 @@ vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
   clearActiveInlineMenu: mocked.clearActiveInlineMenuMock,
 }));
 
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: mocked.keyboardInitializeMock,
-    updateModel: mocked.keyboardUpdateModelMock,
-    updateVariant: mocked.keyboardUpdateVariantMock,
-    updateAgent: mocked.keyboardUpdateAgentMock,
-    updateContext: mocked.keyboardUpdateContextMock,
-  },
-}));
-
 vi.mock("../../../src/bot/keyboards/main-reply-keyboard.js", () => ({
   createMainKeyboard: mocked.createMainKeyboardMock,
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
-    getContextInfo: mocked.pinnedGetContextInfoMock,
-    getContextLimit: mocked.pinnedGetContextLimitMock,
-    refresh: mocked.pinnedRefreshMock,
-  },
 }));
 
 vi.mock("../../../src/bot/callbacks/feedback.js", () => ({
@@ -75,6 +56,7 @@ vi.mock("../../../src/bot/callbacks/feedback.js", () => ({
 
 import { handleVariantSelect } from "../../../src/bot/callbacks/variant-selection-callback-handler.js";
 import { t } from "../../../src/i18n/index.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 function mockContext(overrides: Record<string, unknown> = {}) {
   return {
@@ -87,6 +69,24 @@ function mockContext(overrides: Record<string, unknown> = {}) {
     deleteMessage: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as import("grammy").Context;
+}
+
+function createDeps() {
+  return createTestAppContainer({
+    keyboardManager: {
+      initialize: mocked.keyboardInitializeMock,
+      updateModel: mocked.keyboardUpdateModelMock,
+      updateVariant: mocked.keyboardUpdateVariantMock,
+      updateAgent: mocked.keyboardUpdateAgentMock,
+      updateContext: mocked.keyboardUpdateContextMock,
+    } as never,
+    pinnedMessageManager: {
+      refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
+      getContextInfo: mocked.pinnedGetContextInfoMock,
+      getContextLimit: mocked.pinnedGetContextLimitMock,
+      refresh: mocked.pinnedRefreshMock,
+    } as never,
+  });
 }
 
 describe("bot variant selection", () => {
@@ -139,7 +139,7 @@ describe("bot variant selection", () => {
       callbackQuery: { data: "variant:low" },
     });
 
-    const result = await handleVariantSelect(ctx);
+    const result = await handleVariantSelect(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setCurrentVariantMock).toHaveBeenCalledWith("low");
@@ -161,7 +161,7 @@ describe("bot variant selection", () => {
       callbackQuery: { data: "variant:low" },
     });
 
-    const result = await handleVariantSelect(ctx);
+    const result = await handleVariantSelect(ctx, createDeps());
 
     expect(result).toBe(true);
     expect(mocked.setCurrentVariantMock).not.toHaveBeenCalled();

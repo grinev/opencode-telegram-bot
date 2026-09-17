@@ -5,6 +5,7 @@ import { handleMcpsCallback } from "../../../src/bot/callbacks/mcp-catalog-callb
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -64,6 +65,10 @@ function createCallbackContext(data: string, messageId: number): Context {
   } as unknown as Context;
 }
 
+function createDeps() {
+  return createTestAppContainer();
+}
+
 describe("bot/commands/mcps", () => {
   beforeEach(() => {
     interactionManager.clear("test_setup");
@@ -82,7 +87,7 @@ describe("bot/commands/mcps", () => {
     mocked.currentProject = null;
 
     const ctx = createCommandContext(100);
-    await mcpsCommand(ctx as never);
+    await mcpsCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("bot.project_not_selected"));
   });
@@ -91,7 +96,7 @@ describe("bot/commands/mcps", () => {
     mocked.mcpStatusMock.mockResolvedValue({ data: {}, error: null });
 
     const ctx = createCommandContext(101);
-    await mcpsCommand(ctx as never);
+    await mcpsCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("mcps.empty"));
   });
@@ -106,7 +111,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCommandContext(102);
-    await mcpsCommand(ctx as never);
+    await mcpsCommand(ctx as never, createDeps());
 
     expect(mocked.mcpStatusMock).toHaveBeenCalledWith({ directory: "D:/Projects/Repo" });
     expect(ctx.reply).toHaveBeenCalledTimes(1);
@@ -132,7 +137,7 @@ describe("bot/commands/mcps", () => {
     mocked.mcpStatusMock.mockResolvedValue({ data: null, error: new Error("API error") });
 
     const ctx = createCommandContext(103);
-    await mcpsCommand(ctx as never);
+    await mcpsCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("mcps.fetch_error"));
   });
@@ -154,7 +159,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCallbackContext("mcps:select:1", 200);
-    const handled = await handleMcpsCallback(ctx);
+    const handled = await handleMcpsCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.editMessageText).toHaveBeenCalledWith(
@@ -191,7 +196,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCallbackContext("mcps:toggle", 300);
-    const handled = await handleMcpsCallback(ctx);
+    const handled = await handleMcpsCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.mcpDisconnectMock).toHaveBeenCalledWith({
@@ -227,7 +232,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCallbackContext("mcps:toggle", 400);
-    const handled = await handleMcpsCallback(ctx);
+    const handled = await handleMcpsCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(mocked.mcpConnectMock).toHaveBeenCalledWith({
@@ -262,7 +267,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCallbackContext("mcps:back", 500);
-    const handled = await handleMcpsCallback(ctx);
+    const handled = await handleMcpsCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.editMessageText).toHaveBeenCalledWith(
@@ -288,7 +293,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCallbackContext("mcps:cancel", 600);
-    const handled = await handleMcpsCallback(ctx);
+    const handled = await handleMcpsCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("common.cancelled") });
@@ -310,7 +315,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCallbackContext("mcps:cancel", 999);
-    const handled = await handleMcpsCallback(ctx);
+    const handled = await handleMcpsCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -334,7 +339,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCallbackContext("mcps:select:0", 800);
-    const handled = await handleMcpsCallback(ctx);
+    const handled = await handleMcpsCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.editMessageText).toHaveBeenCalledWith(
@@ -364,7 +369,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCommandContext(850);
-    await mcpsCommand(ctx as never);
+    await mcpsCommand(ctx as never, createDeps());
 
     const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
       string,
@@ -397,7 +402,7 @@ describe("bot/commands/mcps", () => {
     });
 
     const ctx = createCallbackContext("mcps:toggle", 900);
-    const handled = await handleMcpsCallback(ctx);
+    const handled = await handleMcpsCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("mcps.toggle_error") });

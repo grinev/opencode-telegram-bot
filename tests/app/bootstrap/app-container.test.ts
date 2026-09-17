@@ -104,6 +104,19 @@ describe("app/bootstrap/app-container", () => {
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 
+  it("drops only the interaction of the failed scope on the interaction-error reset", () => {
+    questionManager.startQuestions(
+      [{ header: "Q1", question: "Pick one", options: [{ label: "Yes", description: "" }] }],
+      "req-1",
+    );
+
+    container.resetInteractionError("permission", "test_error");
+    expect(interactionManager.getSnapshot()?.kind).toBe("question");
+
+    container.resetInteractionError("question", "test_error");
+    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
   it("clears only the aggregator on the aggregator reset", () => {
     const aggregatorClear = vi.spyOn(summaryAggregator, "clear");
     const runClear = vi.spyOn(assistantRunState, "clearAll");

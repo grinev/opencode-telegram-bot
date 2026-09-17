@@ -1,13 +1,18 @@
 import type { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { loadSkillsCatalog } from "../../app/services/skills-catalog-service.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { buildSkillsListKeyboard, formatSkillsSelectText } from "../menus/skills-catalog-menu.js";
 
-export async function skillsCommand(ctx: CommandContext<Context>): Promise<void> {
+export type SkillsCommandDeps = Pick<AppContainer, "interactionManager">;
+
+export async function skillsCommand(
+  ctx: CommandContext<Context>,
+  deps: SkillsCommandDeps,
+): Promise<void> {
   try {
     const currentProject = getCurrentProject();
     if (!currentProject) {
@@ -27,7 +32,7 @@ export async function skillsCommand(ctx: CommandContext<Context>): Promise<void>
       reply_markup: keyboard,
     });
 
-    interactionManager.start({
+    deps.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {

@@ -41,34 +41,8 @@ vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   resolveProjectAgent: mocked.resolveProjectAgentMock,
 }));
 
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: mocked.keyboardInitializeMock,
-    updateModel: mocked.keyboardUpdateModelMock,
-    updateAgent: mocked.keyboardUpdateAgentMock,
-    updateContext: mocked.keyboardUpdateContextMock,
-  },
-}));
-
 vi.mock("../../../src/bot/keyboards/main-reply-keyboard.js", () => ({
   createMainKeyboard: mocked.createMainKeyboardMock,
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
-    getContextInfo: mocked.pinnedGetContextInfoMock,
-    getContextLimit: mocked.pinnedGetContextLimitMock,
-  },
-}));
-
-vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
-  interactionManager: {
-    getSnapshot: mocked.interactionManagerGetSnapshotMock,
-    start: mocked.interactionManagerStartMock,
-    transition: mocked.interactionManagerTransitionMock,
-    clear: mocked.interactionManagerClearMock,
-  },
 }));
 
 vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
@@ -98,6 +72,29 @@ import {
 } from "../../../src/bot/callbacks/model-selection-callback-handler.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
+
+function createDeps() {
+  return createTestAppContainer({
+    interactionManager: {
+      getSnapshot: mocked.interactionManagerGetSnapshotMock,
+      start: mocked.interactionManagerStartMock,
+      transition: mocked.interactionManagerTransitionMock,
+      clear: mocked.interactionManagerClearMock,
+    } as never,
+    keyboardManager: {
+      initialize: mocked.keyboardInitializeMock,
+      updateModel: mocked.keyboardUpdateModelMock,
+      updateAgent: mocked.keyboardUpdateAgentMock,
+      updateContext: mocked.keyboardUpdateContextMock,
+    } as never,
+    pinnedMessageManager: {
+      refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
+      getContextInfo: mocked.pinnedGetContextInfoMock,
+      getContextLimit: mocked.pinnedGetContextLimitMock,
+    } as never,
+  });
+}
 
 function mockContext(overrides: Record<string, unknown> = {}) {
   return {
@@ -246,7 +243,7 @@ describe("bot model selection", () => {
         api: {},
       });
 
-      const result = await handleModelSelect(ctx);
+      const result = await handleModelSelect(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.selectModelMock).toHaveBeenCalledWith({
@@ -282,7 +279,7 @@ describe("bot model selection", () => {
         api: {},
       });
 
-      const result = await handleModelSelect(ctx);
+      const result = await handleModelSelect(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.selectModelMock).not.toHaveBeenCalled();
@@ -307,7 +304,7 @@ describe("bot model selection", () => {
         api: {},
       });
 
-      const result = await handleModelSelect(ctx);
+      const result = await handleModelSelect(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.selectModelMock).not.toHaveBeenCalled();
@@ -338,7 +335,7 @@ describe("bot model selection", () => {
         api: {},
       });
 
-      const result = await handleModelSelect(ctx);
+      const result = await handleModelSelect(ctx, createDeps());
 
       // `false` here would make the router answer the callback a second time.
       expect(result).toBe(true);
@@ -354,7 +351,7 @@ describe("bot model selection", () => {
         callbackQuery: { data: "model:openai:gpt-4o" },
       });
 
-      const result = await handleModelSearchCallback(ctx);
+      const result = await handleModelSearchCallback(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -362,7 +359,7 @@ describe("bot model selection", () => {
     it("returns false when no callback data", async () => {
       const ctx = mockContext({ callbackQuery: undefined });
 
-      const result = await handleModelSearchCallback(ctx);
+      const result = await handleModelSearchCallback(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -376,7 +373,7 @@ describe("bot model selection", () => {
         message: { text: "gpt" },
       });
 
-      const result = await handleModelSearchTextInput(ctx);
+      const result = await handleModelSearchTextInput(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -391,7 +388,7 @@ describe("bot model selection", () => {
         message: { text: "gpt" },
       });
 
-      const result = await handleModelSearchTextInput(ctx);
+      const result = await handleModelSearchTextInput(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -406,7 +403,7 @@ describe("bot model selection", () => {
         message: { text: "gpt" },
       });
 
-      const result = await handleModelSearchTextInput(ctx);
+      const result = await handleModelSearchTextInput(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -421,7 +418,7 @@ describe("bot model selection", () => {
         message: { text: undefined },
       });
 
-      const result = await handleModelSearchTextInput(ctx);
+      const result = await handleModelSearchTextInput(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -440,7 +437,7 @@ describe("bot model selection", () => {
         message: { text: "fireworks" },
       });
 
-      const result = await handleModelSearchTextInput(ctx);
+      const result = await handleModelSearchTextInput(ctx, createDeps());
       const replyCall = defined(vi.mocked(ctx.reply).mock.calls[0]);
       const replyOptions = replyCall[1] as {
         reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> };
@@ -465,7 +462,7 @@ describe("bot model selection", () => {
     it("returns false when no callback data", async () => {
       const ctx = mockContext({ callbackQuery: undefined });
 
-      const result = await handleModelSearchResults(ctx);
+      const result = await handleModelSearchResults(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -477,7 +474,7 @@ describe("bot model selection", () => {
         callbackQuery: { data: "model:search:cancel" },
       });
 
-      const result = await handleModelSearchResults(ctx);
+      const result = await handleModelSearchResults(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -492,7 +489,7 @@ describe("bot model selection", () => {
         callbackQuery: { data: "model:search:cancel" },
       });
 
-      const result = await handleModelSearchResults(ctx);
+      const result = await handleModelSearchResults(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -507,7 +504,7 @@ describe("bot model selection", () => {
         callbackQuery: { data: "model:search:cancel" },
       });
 
-      const result = await handleModelSearchResults(ctx);
+      const result = await handleModelSearchResults(ctx, createDeps());
 
       expect(result).toBe(false);
     });
@@ -532,7 +529,7 @@ describe("bot model selection", () => {
         api: {},
       });
 
-      const result = await handleModelSearchResults(ctx);
+      const result = await handleModelSearchResults(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.interactionManagerClearMock).toHaveBeenCalledWith("model_search_selected");
@@ -567,7 +564,7 @@ describe("bot model selection", () => {
         api: {},
       });
 
-      const result = await handleModelSearchResults(ctx);
+      const result = await handleModelSearchResults(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.selectModelMock).not.toHaveBeenCalled();
@@ -685,7 +682,7 @@ describe("bot model selection", () => {
     it("ignores callbacks that are not part of the provider browser", async () => {
       const ctx = providerMenuContext("model:list:recent:0");
 
-      await expect(handleModelProvidersCallback(ctx)).resolves.toBe(false);
+      await expect(handleModelProvidersCallback(ctx, createDeps())).resolves.toBe(false);
     });
 
     it("opens the providers list and stores it with the active menu", async () => {
@@ -694,7 +691,7 @@ describe("bot model selection", () => {
       mocked.getProvidersMock.mockResolvedValue(providers);
 
       const ctx = providerMenuContext("model:providers:0");
-      const result = await handleModelProvidersCallback(ctx);
+      const result = await handleModelProvidersCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(ctx.editMessageText).toHaveBeenCalledWith(
@@ -723,7 +720,7 @@ describe("bot model selection", () => {
       ]);
 
       const ctx = providerMenuContext("model:provider:0:0");
-      const result = await handleModelProvidersCallback(ctx);
+      const result = await handleModelProvidersCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.getProviderModelsMock).toHaveBeenCalledWith("openai");
@@ -757,7 +754,7 @@ describe("bot model selection", () => {
       mocked.getModelSelectionListsMock.mockResolvedValue(modelLists);
 
       const ctx = providerMenuContext("model:root");
-      const result = await handleModelProvidersCallback(ctx);
+      const result = await handleModelProvidersCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(ctx.editMessageText).toHaveBeenCalled();
@@ -777,7 +774,7 @@ describe("bot model selection", () => {
       );
 
       const ctx = providerMenuContext("model:pick:0");
-      const result = await handleModelProvidersCallback(ctx);
+      const result = await handleModelProvidersCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.selectModelMock).toHaveBeenCalledWith({
@@ -798,7 +795,7 @@ describe("bot model selection", () => {
       );
 
       const ctx = providerMenuContext("model:pick:3");
-      const result = await handleModelProvidersCallback(ctx);
+      const result = await handleModelProvidersCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(mocked.selectModelMock).not.toHaveBeenCalled();
@@ -811,7 +808,7 @@ describe("bot model selection", () => {
       mocked.ensureActiveInlineMenuMock.mockResolvedValue(false);
 
       const ctx = providerMenuContext("model:providers:0");
-      const result = await handleModelProvidersCallback(ctx);
+      const result = await handleModelProvidersCallback(ctx, createDeps());
 
       expect(result).toBe(true);
       expect(ctx.editMessageText).not.toHaveBeenCalled();
@@ -824,7 +821,7 @@ describe("bot model selection", () => {
         callbackQuery: { data: "model:providers:0", message: { message_id: 999 } },
       });
 
-      const result = await handleModelSelect(ctx);
+      const result = await handleModelSelect(ctx, createDeps());
 
       expect(result).toBe(false);
       expect(mocked.ensureActiveInlineMenuMock).not.toHaveBeenCalled();

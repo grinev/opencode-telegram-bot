@@ -72,15 +72,13 @@ describe("bot/routers/command-router", () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("passes the container's runtime-streams reset to the opencode_stop handler", async () => {
+  it("passes the container to the opencode_stop handler", async () => {
     const bot = { command: vi.fn(), use: vi.fn() };
-    const clearRuntimeState = vi.fn();
+    const container = createTestAppContainer();
     mocked.opencodeStopCommand.mockReset();
     mocked.opencodeStopCommand.mockResolvedValue(undefined);
 
-    registerCommandRouter(bot as never, {
-      container: createTestAppContainer({ resetRuntimeStreams: clearRuntimeState }),
-    });
+    registerCommandRouter(bot as never, { container });
 
     const stopRegistration = bot.command.mock.calls.find(([command]) => command === "opencode_stop");
     expect(stopRegistration).toBeDefined();
@@ -88,7 +86,7 @@ describe("bot/routers/command-router", () => {
     const ctx = { chat: { id: 123 } } as unknown as Context;
     await stopRegistration?.[1](ctx);
 
-    expect(mocked.opencodeStopCommand).toHaveBeenCalledWith(ctx, { clearRuntimeState });
+    expect(mocked.opencodeStopCommand).toHaveBeenCalledWith(ctx, container);
   });
 
   it("initializes commands for the authorized chat", async () => {

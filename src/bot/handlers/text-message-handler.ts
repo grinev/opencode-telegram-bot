@@ -33,7 +33,7 @@ export async function handleCommandTextArguments(
     return true;
   }
 
-  clearCommandsInteraction("commands_arguments_submitted");
+  clearCommandsInteraction(deps, "commands_arguments_submitted");
 
   if (ctx.chat) {
     await ctx.api.deleteMessage(ctx.chat.id, metadata.messageId).catch(() => {});
@@ -68,7 +68,7 @@ export async function handleSkillTextArguments(
     return true;
   }
 
-  clearSkillsInteraction("skills_arguments_submitted");
+  clearSkillsInteraction(deps, "skills_arguments_submitted");
 
   if (ctx.chat) {
     await ctx.api.deleteMessage(ctx.chat.id, metadata.messageId).catch(() => {});

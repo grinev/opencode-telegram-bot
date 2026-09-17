@@ -1,8 +1,8 @@
 import { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { resolveLocalOpencodeTarget, startLocalOpencodeServer } from "../../opencode/process.js";
-import { opencodeReadyLifecycle } from "../../opencode/ready-lifecycle.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { isContainerRuntime } from "../../runtime/container.js";
@@ -76,7 +76,12 @@ async function waitForServerReady(maxWaitMs: number = 10000): Promise<boolean> {
  * Command handler for /opencode-start
  * Starts the OpenCode server process
  */
-export async function opencodeStartCommand(ctx: CommandContext<Context>) {
+export type OpencodeStartCommandDeps = Pick<AppContainer, "opencodeReadyLifecycle">;
+
+export async function opencodeStartCommand(
+  ctx: CommandContext<Context>,
+  deps: OpencodeStartCommandDeps,
+) {
   try {
     if (isContainerRuntime()) {
       await ctx.reply(t("runtime.container.command_unavailable"));
@@ -98,7 +103,7 @@ export async function opencodeStartCommand(ctx: CommandContext<Context>) {
         await ctx.reply(
           t("opencode_start.already_running", { version: data.version || t("common.unknown") }),
         );
-        await opencodeReadyLifecycle.notifyReady("opencode_start_already_running");
+        await deps.opencodeReadyLifecycle.notifyReady("opencode_start_already_running");
         return;
       }
     } catch {
@@ -153,7 +158,7 @@ export async function opencodeStartCommand(ctx: CommandContext<Context>) {
     });
 
     logger.info(`[Bot] OpenCode server started successfully, PID=${pid}, port=${localTarget.port}`);
-    await opencodeReadyLifecycle.notifyReady("opencode_start_success");
+    await deps.opencodeReadyLifecycle.notifyReady("opencode_start_success");
   } catch (err) {
     logger.error("[Bot] Error in /opencode-start command:", err);
     await ctx.reply(t("opencode_start.error"));

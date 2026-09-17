@@ -152,6 +152,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
   });
 
   const voicePromptDeps = { bot, ensureEventSubscription: container.ensureEventSubscription };
+  const catalogDeps = { ...container, bot };
 
   bot.on("message:voice", async (ctx) => {
     logger.debug(`[Bot] Received voice message, chatId=${ctx.chat.id}`);
@@ -199,27 +200,27 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     }
 
     if (container.questionManager.isActive()) {
-      await handleQuestionTextAnswer(ctx);
+      await handleQuestionTextAnswer(ctx, container);
       return;
     }
 
-    const handledTask = await handleTaskTextInput(ctx);
+    const handledTask = await handleTaskTextInput(ctx, container);
     if (handledTask) {
       return;
     }
 
-    const handledModelSearchText = await handleModelSearchTextInput(ctx);
+    const handledModelSearchText = await handleModelSearchTextInput(ctx, container);
     if (handledModelSearchText) {
       return;
     }
 
-    const handledRename = await handleRenameTextAnswer(ctx);
+    const handledRename = await handleRenameTextAnswer(ctx, container);
     if (handledRename) {
       return;
     }
 
     const promptDeps = { bot, ensureEventSubscription: container.ensureEventSubscription };
-    const handledCatalogTextArgs = await handleCatalogTextArguments(ctx, promptDeps);
+    const handledCatalogTextArgs = await handleCatalogTextArguments(ctx, catalogDeps);
     if (handledCatalogTextArgs) {
       return;
     }

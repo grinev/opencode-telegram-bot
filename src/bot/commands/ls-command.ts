@@ -1,6 +1,6 @@
 import type { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getProjectRoot, isWithinProjectRoot } from "../../app/services/file-browser-service.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { t } from "../../i18n/index.js";
 import { isContainerRuntime } from "../../runtime/container.js";
@@ -8,7 +8,12 @@ import { clearLsPathIndex, renderLsBrowseView } from "../menus/file-browser-menu
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { rememberLsDirectory, resolveInitialLsDirectory } from "../callbacks/file-browser-callback-handler.js";
 
-export async function lsCommand(ctx: CommandContext<Context>): Promise<void> {
+export type LsCommandDeps = Pick<AppContainer, "interactionManager">;
+
+export async function lsCommand(
+  ctx: CommandContext<Context>,
+  deps: LsCommandDeps,
+): Promise<void> {
   if (isForegroundBusy()) {
     await replyBusyBlocked(ctx);
     return;
@@ -53,7 +58,7 @@ export async function lsCommand(ctx: CommandContext<Context>): Promise<void> {
   }
 
   const message = await ctx.reply(view.text, { parse_mode: "HTML", reply_markup: view.keyboard });
-  interactionManager.start({
+  deps.interactionManager.start({
     kind: "inline",
     expectedInput: "callback",
     metadata: {

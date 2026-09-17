@@ -1,11 +1,9 @@
 import { CommandContext, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
-import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
-import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
 import { markAttachedSessionIdle } from "../../app/services/attach-service.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
 import { markUserAbortRequested } from "../../app/managers/abort-suppression-manager.js";
@@ -14,19 +12,24 @@ import { promptAttachment } from "../../app/managers/prompt-attachment-manager.j
 
 type SessionState = "idle" | "busy" | "not-found";
 
+export type AbortCommandDeps = Pick<
+  AppContainer,
+  "assistantRunState" | "foregroundSessionState" | "resetInteractions"
+>;
+
 interface AbortCurrentOperationOptions {
   notifyUser?: boolean;
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function abortLocalStreaming(): void {
-  clearAllInteractionState("abort_command");
-}
-
-async function releaseAbortBusyState(sessionId: string, reason: string): Promise<void> {
-  foregroundSessionState.markIdle(sessionId);
-  assistantRunState.clearRun(sessionId, reason);
+async function releaseAbortBusyState(
+  deps: AbortCommandDeps,
+  sessionId: string,
+  reason: string,
+): Promise<void> {
+  deps.foregroundSessionState.markIdle(sessionId);
+  deps.assistantRunState.clearRun(sessionId, reason);
   await markAttachedSessionIdle(sessionId);
   clearPromptResponseMode(sessionId);
 }
@@ -72,14 +75,15 @@ async function pollSessionStatus(
 
 export async function abortCurrentOperation(
   ctx: Context,
+  deps: AbortCommandDeps,
   options: AbortCurrentOperationOptions = {},
 ): Promise<void> {
   const notifyUser = options.notifyUser ?? true;
 
   try {
-    abortLocalStreaming();
+    deps.resetInteractions("abort_command");
     promptQueue.clear("abort_command");
-    // abortLocalStreaming drops the waiting mode, so the attachment has to go with it -
+    // The interactions reset drops the waiting mode, so the attachment has to go with it -
     // otherwise it would ride along on the next, unrelated prompt with no confirmation left.
     promptAttachment.clear("abort_command");
 
@@ -125,7 +129,7 @@ export async function abortCurrentOperation(
 
       if (abortError) {
         logger.warn("[Abort] Abort request failed:", abortError);
-        await releaseAbortBusyState(currentSession.id, "abort_unconfirmed");
+        await releaseAbortBusyState(deps, currentSession.id, "abort_unconfirmed");
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
           await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_unconfirmed"));
         }
@@ -133,7 +137,7 @@ export async function abortCurrentOperation(
       }
 
       if (abortResult !== true) {
-        await releaseAbortBusyState(currentSession.id, "abort_maybe_finished");
+        await releaseAbortBusyState(deps, currentSession.id, "abort_maybe_finished");
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
           await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_maybe_finished"));
         }
@@ -147,7 +151,7 @@ export async function abortCurrentOperation(
       );
 
       if (finalStatus === "idle" || finalStatus === "not-found") {
-        await releaseAbortBusyState(currentSession.id, "abort_confirmed");
+        await releaseAbortBusyState(deps, currentSession.id, "abort_confirmed");
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
           await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.success"));
         }
@@ -158,7 +162,7 @@ export async function abortCurrentOperation(
       }
     } catch (error) {
       clearTimeout(timeoutId);
-      await releaseAbortBusyState(currentSession.id, "abort_error");
+      await releaseAbortBusyState(deps, currentSession.id, "abort_error");
 
       if (error instanceof Error && error.name === "AbortError") {
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
@@ -177,6 +181,9 @@ export async function abortCurrentOperation(
   }
 }
 
-export async function abortCommand(ctx: CommandContext<Context>): Promise<void> {
-  await abortCurrentOperation(ctx);
+export async function abortCommand(
+  ctx: CommandContext<Context>,
+  deps: AbortCommandDeps,
+): Promise<void> {
+  await abortCurrentOperation(ctx, deps);
 }

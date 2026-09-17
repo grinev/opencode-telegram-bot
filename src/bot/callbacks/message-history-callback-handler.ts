@@ -1,13 +1,12 @@
 import type { Bot, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
 import type { InteractionState } from "../../app/types/interaction.js";
-import { clearAllInteractionState, interactionManager } from "../../app/managers/interaction-manager.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { setCurrentSession } from "../../app/services/session-service.js";
 import { applySessionSettings } from "../../app/services/session-settings-service.js";
 import { getStoredAgent } from "../../app/services/agent-selection-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import type { SessionInfo } from "../../app/types/session.js";
 import { attachToSession } from "../../app/services/attach-service.js";
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
@@ -38,10 +37,12 @@ import {
   truncateMessageHistoryText,
 } from "../menus/message-history-menu.js";
 
-export interface MessagesCallbackDeps {
+export type MessagesCallbackDeps = Pick<
+  AppContainer,
+  "ensureEventSubscription" | "interactionManager" | "keyboardManager" | "resetInteractions"
+> & {
   bot: Bot<Context>;
-  ensureEventSubscription: (directory: string) => Promise<void>;
-}
+};
 
 interface MessagesListMetadata {
   flow: "messages";
@@ -160,10 +161,10 @@ function parseMessagesMetadata(state: InteractionState | null): MessagesMetadata
   return null;
 }
 
-function clearMessagesInteraction(reason: string): void {
-  const metadata = parseMessagesMetadata(interactionManager.getSnapshot());
+function clearMessagesInteraction(deps: MessagesCallbackDeps, reason: string): void {
+  const metadata = parseMessagesMetadata(deps.interactionManager.getSnapshot());
   if (metadata) {
-    interactionManager.clear(reason);
+    deps.interactionManager.clear(reason);
   }
 }
 
@@ -202,7 +203,7 @@ export async function handleMessagesCallback(
     return true;
   }
 
-  const metadata = parseMessagesMetadata(interactionManager.getSnapshot());
+  const metadata = parseMessagesMetadata(deps.interactionManager.getSnapshot());
   const callbackMessageId = getCallbackMessageId(ctx);
 
   if (!metadata || callbackMessageId === null || metadata.messageId !== callbackMessageId) {
@@ -234,11 +235,11 @@ export async function handleMessagesCallback(
 
         const successText = t("messages.revert_success", { text: selectedMessage.text });
         await ctx.editMessageText(truncateMessageHistoryText(successText, TELEGRAM_MESSAGE_LIMIT));
-        clearMessagesInteraction("messages_revert_success");
+        clearMessagesInteraction(deps, "messages_revert_success");
       } catch (error) {
         logger.error("[Messages] Error reverting message:", error);
         await ctx.editMessageText(t("messages.revert_error"));
-        clearMessagesInteraction("messages_revert_error");
+        clearMessagesInteraction(deps, "messages_revert_error");
       }
 
       return true;
@@ -283,9 +284,9 @@ export async function handleMessagesCallback(
         // Pull before attaching, so the pinned message rendered inside
         // attachToSession already carries the forked session's model.
         applySessionSettings(forkedSession);
-        keyboardManager.updateAgent(getStoredAgent());
-        keyboardManager.updateModel(getStoredModel());
-        clearAllInteractionState("session_forked");
+        deps.keyboardManager.updateAgent(getStoredAgent());
+        deps.keyboardManager.updateModel(getStoredModel());
+        deps.resetInteractions("session_forked");
         await ingestSessionInfoForCache(forkedSession);
 
         await attachToSession({
@@ -297,7 +298,7 @@ export async function handleMessagesCallback(
 
         const successText = t("messages.fork_success", { text: selectedMessage.text });
         await ctx.editMessageText(truncateMessageHistoryText(successText, TELEGRAM_MESSAGE_LIMIT));
-        clearMessagesInteraction("messages_fork_success");
+        clearMessagesInteraction(deps, "messages_fork_success");
 
         safeBackgroundTask({
           taskName: "messages.sendLatestAssistantResponse",
@@ -312,7 +313,7 @@ export async function handleMessagesCallback(
       } catch (error) {
         logger.error("[Messages] Error forking session:", error);
         await ctx.editMessageText(t("messages.fork_error"));
-        clearMessagesInteraction("messages_fork_error");
+        clearMessagesInteraction(deps, "messages_fork_error");
       }
 
       return true;
@@ -335,7 +336,7 @@ export async function handleMessagesCallback(
         reply_markup: buildMessagesListKeyboard(metadata.messages, normalizedPage, pageSize),
       });
 
-      interactionManager.transition({
+      deps.interactionManager.transition({
         expectedInput: "callback",
         metadata: {
           flow: "messages",
@@ -352,7 +353,7 @@ export async function handleMessagesCallback(
     }
 
     if (data === MESSAGES_CALLBACK_CANCEL) {
-      clearMessagesInteraction("messages_cancelled");
+      clearMessagesInteraction(deps, "messages_cancelled");
       await cancelMenu(ctx);
       return true;
     }
@@ -381,7 +382,7 @@ export async function handleMessagesCallback(
         reply_markup: buildMessagesListKeyboard(metadata.messages, normalizedPage, pageSize),
       });
 
-      interactionManager.transition({
+      deps.interactionManager.transition({
         expectedInput: "callback",
         metadata: {
           flow: "messages",
@@ -414,7 +415,7 @@ export async function handleMessagesCallback(
       reply_markup: buildMessageDetailKeyboard(),
     });
 
-    interactionManager.transition({
+    deps.interactionManager.transition({
       expectedInput: "callback",
       metadata: {
         flow: "messages",
@@ -431,7 +432,7 @@ export async function handleMessagesCallback(
     return true;
   } catch (error) {
     logger.error("[Messages] Error handling messages callback:", error);
-    clearMessagesInteraction("messages_callback_error");
+    clearMessagesInteraction(deps, "messages_callback_error");
     await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     return true;
   }

@@ -3,7 +3,7 @@ import type { Context } from "grammy";
 import { defined } from "../../helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
-  clearInteractionErrorState: vi.fn(),
+  resetInteractionError: vi.fn(),
   handleAgentSelect: vi.fn(),
   handleCommandsCallback: vi.fn(),
   handleCompactConfirm: vi.fn(),
@@ -33,10 +33,6 @@ const mocked = vi.hoisted(() => ({
   clearOpenPathIndex: vi.fn(),
 }));
 
-vi.mock("../../../src/app/managers/interaction-manager.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../src/app/managers/interaction-manager.js")>()),
-  clearInteractionErrorState: mocked.clearInteractionErrorState,
-}));
 vi.mock("../../../src/i18n/index.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/i18n/index.js")>()),
   t: (key: string) => key,
@@ -264,7 +260,7 @@ describe("bot/callbacks/callback-router", () => {
 
     await callback(ctx);
 
-    expect(mocked.clearInteractionErrorState).toHaveBeenCalledWith(
+    expect(mocked.resetInteractionError).toHaveBeenCalledWith(
       "interaction",
       "callback_handler_error",
     );
@@ -278,7 +274,7 @@ describe("bot/callbacks/callback-router", () => {
 
     await callback(ctx);
 
-    expect(mocked.clearInteractionErrorState).toHaveBeenCalledWith(
+    expect(mocked.resetInteractionError).toHaveBeenCalledWith(
       "permission",
       "callback_handler_error",
     );
@@ -291,7 +287,7 @@ describe("bot/callbacks/callback-router", () => {
 
     await callback(ctx);
 
-    expect(mocked.clearInteractionErrorState).toHaveBeenCalledWith(
+    expect(mocked.resetInteractionError).toHaveBeenCalledWith(
       "interaction",
       "callback_handler_error",
     );
@@ -301,7 +297,11 @@ describe("bot/callbacks/callback-router", () => {
 function registerAndGetCallback() {
   const bot = { on: vi.fn() };
   registerCallbackRouter(bot as never, {
-    container: createTestAppContainer({ ensureEventSubscription: vi.fn(), setTelegramContext: vi.fn() }),
+    container: createTestAppContainer({
+      ensureEventSubscription: vi.fn(),
+      setTelegramContext: vi.fn(),
+      resetInteractionError: mocked.resetInteractionError,
+    }),
   });
   return defined(bot.on.mock.calls[0]?.[1]) as (ctx: Context) => Promise<void>;
 }

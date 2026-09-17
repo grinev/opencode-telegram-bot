@@ -3,6 +3,7 @@ import type { Bot, Context } from "grammy";
 import { newCommand } from "../../../src/bot/commands/new-command.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { t } from "../../../src/i18n/index.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   sessionCreateMock: vi.fn(),
@@ -30,31 +31,6 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
 vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   ingestSessionInfoForCache: vi.fn().mockResolvedValue(undefined),
   __resetSessionDirectoryCacheForTests: vi.fn(),
-}));
-
-vi.mock("../../../src/app/managers/interaction-manager.js", () => ({
-  interactionManager: { clear: vi.fn() },
-  clearAllInteractionState: vi.fn(),
-}));
-
-vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
-  summaryAggregator: { clear: vi.fn() },
-}));
-
-vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
-  pinnedMessageManager: {
-    isInitialized: vi.fn(() => false),
-    initialize: vi.fn(),
-    onSessionChange: vi.fn().mockResolvedValue(undefined),
-  },
-}));
-
-vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
-  keyboardManager: {
-    initialize: vi.fn(),
-    updateAgent: vi.fn(),
-    getContextInfo: vi.fn(() => null),
-  },
 }));
 
 vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
@@ -88,8 +64,16 @@ function createContext(): Context {
 
 function createDeps() {
   return {
+    ...createTestAppContainer({
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      resetInteractions: vi.fn(),
+      keyboardManager: {
+        initialize: vi.fn(),
+        updateAgent: vi.fn(),
+        getContextInfo: vi.fn(() => null),
+      } as never,
+    }),
     bot: { api: {} } as Bot<Context>,
-    ensureEventSubscription: mocked.ensureEventSubscriptionMock,
   };
 }
 
