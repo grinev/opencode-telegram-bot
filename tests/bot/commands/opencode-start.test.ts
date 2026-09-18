@@ -7,6 +7,7 @@ const mocked = vi.hoisted(() => ({
   healthMock: vi.fn(),
   resolveLocalOpencodeTargetMock: vi.fn(),
   startLocalOpencodeServerMock: vi.fn(),
+  freeLocalOpencodePortMock: vi.fn(),
   notifyReadyMock: vi.fn(),
   editBotTextMock: vi.fn(),
   loggerDebugMock: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
 vi.mock("../../../src/opencode/process.js", () => ({
   resolveLocalOpencodeTarget: mocked.resolveLocalOpencodeTargetMock,
   startLocalOpencodeServer: mocked.startLocalOpencodeServerMock,
+  freeLocalOpencodePort: mocked.freeLocalOpencodePortMock,
 }));
 
 vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
@@ -79,6 +81,7 @@ describe("bot/commands/opencode-start-command", () => {
     mocked.healthMock.mockReset();
     mocked.resolveLocalOpencodeTargetMock.mockReset();
     mocked.startLocalOpencodeServerMock.mockReset();
+    mocked.freeLocalOpencodePortMock.mockReset();
     mocked.notifyReadyMock.mockReset();
     mocked.editBotTextMock.mockReset();
     mocked.loggerDebugMock.mockReset();
@@ -88,6 +91,7 @@ describe("bot/commands/opencode-start-command", () => {
 
     mocked.config.opencode.apiUrl = "http://localhost:4096";
     mocked.resolveLocalOpencodeTargetMock.mockReturnValue({ host: "localhost", port: 4096 });
+    mocked.freeLocalOpencodePortMock.mockResolvedValue(true);
     mocked.notifyReadyMock.mockResolvedValue(true);
     mocked.editBotTextMock.mockResolvedValue(undefined);
   });
@@ -143,6 +147,10 @@ describe("bot/commands/opencode-start-command", () => {
 
     await opencodeStartCommand(ctx as never);
 
+    expect(mocked.freeLocalOpencodePortMock).toHaveBeenCalledWith({
+      host: "localhost",
+      port: 4096,
+    });
     expect(mocked.startLocalOpencodeServerMock).toHaveBeenCalledWith({
       host: "localhost",
       port: 4096,
@@ -218,5 +226,20 @@ describe("bot/commands/opencode-start-command", () => {
     expect(mocked.loggerWarnMock).toHaveBeenCalledWith(
       "[Bot] OpenCode health check timed out after 3000ms",
     );
+  });
+
+  it("reports a busy port when it cannot be freed", async () => {
+    const ctx = createContext();
+    mocked.freeLocalOpencodePortMock.mockResolvedValue(false);
+    mocked.healthMock.mockRejectedValue(new Error("offline"));
+
+    await opencodeStartCommand(ctx as never);
+
+    expect(mocked.freeLocalOpencodePortMock).toHaveBeenCalledWith({
+      host: "localhost",
+      port: 4096,
+    });
+    expect(ctx.reply).toHaveBeenCalledWith(t("opencode_start.port_busy", { port: 4096 }));
+    expect(mocked.startLocalOpencodeServerMock).not.toHaveBeenCalled();
   });
 });

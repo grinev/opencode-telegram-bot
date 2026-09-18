@@ -30,6 +30,7 @@ import { handlePhotoMessage } from "../handlers/photo-handler.js";
 import { queuePromptForMerging } from "../handlers/message-merger.js";
 import { handleCatalogTextArguments } from "../handlers/text-message-handler.js";
 import { handleVoiceMessage } from "../handlers/voice-handler.js";
+import { handleVoiceMessage as handleVoiceCliMessage } from "../handlers/voice-cli-handler.js";
 import { unknownCommandMiddleware } from "../middleware/unknown-command.js";
 import { getIncomingPrompt } from "../handlers/rich-message-handler.js";
 import { handleUnsupportedMessage } from "../handlers/unsupported-message-handler.js";
@@ -155,13 +156,21 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
   bot.on("message:voice", async (ctx) => {
     logger.debug(`[Bot] Received voice message, chatId=${ctx.chat.id}`);
     deps.setTelegramContext(bot, ctx.chat.id);
-    await handleVoiceMessage(ctx, voicePromptDeps);
+    if (config.voiceCli.enabled) {
+      await handleVoiceCliMessage(ctx, { bot, ensureEventSubscription: deps.ensureEventSubscription });
+    } else {
+      await handleVoiceMessage(ctx, voicePromptDeps);
+    }
   });
 
   bot.on("message:audio", async (ctx) => {
     logger.debug(`[Bot] Received audio message, chatId=${ctx.chat.id}`);
     deps.setTelegramContext(bot, ctx.chat.id);
-    await handleVoiceMessage(ctx, voicePromptDeps);
+    if (config.voiceCli.enabled) {
+      await handleVoiceCliMessage(ctx, { bot, ensureEventSubscription: deps.ensureEventSubscription });
+    } else {
+      await handleVoiceMessage(ctx, voicePromptDeps);
+    }
   });
 
   bot.on(

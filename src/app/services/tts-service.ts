@@ -1,10 +1,54 @@
 import { config } from "../../config.js";
 import { logger } from "../../utils/logger.js";
 import textToSpeech from "@google-cloud/text-to-speech";
-import { synthesizeWithEdgeTts, EDGE_DEFAULT_VOICE } from "./edge-tts.js";
+import { synthesizeWithEdgeTts } from "./edge-tts.js";
 
 const TTS_REQUEST_TIMEOUT_MS = 60_000;
 const MAX_TTS_INPUT_CHARS = 4_000;
+
+// Common Indonesian words for language detection
+const INDONESIAN_WORDS = new Set([
+  "yang", "dan", "di", "ke", "dari", "untuk", "dengan", "pada", "ini", "itu",
+  "adalah", "atau", "juga", "sudah", "belum", "bisa", "tidak", "ada", "akan",
+  "saya", "kamu", "dia", "kita", "mereka", "ini", "itu", "sini", "sana",
+  "apa", "siapa", "mana", "kapan", "bagaimana", "mengapa", "kenapa",
+  "masih", "hanya", "saja", "lagi", "masih", "karena", "jadi", "lalu",
+  "terus", "tapi", "namun", "kalau", "kalo", "kayak", "gitu", "gini",
+  "nggak", "ga", "gak", "udah", "blom", "sdh", "blm", "tdk", "jg",
+  "spt", "spy", "krn", "utk", "dlm", "lbh", "tp", "dl", "bnr", "btl"
+]);
+
+function detectLanguage(text: string): "id" | "en" {
+  const words = text.toLowerCase().split(/\s+/);
+  let indonesianCount = 0;
+  let englishCount = 0;
+
+  // Check first 50 words for efficiency
+  const sampleWords = words.slice(0, 50);
+  for (const word of sampleWords) {
+    const cleanWord = word.replace(/[^\w]/g, "");
+    if (INDONESIAN_WORDS.has(cleanWord)) {
+      indonesianCount++;
+    } else if (cleanWord.length > 2 && /^[a-z]+$/.test(cleanWord)) {
+      // Likely English word (simple heuristic)
+      englishCount++;
+    }
+  }
+
+  // Also check for Indonesian patterns
+  const indonesianPatterns = /\b(aku|gue|gua|lu|loe|lo|gue|gw)\b/i;
+  if (indonesianPatterns.test(text)) indonesianCount += 5;
+
+  return indonesianCount >= englishCount ? "id" : "en";
+}
+
+function getEdgeVoice(language: "id" | "en"): string {
+  if (language === "id") {
+    return config.tts.voice || "id-ID-ArdiNeural"; // male Indonesian
+  }
+  // English: prefer British male (JARVIS-like)
+  return config.tts.voice || "en-GB-RyanNeural";
+}
 
 export interface TtsResult {
   buffer: Buffer;
@@ -208,10 +252,11 @@ async function synthesizeWithElevenLabs(text: string): Promise<TtsResult> {
 }
 
 async function synthesizeWithEdge(text: string): Promise<TtsResult> {
-  const voice = config.tts.voice || EDGE_DEFAULT_VOICE;
+  const language = detectLanguage(text);
+  const voice = getEdgeVoice(language);
 
   logger.debug(
-    `[TTS] Edge: voice=${voice}, chars=${text.length}`,
+    `[TTS] Edge: language=${language}, voice=${voice}, chars=${text.length}`,
   );
 
   const buffer = await synthesizeWithEdgeTts(text, {

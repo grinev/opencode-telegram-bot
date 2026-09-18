@@ -10,7 +10,7 @@ import {
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
 import { getCurrentProject, getTtsMode } from "../../app/stores/settings-store.js";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
-import { getStoredModel } from "../../app/services/model-selection-service.js";
+import { getStoredModel, shouldUseStoredModelForPrompt } from "../../app/services/model-selection-service.js";
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
@@ -333,8 +333,10 @@ export async function processUserPrompt(
       agent: currentAgent,
     };
 
-    // Use stored model (from settings or config)
-    if (storedModel.providerID && storedModel.modelID) {
+    // Use stored model (from settings or config).
+    // In dynamic-model mode the model param is omitted unless the user
+    // explicitly picked a model, so the server's active model is used.
+    if (storedModel.providerID && storedModel.modelID && shouldUseStoredModelForPrompt()) {
       promptOptions.model = {
         providerID: storedModel.providerID,
         modelID: storedModel.modelID,

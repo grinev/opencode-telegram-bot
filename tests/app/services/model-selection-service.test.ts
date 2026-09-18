@@ -488,47 +488,47 @@ describe("app/services/model-selection-service", () => {
     it("returns matching models by case-insensitive substring", async () => {
       const results = await searchModels("gpt");
 
-      expect(results.length).toBeGreaterThanOrEqual(2);
-      expect(results).toContainEqual({ providerID: "openai", modelID: "gpt-4o" });
-      expect(results).toContainEqual({ providerID: "openai", modelID: "gpt-3.5" });
+      expect(results.models.length).toBeGreaterThanOrEqual(2);
+      expect(results.models).toContainEqual({ providerID: "openai", modelID: "gpt-4o" });
+      expect(results.models).toContainEqual({ providerID: "openai", modelID: "gpt-3.5" });
     });
 
     it("matches across providerID and modelID", async () => {
       const results = await searchModels("openai");
 
-      expect(results.length).toBeGreaterThanOrEqual(2);
-      expect(results).toContainEqual({ providerID: "openai", modelID: "gpt-3.5" });
-      expect(results).toContainEqual({ providerID: "openai", modelID: "gpt-4o" });
+      expect(results.models.length).toBeGreaterThanOrEqual(2);
+      expect(results.models).toContainEqual({ providerID: "openai", modelID: "gpt-3.5" });
+      expect(results.models).toContainEqual({ providerID: "openai", modelID: "gpt-4o" });
     });
 
     it("matches by providerID substring", async () => {
       const results = await searchModels("anthrop");
 
-      expect(results).toContainEqual({ providerID: "anthropic", modelID: "claude-sonnet" });
+      expect(results.models).toContainEqual({ providerID: "anthropic", modelID: "claude-sonnet" });
     });
 
     it("is case-insensitive", async () => {
       const results = await searchModels("GPT-4O");
 
-      expect(results).toContainEqual({ providerID: "openai", modelID: "gpt-4o" });
+      expect(results.models).toContainEqual({ providerID: "openai", modelID: "gpt-4o" });
     });
 
     it("returns empty array when no models match", async () => {
       const results = await searchModels("nonexistent-model-xyz");
 
-      expect(results).toHaveLength(0);
+      expect(results.models.length).toBe(0);
     });
 
     it("returns empty array for empty query", async () => {
       const results = await searchModels("   ");
 
-      expect(results).toHaveLength(0);
+      expect(results.models.length).toBe(0);
     });
 
     it("sorts results alphabetically", async () => {
       const results = await searchModels("gpt");
 
-      const keys = results.map((m) => `${m.providerID}/${m.modelID}`);
+      const keys = results.models.map((m) => `${m.providerID}/${m.modelID}`);
       expect(keys).toEqual([...keys].sort());
     });
 
@@ -538,7 +538,7 @@ describe("app/services/model-selection-service", () => {
 
       const results = await searchModels("gpt");
 
-      expect(results).toHaveLength(0);
+      expect(results.models).toHaveLength(0);
     });
 
     it("uses model catalog cache between repeated calls", async () => {

@@ -257,6 +257,15 @@ export function setPromptQueueEnabled(enabled: boolean): void {
   void writeSettingsFile(currentSettings);
 }
 
+export function getGlobalRealTime(): boolean {
+  return currentSettings.globalRealTime ?? true;
+}
+
+export function setGlobalRealTime(enabled: boolean): void {
+  currentSettings.globalRealTime = enabled;
+  void writeSettingsFile(currentSettings);
+}
+
 export function getCurrentAgent(): string | undefined {
   return currentSettings.currentAgent;
 }
@@ -275,6 +284,20 @@ export function getCurrentModel(): ModelInfo | undefined {
   return currentSettings.currentModel;
 }
 
+export function markModelExplicitlySelected(): void {
+  currentSettings.modelExplicitlySelected = true;
+  void writeSettingsFile(currentSettings);
+}
+
+export function clearModelExplicitlySelected(): void {
+  currentSettings.modelExplicitlySelected = false;
+  void writeSettingsFile(currentSettings);
+}
+
+export function isModelExplicitlySelected(): boolean {
+  return currentSettings.modelExplicitlySelected === true;
+}
+
 export function setCurrentModel(modelInfo: ModelInfo): void {
   currentSettings.currentModel = modelInfo;
   void writeSettingsFile(currentSettings);
@@ -282,6 +305,24 @@ export function setCurrentModel(modelInfo: ModelInfo): void {
 
 export function clearCurrentModel(): void {
   currentSettings.currentModel = undefined;
+  void writeSettingsFile(currentSettings);
+}
+
+export function getAlwaysAllowPermissions(): boolean {
+  return currentSettings.alwaysAllowPermissions === true;
+}
+
+export function setAlwaysAllowPermissions(enabled: boolean): void {
+  currentSettings.alwaysAllowPermissions = enabled;
+  void writeSettingsFile(currentSettings);
+}
+
+export function getFirstRunComplete(): boolean {
+  return currentSettings.firstRunComplete === true;
+}
+
+export function setFirstRunComplete(): void {
+  currentSettings.firstRunComplete = true;
   void writeSettingsFile(currentSettings);
 }
 
@@ -353,6 +394,7 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
     "responseStreamingMode",
     "sendDiffFileAttachments",
     "promptQueueEnabled",
+    "globalRealTime",
   ]);
 
   for (const [key, value] of Object.entries(preset)) {
@@ -417,6 +459,10 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
         case "promptQueueEnabled":
           if (currentSettings.promptQueueEnabled === undefined)
             currentSettings.promptQueueEnabled = value;
+          break;
+        case "globalRealTime":
+          if (currentSettings.globalRealTime === undefined)
+            currentSettings.globalRealTime = value;
           break;
       }
     }

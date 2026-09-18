@@ -42,6 +42,7 @@ vi.mock("../../../src/config.js", () => ({
   config: {
     bot: {
       scheduledTaskExecutionTimeoutMinutes: 120,
+      dynamicModel: false,
     },
   },
 }));
@@ -156,6 +157,7 @@ function createAssistantMessage(
 
 describe("app/services/scheduled-task-executor-service", () => {
   beforeEach(() => {
+    vi.resetModules();
     mocked.createMock.mockReset();
     mocked.promptAsyncMock.mockReset();
     mocked.messagesMock.mockReset();

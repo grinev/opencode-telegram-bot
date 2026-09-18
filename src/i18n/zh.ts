@@ -12,6 +12,7 @@ export const zh: I18nDictionary = {
   "cmd.description.worktree": "切换 git worktree",
   "cmd.description.task": "创建定时任务",
   "cmd.description.tasklist": "查看定时任务",
+  "cmd.description.toggle_permissions": "始终允许切换",
   "cmd.description.commands": "自定义命令",
   "cmd.description.skills": "技能目录",
   "cmd.description.mcps": "MCP servers",
@@ -51,7 +52,7 @@ export const zh: I18nDictionary = {
   "common.unknown_error": "未知错误",
 
   "start.welcome":
-    "👋 欢迎使用 OpenCode Telegram Bot！\n\n可用命令：\n/projects — 选择项目\n/sessions — 会话列表\n/new — 新建会话\n/commands — 自定义命令\n/skills — 技能目录\n/task — 定时任务\n/tasklist — 定时任务列表\n/status — 状态\n/help — 帮助\n\n请使用底部按钮选择 Agent、模型和变体。",
+    "👋 欢迎使用 OpenCode Telegram Bot！\n\n使用 /projects 选择项目，然后用 /new 新建会话或 /sessions 选择现有会话。\n\n底部按钮：Agent、模型、变体、上下文。",
   "help.keyboard_hint": "💡 Agent、模型、变体和上下文操作请使用底部键盘按钮。",
   "help.text":
     "📖 **帮助**\n\n/status - 查看服务器状态\n/sessions - 会话列表\n/new - 创建新会话\n/help - 帮助",
@@ -149,6 +150,7 @@ export const zh: I18nDictionary = {
   "settings.pin_session_dashboard.label": "Pin session dashboard",
   "settings.tts.label": "语音回复",
   "settings.prompt_queue.label": "消息队列",
+  "settings.global_real_time.label": "全局实时同步",
   "settings.value.on": "开启",
   "settings.value.off": "关闭",
   "settings.saved": "✅ 设置已保存。",
@@ -183,6 +185,10 @@ export const zh: I18nDictionary = {
   "sessions.preview.title": "最近消息：",
   "sessions.preview.you": "你：",
   "sessions.preview.agent": "代理：",
+  "sessions.history.title": "📜 会话历史 — {title}\n显示 {total} 条消息中的 {shown} 条。",
+  "sessions.history.truncated": "\n⚠️ 已省略较早的消息（HISTORY_RENDER_LIMIT）。",
+  "sessions.cleanup_failed_partial": "⚠️ 部分之前的机器人消息无法删除（超过48小时）。",
+  "autofollow.switched": "🔄 正在跟随 {project} 中的活动会话...",
 
   "messages.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择项目。",
   "messages.session_not_selected":
@@ -252,6 +258,7 @@ export const zh: I18nDictionary = {
     "⚠️ OpenCode 服务器已启动，但未响应\n\nPID：{pid}\n\n服务器可能仍在启动中。几秒后试试 /status。",
   "opencode_start.success": "✅ OpenCode 服务器启动成功\n\nPID：{pid}\n版本：{version}",
   "opencode_start.error": "🔴 启动服务器时发生错误。\n\n请查看应用日志了解详情。",
+  "opencode_start.port_busy": "🔴 端口 {port} 仍被其他进程占用。\n\n无法自动停止该进程。请手动停止进程并重试 /opencode_start。",
   "opencode_stop.external_running":
     "⚠️ OpenCode 服务器正作为外部进程运行\n\n该服务器不是通过 /opencode-start 启动的。\n请手动停止它，或使用 /status 检查状态。",
   "opencode_stop.remote_configured": "⚠️ /opencode_stop 仅适用于本地 OpenCode 服务器。",
@@ -330,6 +337,7 @@ export const zh: I18nDictionary = {
   "permission.grouped_count": "\n⚠️ 有 {count} 个相同的请求待处理，你的回答将同时应用于全部。\n",
   "permission.button.allow": "✅ 允许一次",
   "permission.button.always": "🔓 始终允许",
+  "permission.always_allowed": "始终允许",
   "permission.button.reject": "❌ 拒绝",
   "permission.name.bash": "Bash",
   "permission.name.edit": "编辑",

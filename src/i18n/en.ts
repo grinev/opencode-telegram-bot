@@ -10,6 +10,7 @@ export const en = {
   "cmd.description.worktree": "Switch git worktrees",
   "cmd.description.task": "Create a scheduled task",
   "cmd.description.tasklist": "List scheduled tasks",
+  "cmd.description.toggle_permissions": "Toggle always-allow permissions",
   "cmd.description.commands": "Custom commands",
   "cmd.description.skills": "Skills catalog",
   "cmd.description.mcps": "MCP servers",
@@ -55,7 +56,7 @@ export const en = {
   "common.unknown_error": "unknown error",
 
   "start.welcome":
-    "👋 Welcome to OpenCode Telegram Bot!\n\nUse commands:\n/projects — select project\n/sessions — session list\n/new — new session\n/commands — custom commands\n/skills — skills catalog\n/task — scheduled task\n/tasklist — scheduled tasks\n/status — status\n/help — help\n\nUse the bottom buttons to select the agent, model, and variant.",
+    "👋 Welcome to OpenCode Telegram Bot!\n\nUse /projects to select a project, then /new to create a session or /sessions to pick an existing one.\n\nBottom buttons: agent, model, variant, context.",
   "help.keyboard_hint":
     "💡 Use the bottom keyboard buttons for the agent, model, variant, and context actions.",
   "help.text":
@@ -160,6 +161,7 @@ export const en = {
   "settings.pin_session_dashboard.label": "Pin session dashboard",
   "settings.tts.label": "Audio replies",
   "settings.prompt_queue.label": "Message queue",
+  "settings.global_real_time.label": "Global real-time sync",
   "settings.value.on": "On",
   "settings.value.off": "Off",
   "settings.saved": "✅ Setting saved.",
@@ -197,6 +199,12 @@ export const en = {
   "sessions.preview.title": "Recent messages:",
   "sessions.preview.you": "You:",
   "sessions.preview.agent": "Agent:",
+  "sessions.history.title":
+    "📜 Session history — {title}\nShowing {shown} of {total} messages.",
+  "sessions.history.truncated": "\n⚠️ Older messages omitted (HISTORY_RENDER_LIMIT).",
+  "sessions.cleanup_failed_partial":
+    "⚠️ Some previous bot messages could not be deleted (older than 48 hours).",
+  "autofollow.switched": "🔄 Following the active session in {project}...",
 
   "messages.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
@@ -280,6 +288,8 @@ export const en = {
     "✅ OpenCode Server started successfully\n\nPID: {pid}\nVersion: {version}",
   "opencode_start.error":
     "🔴 An error occurred while starting server.\n\nCheck application logs for details.",
+  "opencode_start.port_busy":
+    "🔴 Port {port} is still occupied by another process.\n\nCould not stop it automatically. Stop the process manually and try /opencode_start again.",
   "opencode_stop.external_running":
     "⚠️ OpenCode Server is running as an external process\n\nThis server was not started via /opencode-start.\nStop it manually or use /status to check state.",
   "opencode_stop.remote_configured": "⚠️ /opencode_stop works only with a local OpenCode Server.",
@@ -362,6 +372,7 @@ export const en = {
   "permission.grouped_count": "\n⚠️ {count} identical requests pending — your answer applies to all of them.\n",
   "permission.button.allow": "✅ Allow once",
   "permission.button.always": "🔓 Allow always",
+  "permission.always_allowed": "Permission always allowed",
   "permission.button.reject": "❌ Reject",
   "permission.name.bash": "Bash",
   "permission.name.edit": "Edit",

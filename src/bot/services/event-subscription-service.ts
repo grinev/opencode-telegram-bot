@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { Bot, Context, InputFile } from "grammy";
 import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
+import { conversationMessageTracker } from "../../app/managers/conversation-message-tracker.js";
 import {
   summaryAggregator,
   type SubagentInfo,
@@ -25,15 +26,23 @@ import {
 import { ToolMessageBatcher } from "../../app/formatters/tool-message-batcher.js";
 import {
   getCompactOutputMode,
+  getCurrentProject,
   getDeleteCompactProgressOnFinish,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
   getShowAssistantRunFooter,
   getShowThinkingContent,
+  setCurrentProject,
   type ResponseStreamingMode,
 } from "../../app/stores/settings-store.js";
-import { getCurrentSession } from "../../app/services/session-service.js";
+import { getCurrentSession, setCurrentSession, clearSession } from "../../app/services/session-service.js";
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
+import { getProjectByWorktree } from "../../app/services/project-service.js";
+import { resolveProjectAgent, getStoredAgent } from "../../app/services/agent-selection-service.js";
+import type { Event } from "@opencode-ai/sdk/v2";
+import { opencodeClient } from "../../opencode/client.js";
+import { isForegroundBusy } from "../../app/services/run-control-service.js";
+import type { ProjectInfo } from "../../app/types/project.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
@@ -70,6 +79,7 @@ import {
 } from "../streaming/stream-throttle.js";
 import { attachManager } from "../../app/managers/attach-manager.js";
 import {
+  attachToSession,
   markAttachedSessionBusy,
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
@@ -99,6 +109,8 @@ import {
   interactionManager,
 } from "../../app/managers/interaction-manager.js";
 import { stopEventListening, subscribeToEvents } from "../../opencode/events.js";
+import { stopAllSessionEvents, subscribeToAllSessionEvents } from "../../opencode/all-events.js";
+import { globalEventManager } from "../../app/managers/global-event-manager.js";
 
 const TELEGRAM_DOCUMENT_CAPTION_MAX_LENGTH = 1024;
 const SESSION_RETRY_PREFIX = "🔁";
@@ -140,6 +152,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   private readonly assistantDraftResponseStreamer: ResponseStreamer;
   private readonly thinkingResponseStreamer: ResponseStreamer;
   private readonly assistantResponseStreamModes = new Map<string, ResponseStreamingMode>();
+  private readonly lastCompleteMessage = new Map<string, string>();
   private readonly toolCallStreamer: ToolCallStreamer;
   private readonly toolMessageBatcher: ToolMessageBatcher;
   private readonly compactProgressStreamer: CompactProgressStreamer;
@@ -151,6 +164,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     { callId: string; activity: string }
   >();
   private readonly subagentSnapshots = new Map<string, SubagentInfo[]>();
+  private followInFlight = false;
 
   constructor() {
     this.runningToolTracker = new RunningToolTracker({
@@ -176,10 +190,11 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
         const keyboard = this.getCurrentReplyKeyboard();
 
-        await this.botInstance.api.sendMessage(this.chatIdInstance, text, {
+        const sentMessage = await this.botInstance.api.sendMessage(this.chatIdInstance, text, {
           disable_notification: true,
           ...(keyboard ? { reply_markup: keyboard } : {}),
         });
+        conversationMessageTracker.track(this.chatIdInstance, sentMessage.message_id);
       },
       sendFile: async (sessionId, fileData) => {
         if (!this.botInstance || !this.chatIdInstance) {
@@ -203,7 +218,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
           const keyboard = this.getCurrentReplyKeyboard();
 
-          await this.botInstance.api.sendDocument(
+          const sentDocument = await this.botInstance.api.sendDocument(
             this.chatIdInstance,
             new InputFile(tempFilePath),
             {
@@ -212,6 +227,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
               ...(keyboard ? { reply_markup: keyboard } : {}),
             },
           );
+          conversationMessageTracker.track(this.chatIdInstance, sentDocument.message_id);
         } finally {
           await fs.unlink(tempFilePath).catch(() => {});
         }
@@ -360,6 +376,17 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   setTelegramContext(bot: Bot<Context> | null, chatId: number | null): void {
     this.botInstance = bot;
     this.chatIdInstance = chatId;
+
+    // Initialize global event manager if enabled
+    if (bot && chatId && config.bot.globalRealTime) {
+      globalEventManager.setDependencies({
+        bot,
+        chatId,
+      });
+      globalEventManager.start().catch((err) => {
+        logger.error("[GlobalEvents] Failed to start global event manager:", err);
+      });
+    }
   }
 
   private getLiveToolPrefix(callId: string): string {
@@ -531,9 +558,143 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
   cleanup(reason: string): void {
     stopEventListening();
+    stopAllSessionEvents?.();
+    globalEventManager.stop();
     summaryAggregator.clear();
     this.clearRuntimeState(reason);
     this.setTelegramContext(null, null);
+  }
+
+  private handleFollowEvent = (event: Event): void => {
+    if (event.type !== "session.status") {
+      return;
+    }
+    const sessionId = this.getEventSessionId(event as EventStreamItem);
+    const status = (event.properties as { status?: { type?: string } }).status;
+    if (!sessionId || status?.type !== "busy") {
+      return;
+    }
+    void this.autoFollowActiveSession(sessionId);
+  };
+
+  private normalizeDirForFollow(directory: string): string {
+    return directory.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  }
+
+  /**
+   * Auto-follow: when a session starts running while the bot is idle on a
+   * different session (same project OR another known project), switch the bot
+   * to it so progress/questions/permissions mirror live.
+   */
+  private async autoFollowActiveSession(sessionId: string): Promise<void> {
+    // eslint-disable-next-line no-console
+    console.log('[AF-T7]', JSON.stringify({ sessionId, flag: config.bot.autoFollowActiveSession, curSes: getCurrentSession()?.id ?? null, curProj: getCurrentProject()?.worktree ?? null }));
+    if (!config.bot.autoFollowActiveSession || this.followInFlight) {
+      return;
+    }
+    const currentProject = getCurrentProject();
+    if (!currentProject) {
+      return;
+    }
+    if (!this.botInstance || !this.chatIdInstance || this.chatIdInstance <= 0) {
+      return;
+    }
+    if (isForegroundBusy()) {
+      return;
+    }
+    const currentSession = getCurrentSession();
+    if (currentSession && currentSession.id === sessionId) {
+      return;
+    }
+    const interaction = interactionManager.getSnapshot();
+    if (interaction && interaction.kind !== "inline") {
+      return;
+    }
+
+    this.followInFlight = true;
+    try {
+      const { data: session, error } = await opencodeClient.session.get({
+        sessionID: sessionId,
+      });
+      if (error || !session) {
+        // Likely a different project's session - resolve its project instead.
+        logger.debug("[AutoFollow] Direct lookup failed, resolving by project:", error);
+      }
+
+      let targetDir = currentProject.worktree;
+      let projectName = currentProject.name || currentProject.worktree;
+
+      const sameAsCurrent =
+        currentSession &&
+        session &&
+        this.normalizeDirForFollow(session.directory) ===
+          this.normalizeDirForFollow(currentSession.directory);
+
+      if (!sameAsCurrent) {
+        let worktree: string | undefined;
+        if (session?.directory) {
+          worktree = session.directory;
+        }
+        if (!worktree) {
+          logger.debug("[AutoFollow] Active session directory unknown, skipping");
+          return;
+        }
+
+        let matched: ProjectInfo | undefined;
+        try {
+          matched = await getProjectByWorktree(worktree);
+        } catch {
+          matched = undefined;
+        }
+        // eslint-disable-next-line no-console
+        console.log('[AF-T7-BRANCH]', JSON.stringify({ worktree, matched: matched?.id ?? null }));
+        if (!matched) {
+          logger.debug("[AutoFollow] Active session is outside known projects, skipping");
+          return;
+        }
+
+        setCurrentProject(matched);
+        clearSession();
+        summaryAggregator.clear();
+        keyboardManager.clearContext();
+        targetDir = matched.worktree;
+        projectName = matched.name || matched.worktree;
+      } else if (session) {
+        targetDir = currentProject.worktree;
+      }
+
+      const info = { id: sessionId, title: session?.title ?? "", directory: targetDir };
+      setCurrentSession(info);
+      await ingestSessionInfoForCache(
+        session ?? ({ id: sessionId, directory: targetDir, title: info.title } as never),
+      );
+      await attachToSession({
+        bot: this.botInstance,
+        chatId: this.chatIdInstance,
+        session: info,
+        ensureEventSubscription: (dir: string) => this.ensureEventSubscription(dir),
+      });
+
+      try {
+        const agent = await resolveProjectAgent(getStoredAgent());
+        keyboardManager.updateAgent(agent);
+      } catch (err) {
+        logger.debug("[AutoFollow] Keyboard agent refresh skipped:", err);
+      }
+
+      logger.info(`[AutoFollow] Following active session: id=${sessionId}, project="${projectName}"`);
+      await this.botInstance.api
+        .sendMessage(this.chatIdInstance, t("autofollow.switched", { project: projectName }), {
+          disable_notification: true,
+        })
+        .catch((err) => {
+          logger.debug("[AutoFollow] Failed to send follow notice:", err);
+        });
+    } catch (err) {
+      logger.warn("[AutoFollow] Failed to follow active session:", err);
+    } finally {
+      this.followInFlight = false;
+    }
   }
 
   ensureEventSubscription = async (directory: string): Promise<void> => {
@@ -654,22 +815,19 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             notifyFirstFinalPart:
               assistantResponseMode === "draft" && !getShowAssistantRunFooter(),
             sendRenderedPart: async (part, options) => {
-              await sendRenderedBotPart({
+              const sentPart = await sendRenderedBotPart({
                 api: botApi,
                 chatId,
                 part,
                 options: options as Parameters<typeof sendBotText>[0]["options"],
               });
+              conversationMessageTracker.track(chatId, sentPart.messageId);
             },
           });
 
-          await sendTtsResponseForSession({
-            api: botApi,
-            sessionId,
-            chatId,
-            text: messageText,
-          });
-        } catch (err) {
+        // Store the last complete assistant message for final TTS at session idle
+        this.lastCompleteMessage.set(sessionId, messageText);
+      } catch (err) {
           clearPromptResponseMode(sessionId);
           this.clearThinkingStream(sessionId, messageId, "assistant_finalize_failed");
           this.compactProgressStreamer.clearSession(sessionId, "assistant_finalize_failed");
@@ -957,6 +1115,37 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     summaryAggregator.setOnPermission(async (request) => {
       const generation = permissionManager.getGeneration();
 
+      // If always allow permissions is enabled, auto-approve without prompting
+      if (config.bot.alwaysAllowPermissions) {
+        logger.info(
+          `[Bot] Auto-approving permission request: type=${request.permission}, requestID=${request.id} (alwaysAllowPermissions enabled)`,
+        );
+        safeBackgroundTask({
+          taskName: "permission.always-allow",
+          task: async () => {
+            const currentProject = getCurrentProject();
+            const currentSession = getCurrentSession();
+            const directory = currentSession?.directory ?? currentProject?.worktree;
+
+            if (!directory) {
+              return { error: "No directory available" };
+            }
+
+            // Reply to all equivalent requests
+            const requestIDs = permissionManager.getRequestIDs(null);
+            for (const requestID of requestIDs) {
+              await opencodeClient.permission.reply({
+                requestID,
+                directory,
+                reply: "always",
+              });
+            }
+            return { success: true };
+          },
+        });
+        return;
+      }
+
       if (!this.botInstance || !this.chatIdInstance) {
         logger.error("Bot or chat ID not available for showing permission request");
         return;
@@ -1160,10 +1349,11 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       await this.sessionCompletionTasks.get(sessionId)?.catch(() => undefined);
 
       const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
-      clearPromptResponseMode(sessionId);
 
       if (!this.botInstance || !this.chatIdInstance) {
         this.compactProgressStreamer.clearSession(sessionId, "session_idle");
+        clearPromptResponseMode(sessionId);
+        this.lastCompleteMessage.delete(sessionId);
         foregroundSessionState.markIdle(sessionId);
         return;
       }
@@ -1171,6 +1361,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       const currentSession = getCurrentSession();
       if (!currentSession || currentSession.id !== sessionId) {
         this.compactProgressStreamer.clearSession(sessionId, "session_idle");
+        clearPromptResponseMode(sessionId);
+        this.lastCompleteMessage.delete(sessionId);
         foregroundSessionState.markIdle(sessionId);
         await scheduledTaskRuntime.flushDeferredDeliveries();
         return;
@@ -1205,9 +1397,25 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             );
           }
         }
+
+        // Send final TTS with the last complete assistant message (summary)
+        // Independent of footer setting - runs on any completed response
+        if (completedRun?.hasCompletedResponse) {
+          const lastMessage = this.lastCompleteMessage.get(sessionId);
+          if (lastMessage && this.botInstance && this.chatIdInstance) {
+            await sendTtsResponseForSession({
+              api: this.botInstance.api,
+              sessionId,
+              chatId: this.chatIdInstance,
+              text: lastMessage,
+            });
+            this.lastCompleteMessage.delete(sessionId);
+          }
+        }
       } catch (err) {
         logger.error("[Bot] Failed to send session idle footer:", err);
       } finally {
+        clearPromptResponseMode(sessionId);
         foregroundSessionState.markIdle(sessionId);
         await scheduledTaskRuntime.flushDeferredDeliveries();
         void dispatchNextQueuedPrompt();
@@ -1374,6 +1582,11 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     }).catch((err) => {
       logger.error("Failed to subscribe to events:", err);
     });
+
+    // Unfiltered global stream powering cross-project auto-follow detection.
+    // Unfiltered global stream powering cross-project auto-follow detection.
+    // Optional call: older test doubles may not provide this export.
+    subscribeToAllSessionEvents?.(this.handleFollowEvent);
   };
 
   private getAssistantResponseStreamKey(sessionId: string, messageId: string): string {
@@ -1491,12 +1704,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             throw new Error("Bot context missing for draft complete");
           }
 
-          return completeDraftPart({
+          const result = await completeDraftPart({
             api: this.botInstance.api,
             chatId: this.chatIdInstance,
             part,
             options,
           });
+          conversationMessageTracker.track(this.chatIdInstance, result.messageId);
+          return result;
         },
       });
     }
@@ -1508,13 +1723,15 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           throw new Error("Bot context missing for streamed send");
         }
 
-        return sendRenderedBotPart({
+        const result = await sendRenderedBotPart({
           api: this.botInstance.api,
           chatId: this.chatIdInstance,
           part,
           options,
           allowPlainFallback: false,
         });
+        conversationMessageTracker.track(this.chatIdInstance, result.messageId);
+        return result;
       },
       editPart: async (messageId, part, options) => {
         if (!this.botInstance || !this.chatIdInstance || this.chatIdInstance <= 0) {
@@ -1632,12 +1849,13 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     }
 
     for (const part of finalPayload.parts) {
-      await sendRenderedBotPart({
+      const sentPart = await sendRenderedBotPart({
         api: this.botInstance.api,
         chatId: this.chatIdInstance,
         part,
         options: finalPayload.sendOptions as Parameters<typeof sendBotText>[0]["options"],
       });
+      conversationMessageTracker.track(this.chatIdInstance, sentPart.messageId);
     }
   }
 

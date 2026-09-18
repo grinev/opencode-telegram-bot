@@ -5,6 +5,7 @@ const mocked = vi.hoisted(() => ({
   healthMock: vi.fn(),
   resolveLocalOpencodeTargetMock: vi.fn(),
   startLocalOpencodeServerMock: vi.fn(),
+  freeLocalOpencodePortMock: vi.fn(),
   notifyReadyMock: vi.fn(),
   notifyUnavailableMock: vi.fn(),
   loggerDebugMock: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("../../src/opencode/client.js", () => ({
 vi.mock("../../src/opencode/process.js", () => ({
   resolveLocalOpencodeTarget: mocked.resolveLocalOpencodeTargetMock,
   startLocalOpencodeServer: mocked.startLocalOpencodeServerMock,
+  freeLocalOpencodePort: mocked.freeLocalOpencodePortMock,
 }));
 
 vi.mock("../../src/opencode/ready-lifecycle.js", () => ({
@@ -78,6 +80,7 @@ describe("opencode/auto-restart", () => {
     mocked.healthMock.mockReset();
     mocked.resolveLocalOpencodeTargetMock.mockReset();
     mocked.startLocalOpencodeServerMock.mockReset();
+    mocked.freeLocalOpencodePortMock.mockReset();
     mocked.notifyReadyMock.mockReset();
     mocked.notifyUnavailableMock.mockReset();
     mocked.loggerDebugMock.mockReset();
@@ -90,6 +93,7 @@ describe("opencode/auto-restart", () => {
     mocked.config.opencode.monitorIntervalSec = 300;
     mocked.resolveLocalOpencodeTargetMock.mockReturnValue({ host: "localhost", port: 4096 });
     mocked.startLocalOpencodeServerMock.mockReturnValue(createChildProcess(123));
+    mocked.freeLocalOpencodePortMock.mockResolvedValue(true);
     mocked.notifyReadyMock.mockResolvedValue(true);
   });
 
@@ -189,6 +193,26 @@ describe("opencode/auto-restart", () => {
     expect(childProcess.unref).toHaveBeenCalledTimes(1);
     expect(mocked.notifyUnavailableMock).toHaveBeenCalledWith("auto_restart_startup");
     expect(mocked.notifyReadyMock).toHaveBeenCalledWith("auto_restart_startup");
+
+    service.stop();
+  });
+
+  it("skips restart when the port cannot be freed", async () => {
+    mocked.config.opencode.autoRestartEnabled = true;
+    mocked.freeLocalOpencodePortMock.mockResolvedValue(false);
+    mocked.healthMock.mockRejectedValue(new Error("offline"));
+    const service = new OpencodeAutoRestartService();
+
+    await service.start();
+
+    expect(mocked.freeLocalOpencodePortMock).toHaveBeenCalledWith({
+      host: "localhost",
+      port: 4096,
+    });
+    expect(mocked.startLocalOpencodeServerMock).not.toHaveBeenCalled();
+    expect(mocked.loggerErrorMock).toHaveBeenCalledWith(
+      "[OpenCodeAutoRestart] Cannot free port 4096, skipping restart",
+    );
 
     service.stop();
   });

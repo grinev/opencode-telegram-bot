@@ -4,6 +4,7 @@ import { logger } from "../utils/logger.js";
 import { opencodeClient } from "./client.js";
 import { opencodeReadyLifecycle } from "./ready-lifecycle.js";
 import {
+  freeLocalOpencodePort,
   resolveLocalOpencodeTarget,
   startLocalOpencodeServer,
   type LocalOpencodeTarget,
@@ -153,6 +154,16 @@ export class OpencodeAutoRestartService {
       logger.warn(
         `[OpenCodeAutoRestart] OpenCode server is unavailable, starting local server: reason=${reason}, port=${this.localTarget.port}`,
       );
+
+      // A stale process may still hold the port even though health-checks fail
+      // (e.g. a detached server from a previous bot run). Stop it first so the
+      // new server can bind the port.
+      if (!(await freeLocalOpencodePort(this.localTarget))) {
+        logger.error(
+          `[OpenCodeAutoRestart] Cannot free port ${this.localTarget.port}, skipping restart`,
+        );
+        return;
+      }
 
       const childProcess = startLocalOpencodeServer(this.localTarget);
       childProcess.once("error", (error) => {

@@ -15,6 +15,7 @@ const mocked = vi.hoisted(() => ({
     worktree: "D:/repo",
   } as { id: string; worktree: string } | undefined,
   currentSession: null as { id: string; title: string; directory: string } | null,
+  alwaysAllowPermissions: false,
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -27,6 +28,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
+  getAlwaysAllowPermissions: vi.fn(() => mocked.alwaysAllowPermissions),
 }));
 
 vi.mock("../../../src/app/services/session-service.js", () => ({

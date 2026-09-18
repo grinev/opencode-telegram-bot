@@ -1,7 +1,11 @@
 import { CommandContext, Context } from "grammy";
 import { config } from "../../config.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { resolveLocalOpencodeTarget, startLocalOpencodeServer } from "../../opencode/process.js";
+import {
+  freeLocalOpencodePort,
+  resolveLocalOpencodeTarget,
+  startLocalOpencodeServer,
+} from "../../opencode/process.js";
 import { opencodeReadyLifecycle } from "../../opencode/ready-lifecycle.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
@@ -103,6 +107,14 @@ export async function opencodeStartCommand(ctx: CommandContext<Context>) {
       }
     } catch {
       // Server not accessible, continue with start.
+    }
+
+    // A stale process may still hold the port while health-checks fail (e.g. a
+    // detached server from a previous bot run). Free it so the new server can
+    // bind the port, otherwise `opencode serve` fails with a busy port.
+    if (!(await freeLocalOpencodePort(localTarget))) {
+      await ctx.reply(t("opencode_start.port_busy", { port: localTarget.port }));
+      return;
     }
 
     const statusMessage = await ctx.reply(t("opencode_start.starting"));

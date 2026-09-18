@@ -2,7 +2,7 @@ import type { Context } from "grammy";
 import { permissionManager } from "../../app/managers/permission-manager.js";
 import type { PermissionReply } from "../../app/types/permission.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentProject } from "../../app/stores/settings-store.js";
+import { getCurrentProject, getAlwaysAllowPermissions } from "../../app/stores/settings-store.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { summaryAggregator } from "../../app/managers/summary-aggregation-manager.js";
 import { clearPermissionInteraction, syncPermissionInteractionState } from "../menus/permission-menu.js";
@@ -59,6 +59,18 @@ export async function handlePermissionCallback(ctx: Context): Promise<boolean> {
   }
 
   logger.debug(`[PermissionHandler] Received callback: ${data}`);
+
+  // If always allow permissions is enabled, just acknowledge the callback
+  // and clear the permission interaction without prompting the user
+  if (getAlwaysAllowPermissions()) {
+    const callbackMessageId = getCallbackMessageId(ctx);
+    if (callbackMessageId !== null) {
+      permissionManager.removeByMessageId(callbackMessageId);
+      clearPermissionInteraction("permission_always_allowed");
+    }
+    await ctx.answerCallbackQuery({ text: t("permission.always_allowed"), show_alert: true });
+    return true;
+  }
 
   if (!permissionManager.isActive()) {
     clearPermissionInteraction("permission_inactive_callback");

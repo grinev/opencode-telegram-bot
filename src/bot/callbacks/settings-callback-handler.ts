@@ -3,6 +3,7 @@ import { isTtsConfigured } from "../../app/services/tts-service.js";
 import {
   getCompactOutputMode,
   getDeleteCompactProgressOnFinish,
+  getGlobalRealTime,
   getPromptQueueEnabled,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
@@ -12,6 +13,7 @@ import {
   getTtsMode,
   setCompactOutputMode,
   setDeleteCompactProgressOnFinish,
+  setGlobalRealTime,
   setPinnedDashboardEnabled,
   setPromptQueueEnabled,
   setResponseStreamingMode,
@@ -33,6 +35,7 @@ import {
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
   SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK,
   SETTINGS_DIFF_FILES_CALLBACK,
+  SETTINGS_GLOBAL_REAL_TIME_CALLBACK,
   SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK,
   SETTINGS_PROMPT_QUEUE_CALLBACK,
   SETTINGS_RESPONSE_STREAMING_CALLBACK,
@@ -133,6 +136,16 @@ export async function handleSettingsCallback(ctx: Context): Promise<boolean> {
 
     if (callbackData === SETTINGS_PROMPT_QUEUE_CALLBACK) {
       setPromptQueueEnabled(!getPromptQueueEnabled());
+      const { text, keyboard } = buildSettingsMenuView();
+      await ctx.answerCallbackQuery({ text: t("settings.saved") });
+      await ctx.editMessageText(text, {
+        reply_markup: appendInlineMenuCancelButton(keyboard, "settings"),
+      });
+      return true;
+    }
+
+    if (callbackData === SETTINGS_GLOBAL_REAL_TIME_CALLBACK) {
+      setGlobalRealTime(!getGlobalRealTime());
       const { text, keyboard } = buildSettingsMenuView();
       await ctx.answerCallbackQuery({ text: t("settings.saved") });
       await ctx.editMessageText(text, {

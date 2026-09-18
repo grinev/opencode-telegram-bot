@@ -72,6 +72,9 @@ vi.mock("../../../src/app/services/model-selection-service.js", () => ({
     modelID: "gpt-5",
     variant: "default",
   })),
+  // Prompt-handler tests exercise the static-model path; dynamic-mode
+  // behavior is covered by model-selection-dynamic-model.test.ts.
+  shouldUseStoredModelForPrompt: vi.fn(() => true),
 }));
 
 vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({

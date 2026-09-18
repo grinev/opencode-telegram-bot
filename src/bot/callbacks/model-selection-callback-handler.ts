@@ -7,6 +7,7 @@ import {
   getProviders,
   searchModels,
   selectModel,
+  SEARCH_RESULTS_LIMIT,
 } from "../../app/services/model-selection-service.js";
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { formatModelForDisplay } from "../../app/types/model.js";
@@ -48,6 +49,10 @@ interface ModelSearchMetadata {
   stage: string;
   messageId?: number | undefined;
   models: ModelInfo[];
+  metadata?: {
+    page?: number;
+    total?: number;
+  };
 }
 
 interface ModelListMetadata {
@@ -541,38 +546,55 @@ export async function handleModelSearchTextInput(ctx: Context): Promise<boolean>
   logger.debug(`[ModelHandler] Model search query: "${text}"`);
 
   try {
-    const results = await searchModels(text);
+    const currentPage = meta.metadata?.page !== undefined ? meta.metadata.page : 0;
+
+    const results = await searchModels(text, currentPage);
 
     const keyboard = new InlineKeyboard();
 
-    for (const [index, model] of results.entries()) {
+    for (const [index, model] of results.models.entries()) {
       const label = `${model.providerID}/${model.modelID}`;
       keyboard.text(label, `${MODEL_SEARCH_RESULT_CALLBACK_PREFIX}${index}`).row();
     }
 
-    keyboard.row();
+    if (results.total > SEARCH_RESULTS_LIMIT) {
+      const page = currentPage;
+      const totalPages = Math.ceil(results.total / SEARCH_RESULTS_LIMIT);
+
+      if (page > 0) {
+        keyboard.text(t("model.providers.prev_page"), `${MODEL_SEARCH_RESULT_CALLBACK_PREFIX}prev:${page - 1}`);
+      }
+
+      if (page < totalPages - 1) {
+        keyboard.text(t("model.providers.next_page"), `${MODEL_SEARCH_RESULT_CALLBACK_PREFIX}next:${page + 1}`);
+      }
+
+      keyboard.row();
+    }
+
     keyboard.text(t("model.search.search_again"), MODEL_SEARCH_AGAIN_CALLBACK);
     keyboard.text(t("inline.button.cancel"), MODEL_SEARCH_CANCEL_CALLBACK);
 
     const replyText =
-      results.length === 0
+      results.models.length === 0
         ? t("model.search.no_results", { query: text })
         : t("model.search.results_title", { query: text });
 
     const sent = await ctx.reply(replyText, { reply_markup: keyboard });
 
-    // Transition to results stage (callback-only)
     interactionManager.transition({
       expectedInput: "callback",
       metadata: {
         flow: "model-search",
         stage: "results",
         messageId: sent.message_id,
-        models: results.map((model) => ({
+        models: results.models.map((model) => ({
           providerID: model.providerID,
           modelID: model.modelID,
           variant: "default",
         })),
+        page: currentPage,
+        total: results.total,
       },
     });
 
@@ -585,12 +607,6 @@ export async function handleModelSearchTextInput(ctx: Context): Promise<boolean>
   }
 }
 
-/**
- * Handle callbacks from the search results menu:
- * - model:search:cancel — clears interaction, deletes message
- * - model:search:again — delegates to handleModelSearchCallback
- * - model:provider:model — selects the model from search results
- */
 export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data) {
@@ -634,7 +650,55 @@ export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
 
     await ctx.reply(t("model.search.prompt"));
 
-    logger.debug("[ModelHandler] Model search prompt shown (search again)");
+    return true;
+  }
+
+  // Handle pagination callbacks
+  if (data.startsWith(`${MODEL_SEARCH_RESULT_CALLBACK_PREFIX}prev:`)) {
+    const prefixLength = `${MODEL_SEARCH_RESULT_CALLBACK_PREFIX}prev:`.length;
+    const pageMatch = data.slice(prefixLength).match(/^\d+$/);
+    if (pageMatch) {
+      const targetPage = parseInt(pageMatch[0], 10);
+      const currentPage = meta.metadata?.page ?? 0;
+      if (targetPage >= 0 && targetPage < currentPage) {
+        interactionManager.transition({
+          expectedInput: "callback",
+          metadata: {
+            flow: "model-search",
+            stage: "results",
+            messageId: meta.messageId,
+            page: targetPage,
+          },
+        });
+        return true;
+      }
+    }
+    await ctx.answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true }).catch(() => {});
+    return true;
+  }
+
+  if (data.startsWith(`${MODEL_SEARCH_RESULT_CALLBACK_PREFIX}next:`)) {
+    const prefixLength = `${MODEL_SEARCH_RESULT_CALLBACK_PREFIX}next:`.length;
+    const pageMatch = data.slice(prefixLength).match(/^\d+$/);
+    if (pageMatch) {
+      const targetPage = parseInt(pageMatch[0], 10);
+      const currentPage = meta.metadata?.page ?? 0;
+      const total = meta.metadata?.total ?? 0;
+      const totalPages = Math.ceil(total / SEARCH_RESULTS_LIMIT);
+      if (targetPage >= 0 && targetPage > currentPage && targetPage < totalPages) {
+        interactionManager.transition({
+          expectedInput: "callback",
+          metadata: {
+            flow: "model-search",
+            stage: "results",
+            messageId: meta.messageId,
+            page: targetPage,
+          },
+        });
+        return true;
+      }
+    }
+    await ctx.answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true }).catch(() => {});
     return true;
   }
 
@@ -654,7 +718,6 @@ export async function handleModelSearchResults(ctx: Context): Promise<boolean> {
   // Backward compatibility for callbacks from already-rendered search result messages.
   if (data.startsWith("model:")) {
     if (isShortModelCallback(data)) {
-      logger.error(`[ModelHandler] Invalid search result callback data: ${data}`);
       await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
       return true;
     }

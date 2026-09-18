@@ -43,6 +43,11 @@ const mocked = vi.hoisted(() => ({
   stopEventListeningMock: vi.fn(),
 }));
 
+vi.mock("../../../src/opencode/all-events.js", () => ({
+  subscribeToAllSessionEvents: vi.fn(async () => {}),
+  stopAllSessionEvents: vi.fn(),
+}));
+
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));

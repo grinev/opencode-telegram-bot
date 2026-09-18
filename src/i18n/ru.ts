@@ -12,6 +12,7 @@ export const ru: I18nDictionary = {
   "cmd.description.worktree": "Переключить git worktree",
   "cmd.description.task": "Создать задачу по расписанию",
   "cmd.description.tasklist": "Список задач по расписанию",
+  "cmd.description.toggle_permissions": "Переключить всегда разрешить",
   "cmd.description.commands": "Пользовательские команды",
   "cmd.description.skills": "Каталог скиллов",
   "cmd.description.mcps": "MCP серверы",
@@ -55,7 +56,7 @@ export const ru: I18nDictionary = {
   "common.unknown_error": "неизвестная ошибка",
 
   "start.welcome":
-    "👋 Добро пожаловать в OpenCode Telegram Bot!\n\nИспользуйте команды:\n/projects — выбрать проект\n/sessions — список сессий\n/new — новая сессия\n/commands — пользовательские команды\n/skills — каталог скиллов\n/task — задача по расписанию\n/tasklist — список задач по расписанию\n/status — статус\n/help — справка\n\nАгент, модель и вариант выбираются кнопками внизу.",
+    "👋 Добро пожаловать в OpenCode Telegram Bot!\n\nИспользуйте /projects для выбора проекта, затем /new для создания сессии или /sessions для выбора существующей.\n\nКнопки внизу: агент, модель, вариант, контекст.",
   "help.keyboard_hint":
     "💡 Агент, модель, вариант и действия с контекстом доступны через нижние кнопки клавиатуры.",
   "help.text":
@@ -160,6 +161,7 @@ export const ru: I18nDictionary = {
   "settings.pin_session_dashboard.label": "Закреплять дашборд сессии",
   "settings.tts.label": "Аудиоответы",
   "settings.prompt_queue.label": "Очередь сообщений",
+  "settings.global_real_time.label": "Глобальная синхронизация в реальном времени",
   "settings.value.on": "Вкл",
   "settings.value.off": "Выкл",
   "settings.saved": "✅ Настройка сохранена.",
@@ -198,6 +200,10 @@ export const ru: I18nDictionary = {
   "sessions.preview.title": "Последние сообщения:",
   "sessions.preview.you": "Вы:",
   "sessions.preview.agent": "Агент:",
+  "sessions.history.title": "📜 История сессии — {title}\nПоказано {shown} из {total} сообщений.",
+  "sessions.history.truncated": "\n⚠️ Более старые сообщения пропущены (HISTORY_RENDER_LIMIT).",
+  "sessions.cleanup_failed_partial": "⚠️ Некоторые предыдущие сообщения бота не удалось удалить (старше 48 часов).",
+  "autofollow.switched": "🔄 Отслеживается активная сессия в {project}...",
 
   "messages.project_not_selected":
     "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
@@ -283,6 +289,8 @@ export const ru: I18nDictionary = {
   "opencode_start.success": "✅ OpenCode Server успешно запущен\n\nPID: {pid}\nВерсия: {version}",
   "opencode_start.error":
     "🔴 Произошла ошибка при запуске сервера.\n\nПроверьте логи приложения для подробностей.",
+  "opencode_start.port_busy":
+    "🔴 Порт {port} всё ещё занят другим процессом.\n\nНе удалось остановить его автоматически. Остановите процесс вручную и попробуйте /opencode_start ещё раз.",
   "opencode_stop.external_running":
     "⚠️ OpenCode Server запущен внешним процессом\n\nЭтот сервер не был запущен через /opencode-start.\nОстановите его вручную или используйте /status для проверки состояния.",
   "opencode_stop.remote_configured":
@@ -365,6 +373,7 @@ export const ru: I18nDictionary = {
   "permission.grouped_count": "\n⚠️ Ожидают {count} одинаковых запроса — ваш ответ применится ко всем.\n",
   "permission.button.allow": "✅ Разрешить один раз",
   "permission.button.always": "🔓 Разрешить всегда",
+  "permission.always_allowed": "Всегда разрешить",
   "permission.button.reject": "❌ Отклонить",
   "permission.name.bash": "Bash",
   "permission.name.edit": "Edit",

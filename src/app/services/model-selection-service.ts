@@ -1,4 +1,6 @@
-import { getCurrentModel, setCurrentModel } from "../stores/settings-store.js";
+import { getCurrentModel, setCurrentModel, isModelExplicitlySelected, markModelExplicitlySelected } from "../stores/settings-store.js";
+
+export { isModelExplicitlySelected } from "../stores/settings-store.js";
 import { config } from "../../config.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { isServerUnavailableError } from "../../utils/opencode-error.js";
@@ -25,7 +27,7 @@ let cachedModelsByProvider: Map<string, FavoriteModel[]> | null = null;
 let modelCatalogCacheExpiresAt = 0;
 let modelCatalogFetchInFlight: Promise<Set<string> | null> | null = null;
 
-const SEARCH_RESULTS_LIMIT = 10;
+export const SEARCH_RESULTS_LIMIT = 10;
 
 function getModelKey(providerID: string, modelID: string): string {
   return `${providerID}/${modelID}`;
@@ -336,6 +338,22 @@ export async function reconcileStoredModelSelection(options?: {
   });
 }
 
+export function shouldUseStoredModelForPrompt(): boolean {
+  // In dynamic model mode, only use stored model if user explicitly picked one.
+  if (config.bot.dynamicModel) {
+    const explicit = isModelExplicitlySelected();
+    if (!explicit) {
+      return false;
+    }
+  }
+  const storedModel = getStoredModel();
+  return !!(
+    storedModel.providerID &&
+    storedModel.modelID &&
+    storedModel.variant !== undefined
+  );
+}
+
 export function __resetModelCatalogCacheForTests(): void {
   cachedValidModelKeys = null;
   cachedAllModels = null;
@@ -392,11 +410,20 @@ export async function getProviderModels(providerID: string): Promise<FavoriteMod
  * @param query Search query string
  * @returns Matching models, empty array if catalog unavailable or no matches
  */
-export async function searchModels(query: string): Promise<FavoriteModel[]> {
+export interface SearchModelsResult {
+  models: FavoriteModel[];
+  total: number;
+}
+
+export async function searchModels(
+  query: string,
+  page: number = 0,
+  pageSize: number = SEARCH_RESULTS_LIMIT,
+): Promise<SearchModelsResult> {
   const normalizedQuery = query.trim().toLowerCase();
 
   if (!normalizedQuery) {
-    return [];
+    return { models: [], total: 0 };
   }
 
   // Ensure catalog is loaded (uses cache if fresh)
@@ -404,10 +431,10 @@ export async function searchModels(query: string): Promise<FavoriteModel[]> {
 
   if (!validKeys || !cachedAllModels) {
     logger.warn("[ModelManager] Model catalog unavailable, skipping search");
-    return [];
+    return { models: [], total: 0 };
   }
 
-  const results = cachedAllModels
+  const allResults = cachedAllModels
     .filter((model) => {
       const key = getModelKey(model.providerID, model.modelID).toLowerCase();
       return key.includes(normalizedQuery);
@@ -416,14 +443,18 @@ export async function searchModels(query: string): Promise<FavoriteModel[]> {
       const keyA = getModelKey(a.providerID, a.modelID).toLowerCase();
       const keyB = getModelKey(b.providerID, b.modelID).toLowerCase();
       return keyA.localeCompare(keyB);
-    })
-    .slice(0, SEARCH_RESULTS_LIMIT);
+    });
+
+  const total = allResults.length;
+  const startIndex = page * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, total);
+  const results = allResults.slice(startIndex, endIndex);
 
   logger.debug(
-    `[ModelManager] Model search: query="${query}", results=${results.length}`,
+    `[ModelManager] Model search: query="${query}", page=${page}, results=${results.length}, total=${total}`,
   );
 
-  return results;
+  return { models: results, total };
 }
 
 /**
@@ -441,6 +472,7 @@ export function fetchCurrentModel(): ModelInfo {
 export function selectModel(modelInfo: ModelInfo): void {
   logger.info(`[ModelManager] Selected model: ${modelInfo.providerID}/${modelInfo.modelID}`);
   setCurrentModel(modelInfo);
+  markModelExplicitlySelected();
 }
 
 /**

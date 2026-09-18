@@ -451,7 +451,7 @@ describe("bot/commands/sessions", () => {
     ]);
     expect(safeBackgroundTaskMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        taskName: "sessions.sendPreview",
+        taskName: "sessions.renderHistory",
       }),
     );
   });

@@ -1,5 +1,6 @@
 import type { Bot, Context, NextFunction } from "grammy";
 import { config } from "../../config.js";
+import { togglePermissionsCommand } from "../commands/toggle-permissions-command.js";
 import { settingsCommand } from "../commands/settings-command.js";
 import { opencodeStartCommand } from "../commands/opencode-start-command.js";
 import { opencodeStopCommand } from "../commands/opencode-stop-command.js";
@@ -114,6 +115,7 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
       });
     });
   }
+  bot.command("toggle_permissions", togglePermissionsCommand);
 }
 
 function localCommandReply(result: LocalCommandResult): string {

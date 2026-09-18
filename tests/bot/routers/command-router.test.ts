@@ -54,6 +54,7 @@ describe("bot/routers/command-router", () => {
       "commands",
       "skills",
       "mcps",
+      "toggle_permissions",
     ]);
   });
 

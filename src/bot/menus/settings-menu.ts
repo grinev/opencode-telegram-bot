@@ -2,6 +2,7 @@ import { InlineKeyboard } from "grammy";
 import {
   getCompactOutputMode,
   getDeleteCompactProgressOnFinish,
+  getGlobalRealTime,
   getPromptQueueEnabled,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
@@ -24,6 +25,7 @@ export const SETTINGS_ASSISTANT_FOOTER_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}as
 export const SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}pin_session_dashboard`;
 export const SETTINGS_TTS_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}tts`;
 export const SETTINGS_PROMPT_QUEUE_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}prompt_queue`;
+export const SETTINGS_GLOBAL_REAL_TIME_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}global_real_time`;
 
 export function formatBooleanSettingValue(enabled: boolean): string {
   return enabled ? t("settings.value.on") : t("settings.value.off");
@@ -57,6 +59,7 @@ export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboar
   const pinnedDashboardEnabled = getPinnedDashboardEnabled();
   const ttsMode = getTtsMode();
   const promptQueueEnabled = getPromptQueueEnabled();
+  const globalRealTime = getGlobalRealTime();
   const keyboard = new InlineKeyboard()
     .text(
       `${t("settings.compact_output.label")}: ${formatBooleanSettingValue(compactOutputMode)}`,
@@ -102,6 +105,11 @@ export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboar
     .text(
       `${t("settings.prompt_queue.label")}: ${formatBooleanSettingValue(promptQueueEnabled)}`,
       SETTINGS_PROMPT_QUEUE_CALLBACK,
+    )
+    .row()
+    .text(
+      `${t("settings.global_real_time.label")}: ${formatBooleanSettingValue(globalRealTime)}`,
+      SETTINGS_GLOBAL_REAL_TIME_CALLBACK,
     );
 
   return {

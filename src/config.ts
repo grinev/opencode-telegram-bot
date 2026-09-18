@@ -204,11 +204,14 @@ export function buildTelegramConfig(): {
 export const config = {
   telegram: buildTelegramConfig(),
   opencode: {
-    apiUrl: getEnvVar("OPENCODE_API_URL", false) || "http://localhost:4096",
+    // OpenCode server URL - can also be set via OPENCODE_PORT (e.g. OPENCODE_PORT=4096)
+    apiUrl: getEnvVar("OPENCODE_API_URL", false) || `http://localhost:${getEnvVar("OPENCODE_PORT", false) || "4096"}`,
     username: getEnvVar("OPENCODE_SERVER_USERNAME", false) || "opencode",
     password: getEnvVar("OPENCODE_SERVER_PASSWORD", false),
     autoRestartEnabled: getOptionalBooleanEnvVar("OPENCODE_AUTO_RESTART_ENABLED", false),
     monitorIntervalSec: getOptionalPositiveIntEnvVar("OPENCODE_MONITOR_INTERVAL_SEC", 300),
+    // Working directory for the OpenCode server process (default: bot's working directory)
+    serverWorkdir: getEnvVar("OPENCODE_SERVER_WORKDIR", false),
     model: {
       provider: getEnvVar("OPENCODE_MODEL_PROVIDER", true), // Required
       modelId: getEnvVar("OPENCODE_MODEL_ID", true), // Required
@@ -241,6 +244,23 @@ export const config = {
     messageMergeWindowMs: getOptionalNonNegativeIntEnvVar("MESSAGE_MERGE_WINDOW_MS", 1500),
     initialSettingsPreset: parseInitialSettingsPreset(),
     excludedProjectPaths: getOptionalPathListEnvVar("PROJECTS_EXCLUDED_PATHS"),
+    // Full-history rendering on session switch: newest N conversation messages,
+    // 0 = unlimited. Cleanup wipes previously rendered bot messages first.
+    historyRenderLimit: getOptionalNonNegativeIntEnvVar("HISTORY_RENDER_LIMIT", 200),
+    cleanupOnSessionSwitch: getOptionalBooleanEnvVar("CLEANUP_ON_SESSION_SWITCH", true),
+    // Dynamic model mode: omit the model param on prompts unless the user
+    // explicitly picked a model via the in-bot picker, so OpenCode uses
+    // whatever model is currently active on the server.
+    dynamicModel: getOptionalBooleanEnvVar("OPENCODE_DYNAMIC_MODEL", true),
+    // Auto-follow: when a session in the current project starts running while
+    // the bot is idle on a different session, switch the bot to the active
+    // session so progress/questions/permissions mirror live.
+    autoFollowActiveSession: getOptionalBooleanEnvVar("AUTO_FOLLOW_ACTIVE_SESSION", true),
+    alwaysAllowPermissions: getOptionalBooleanEnvVar("ALLOW_PERMISSIONS_ALWAYS", false),
+    // Global real-time: subscribe to events from ALL projects simultaneously,
+    // enabling real-time sync of prompts from OpenCode CLI/TUI to Telegram
+    // regardless of which project/session is currently selected in the bot.
+    globalRealTime: getOptionalBooleanEnvVar("GLOBAL_REAL_TIME", true),
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),
@@ -282,4 +302,24 @@ export const config = {
       voice: getEnvVar("TTS_VOICE", false) || defaultVoice,
     };
   })(),
+  voiceCli: {
+    // Enable voice CLI mode (local STT + opencode CLI + Edge TTS)
+    enabled: getOptionalBooleanEnvVar("VOICE_CLI_ENABLED", false),
+    // Working directory for opencode CLI (default: bot's working directory)
+    workdir: getEnvVar("VOICE_CLI_WORKDIR", false),
+    // Default model for opencode CLI (optional, uses config default if not set)
+    model: getEnvVar("VOICE_CLI_MODEL", false),
+    // Default agent for opencode CLI (optional)
+    agent: getEnvVar("VOICE_CLI_AGENT", false),
+    // STT mode: "api" (Whisper API like Groq), "vosk" (fully offline Vosk), or "whisper" (local Whisper via transformers.js)
+    sttMode: getEnvVar("VOICE_CLI_STT_MODE", false) || "api",
+  },
+  vosk: {
+    // Path to Vosk model directory (for fully offline STT)
+    modelPath: getEnvVar("VOSK_MODEL_PATH", false),
+  },
+  whisper: {
+    // Transformers.js Whisper model ID (local ONNX, downloaded once, then offline)
+    model: getEnvVar("WHISPER_MODEL", false) || "onnx-community/whisper-small",
+  },
 };

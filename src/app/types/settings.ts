@@ -15,6 +15,12 @@ export interface Settings {
   currentSession?: SessionInfo | undefined;
   currentAgent?: string | undefined;
   currentModel?: ModelInfo | undefined;
+  /**
+   * True only when the user picked a model via the in-bot picker.
+   * In dynamic-model mode (OPENCODE_DYNAMIC_MODEL=true) prompts omit the
+   * model param unless this is set, so the server's active model is used.
+   */
+  modelExplicitlySelected?: boolean | undefined;
   pinnedMessageId?: number | undefined;
   ttsMode?: "off" | "all" | "auto" | undefined;
   compactOutputMode?: boolean | undefined;
@@ -25,7 +31,11 @@ export interface Settings {
   responseStreamingMode?: ResponseStreamingMode | undefined;
   sendDiffFileAttachments?: boolean | undefined;
   promptQueueEnabled?: boolean | undefined;
+  globalRealTime?: boolean | undefined;
   sessionDirectoryCache?: SessionDirectoryCacheInfo | undefined;
   scheduledTasks?: ScheduledTask[] | undefined;
   scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[] | undefined;
+  alwaysAllowPermissions?: boolean | undefined;
+  /** Tracks whether the user has completed their first run (used to skip auto-history-render on startup). */
+  firstRunComplete?: boolean | undefined;
 }

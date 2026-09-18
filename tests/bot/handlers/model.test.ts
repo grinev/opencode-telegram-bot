@@ -34,6 +34,7 @@ vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   searchModels: mocked.searchModelsMock,
   selectModel: mocked.selectModelMock,
   fetchCurrentModel: mocked.fetchCurrentModelMock,
+  SEARCH_RESULTS_LIMIT: 10,
 }));
 
 vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
@@ -432,9 +433,10 @@ describe("bot model selection", () => {
         kind: "custom",
         metadata: { flow: "model-search", stage: "input" },
       });
-      mocked.searchModelsMock.mockResolvedValue([
-        { providerID: "fireworks", modelID: longModelID },
-      ]);
+      mocked.searchModelsMock.mockResolvedValue({
+        models: [{ providerID: "fireworks", modelID: longModelID }],
+        total: 1,
+      });
 
       const ctx = mockContext({
         message: { text: "fireworks" },

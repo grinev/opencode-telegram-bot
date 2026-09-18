@@ -19,6 +19,7 @@ export const ar: I18nDictionary = {
   "cmd.description.worktree": "التبديل بين نسخ العمل في Git",
   "cmd.description.task": "إنشاء مهمة مجدولة",
   "cmd.description.tasklist": "عرض المهام المجدولة",
+  "cmd.description.toggle_permissions": "التبديلalways-allow الأذونات",
   "cmd.description.commands": "الأوامر المخصصة",
   "cmd.description.skills": "قائمة المهارات",
   "cmd.description.mcps": "خوادم MCP",
@@ -59,7 +60,7 @@ export const ar: I18nDictionary = {
   "common.unknown_error": "خطأ غير معروف",
 
   "start.welcome":
-    "👋 أهلًا بك في OpenCode Telegram Bot!\n\nالأوامر الأساسية:\n/projects — اختيار مشروع\n/sessions — عرض الجلسات\n/new — بدء جلسة جديدة\n/commands — الأوامر المخصصة\n/skills — قائمة المهارات\n/task — إنشاء مهمة مجدولة\n/tasklist — عرض المهام المجدولة\n/status — حالة الخادم والجلسة\n/help — المساعدة\n\nاستخدم الأزرار السفلية للتبديل بين الوكيل والنموذج وخيارات التشغيل.",
+    "👋 أهلًا بك في OpenCode Telegram Bot!\n\nاستخدم /projects لاختيار مشروع، ثم /new لإنشاء جلسة أو /sessions لاختيار جلسة موجودة.\n\nالأزرار السفلية: الوكيل، النموذج، الخيار، السياق.",
   "help.keyboard_hint":
     "💡 استخدم الأزرار السفلية للتبديل بين الوكيل والنموذج وخيارات التشغيل وإدارة السياق.",
   "help.text":
@@ -162,6 +163,7 @@ export const ar: I18nDictionary = {
   "settings.pin_session_dashboard.label": "Pin session dashboard",
   "settings.tts.label": "الردود الصوتية",
   "settings.prompt_queue.label": "قائمة انتظار الرسائل",
+  "settings.global_real_time.label": "مزامنة عالمية فورية",
   "settings.value.on": "مفعّل",
   "settings.value.off": "معطّل",
   "settings.saved": "✅ تم حفظ الإعداد.",
@@ -197,6 +199,10 @@ export const ar: I18nDictionary = {
   "sessions.preview.title": "أحدث الرسائل:",
   "sessions.preview.you": "أنت:",
   "sessions.preview.agent": "الوكيل:",
+  "sessions.history.title": "📜 سجل الجلسة — {title}\nعرض {shown} من أصل {total} رسالة.",
+  "sessions.history.truncated": "\n⚠️ تم حذف الرسائل الأقدم (HISTORY_RENDER_LIMIT).",
+  "sessions.cleanup_failed_partial": "⚠️ تعذر حذف بعض رسائل البوت السابقة (أقدم من 48 ساعة).",
+  "autofollow.switched": "🔄 متابعة الجلسة النشطة في {project}...",
 
   "messages.project_not_selected":
     "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",
@@ -274,6 +280,7 @@ export const ar: I18nDictionary = {
     "⚠️ تم تشغيل خادم OpenCode، لكنه لا يستجيب\n\nPID: {pid}\n\nقد لا يزال الخادم قيد التشغيل. جرّب /status بعد بضع ثوانٍ.",
   "opencode_start.success": "✅ تم تشغيل خادم OpenCode بنجاح\n\nPID: {pid}\nالإصدار: {version}",
   "opencode_start.error": "🔴 حدث خطأ أثناء تشغيل الخادم.\n\nراجع سجلات التطبيق للتفاصيل.",
+  "opencode_start.port_busy": "🔴 المنفذ {port} ما زال مشغولاً بعملية أخرى.\n\nتعذّر إيقافها تلقائياً. أوقف العملية يدوياً وحاول /opencode_start مرة أخرى.",
   "opencode_stop.external_running":
     "⚠️ خادم OpenCode يعمل كعملية خارجية\n\nلم يتم تشغيل هذا الخادم عبر /opencode-start.\nأوقفه يدويًا أو استخدم /status للتحقق من الحالة.",
   "opencode_stop.remote_configured": "⚠️ يعمل /opencode_stop فقط مع خادم OpenCode محلي.",
@@ -352,6 +359,7 @@ export const ar: I18nDictionary = {
   "permission.grouped_count": "\n⚠️ يوجد {count} طلبات متطابقة قيد الانتظار — سيُطبَّق ردك عليها جميعًا.\n",
   "permission.button.allow": "✅ سماح لمرة واحدة",
   "permission.button.always": "🔓 سماح دائم",
+  "permission.always_allowed": "Always allowed",
   "permission.button.reject": "❌ رفض",
   "permission.name.bash": "تشغيل أمر Bash",
   "permission.name.edit": "تعديل ملف",

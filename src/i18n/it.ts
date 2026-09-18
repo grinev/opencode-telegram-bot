@@ -12,6 +12,7 @@ export const it: I18nDictionary = {
   "cmd.description.worktree": "Cambia i worktree git",
   "cmd.description.task": "Crea un'attività pianificata",
   "cmd.description.tasklist": "Elenca le attività pianificate",
+  "cmd.description.toggle_permissions": "Attiva sempre autorizzazioni",
   "cmd.description.commands": "Comandi personalizzati",
   "cmd.description.skills": "Catalogo delle skill",
   "cmd.description.mcps": "Server MCP",
@@ -59,7 +60,7 @@ export const it: I18nDictionary = {
   "common.unknown_error": "errore sconosciuto",
 
   "start.welcome":
-    "👋 Benvenuto in OpenCode Telegram Bot!\n\nUsa i comandi:\n/projects — seleziona il progetto\n/sessions — elenco sessioni\n/new — nuova sessione\n/commands — comandi personalizzati\n/skills — catalogo delle skill\n/task — attività pianificata\n/tasklist — attività pianificate\n/status — stato\n/help — aiuto\n\nUsa i pulsanti in basso per selezionare agente, modello e variante.",
+    "👋 Benvenuto in OpenCode Telegram Bot!\n\nUsa /projects per selezionare un progetto, poi /new per creare una sessione o /sessions per sceglierne una esistente.\n\nPulsanti in basso: agente, modello, variante, contesto.",
   "help.keyboard_hint":
     "💡 Usa i pulsanti della tastiera in basso per le azioni di agente, modello, variante e contesto.",
   "help.text":
@@ -173,6 +174,7 @@ export const it: I18nDictionary = {
   "settings.pin_session_dashboard.label": "Pin session dashboard",
   "settings.tts.label": "Risposte audio",
   "settings.prompt_queue.label": "Coda messaggi",
+  "settings.global_real_time.label": "Sincronizzazione globale in tempo reale",
   "settings.value.on": "On",
   "settings.value.off": "Off",
   "settings.saved": "✅ Impostazione salvata.",
@@ -210,6 +212,10 @@ export const it: I18nDictionary = {
   "sessions.preview.title": "Messaggi recenti:",
   "sessions.preview.you": "Tu:",
   "sessions.preview.agent": "Agente:",
+  "sessions.history.title": "📜 Cronologia della sessione — {title}\nMostrati {shown} di {total} messaggi.",
+  "sessions.history.truncated": "\n⚠️ Messaggi precedenti omessi (HISTORY_RENDER_LIMIT).",
+  "sessions.cleanup_failed_partial": "⚠️ Impossibile eliminare alcuni messaggi precedenti del bot (più vecchi di 48 ore).",
+  "autofollow.switched": "🔄 Seguimento della sessione attiva in {project}...",
 
   "messages.project_not_selected":
     "🏗 Nessun progetto selezionato.\n\nSeleziona prima un progetto con /projects.",
@@ -294,6 +300,8 @@ export const it: I18nDictionary = {
     "✅ Server OpenCode avviato correttamente\n\nPID: {pid}\nVersione: {version}",
   "opencode_start.error":
     "🔴 Si è verificato un errore durante l'avvio del server.\n\nControlla i log dell'applicazione per i dettagli.",
+  "opencode_start.port_busy":
+    "🔴 La porta {port} è ancora occupata da un altro processo.\n\nNon è stato possibile fermarlo automaticamente. Ferma il processo manualmente e riprova con /opencode_start.",
   "opencode_stop.external_running":
     "⚠️ Il server OpenCode è in esecuzione come processo esterno\n\nQuesto server non è stato avviato tramite /opencode-start.\nFermalo manualmente o usa /status per controllarne lo stato.",
   "opencode_stop.remote_configured": "⚠️ /opencode_stop funziona solo con un server OpenCode locale.",
@@ -377,6 +385,7 @@ export const it: I18nDictionary = {
     "\n⚠️ {count} richieste identiche in sospeso: la tua risposta si applicherà a tutte.\n",
   "permission.button.allow": "✅ Consenti una volta",
   "permission.button.always": "🔓 Consenti sempre",
+  "permission.always_allowed": "Sempre consentito",
   "permission.button.reject": "❌ Rifiuta",
   "permission.name.bash": "Bash",
   "permission.name.edit": "Modifica",

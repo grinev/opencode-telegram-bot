@@ -19,6 +19,7 @@ export const ko: I18nDictionary = {
   "cmd.description.worktree": "git 워크트리 전환",
   "cmd.description.task": "예약 작업 만들기",
   "cmd.description.tasklist": "예약 작업 목록 보기",
+  "cmd.description.toggle_permissions": "항상 허용 권한 전환",
   "cmd.description.commands": "사용자 지정 명령어",
   "cmd.description.skills": "스킬 카탈로그",
   "cmd.description.mcps": "MCP 서버",
@@ -169,6 +170,7 @@ export const ko: I18nDictionary = {
   "settings.pin_session_dashboard.label": "Pin session dashboard",
   "settings.tts.label": "음성 답변",
   "settings.prompt_queue.label": "메시지 대기열",
+  "settings.global_real_time.label": "글로벌 실시간 동기화",
   "settings.value.on": "켜기",
   "settings.value.off": "끄기",
   "settings.saved": "✅ 설정이 저장되었습니다.",
@@ -206,6 +208,12 @@ export const ko: I18nDictionary = {
   "sessions.preview.title": "최근 메시지:",
   "sessions.preview.you": "나:",
   "sessions.preview.agent": "에이전트:",
+  "sessions.history.title":
+    "📜 세션 기록 — {title}\n총 {total}개 중 {shown}개 메시지를 표시합니다.",
+  "sessions.history.truncated": "\n⚠️ 이전 메시지는 생략되었습니다 (HISTORY_RENDER_LIMIT).",
+  "sessions.cleanup_failed_partial":
+    "⚠️ 일부 이전 봇 메시지를 삭제할 수 없습니다 (48시간 이상 경과).",
+  "autofollow.switched": "🔄 {project}에서 활성 세션을 추적하는 중...",
 
   "messages.project_not_selected":
     "🏗 프로젝트가 선택되지 않았습니다.\n\n먼저 /projects로 프로젝트를 선택해 주세요.",
@@ -289,6 +297,8 @@ export const ko: I18nDictionary = {
     "✅ OpenCode 서버가 성공적으로 시작되었습니다\n\nPID: {pid}\n버전: {version}",
   "opencode_start.error":
     "🔴 서버 시작 중 오류가 발생했습니다.\n\n자세한 내용은 애플리케이션 로그를 확인해 주세요.",
+  "opencode_start.port_busy":
+    "🔴 포트 {port}가 아직 다른 프로세스에 의해 사용 중입니다.\n\n자동으로 중지할 수 없습니다. 프로세스를 수동으로 중지한 후 /opencode_start를 다시 시도해 주세요.",
   "opencode_stop.external_running":
     "⚠️ OpenCode 서버가 외부 프로세스로 실행 중입니다\n\n이 서버는 /opencode-start로 시작된 것이 아닙니다.\n직접 중지하거나 /status로 상태를 확인해 주세요.",
   "opencode_stop.remote_configured": "⚠️ /opencode_stop은 로컬 OpenCode 서버에서만 동작합니다.",
@@ -371,6 +381,7 @@ export const ko: I18nDictionary = {
   "permission.grouped_count": "\n⚠️ 동일한 요청 {count}건이 대기 중입니다 — 답변은 모든 요청에 적용됩니다.\n",
   "permission.button.allow": "✅ 한 번 허용",
   "permission.button.always": "🔓 항상 허용",
+  "permission.always_allowed": "권한이 항상 허용되었습니다",
   "permission.button.reject": "❌ 거부",
   "permission.name.bash": "Bash",
   "permission.name.edit": "편집",

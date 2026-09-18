@@ -3,6 +3,7 @@ import { t } from "../../i18n/index.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { logger } from "../../utils/logger.js";
 import { extractErrorMessage } from "../../utils/opencode-error.js";
+import { isModelExplicitlySelected } from "./model-selection-service.js";
 import {
   cleanupScheduledTaskSessionIgnores,
   registerScheduledTaskSessionIgnore,
@@ -530,7 +531,11 @@ export async function executeScheduledTask(
       agent: task.agent,
     };
 
-    if (task.model.providerID && task.model.modelID) {
+    if (
+      task.model.providerID &&
+      task.model.modelID &&
+      (!config.bot.dynamicModel || isModelExplicitlySelected())
+    ) {
       promptOptions.model = {
         providerID: task.model.providerID,
         modelID: task.model.modelID,

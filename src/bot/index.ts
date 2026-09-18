@@ -1,6 +1,8 @@
 import { Bot, Context } from "grammy";
 import { config } from "../config.js";
 import { getCurrentProject } from "../app/stores/settings-store.js";
+import { getCurrentSession } from "../app/services/session-service.js";
+import { getFirstRunComplete, setFirstRunComplete } from "../app/stores/settings-store.js";
 import { attachManager } from "../app/managers/attach-manager.js";
 import { clearAllInteractionState } from "../app/managers/interaction-manager.js";
 import {
@@ -28,7 +30,9 @@ import {
   type BotEventSubscriptionService,
 } from "./services/event-subscription-service.js";
 import { createAttachPresentation } from "./services/attach-presentation.js";
+import { renderFullSessionHistory } from "./messages/history-rendering.js";
 import { createTelegramBotOptions } from "./telegram-client-options.js";
+import { getRuntimeMode } from "../runtime/mode.js";
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeReadyRestore: (() => void) | null = null;
@@ -106,6 +110,35 @@ export function createBot(localCommandRegistry = LocalCommandRegistry.empty()): 
 
     if (restored) {
       logger.info(`[Bot] Restored followed session after OpenCode ready: reason=${reason}`);
+
+      const restoredSession = getCurrentSession();
+      const restoredProject = getCurrentProject();
+      if (restoredSession && restoredProject) {
+        // Skip full history render in dev mode (sources) to avoid spam
+        const isDevMode = getRuntimeMode() === "sources";
+        const shouldRenderHistory = getFirstRunComplete() && !isDevMode;
+
+        if (shouldRenderHistory) {
+          await renderFullSessionHistory({
+            api: bot.api,
+            chatId: config.telegram.allowedUserId,
+            sessionId: restoredSession.id,
+            directory: restoredProject.worktree,
+            sessionTitle: restoredSession.title,
+          });
+        } else if (!getFirstRunComplete()) {
+          setFirstRunComplete();
+          logger.info("[Bot] First run detected - skipping full history render");
+        } else if (isDevMode) {
+          logger.info("[Bot] Dev mode - skipping full history render");
+        }
+
+        // Log current session and project info
+        logger.info(
+          `[Bot] Connected | Session: ${restoredSession.title} (${restoredSession.id.slice(0, 8)}) | Project: ${restoredProject.name || restoredProject.worktree}`,
+        );
+      }
+
       return;
     }
 

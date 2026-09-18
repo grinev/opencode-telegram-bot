@@ -49,6 +49,7 @@ const mocked = vi.hoisted(() => ({
   getPromptQueueEnabledMock: vi.fn(),
   setPromptQueueEnabledMock: vi.fn(),
   isTtsConfiguredMock: vi.fn(),
+  getGlobalRealTimeMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -70,6 +71,7 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
   setTtsMode: mocked.setTtsModeMock,
   getPromptQueueEnabled: mocked.getPromptQueueEnabledMock,
   setPromptQueueEnabled: mocked.setPromptQueueEnabledMock,
+  getGlobalRealTime: mocked.getGlobalRealTimeMock,
 }));
 
 vi.mock("../../../src/app/services/tts-service.js", () => ({
@@ -105,6 +107,8 @@ describe("bot/commands/settings-command", () => {
     mocked.getPromptQueueEnabledMock.mockReset();
     mocked.setPromptQueueEnabledMock.mockReset();
     mocked.isTtsConfiguredMock.mockReset();
+    mocked.getGlobalRealTimeMock.mockReset();
+    mocked.getGlobalRealTimeMock.mockReturnValue(false);
     mocked.getResponseStreamingModeMock.mockReturnValue("edit");
     mocked.getSendDiffFileAttachmentsMock.mockReturnValue(true);
     mocked.getShowAssistantRunFooterMock.mockReturnValue(true);
@@ -153,7 +157,10 @@ describe("bot/commands/settings-command", () => {
     expect(opts.reply_markup.inline_keyboard[6][0].text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.off")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[7][0].text).toBe(t("inline.button.close"));
+    expect(opts.reply_markup.inline_keyboard[7][0].text).toBe(
+      `${t("settings.global_real_time.label")}: ${t("settings.value.off")}`,
+    );
+    expect(opts.reply_markup.inline_keyboard[8][0].text).toBe(t("inline.button.close"));
   });
 
   it("shows thinking content setting when compact output is disabled", async () => {

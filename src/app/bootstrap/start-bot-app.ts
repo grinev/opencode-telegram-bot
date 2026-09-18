@@ -3,6 +3,7 @@ import { cleanupBotRuntime, createBot, restoreFollowedSessionOnPollingStart } fr
 import { createScheduledTaskDeliverySender } from "../../bot/messages/scheduled-task-delivery.js";
 import { config } from "../../config.js";
 import { opencodeAutoRestartService } from "../../opencode/auto-restart.js";
+import { stopManagedServers } from "../../opencode/process.js";
 import {
   notifyOpencodeReadyIfHealthy,
   registerOpenCodeReadyRefreshHandler,
@@ -235,6 +236,9 @@ export async function startBotApp(): Promise<void> {
     logger.info(`[App] Received ${signal}, shutting down...`);
     cleanupBotRuntime(`app_shutdown_${signal.toLowerCase()}`);
     opencodeAutoRestartService.stop();
+    void stopManagedServers().catch((error) => {
+      logger.warn("[App] Failed to stop managed OpenCode server(s)", error);
+    });
     scheduledTaskRuntime.shutdown();
 
     shutdownTimeout = setTimeout(() => {
@@ -319,6 +323,9 @@ export async function startBotApp(): Promise<void> {
     }
     cleanupBotRuntime("app_shutdown_complete");
     opencodeAutoRestartService.stop();
+    await stopManagedServers().catch((error) => {
+      logger.warn("[App] Failed to stop managed OpenCode server(s)", error);
+    });
     scheduledTaskRuntime.shutdown();
     await clearManagedServiceState().catch((error) => {
       logger.warn("[App] Failed to clear managed service state", error);

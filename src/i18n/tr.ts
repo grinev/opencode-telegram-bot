@@ -12,6 +12,7 @@ export const tr: I18nDictionary = {
   "cmd.description.worktree": "Git worktree değiştir",
   "cmd.description.task": "Zamanlanmış görev oluştur",
   "cmd.description.tasklist": "Zamanlanmış görevleri listele",
+  "cmd.description.toggle_permissions": "Her zaman izin ver ayarını değiştir",
   "cmd.description.commands": "Özel komutlar",
   "cmd.description.skills": "Yetenek kataloğu",
   "cmd.description.mcps": "MCP sunucuları",
@@ -163,6 +164,7 @@ export const tr: I18nDictionary = {
   "settings.pin_session_dashboard.label": "Oturum panosunu sabitle",
   "settings.tts.label": "Sesli yanıtlar",
   "settings.prompt_queue.label": "Mesaj kuyruğu",
+  "settings.global_real_time.label": "Genel gerçek zamanlı senkronizasyon",
   "settings.value.on": "Açık",
   "settings.value.off": "Kapalı",
   "settings.saved": "✅ Ayar kaydedildi.",
@@ -199,6 +201,12 @@ export const tr: I18nDictionary = {
   "sessions.preview.title": "Son mesajlar:",
   "sessions.preview.you": "Siz:",
   "sessions.preview.agent": "Ajan:",
+  "sessions.history.title":
+    "📜 Oturum geçmişi — {title}\nToplam {total} mesajdan {shown} tanesi gösteriliyor.",
+  "sessions.history.truncated": "\n⚠️ Daha eski mesajlar atlandı (HISTORY_RENDER_LIMIT).",
+  "sessions.cleanup_failed_partial":
+    "⚠️ Bazı önceki bot mesajları silinemedi (48 saatten eski).",
+  "autofollow.switched": "🔄 {project} içindeki etkin oturum takip ediliyor...",
 
   "messages.project_not_selected": "🏗 Proje seçilmedi.\n\nÖnce /projects ile bir proje seçin.",
   "messages.session_not_selected":
@@ -279,6 +287,8 @@ export const tr: I18nDictionary = {
     "✅ OpenCode Sunucusu başarıyla başlatıldı\n\nPID: {pid}\nSürüm: {version}",
   "opencode_start.error":
     "🔴 Sunucu başlatılırken bir hata oluştu.\n\nAyrıntılar için uygulama günlüklerini kontrol edin.",
+  "opencode_start.port_busy":
+    "🔴 {port} bağlantı noktası başka bir işlem tarafından hâlâ kullanılıyor.\n\nOtomatik olarak durdurulamadı. İşlemi elle durdurun ve /opencode_start komutunu yeniden deneyin.",
   "opencode_stop.external_running":
     "⚠️ OpenCode Sunucusu harici bir süreç olarak çalışıyor\n\nBu sunucu /opencode-start ile başlatılmadı.\nElle durdurun veya durumu kontrol etmek için /status kullanın.",
   "opencode_stop.remote_configured":
@@ -362,6 +372,7 @@ export const tr: I18nDictionary = {
   "permission.grouped_count": "\n⚠️ {count} özdeş istek bekliyor — yanıtınız hepsine uygulanır.\n",
   "permission.button.allow": "✅ Bir kez izin ver",
   "permission.button.always": "🔓 Her zaman izin ver",
+  "permission.always_allowed": "İzin her zaman verildi",
   "permission.button.reject": "❌ Reddet",
   "permission.name.bash": "Bash",
   "permission.name.edit": "Düzenleme",

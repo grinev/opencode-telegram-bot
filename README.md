@@ -530,6 +530,96 @@ Port 4096 is **not** exposed by the bot image; it belongs to the OpenCode server
 
 > **Note:** No file watcher or auto-restart is used. The bot maintains persistent SSE and long-polling connections — automatic restarts would break them mid-task. After making changes, restart manually with `npm run dev`.
 
+## Voice CLI Mode (Experimental)
+
+An alternative voice processing mode that runs entirely locally using the global `opencode` CLI:
+
+**Flow:**
+1. **Voice → Text**: Transcribe voice using a free Whisper-compatible API (e.g., [Groq](https://console.groq.com/keys) free tier)
+2. **Text → opencode CLI**: Execute `opencode run "<prompt>" --format json` via child_process
+3. **Text Response**: Send the text result back to Telegram
+4. **Text → Voice**: Convert response to speech using **Microsoft Edge TTS** (free, no API key required)
+
+**Configuration:**
+
+**Option A: API-based STT (Groq Whisper - free tier, requires internet)**
+```env
+# Enable Voice CLI mode
+VOICE_CLI_ENABLED=true
+VOICE_CLI_STT_MODE=api
+
+# Free STT (Groq example - get key at https://console.groq.com/keys)
+STT_API_URL=https://api.groq.com/openai/v1
+STT_API_KEY=your_groq_key
+STT_MODEL=whisper-large-v3-turbo
+
+# Free TTS (Edge TTS - no API key needed!)
+TTS_PROVIDER=edge
+TTS_VOICE=en-US-EmmaMultilingualNeural
+
+# Optional: opencode CLI settings
+VOICE_CLI_WORKDIR=        # Working directory (default: bot's working directory)
+VOICE_CLI_MODEL=          # Default model (optional)
+VOICE_CLI_AGENT=          # Default agent (optional)
+```
+
+**Option B: Fully Offline STT (Vosk - no API key, no internet!)**
+```env
+# Enable Voice CLI mode with Vosk
+VOICE_CLI_ENABLED=true
+VOICE_CLI_STT_MODE=vosk
+
+# Vosk model path (download from https://alphacephei.com/vosk/models)
+# English small (~50MB): vosk-model-small-en-us-0.15
+# Indonesian (~1.5GB): vosk-model-id-0.4
+VOSK_MODEL_PATH=./vosk-model
+
+# Free TTS (Edge TTS - no API key needed!)
+TTS_PROVIDER=edge
+TTS_VOICE=en-US-EmmaMultilingualNeural
+
+# Optional: opencode CLI settings
+VOICE_CLI_WORKDIR=        # Working directory (default: bot's working directory)
+VOICE_CLI_MODEL=          # Default model (optional)
+VOICE_CLI_AGENT=          # Default agent (optional)
+```
+
+**Option C: Local Whisper STT (Transformers.js - no API key, no internet, auto-detect language!)**
+```env
+# Enable Voice CLI mode with Local Whisper
+VOICE_CLI_ENABLED=true
+VOICE_CLI_STT_MODE=whisper
+
+# Whisper model (downloads once, then offline)
+# whisper-small (~250MB, fast): onnx-community/whisper-small
+# whisper-medium (~500MB, more accurate): onnx-community/whisper-medium
+WHISPER_MODEL=onnx-community/whisper-small
+
+# Free TTS (Edge TTS - no API key needed!)
+TTS_PROVIDER=edge
+TTS_VOICE=id-ID-ArdiNeural  # Indonesian male voice
+
+# Optional: opencode CLI settings
+VOICE_CLI_WORKDIR=        # Working directory (default: bot's working directory)
+VOICE_CLI_MODEL=          # Default model (optional)
+VOICE_CLI_AGENT=          # Default agent (optional)
+```
+
+> **Note:** Language is auto-detected (Indonesian/English). No `STT_LANGUAGE` needed.
+> TTS voice auto-switches: Indonesian → `id-ID-ArdiNeural`, English → `en-GB-RyanNeural`.
+
+**Requirements:**
+- Global `opencode` CLI installed (`npm install -g @opencode-ai/opencode`)
+- For API mode: Free Groq API key (or any Whisper-compatible endpoint)
+- For Vosk mode: Download a Vosk model (one-time, ~50MB-1.5GB)
+- Internet connection for Edge TTS WebSocket (TTS only; STT is offline in Vosk mode)
+
+**Advantages:**
+- No OpenCode server needed (runs CLI directly)
+- **Vosk mode**: Completely free STT + TTS, works 100% offline for STT
+- No API keys required with Vosk
+- Lower resource usage than running a persistent server
+
 ## Troubleshooting
 
 **Bot doesn't respond to messages**

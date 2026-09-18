@@ -439,6 +439,70 @@ export function stopEventListening(): void {
   logger.info("Event listener stopped");
 }
 
+// ---------------------------------------------------------------------------
+// Auto-follow raw stream: unfiltered global events from ALL projects/directories.
+// Used exclusively to detect "a session just went busy anywhere" so the bot can
+// follow it across projects. Independent lifecycle from subscribeToEvents.
+// ---------------------------------------------------------------------------
+
+let followAbortController: AbortController | null = null;
+let followCallback: EventCallback | null = null;
+
+export async function subscribeToAllSessionEvents(callback: EventCallback): Promise<void> {
+  followCallback = callback;
+  if (followAbortController) {
+    return; // already streaming; callback reference updated above
+  }
+
+  const controller = new AbortController();
+  followAbortController = controller;
+
+  while (followAbortController === controller && !controller.signal.aborted) {
+    try {
+      const client = opencodeClient as OptionalGlobalEventClient;
+      if (!client.global?.event) {
+        throw new Error(FATAL_NO_STREAM_ERROR);
+      }
+      const attempt = createAttemptAbortController(controller.signal);
+      const result = await client.global.event({ signal: attempt.controller.signal });
+      if (!result.stream) {
+        throw new Error(FATAL_NO_STREAM_ERROR);
+      }
+      logger.debug("[AllEvents] Global unfiltered stream connected");
+
+      for (;;) {
+        const read = await readStreamWithIdleTimeout(result.stream, attempt.controller.signal);
+        if (read.type !== "next") break;
+
+        const raw = read.result.value as unknown;
+        let payload: unknown = raw;
+        if (
+          isRecord(raw) &&
+          "payload" in raw &&
+          isEventLike((raw as { payload: unknown }).payload)
+        ) {
+          payload = (raw as { payload: unknown }).payload;
+        }
+        if (isEventLike(payload) && followCallback) {
+          followCallback(payload);
+        }
+      }
+    } catch (error) {
+      if (controller.signal.aborted || followAbortController !== controller) break;
+      logger.warn("[AllEvents] Stream error, reconnecting:", error);
+    }
+
+    if (followAbortController !== controller || controller.signal.aborted) break;
+    await waitWithAbort(RECONNECT_BASE_DELAY_MS, controller.signal);
+  }
+}
+
+export function stopAllSessionEvents(): void {
+  followAbortController?.abort();
+  followAbortController = null;
+  followCallback = null;
+}
+
 export function __setSseIdleTimeoutForTests(timeoutMs: number): void {
   sseIdleTimeoutMs = timeoutMs;
 }

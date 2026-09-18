@@ -2,10 +2,20 @@ import { exec, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import * as path from "node:path";
 import { promisify } from "node:util";
+import { config } from "../config.js";
+import { logger } from "../utils/logger.js";
 
 const execAsync = promisify(exec);
 const DEFAULT_OPENCODE_PORT = 4096;
 const PROCESS_EXIT_POLL_MS = 100;
+const SERVER_STOP_TIMEOUT_MS = 5000;
+
+/**
+ * PIDs of local OpenCode servers spawned by this bot instance via
+ * `startLocalOpencodeServer`. They are detached by design, so without this
+ * registry they would keep running and hold the port after the bot exits.
+ */
+const managedServerPids = new Set<number>();
 
 export interface LocalOpencodeTarget {
   host: string;
@@ -51,10 +61,12 @@ function resolveWindowsOpencodeExe(): string {
 
   // First pass: look for opencode.exe directly on PATH.
   // Covers non-npm installations (install script, scoop, choco, manual download, etc.).
+  let directExe = "";
   for (const entry of pathEntries) {
     const candidateExe = path.join(entry, "opencode.exe");
     if (existsSync(candidateExe)) {
-      return candidateExe;
+      directExe = candidateExe;
+      break;
     }
   }
 
@@ -75,7 +87,8 @@ function resolveWindowsOpencodeExe(): string {
     break;
   }
 
-  return "";
+  // Return direct exe if found, otherwise empty string
+  return directExe;
 }
 
 export function createOpencodeServeSpawnCommand(
@@ -113,11 +126,57 @@ export function createOpencodeServeSpawnCommand(
 export function startLocalOpencodeServer(target: LocalOpencodeTarget): ChildProcess {
   const spawnCommand = createOpencodeServeSpawnCommand(target);
 
-  return spawn(spawnCommand.command, spawnCommand.args, {
+  // Use configured server workdir, or fall back to current working directory
+  const serverWorkdir = config.opencode.serverWorkdir;
+
+  const childProcess = spawn(spawnCommand.command, spawnCommand.args, {
     detached: true,
     stdio: "ignore",
     windowsHide: spawnCommand.windowsHide,
+    cwd: serverWorkdir || process.cwd(),
   });
+
+  if (childProcess.pid) {
+    managedServerPids.add(childProcess.pid);
+  }
+
+  return childProcess;
+}
+
+/** Stop the local OpenCode servers this bot spawned so they do not outlive the bot and keep the port busy. */
+export async function stopManagedServers(timeoutMs: number = SERVER_STOP_TIMEOUT_MS): Promise<void> {
+  if (managedServerPids.size === 0) {
+    return;
+  }
+
+  logger.info(`[Process] Stopping ${managedServerPids.size} managed OpenCode server(s)`);
+
+  for (const pid of [...managedServerPids]) {
+    managedServerPids.delete(pid);
+    try {
+      const stopped = await killServerProcess(pid, timeoutMs);
+      if (stopped) {
+        logger.info(`[Process] Managed OpenCode server stopped: pid=${pid}`);
+      } else {
+        logger.warn(`[Process] Managed OpenCode server still running: pid=${pid}`);
+      }
+    } catch (error) {
+      logger.warn(`[Process] Failed to stop managed OpenCode server: pid=${pid}`, error);
+    }
+  }
+}
+
+/** Stop the process holding the port, if any, so a stale process cannot block `opencode serve`. */
+export async function freeLocalOpencodePort(target: LocalOpencodeTarget): Promise<boolean> {
+  const pid = await findServerPid(target.port);
+  if (pid === null) {
+    return true;
+  }
+
+  logger.warn(
+    `[Process] Port ${target.port} is held by PID ${pid}, stopping it before starting OpenCode server`,
+  );
+  return killServerProcess(pid);
 }
 
 function parsePid(value: string): number | null {
@@ -235,8 +294,11 @@ function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // EPERM means the process exists but belongs to another session/user
+    // (e.g. an elevated shell). Treat it as alive so the caller still tries
+    // to stop it instead of silently reporting success.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
