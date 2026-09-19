@@ -4,6 +4,7 @@ import { de } from "../../src/i18n/de.js";
 import { en, type I18nDictionary, type I18nKey } from "../../src/i18n/en.js";
 import { es } from "../../src/i18n/es.js";
 import { fr } from "../../src/i18n/fr.js";
+import { id } from "../../src/i18n/id.js";
 import { it as itLocale } from "../../src/i18n/it.js";
 import { ko } from "../../src/i18n/ko.js";
 import { pt } from "../../src/i18n/pt.js";
@@ -19,6 +20,7 @@ const LOCALES: Record<string, I18nDictionary> = {
   de,
   es,
   fr,
+  id,
   it: itLocale,
   ko,
   pt,
