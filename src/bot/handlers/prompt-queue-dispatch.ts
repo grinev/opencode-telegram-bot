@@ -60,7 +60,11 @@ export function canQueueMediaPrompt(ctx: Context): boolean {
   return Boolean(
     getPromptQueueEnabled() &&
       message &&
-      (message.voice || message.audio || message.photo?.length || message.document),
+      (message.voice ||
+        message.audio ||
+        message.photo?.length ||
+        message.document ||
+        message.video),
   );
 }
 

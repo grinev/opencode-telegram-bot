@@ -6,7 +6,13 @@ import {
   toDataUri,
   isTextMimeType,
   isFileSizeAllowed,
+  MAX_FILE_SIZE_BYTES,
 } from "../../app/services/file-download-service.js";
+import {
+  buildVideoSavedNote,
+  saveVideoForAgent,
+  videoExtensionFor,
+} from "../../app/services/video-save-service.js";
 import { isDocExtractorConfigured, extractDocument } from "../../app/services/document-extractor-service.js";
 import { getModelCapabilities, supportsInput } from "../../app/services/model-capabilities-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
@@ -20,11 +26,14 @@ import {
   tryEnqueuePromptIfBusy,
 } from "./prompt-queue-dispatch.js";
 
+const MAX_FILE_SIZE_MB = String(MAX_FILE_SIZE_BYTES / (1024 * 1024));
+
 export interface DocumentHandlerDeps extends ProcessPromptDeps {
   downloadFile?: (
     api: Context["api"],
     fileId: string,
   ) => Promise<{ buffer: Buffer; filePath: string }>;
+  saveVideo?: (buffer: Buffer, extension?: string) => Promise<string>;
   getModelCapabilities?: (
     providerId: string,
     modelId: string,
@@ -42,6 +51,7 @@ export async function handleDocumentMessage(
   deps: DocumentHandlerDeps,
 ): Promise<void> {
   const downloadFile = deps.downloadFile ?? downloadTelegramFile;
+  const saveVideo = deps.saveVideo ?? saveVideoForAgent;
   const getCapabilities = deps.getModelCapabilities ?? getModelCapabilities;
   const getStored = deps.getStoredModel ?? getStoredModel;
   const processPrompt = deps.processPrompt ?? processUserPrompt;
@@ -140,6 +150,34 @@ export async function handleDocumentMessage(
       );
 
       await submitPrompt(caption, [filePart], doc.file_size);
+      return;
+    }
+
+    if (mimeType.startsWith("video/")) {
+      if (doc.file_size && doc.file_size > MAX_FILE_SIZE_BYTES) {
+        logger.warn(
+          `[Document] Video too large: ${filename} (${doc.file_size} bytes > ${MAX_FILE_SIZE_BYTES})`,
+        );
+        await ctx.reply(t("bot.file_too_large", { maxSizeMb: MAX_FILE_SIZE_MB }));
+        return;
+      }
+
+      await ctx.reply(t("bot.file_downloading"));
+      if (await rejectQueuedMediaBeforePreparation(ctx, doc.file_size)) {
+        return;
+      }
+      const downloadedFile = await downloadFile(ctx.api, doc.file_id);
+      const savedPath = await saveVideo(
+        downloadedFile.buffer,
+        videoExtensionFor(mimeType, filename),
+      );
+      const note = buildVideoSavedNote(savedPath);
+
+      logger.info(
+        `[Document] Saved video (${downloadedFile.buffer.length} bytes, ${filename}) for agent inspection`,
+      );
+
+      await submitPrompt(caption ? `${caption}\n\n${note}` : note, [], doc.file_size);
       return;
     }
 

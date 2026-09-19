@@ -481,6 +481,10 @@ LOCAL_VISION_MODEL=lfm2.5-vl-3b
 
 Full setup guide (model download + llama.cpp server): see [docs/LOCAL_VISION.md](./docs/LOCAL_VISION.md).
 
+### Videos
+
+Videos sent as video messages or as `video/*` documents are downloaded and saved to the agent upload directory (`LOCAL_VISION_UPLOAD_DIR`, default `~/.opencode/uploads`). The saved path is appended to your caption, so the agent can process the original file locally — e.g. extract frames with `ffmpeg` while building a 3D model of a location. Downloads are limited to 20 MB per file (Telegram Bot API limit); send shorter clips or compressed videos for anything larger.
+
 ### Model Configuration
 
 The model picker uses OpenCode local model state (`favorite` + `recent`):

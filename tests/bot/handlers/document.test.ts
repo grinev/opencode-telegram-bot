@@ -62,6 +62,7 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
   deps: DocumentHandlerDeps;
   processPromptMock: ReturnType<typeof vi.fn>;
   downloadMock: ReturnType<typeof vi.fn>;
+  saveVideoMock: ReturnType<typeof vi.fn>;
   getCapabilitiesMock: ReturnType<typeof vi.fn>;
   getStoredModelMock: ReturnType<typeof vi.fn>;
 } {
@@ -70,6 +71,7 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
     buffer: Buffer.from("file content here"),
     filePath: "documents/test.txt",
   });
+  const saveVideoMock = vi.fn().mockResolvedValue("/tmp/uploads/video-1234567890.mp4");
   const getCapabilitiesMock = vi.fn().mockResolvedValue({
     input: { pdf: true, image: true },
   });
@@ -82,6 +84,7 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
     bot: {} as DocumentHandlerDeps["bot"],
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
     downloadFile: downloadMock,
+    saveVideo: saveVideoMock,
     getModelCapabilities: getCapabilitiesMock,
     getStoredModel: getStoredModelMock,
     processPrompt: (ctx, input, promptDeps) =>
@@ -91,7 +94,7 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
     ...overrides,
   };
 
-  return { deps, processPromptMock, downloadMock, getCapabilitiesMock, getStoredModelMock };
+  return { deps, processPromptMock, downloadMock, saveVideoMock, getCapabilitiesMock, getStoredModelMock };
 }
 
 describe("bot/handlers/document", () => {
@@ -434,6 +437,58 @@ describe("bot/handlers/document", () => {
 
       expect(downloadMock).not.toHaveBeenCalled();
       expect(processPromptMock).toHaveBeenCalledWith(ctx, "Describe this image", deps);
+    });
+  });
+
+  describe("video files", () => {
+    it("saves video documents for agent inspection and appends the on-disk path", async () => {
+      const { ctx, replyMock } = createDocumentContext({
+        document: {
+          file_id: "video-file-id",
+          file_unique_id: "video-unique-id",
+          file_name: "VID_20260918_194154.mp4",
+          mime_type: "video/mp4",
+          file_size: 5_000_000,
+        },
+        caption: "Vídeo de la tienda",
+      });
+      const { deps, processPromptMock, downloadMock, saveVideoMock } = createDocumentDeps();
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_downloading"));
+      expect(downloadMock).toHaveBeenCalledWith(ctx.api, "video-file-id");
+      expect(saveVideoMock).toHaveBeenCalledWith(expect.any(Buffer), "mp4");
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("Vídeo de la tienda"),
+        deps,
+      );
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("/tmp/uploads/video-1234567890.mp4"),
+        deps,
+      );
+    });
+
+    it("rejects videos over the Telegram download limit before downloading", async () => {
+      const { ctx, replyMock } = createDocumentContext({
+        document: {
+          file_id: "video-file-id",
+          file_unique_id: "video-unique-id",
+          file_name: "VID_huge.mp4",
+          mime_type: "video/mp4",
+          file_size: 21 * 1024 * 1024,
+        },
+      });
+      const { deps, processPromptMock, downloadMock, saveVideoMock } = createDocumentDeps();
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_too_large", { maxSizeMb: "20" }));
+      expect(downloadMock).not.toHaveBeenCalled();
+      expect(saveVideoMock).not.toHaveBeenCalled();
+      expect(processPromptMock).not.toHaveBeenCalled();
     });
   });
 

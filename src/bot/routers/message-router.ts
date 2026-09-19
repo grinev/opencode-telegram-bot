@@ -25,6 +25,7 @@ import { promptQueue } from "../../app/managers/prompt-queue-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { findQueuedPromptByButtonLabel } from "../keyboards/queued-prompt-button.js";
 import { handleDocumentMessage } from "../handlers/document-handler.js";
+import { handleVideoMessage } from "../handlers/video-handler.js";
 import { createMediaGroupAttachmentMiddleware } from "../handlers/media-group-handler.js";
 import { handlePhotoMessage } from "../handlers/photo-handler.js";
 import { queuePromptForMerging } from "../handlers/message-merger.js";
@@ -182,6 +183,12 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     logger.debug(`[Bot] Received document message, chatId=${ctx.chat.id}`);
     deps.setTelegramContext(bot, ctx.chat.id);
     await handleDocumentMessage(ctx, { bot, ensureEventSubscription: deps.ensureEventSubscription });
+  });
+
+  bot.on("message:video", async (ctx) => {
+    logger.debug(`[Bot] Received video message, chatId=${ctx.chat.id}`);
+    deps.setTelegramContext(bot, ctx.chat.id);
+    await handleVideoMessage(ctx, { bot, ensureEventSubscription: deps.ensureEventSubscription });
   });
 
   bot.on("message:text", async (ctx) => {
