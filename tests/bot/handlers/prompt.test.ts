@@ -7,7 +7,6 @@ import {
   type ProcessPromptDeps,
 } from "../../../src/bot/handlers/prompt.js";
 import { promptAttachment } from "../../../src/app/managers/prompt-attachment-manager.js";
-import { attachManager } from "../../../src/app/managers/attach-manager.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { t } from "../../../src/i18n/index.js";
 import { logger } from "../../../src/utils/logger.js";
@@ -108,45 +107,44 @@ function createContext(): Context {
 
 function createDeps(): ProcessPromptDeps {
   return {
-    ...createTestAppContainer({
-      pinnedMessageManager: {
-        isInitialized: vi.fn(() => true),
-        initialize: vi.fn(),
-        getState: vi.fn(() => ({ messageId: 1 })),
-        onSessionChange: vi.fn(),
-        clear: vi.fn(),
-        getContextInfo: vi.fn(() => null),
-      } as unknown as AppContainer["pinnedMessageManager"],
-      keyboardManager: {
-        initialize: vi.fn(),
-        clearContext: vi.fn(),
-        updateAgent: vi.fn(),
-      } as unknown as AppContainer["keyboardManager"],
-      summaryAggregator: {
-        setSession: mocked.setSessionSummaryMock,
-        setBotAndChatId: mocked.setBotAndChatIdMock,
-        clear: vi.fn(),
-      } as unknown as AppContainer["summaryAggregator"],
-      interactionManager: {
-        clear: mocked.interactionClearMock,
-        getSnapshot: vi.fn(() => null),
-      } as unknown as AppContainer["interactionManager"],
-      resetInteractions: vi.fn(),
-      resetAggregator: vi.fn(),
-      foregroundSessionState: {
-        markBusy: vi.fn(),
-        markIdle: vi.fn(),
-        clearAll: vi.fn(),
-      } as unknown as AppContainer["foregroundSessionState"],
-      assistantRunState: {
-        startRun: vi.fn(),
-        clearRun: vi.fn(),
-        clearAll: vi.fn(),
-      } as unknown as AppContainer["assistantRunState"],
-      externalUserInputSuppressionManager: {
-        register: mocked.suppressionRegisterMock,
-      } as unknown as AppContainer["externalUserInputSuppressionManager"],
-    }),
+    ...container,
+    pinnedMessageManager: {
+      isInitialized: vi.fn(() => true),
+      initialize: vi.fn(),
+      getState: vi.fn(() => ({ messageId: 1 })),
+      onSessionChange: vi.fn(),
+      clear: vi.fn(),
+      getContextInfo: vi.fn(() => null),
+    } as unknown as AppContainer["pinnedMessageManager"],
+    keyboardManager: {
+      initialize: vi.fn(),
+      clearContext: vi.fn(),
+      updateAgent: vi.fn(),
+    } as unknown as AppContainer["keyboardManager"],
+    summaryAggregator: {
+      setSession: mocked.setSessionSummaryMock,
+      setBotAndChatId: mocked.setBotAndChatIdMock,
+      clear: vi.fn(),
+    } as unknown as AppContainer["summaryAggregator"],
+    interactionManager: {
+      clear: mocked.interactionClearMock,
+      getSnapshot: vi.fn(() => null),
+    } as unknown as AppContainer["interactionManager"],
+    resetInteractions: vi.fn(),
+    resetAggregator: vi.fn(),
+    foregroundSessionState: {
+      markBusy: vi.fn(),
+      markIdle: vi.fn(),
+      clearAll: vi.fn(),
+    } as unknown as AppContainer["foregroundSessionState"],
+    assistantRunState: {
+      startRun: vi.fn(),
+      clearRun: vi.fn(),
+      clearAll: vi.fn(),
+    } as unknown as AppContainer["assistantRunState"],
+    externalUserInputSuppressionManager: {
+      register: mocked.suppressionRegisterMock,
+    } as unknown as AppContainer["externalUserInputSuppressionManager"],
     bot: { api: { sendMessage: vi.fn().mockResolvedValue(undefined) } } as unknown as Bot<Context>,
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
   };
@@ -180,10 +178,15 @@ function getScheduledBackgroundTask(): {
   return options;
 }
 
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
+
 describe("bot/handlers/prompt", () => {
   beforeEach(() => {
-    attachManager.__resetForTests();
-    attachManager.attach("session-1", "D:\\Projects\\Repo");
+    container.attachManager.attach("session-1", "D:\\Projects\\Repo");
     mocked.currentProject = { id: "project-1", worktree: "D:\\Projects\\Repo" };
     mocked.currentSession = {
       id: "session-1",
@@ -311,7 +314,7 @@ describe("bot/handlers/prompt", () => {
 
     expect(handled).toBe(true);
 
-    attachManager.clear("test_detach");
+    container.attachManager.clear("test_detach");
 
     const backgroundTask = getScheduledBackgroundTask();
     backgroundTask.onSuccess?.({ error: new Error("request start failed") });
@@ -330,7 +333,7 @@ describe("bot/handlers/prompt", () => {
 
     expect(handled).toBe(true);
 
-    attachManager.clear("test_detach");
+    container.attachManager.clear("test_detach");
 
     const backgroundTask = getScheduledBackgroundTask();
     const startError = new Error("network down");
@@ -353,7 +356,7 @@ describe("bot/handlers/prompt", () => {
 
     expect(handled).toBe(true);
 
-    attachManager.attach("session-2", "D:\\Projects\\Repo");
+    container.attachManager.attach("session-2", "D:\\Projects\\Repo");
 
     const backgroundTask = getScheduledBackgroundTask();
     backgroundTask.onSuccess?.({ error: new Error("request start failed") });
@@ -369,8 +372,8 @@ describe("bot/handlers/prompt", () => {
 
     expect(handled).toBe(true);
 
-    attachManager.clear("test_detach");
-    attachManager.attach("session-1", "D:\\Projects\\Repo");
+    container.attachManager.clear("test_detach");
+    container.attachManager.attach("session-1", "D:\\Projects\\Repo");
 
     const backgroundTask = getScheduledBackgroundTask();
     backgroundTask.onSuccess?.({ error: new Error("request start failed") });

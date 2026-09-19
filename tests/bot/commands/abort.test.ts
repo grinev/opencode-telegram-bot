@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
 import { abortCommand, abortCurrentOperation } from "../../../src/bot/commands/abort-command.js";
-import { clearAllInteractionState } from "../../../src/app/managers/interaction-manager.js";
-import { questionManager } from "../../../src/app/managers/question-manager.js";
-import { permissionManager } from "../../../src/app/managers/permission-manager.js";
-import { renameManager } from "../../../src/app/managers/rename-manager.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { promptAttachment } from "../../../src/app/managers/prompt-attachment-manager.js";
@@ -18,6 +12,7 @@ import {
   shouldSuppressUserAbortSessionError,
 } from "../../../src/app/managers/abort-suppression-manager.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentSession: null as { id: string; title: string; directory: string } | null,
@@ -68,20 +63,26 @@ const TEST_PERMISSION: PermissionRequest = {
 };
 
 function createDeps() {
-  return createTestAppContainer({
+  return {
+    ...container,
     assistantRunState: { clearRun: mocked.clearRunMock } as never,
-  });
+  };
 }
 
 function activateInteractionState(): void {
-  questionManager.startQuestions([TEST_QUESTION], "req-abort");
-  interactionManager.waitPermission(TEST_PERMISSION);
+  container.questionManager.startQuestions([TEST_QUESTION], "req-abort");
+  container.interactionManager.waitPermission(TEST_PERMISSION);
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot/commands/abort", () => {
   beforeEach(() => {
-    clearAllInteractionState("test_setup");
-    foregroundSessionState.__resetForTests();
+    container.interactionManager.reset("test_setup");
     mocked.currentSession = null;
     mocked.abortMock.mockReset();
     mocked.statusMock.mockReset();
@@ -93,11 +94,11 @@ describe("bot/commands/abort", () => {
   });
 
   function markSessionBusy(): void {
-    foregroundSessionState.markBusy("session-1", "D:/repo");
+    container.foregroundSessionState.markBusy("session-1", "D:/repo");
   }
 
   function expectAbortStateReleased(reason: string): void {
-    expect(foregroundSessionState.isBusy()).toBe(false);
+    expect(container.foregroundSessionState.isBusy()).toBe(false);
     expect(mocked.clearRunMock).toHaveBeenCalledWith("session-1", reason);
     expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1", expect.anything());
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
@@ -114,11 +115,11 @@ describe("bot/commands/abort", () => {
     await abortCommand(ctx as never, createDeps());
 
     expect(replyMock).toHaveBeenCalledWith(t("stop.no_active_session"));
-    expect(questionManager.isActive()).toBe(false);
-    expect(permissionManager.isActive()).toBe(false);
-    expect(renameManager.isWaitingForName()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
-    expect(interactionManager.getWaitingKind()).toBeNull();
+    expect(container.questionManager.isActive()).toBe(false);
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.renameManager.isWaitingForName()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getWaitingKind()).toBeNull();
     expect(mocked.abortMock).not.toHaveBeenCalled();
   });
 
@@ -157,10 +158,10 @@ describe("bot/commands/abort", () => {
     expect(mocked.abortMock).toHaveBeenCalled();
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.success"));
 
-    expect(questionManager.isActive()).toBe(false);
-    expect(permissionManager.isActive()).toBe(false);
-    expect(renameManager.isWaitingForName()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.questionManager.isActive()).toBe(false);
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.renameManager.isWaitingForName()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
     expectAbortStateReleased("abort_confirmed");
     expect(shouldSuppressUserAbortSessionError("session-1", "Aborted")).toBe(true);
   });
@@ -279,10 +280,10 @@ describe("bot/commands/abort", () => {
     expect(replyMock).not.toHaveBeenCalled();
     expect(editMessageTextMock).not.toHaveBeenCalled();
 
-    expect(questionManager.isActive()).toBe(false);
-    expect(permissionManager.isActive()).toBe(false);
-    expect(renameManager.isWaitingForName()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.questionManager.isActive()).toBe(false);
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.renameManager.isWaitingForName()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
     expectAbortStateReleased("abort_confirmed");
   });
 

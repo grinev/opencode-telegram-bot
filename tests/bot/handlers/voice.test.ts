@@ -175,9 +175,6 @@ describe("bot/handlers/voice-handler", () => {
   it("transcribes and queues a voice message while the agent is busy", async () => {
     mocked.getPromptQueueEnabledMock.mockReturnValue(true);
     const { handleVoiceMessage } = await loadVoiceModule();
-    const { foregroundSessionState } = await import(
-      "../../../src/app/managers/foreground-session-state-manager.js"
-    );
     const { promptQueue } = await import("../../../src/app/managers/prompt-queue-manager.js");
     const { initializePromptQueueDispatch } = await import(
       "../../../src/bot/handlers/prompt-queue-dispatch.js"
@@ -186,12 +183,12 @@ describe("bot/handlers/voice-handler", () => {
     const { createTestAppContainer: createFreshTestAppContainer } = await import(
       "../../helpers/app-container.js"
     );
-    foregroundSessionState.__resetForTests();
+    const container = createFreshTestAppContainer();
     promptQueue.__resetForTests();
-    foregroundSessionState.markBusy("session-1", "/repo");
+    container.foregroundSessionState.markBusy("session-1", "/repo");
     const { ctx } = createVoiceContext();
     const { deps: baseDeps, processPromptMock, transcribeMock } = createVoiceDeps();
-    const deps = { ...baseDeps, ...createFreshTestAppContainer() };
+    const deps = { ...baseDeps, ...container };
     initializePromptQueueDispatch(deps);
 
     await handleVoiceMessage(ctx, deps);

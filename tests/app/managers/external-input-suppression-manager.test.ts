@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { externalUserInputSuppressionManager } from "../../../src/app/managers/external-input-suppression-manager.js";
+import { ExternalUserInputSuppressionManager } from "../../../src/app/managers/external-input-suppression-manager.js";
+
+let externalUserInputSuppressionManager: ExternalUserInputSuppressionManager;
+
+beforeEach(() => {
+  externalUserInputSuppressionManager = new ExternalUserInputSuppressionManager();
+});
 
 describe("external-input/suppression", () => {
-  beforeEach(() => {
-    externalUserInputSuppressionManager.__resetForTests();
-  });
-
   it("consumes a matching suppressed input for the same session", () => {
     externalUserInputSuppressionManager.register("session-1", "Review README");
 

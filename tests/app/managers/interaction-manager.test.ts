@@ -1,21 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_ALLOWED_INTERACTION_COMMANDS,
-  clearAllInteractionState,
-  interactionManager,
+  InteractionManager,
 } from "../../../src/app/managers/interaction-manager.js";
-import { permissionManager } from "../../../src/app/managers/permission-manager.js";
-import { questionManager } from "../../../src/app/managers/question-manager.js";
-import { renameManager } from "../../../src/app/managers/rename-manager.js";
-import { taskCreationManager } from "../../../src/app/managers/scheduled-task-creation-manager.js";
+import { PermissionManager } from "../../../src/app/managers/permission-manager.js";
+import { QuestionManager } from "../../../src/app/managers/question-manager.js";
+import { RenameManager } from "../../../src/app/managers/rename-manager.js";
+import { TaskCreationManager } from "../../../src/app/managers/scheduled-task-creation-manager.js";
 import type { PermissionRequest } from "../../../src/app/types/permission.js";
+import { logger } from "../../../src/utils/logger.js";
 import type { Question } from "../../../src/app/types/question.js";
 
-describe("interactionManager", () => {
-  beforeEach(() => {
-    interactionManager.__resetForTests();
-  });
+let interactionManager: InteractionManager;
+let permissionManager: PermissionManager;
+let questionManager: QuestionManager;
+let renameManager: RenameManager;
+let taskCreationManager: TaskCreationManager;
 
+beforeEach(() => {
+  interactionManager = new InteractionManager();
+  permissionManager = new PermissionManager(interactionManager);
+  questionManager = new QuestionManager(interactionManager);
+  renameManager = new RenameManager(interactionManager);
+  taskCreationManager = new TaskCreationManager(interactionManager);
+});
+
+describe("interactionManager", () => {
   it("starts interaction with defaults", () => {
     const state = interactionManager.start({
       kind: "custom",
@@ -91,6 +101,23 @@ describe("interactionManager", () => {
     expect(interactionManager.isActive()).toBe(false);
     expect(interactionManager.get()).toBeNull();
   });
+
+  it("logs a full reset at info only when something was open", () => {
+    const infoSpy = vi.spyOn(logger, "info");
+    const debugSpy = vi.spyOn(logger, "debug");
+    const resetLines = (spy: typeof infoSpy) =>
+      spy.mock.calls.filter(([line]) => String(line).startsWith("[InteractionCleanup] Cleared state"));
+
+    interactionManager.reset("test_idle");
+    expect(resetLines(infoSpy)).toHaveLength(0);
+    expect(resetLines(debugSpy)).toHaveLength(1);
+
+    interactionManager.start({ kind: "custom", expectedInput: "mixed" });
+    interactionManager.reset("test_open");
+    expect(resetLines(infoSpy)).toEqual([
+      ["[InteractionCleanup] Cleared state: reason=test_open, interactionKind=custom, waiting=none"],
+    ]);
+  });
 });
 
 describe("interactionManager waiting request", () => {
@@ -116,10 +143,6 @@ describe("interactionManager waiting request", () => {
   async function nextTick(): Promise<void> {
     await new Promise((resolve) => setImmediate(resolve));
   }
-
-  beforeEach(() => {
-    interactionManager.__resetForTests();
-  });
 
   it("releases the waiting request to the listener when the agent request is cleared", async () => {
     const listener = vi.fn();
@@ -222,11 +245,6 @@ describe("stateful managers on the shared slot", () => {
     always: [],
   };
 
-  beforeEach(() => {
-    interactionManager.__resetForTests();
-    permissionManager.__resetForTests();
-  });
-
   it("refuses to start a poll while permissions are on screen", () => {
     permissionManager.startPermission(PERMISSION, 101);
 
@@ -282,7 +300,7 @@ describe("stateful managers on the shared slot", () => {
     permissionManager.resolveRequest("perm-1");
     expect(permissionManager.isResolved("perm-1")).toBe(true);
 
-    clearAllInteractionState("test_reset");
+    interactionManager.reset("test_reset");
 
     expect(permissionManager.isResolved("perm-1")).toBe(false);
   });

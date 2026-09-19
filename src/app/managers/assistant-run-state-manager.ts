@@ -22,7 +22,7 @@ export interface AssistantRunInfo extends AssistantRunStartInfo {
   hasCompletedResponse: boolean;
 }
 
-class AssistantRunState {
+export class AssistantRunState {
   private readonly runs = new Map<string, AssistantRunInfo>();
 
   startRun(sessionId: string, info: AssistantRunStartInfo): void {
@@ -93,11 +93,4 @@ class AssistantRunState {
     logger.debug(`[AssistantRunState] Cleared all runs: count=${this.runs.size}, reason=${reason}`);
     this.runs.clear();
   }
-
-  __resetForTests(): void {
-    resetAllStreamThrottles();
-    this.runs.clear();
-  }
 }
-
-export const assistantRunState = new AssistantRunState();

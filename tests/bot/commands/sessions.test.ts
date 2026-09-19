@@ -6,13 +6,12 @@ import {
 } from "../../../src/bot/callbacks/session-callback-handler.js";
 import { sessionsCommand } from "../../../src/bot/commands/sessions-command.js";
 import { buildBackgroundSessionOpenKeyboard } from "../../../src/bot/menus/session-selection-menu.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { safeBackgroundTask } from "../../../src/utils/safe-background-task.js";
 import { startInteractionForTest } from "../../helpers/interaction.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -171,18 +170,17 @@ function createCallbackContext(data: string, messageId: number): Context {
 
 function createDeps() {
   return {
-    ...createTestAppContainer({
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
-      resetInteractions: mocked.clearInteractionMock,
-      keyboardManager: {
-        initialize: mocked.keyboardInitializeMock,
-        getKeyboard: mocked.keyboardGetKeyboardMock,
-        getContextInfo: mocked.keyboardGetContextInfoMock,
-        updateAgent: mocked.keyboardUpdateAgentMock,
-        updateModel: mocked.keyboardUpdateModelMock,
-        updateContext: mocked.keyboardUpdateContextMock,
-      } as never,
-    }),
+    ...container,
+    ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    resetInteractions: mocked.clearInteractionMock,
+    keyboardManager: {
+      initialize: mocked.keyboardInitializeMock,
+      getKeyboard: mocked.keyboardGetKeyboardMock,
+      getContextInfo: mocked.keyboardGetContextInfoMock,
+      updateAgent: mocked.keyboardUpdateAgentMock,
+      updateModel: mocked.keyboardUpdateModelMock,
+      updateContext: mocked.keyboardUpdateContextMock,
+    } as never,
     bot: { api: {} } as Bot<Context>,
   };
 }
@@ -195,10 +193,15 @@ function getKeyboardButtons(ctx: Context): Array<Array<{ text: string; callback_
   return options.reply_markup.inline_keyboard;
 }
 
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
+
 describe("bot/commands/sessions", () => {
   beforeEach(() => {
-    interactionManager.clear("test_setup");
-    foregroundSessionState.__resetForTests();
+    container.interactionManager.clear("test_setup");
     mocked.currentProject = {
       id: "project-1",
       worktree: "/repo",
@@ -252,7 +255,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("blocks sessions command while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCommandContext();
     await sessionsCommand(ctx as never, createDeps());
@@ -265,7 +268,7 @@ describe("bot/commands/sessions", () => {
     const pageTwoData = Array.from({ length: 12 }, (_, index) => createSession(index));
     mocked.sessionListMock.mockResolvedValueOnce({ data: pageTwoData, error: null });
 
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -301,7 +304,7 @@ describe("bot/commands/sessions", () => {
   it("returns page-empty callback message when requested page has no sessions", async () => {
     mocked.sessionListMock.mockResolvedValueOnce({ data: [], error: null });
 
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -326,7 +329,7 @@ describe("bot/commands/sessions", () => {
       error: new Error("session list failed"),
     });
 
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -353,7 +356,7 @@ describe("bot/commands/sessions", () => {
       error: new Error("session get failed"),
     });
 
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -378,7 +381,7 @@ describe("bot/commands/sessions", () => {
     });
     mocked.resolveProjectAgentMock.mockResolvedValueOnce("plan");
 
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -423,7 +426,7 @@ describe("bot/commands/sessions", () => {
     const session = createSession(0);
     mocked.sessionGetMock.mockResolvedValueOnce({ data: session, error: null });
 
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -443,7 +446,7 @@ describe("bot/commands/sessions", () => {
   it("puts the pulled model on the keyboard sent with the selection message", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
 
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -478,9 +481,9 @@ describe("bot/commands/sessions", () => {
   });
 
   it("blocks session selection callback while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -620,7 +623,7 @@ describe("bot/commands/sessions", () => {
       data: createSession(0),
       error: null,
     });
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -669,7 +672,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("blocks background session open while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("background-session:session-2", 456);
     const handled = await handleBackgroundSessionOpen(ctx, createDeps());
@@ -684,7 +687,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("blocks background session open during non-inline interactions", async () => {
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "question",
       expectedInput: "callback",
     });

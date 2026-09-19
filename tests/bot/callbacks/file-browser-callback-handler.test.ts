@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { promptAttachment } from "../../../src/app/managers/prompt-attachment-manager.js";
 import { handleLsCallback } from "../../../src/bot/callbacks/file-browser-callback-handler.js";
 import { LS_CALLBACK_ATTACH_PREFIX } from "../../../src/bot/menus/file-browser-menu.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const PROJECT_ROOT = "D:\\Repo";
 const FILE_PATH = "D:\\Repo\\src\\index.ts";
@@ -54,13 +54,19 @@ function createContext(data: string): Context {
 }
 
 function createDeps() {
-  return createTestAppContainer();
+  return container;
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
   beforeEach(() => {
     promptAttachment.__resetForTests();
-    interactionManager.clear("test_reset");
+    container.interactionManager.clear("test_reset");
     mocked.isForegroundBusyMock.mockReturnValue(false);
     mocked.ensureActiveInlineMenuMock.mockResolvedValue(true);
     mocked.clearActiveInlineMenuMock.mockReset();
@@ -90,7 +96,7 @@ describe("bot/callbacks/file-browser-callback-handler - attach branch", () => {
   it("enters the waiting-for-prompt mode", async () => {
     await handleLsCallback(createContext(`${LS_CALLBACK_ATTACH_PREFIX}${FILE_PATH}`), createDeps());
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state).toMatchObject({
       kind: "custom",
       expectedInput: "mixed",

@@ -11,13 +11,11 @@ import {
   formatCommandsSelectText,
   parseCommandPageCallback,
 } from "../../../src/bot/menus/command-catalog-menu.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
-import { attachManager } from "../../../src/app/managers/attach-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { logger } from "../../../src/utils/logger.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -156,17 +154,16 @@ function createTextContext(text: string): Context {
 
 function createDeps(): ExecuteCommandDeps {
   return {
-    ...createTestAppContainer({
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
-      summaryAggregator: {
-        setSession: mocked.setSessionSummaryMock,
-        setBotAndChatId: mocked.setBotAndChatIdMock,
-        clear: mocked.clearSummaryMock,
-      } as never,
-      externalUserInputSuppressionManager: {
-        register: mocked.suppressionRegisterMock,
-      } as never,
-    }),
+    ...container,
+    ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    summaryAggregator: {
+      setSession: mocked.setSessionSummaryMock,
+      setBotAndChatId: mocked.setBotAndChatIdMock,
+      clear: mocked.clearSummaryMock,
+    } as never,
+    externalUserInputSuppressionManager: {
+      register: mocked.suppressionRegisterMock,
+    } as never,
     bot: {} as Bot<Context>,
   };
 }
@@ -189,12 +186,16 @@ function getScheduledBackgroundTask(): {
   return options;
 }
 
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
+
 describe("bot/commands/commands", () => {
   beforeEach(() => {
-    interactionManager.clear("test_setup");
-    foregroundSessionState.__resetForTests();
-    attachManager.__resetForTests();
-    attachManager.attach("session-1", "D:\\Projects\\Repo");
+    container.interactionManager.clear("test_setup");
+    container.attachManager.attach("session-1", "D:\\Projects\\Repo");
 
     mocked.currentProject = {
       id: "project-1",
@@ -261,7 +262,7 @@ describe("bot/commands/commands", () => {
     expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("commands:select:1");
     expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("commands:cancel");
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");
     expect(state?.expectedInput).toBe("callback");
     expect(state?.metadata.flow).toBe("commands");
@@ -270,7 +271,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("transitions to confirmation step after selecting command", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -295,7 +296,7 @@ describe("bot/commands/commands", () => {
       expect.objectContaining({ reply_markup: expect.any(Object) }),
     );
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");
     expect(state?.expectedInput).toBe("mixed");
     expect(state?.metadata.stage).toBe("confirm");
@@ -303,7 +304,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("executes selected command from callback", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "mixed",
       metadata: {
@@ -321,7 +322,7 @@ describe("bot/commands/commands", () => {
     await backgroundTask.task();
 
     expect(handled).toBe(true);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
     expect(ctx.deleteMessage).toHaveBeenCalledTimes(1);
     expect(ctx.reply).toHaveBeenCalledWith(`${t("commands.executing_prefix")}\n/poem`, {
       entities: [{ type: "code", offset: t("commands.executing_prefix").length + 1, length: 5 }],
@@ -351,7 +352,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("executes selected command with arguments from text message", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "mixed",
       metadata: {
@@ -369,7 +370,7 @@ describe("bot/commands/commands", () => {
     await backgroundTask.task();
 
     expect(handled).toBe(true);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
     expect(ctx.api.deleteMessage).toHaveBeenCalledWith(777, 500);
     expect(ctx.reply).toHaveBeenCalledWith(
       `${t("commands.executing_prefix")}\n/poem about spring`,
@@ -393,7 +394,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("notifies the user when session.command reports an error while attached", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "mixed",
       metadata: {
@@ -415,7 +416,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("notifies the user when session.command rejects while attached", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "mixed",
       metadata: {
@@ -442,7 +443,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("does not notify the user when session.command reports an error after detach", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "mixed",
       metadata: {
@@ -458,7 +459,7 @@ describe("bot/commands/commands", () => {
     const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
     const handled = await handleCommandsCallback(ctx, createDeps());
 
-    attachManager.clear("test_detach");
+    container.attachManager.clear("test_detach");
 
     const backgroundTask = getScheduledBackgroundTask();
     backgroundTask.onSuccess?.({ error: new Error("command failed") });
@@ -470,7 +471,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("does not notify the user when session.command rejects after detach", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "mixed",
       metadata: {
@@ -486,7 +487,7 @@ describe("bot/commands/commands", () => {
     const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
     const handled = await handleCommandsCallback(ctx, createDeps());
 
-    attachManager.clear("test_detach");
+    container.attachManager.clear("test_detach");
 
     const backgroundTask = getScheduledBackgroundTask();
     const startError = new Error("network down");
@@ -503,7 +504,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("does not notify the user when session.command fails while attached to another session", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "mixed",
       metadata: {
@@ -518,7 +519,7 @@ describe("bot/commands/commands", () => {
     const ctx = createCallbackContext("commands:execute", 400);
     const handled = await handleCommandsCallback(ctx, createDeps());
 
-    attachManager.attach("session-2", "D:\\Projects\\Repo");
+    container.attachManager.attach("session-2", "D:\\Projects\\Repo");
 
     const backgroundTask = getScheduledBackgroundTask();
     backgroundTask.onSuccess?.({ error: new Error("command failed") });
@@ -528,7 +529,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("still notifies the user when session.command fails after re-attach to the same session", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "mixed",
       metadata: {
@@ -543,8 +544,8 @@ describe("bot/commands/commands", () => {
     const ctx = createCallbackContext("commands:execute", 400);
     const handled = await handleCommandsCallback(ctx, createDeps());
 
-    attachManager.clear("test_detach");
-    attachManager.attach("session-1", "D:\\Projects\\Repo");
+    container.attachManager.clear("test_detach");
+    container.attachManager.attach("session-1", "D:\\Projects\\Repo");
 
     const backgroundTask = getScheduledBackgroundTask();
     backgroundTask.onSuccess?.({ error: new Error("command failed") });
@@ -554,7 +555,7 @@ describe("bot/commands/commands", () => {
   });
 
   it("handles stale callback as inactive", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -574,7 +575,7 @@ describe("bot/commands/commands", () => {
       text: t("commands.inactive_callback"),
       show_alert: true,
     });
-    expect(interactionManager.getSnapshot()?.kind).toBe("custom");
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("custom");
   });
 
   it("shows next-page button when commands exceed page size", async () => {
@@ -634,7 +635,7 @@ describe("bot/commands/commands", () => {
     expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("commands:select:1");
     expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("commands:cancel");
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");
     expect(state?.metadata.flow).toBe("commands");
     expect(state?.metadata.stage).toBe("list");
@@ -650,7 +651,7 @@ describe("bot/commands/commands", () => {
       description: `Command ${i + 1} description`,
     }));
 
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -693,7 +694,7 @@ describe("bot/commands/commands", () => {
       description: `Command ${i + 1} description`,
     }));
 
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -722,7 +723,7 @@ describe("bot/commands/commands", () => {
       description: `Command ${i + 1} description`,
     }));
 
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -744,7 +745,7 @@ describe("bot/commands/commands", () => {
       expect.objectContaining({ reply_markup: expect.any(Object) }),
     );
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");
     expect(state?.metadata.stage).toBe("confirm");
     expect(state?.metadata.commandName).toBe("cmd13");

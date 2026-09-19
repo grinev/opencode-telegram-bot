@@ -1,10 +1,12 @@
 import type { Question, QuestionState, QuestionAnswer } from "../types/question.js";
-import { interactionManager } from "./interaction-manager.js";
+import type { InteractionManager } from "./interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 
-class QuestionManager {
+export class QuestionManager {
+  constructor(private readonly interactionManager: InteractionManager) {}
+
   private get state(): QuestionState | null {
-    return interactionManager.getPayload("question");
+    return this.interactionManager.getPayload("question");
   }
 
   /**
@@ -12,7 +14,7 @@ class QuestionManager {
    * permission prompts hold the slot: the poll has to wait for them.
    */
   startQuestions(questions: Question[], requestID: string): boolean {
-    const current = interactionManager.getSnapshot();
+    const current = this.interactionManager.getSnapshot();
     logger.debug(
       `[QuestionManager] startQuestions called: slot=${current?.kind ?? "none"}, newQuestions=${questions.length}, requestID=${requestID}`,
     );
@@ -31,7 +33,7 @@ class QuestionManager {
     logger.info(
       `[QuestionManager] Starting new poll with ${questions.length} questions, requestID=${requestID}`,
     );
-    interactionManager.start({
+    this.interactionManager.start({
       kind: "question",
       expectedInput: "callback",
       payload: {
@@ -203,11 +205,11 @@ class QuestionManager {
 
   cancel(): void {
     logger.info("[QuestionManager] Poll cancelled");
-    interactionManager.clearKind("question", "question_cancelled");
+    this.interactionManager.clearKind("question", "question_cancelled");
   }
 
   clear(): void {
-    interactionManager.clearKind("question", "question_cleared");
+    this.interactionManager.clearKind("question", "question_cleared");
   }
 
   getAllAnswers(): QuestionAnswer[] {
@@ -238,5 +240,3 @@ class QuestionManager {
     return answers;
   }
 }
-
-export const questionManager = new QuestionManager();

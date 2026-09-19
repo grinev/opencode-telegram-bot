@@ -21,24 +21,25 @@ vi.mock("../../../src/utils/logger.js", () => ({
   },
 }));
 
-import { attachManager } from "../../../src/app/managers/attach-manager.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { reconcileForegroundBusyState } from "../../../src/app/services/run-control-service.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
-const deps = createTestAppContainer();
+let deps: AppContainer;
+
+beforeEach(() => {
+  deps = createTestAppContainer();
+});
 
 describe("app/services/run-control-service", () => {
   beforeEach(() => {
-    foregroundSessionState.__resetForTests();
-    attachManager.__resetForTests();
     mocked.reconcileBusyStateNowMock.mockReset();
     mocked.reconcileBusyStateNowMock.mockResolvedValue(undefined);
     mocked.loggerWarnMock.mockReset();
   });
 
   it("uses non-throttled reconciliation for foreground busy directories", async () => {
-    foregroundSessionState.markBusy("session-1", "D:/repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:/repo");
 
     await reconcileForegroundBusyState(deps);
 
@@ -47,8 +48,8 @@ describe("app/services/run-control-service", () => {
   });
 
   it("continues checking other directories when one on-demand reconciliation fails", async () => {
-    foregroundSessionState.markBusy("session-1", "D:/repo-a");
-    foregroundSessionState.markBusy("session-2", "D:/repo-b");
+    deps.foregroundSessionState.markBusy("session-1", "D:/repo-a");
+    deps.foregroundSessionState.markBusy("session-2", "D:/repo-b");
     const error = new Error("status failed");
     mocked.reconcileBusyStateNowMock.mockRejectedValueOnce(error).mockResolvedValueOnce(undefined);
 

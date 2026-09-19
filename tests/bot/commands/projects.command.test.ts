@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
 import { projectsCommand } from "../../../src/bot/commands/projects-command.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: null as { id: string; worktree: string; name?: string } | null,
@@ -64,9 +64,14 @@ function createContext(): Context {
   } as unknown as Context;
 }
 
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
+
 describe("bot/commands/projects command", () => {
   beforeEach(() => {
-    foregroundSessionState.__resetForTests();
     mocked.currentProject = null;
     mocked.syncSessionDirectoryCacheMock.mockReset();
     mocked.getProjectsMock.mockReset();
@@ -75,10 +80,10 @@ describe("bot/commands/projects command", () => {
   });
 
   it("blocks projects command while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createContext();
-    await projectsCommand(ctx as never, createTestAppContainer());
+    await projectsCommand(ctx as never, container);
 
     expect(mocked.syncSessionDirectoryCacheMock).not.toHaveBeenCalled();
     expect(mocked.getProjectsMock).not.toHaveBeenCalled();
@@ -105,7 +110,7 @@ describe("bot/commands/projects command", () => {
     });
 
     const ctx = createContext();
-    await projectsCommand(ctx as never, createTestAppContainer());
+    await projectsCommand(ctx as never, container);
 
     const keyboard = mocked.replyWithInlineMenuMock.mock.calls[0]?.[1]?.keyboard as {
       inline_keyboard: Array<Array<{ text: string }>>;

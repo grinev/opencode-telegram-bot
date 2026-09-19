@@ -57,9 +57,9 @@ vi.mock("../../../src/bot/handlers/prompt.js", () => ({
 import { opencodeStopCommand } from "../../../src/bot/commands/opencode-stop-command.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { startInteractionForTest } from "../../helpers/interaction.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 function createContext(): Context {
   return {
@@ -70,7 +70,8 @@ function createContext(): Context {
 }
 
 function createDeps() {
-  return createTestAppContainer({
+  return {
+    ...container,
     resetRuntimeStreams: mocked.clearRuntimeStateMock,
     foregroundSessionState: {
       getBusySessions: mocked.getBusySessionsMock,
@@ -78,8 +79,14 @@ function createDeps() {
     } as never,
     attachManager: { getSnapshot: mocked.attachGetSnapshotMock } as never,
     opencodeReadyLifecycle: { notifyUnavailable: mocked.notifyUnavailableMock } as never,
-  });
+  };
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot/commands/opencode-stop-command", () => {
   beforeEach(() => {
@@ -97,7 +104,7 @@ describe("bot/commands/opencode-stop-command", () => {
     mocked.clearPromptResponseModeMock.mockReset();
     mocked.notifyUnavailableMock.mockReset();
     promptQueue.__resetForTests();
-    interactionManager.clear("test_setup");
+    container.interactionManager.clear("test_setup");
 
     mocked.config.opencode.apiUrl = "http://localhost:4096";
     mocked.resolveLocalOpencodeTargetMock.mockReturnValue({ host: "localhost", port: 4096 });
@@ -158,7 +165,7 @@ describe("bot/commands/opencode-stop-command", () => {
     expect(mocked.clearRuntimeStateMock).toHaveBeenCalledWith("opencode_stop");
     expect(mocked.clearAllForegroundMock).toHaveBeenCalledWith("opencode_stop");
     expect(promptQueue.size()).toBe(0);
-    expect(interactionManager.isActive()).toBe(false);
+    expect(container.interactionManager.isActive()).toBe(false);
     expect(mocked.notifyUnavailableMock).toHaveBeenCalledWith("opencode_stop");
     expect(mocked.editBotTextMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ text: t("opencode_stop.success") }),
@@ -179,7 +186,7 @@ describe("bot/commands/opencode-stop-command", () => {
       busy: true,
     });
     promptQueue.add(createIncomingPrompt("queued after hang"));
-    startInteractionForTest({
+    startInteractionForTest(container.interactionManager, {
       kind: "question",
       expectedInput: "mixed",
     });
@@ -187,7 +194,7 @@ describe("bot/commands/opencode-stop-command", () => {
     await opencodeStopCommand(ctx as never, createDeps());
 
     expect(promptQueue.size()).toBe(0);
-    expect(interactionManager.isActive()).toBe(false);
+    expect(container.interactionManager.isActive()).toBe(false);
 
     expect(mocked.markAttachedSessionIdleMock).toHaveBeenCalledWith("session-1", expect.anything());
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");

@@ -11,9 +11,8 @@ import { t } from "../../i18n/index.js";
 
 /**
  * Keyboard Manager - manages Reply Keyboard state and updates
- * Singleton pattern
  */
-class KeyboardManager {
+export class KeyboardManager {
   private state: KeyboardState | null = null;
 
   private api: Api | null = null;
@@ -201,6 +200,3 @@ class KeyboardManager {
     return this.state !== null;
   }
 }
-
-// Export singleton instance
-export const keyboardManager = new KeyboardManager();

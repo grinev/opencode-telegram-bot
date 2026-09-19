@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { promptAttachment } from "../../../src/app/managers/prompt-attachment-manager.js";
 import {
   ATTACHMENT_CANCEL_CALLBACK,
   handlePromptAttachmentCancel,
 } from "../../../src/bot/callbacks/prompt-attachment-callback-handler.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 vi.mock("../../../src/utils/logger.js", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -21,13 +21,19 @@ function createContext(data: string): Context {
 }
 
 function createDeps() {
-  return createTestAppContainer();
+  return container;
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot/callbacks/prompt-attachment-callback-handler", () => {
   beforeEach(() => {
     promptAttachment.__resetForTests();
-    interactionManager.clear("test_reset");
+    container.interactionManager.clear("test_reset");
   });
 
   it("ignores callbacks that belong to other handlers", async () => {
@@ -39,7 +45,7 @@ describe("bot/callbacks/prompt-attachment-callback-handler", () => {
 
   it("clears the attachment and the waiting mode", async () => {
     promptAttachment.set("/repo/src/index.ts", "/repo");
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "mixed",
       metadata: { flow: "attachment" },
@@ -49,7 +55,7 @@ describe("bot/callbacks/prompt-attachment-callback-handler", () => {
 
     expect(await handlePromptAttachmentCancel(ctx, createDeps())).toBe(true);
     expect(promptAttachment.get()).toBeNull();
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("drops the keyboard so the button cannot be pressed twice", async () => {

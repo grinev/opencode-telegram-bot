@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context, InlineKeyboard } from "grammy";
 import type { PermissionRequest } from "../../../src/app/types/permission.js";
-import { permissionManager } from "../../../src/app/managers/permission-manager.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { showPermissionRequest } from "../../../src/bot/menus/permission-menu.js";
 import { handlePermissionCallback } from "../../../src/bot/callbacks/permission-callback-handler.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   permissionReplyMock: vi.fn(),
@@ -116,13 +115,19 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 function createDeps() {
-  return createTestAppContainer();
+  return container;
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot permission menu/callbacks", () => {
   beforeEach(() => {
-    permissionManager.clear();
-    interactionManager.clear("test_setup");
+    container.permissionManager.clear();
+    container.interactionManager.clear("test_setup");
 
     mocked.permissionReplyMock.mockReset();
     mocked.permissionReplyMock.mockResolvedValue({ error: null });
@@ -153,12 +158,12 @@ describe("bot permission menu/callbacks", () => {
     expect(replyMarkup.inline_keyboard[2]?.[0]?.text).toBe(t("permission.button.reject"));
     expect(getCallbackData(replyMarkup.inline_keyboard[2]?.[0])).toBe("permission:reject");
 
-    expect(permissionManager.isActive()).toBe(true);
-    expect(permissionManager.getRequestID(500)).toBe("perm-1");
-    expect(permissionManager.getMessageId()).toBe(500);
-    expect(permissionManager.getPendingCount()).toBe(1);
+    expect(container.permissionManager.isActive()).toBe(true);
+    expect(container.permissionManager.getRequestID(500)).toBe("perm-1");
+    expect(container.permissionManager.getMessageId()).toBe(500);
+    expect(container.permissionManager.getPendingCount()).toBe(1);
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("permission");
     expect(state?.expectedInput).toBe("callback");
     expect(state?.metadata.requestID).toBe("perm-1");
@@ -183,13 +188,13 @@ describe("bot permission menu/callbacks", () => {
     const deleteMessageMock = botApi.deleteMessage as unknown as ReturnType<typeof vi.fn>;
     expect(deleteMessageMock).not.toHaveBeenCalled();
 
-    expect(permissionManager.getRequestID(500)).toBe("perm-1");
-    expect(permissionManager.getRequestID(501)).toBe("perm-2");
-    expect(permissionManager.getMessageId()).toBe(501);
-    expect(permissionManager.getMessageIds()).toEqual([500, 501]);
-    expect(permissionManager.getPendingCount()).toBe(2);
+    expect(container.permissionManager.getRequestID(500)).toBe("perm-1");
+    expect(container.permissionManager.getRequestID(501)).toBe("perm-2");
+    expect(container.permissionManager.getMessageId()).toBe(501);
+    expect(container.permissionManager.getMessageIds()).toEqual([500, 501]);
+    expect(container.permissionManager.getPendingCount()).toBe(2);
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("permission");
     expect(state?.metadata.requestID).toBe("perm-2");
     expect(state?.metadata.messageId).toBe(501);
@@ -198,7 +203,7 @@ describe("bot permission menu/callbacks", () => {
 
   it("does not show a permission request that was already resolved", async () => {
     const botApi = createBotApi(502);
-    permissionManager.resolveRequest("perm-resolved");
+    container.permissionManager.resolveRequest("perm-resolved");
 
     await showPermissionRequest(
       botApi,
@@ -208,14 +213,14 @@ describe("bot permission menu/callbacks", () => {
     );
 
     expect(botApi.sendMessage).not.toHaveBeenCalled();
-    expect(permissionManager.isActive()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("does not send a permission message from a cleared lifecycle", async () => {
     const botApi = createBotApi(503);
-    const generation = permissionManager.getGeneration();
-    permissionManager.clear();
+    const generation = container.permissionManager.getGeneration();
+    container.permissionManager.clear();
 
     await showPermissionRequest(
       botApi,
@@ -226,7 +231,7 @@ describe("bot permission menu/callbacks", () => {
     );
 
     expect(botApi.sendMessage).not.toHaveBeenCalled();
-    expect(permissionManager.isActive()).toBe(false);
+    expect(container.permissionManager.isActive()).toBe(false);
   });
 
   it("discards an in-flight permission message after state is cleared", async () => {
@@ -248,14 +253,14 @@ describe("bot permission menu/callbacks", () => {
     await vi.waitFor(() => {
       expect(botApi.sendMessage).toHaveBeenCalledTimes(1);
     });
-    permissionManager.clear();
+    container.permissionManager.clear();
     resolveSend({ message_id: 503 });
 
     await showTask;
 
     expect(botApi.deleteMessage).toHaveBeenCalledWith(777, 503);
-    expect(permissionManager.isActive()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("rejects callback from unknown permission message", async () => {
@@ -282,9 +287,9 @@ describe("bot permission menu/callbacks", () => {
     });
     expect(mocked.permissionReplyMock).not.toHaveBeenCalled();
 
-    expect(permissionManager.isActive()).toBe(true);
-    expect(permissionManager.getPendingCount()).toBe(2);
-    expect(permissionManager.getRequestID(501)).toBe("perm-2");
+    expect(container.permissionManager.isActive()).toBe(true);
+    expect(container.permissionManager.getPendingCount()).toBe(2);
+    expect(container.permissionManager.getRequestID(501)).toBe("perm-2");
   });
 
   it("handles valid permission reply and clears active states", async () => {
@@ -306,8 +311,8 @@ describe("bot permission menu/callbacks", () => {
       reply: "always",
     });
 
-    expect(permissionManager.isActive()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("deduplicates equivalent permission requests behind one Telegram message", async () => {
@@ -323,9 +328,9 @@ describe("bot permission menu/callbacks", () => {
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     expect(sendMessageMock).toHaveBeenCalledTimes(1);
-    expect(permissionManager.getPendingCount()).toBe(1);
-    expect(permissionManager.getRequestID(650)).toBe("perm-1");
-    expect(permissionManager.getRequestIDs(650)).toEqual(["perm-1", "perm-duplicate"]);
+    expect(container.permissionManager.getPendingCount()).toBe(1);
+    expect(container.permissionManager.getRequestID(650)).toBe("perm-1");
+    expect(container.permissionManager.getRequestIDs(650)).toEqual(["perm-1", "perm-duplicate"]);
 
     const ctx = createPermissionCallbackContext("permission:always", 650);
     const handled = await handlePermissionCallback(ctx, createDeps());
@@ -346,8 +351,8 @@ describe("bot permission menu/callbacks", () => {
       directory: "D:/repo",
       reply: "always",
     });
-    expect(permissionManager.isActive()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("shows the grouped request count on the visible permission message", async () => {
@@ -375,17 +380,17 @@ describe("bot permission menu/callbacks", () => {
     const botApi = createBotApi(652);
 
     await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), createDeps());
-    const generation = permissionManager.getGeneration();
+    const generation = container.permissionManager.getGeneration();
 
-    permissionManager.resolveRequest("perm-resolved");
+    container.permissionManager.resolveRequest("perm-resolved");
     expect(
-      permissionManager.addEquivalentRequest(createPermissionRequest("perm-resolved")),
+      container.permissionManager.addEquivalentRequest(createPermissionRequest("perm-resolved")),
     ).toBeNull();
     expect(
-      permissionManager.addEquivalentRequest(createPermissionRequest("perm-stale"), generation - 1),
+      container.permissionManager.addEquivalentRequest(createPermissionRequest("perm-stale"), generation - 1),
     ).toBeNull();
 
-    expect(permissionManager.getRequestIDs(652)).toEqual(["perm-1"]);
+    expect(container.permissionManager.getRequestIDs(652)).toEqual(["perm-1"]);
   });
 
   it("does not group behind a message whose request was replaced", async () => {
@@ -399,7 +404,7 @@ describe("bot permission menu/callbacks", () => {
     );
     // Same Telegram message id, different scope: the replaced request's
     // signature must no longer group new requests behind it.
-    permissionManager.startPermission(createPermissionRequest("perm-2", { patterns: ["ls"] }), 653);
+    container.permissionManager.startPermission(createPermissionRequest("perm-2", { patterns: ["ls"] }), 653);
 
     await showPermissionRequest(botApi, 777, createPermissionRequest("perm-3"), createDeps());
 
@@ -419,9 +424,9 @@ describe("bot permission menu/callbacks", () => {
       createDeps(),
     );
 
-    expect(permissionManager.resolveRequest("perm-duplicate")).toEqual([655]);
-    expect(permissionManager.isActive()).toBe(false);
-    expect(permissionManager.getRequestIDs(655)).toEqual([]);
+    expect(container.permissionManager.resolveRequest("perm-duplicate")).toEqual([655]);
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.permissionManager.getRequestIDs(655)).toEqual([]);
   });
 
   it("ignores duplicate permission not-found errors after replying grouped requests", async () => {
@@ -480,11 +485,11 @@ describe("bot permission menu/callbacks", () => {
       reply: "once",
     });
 
-    expect(permissionManager.isActive()).toBe(true);
-    expect(permissionManager.getPendingCount()).toBe(1);
-    expect(permissionManager.getRequestID(701)).toBe("perm-2");
+    expect(container.permissionManager.isActive()).toBe(true);
+    expect(container.permissionManager.getPendingCount()).toBe(1);
+    expect(container.permissionManager.getRequestID(701)).toBe("perm-2");
 
-    const stateAfterFirstReply = interactionManager.getSnapshot();
+    const stateAfterFirstReply = container.interactionManager.getSnapshot();
     expect(stateAfterFirstReply?.kind).toBe("permission");
     expect(stateAfterFirstReply?.expectedInput).toBe("callback");
     expect(stateAfterFirstReply?.metadata.pendingCount).toBe(1);
@@ -505,8 +510,8 @@ describe("bot permission menu/callbacks", () => {
       reply: "reject",
     });
 
-    expect(permissionManager.isActive()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("does not report an error when the permission request was already resolved", async () => {
@@ -524,8 +529,8 @@ describe("bot permission menu/callbacks", () => {
     await flushMicrotasks();
 
     expect(ctx.api.sendMessage).not.toHaveBeenCalled();
-    expect(permissionManager.isActive()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("keeps reporting non-stale permission reply errors", async () => {
@@ -552,8 +557,8 @@ describe("bot permission menu/callbacks", () => {
       showPermissionRequest(botApi, 777, createPermissionRequest("perm-fail"), createDeps()),
     ).rejects.toThrow("send failed");
 
-    expect(permissionManager.isActive()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.permissionManager.isActive()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("sends permission text in raw mode for underscore-based permission names", async () => {

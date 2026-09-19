@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context, NextFunction } from "grammy";
 import { interactionGuardMiddleware } from "../../../src/bot/middleware/interaction-guard.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import {
   MAX_QUEUED_MEDIA_BYTES,
@@ -16,8 +14,9 @@ import { startInteractionForTest } from "../../helpers/interaction.js";
 import type { Bot } from "grammy";
 import { initializePromptQueueDispatch } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
-const deps = createTestAppContainer();
+let deps: AppContainer;
 
 const mocked = vi.hoisted(() => ({
   reconcileForegroundBusyStateMock: vi.fn(),
@@ -66,11 +65,14 @@ function createVoiceContext(): Context {
   } as unknown as Context;
 }
 
+beforeEach(() => {
+  deps = createTestAppContainer();
+});
+
 describe("interactionGuardMiddleware", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    interactionManager.clear("test_setup");
-    foregroundSessionState.__resetForTests();
+    deps.interactionManager.clear("test_setup");
     mocked.reconcileForegroundBusyStateMock.mockReset();
     mocked.reconcileForegroundBusyStateMock.mockResolvedValue(undefined);
     mocked.getPromptQueueEnabled.mockReset().mockReturnValue(false);
@@ -89,7 +91,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks text and replies when callback is expected", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
     });
@@ -104,7 +106,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks callback and answers callback query when text is expected", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "rename",
       expectedInput: "text",
     });
@@ -122,7 +124,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows command from allowed list", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -138,7 +140,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("always allows /start even when command list is restricted", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -154,7 +156,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks disallowed command", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "inline",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -170,7 +172,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows permission-specific message for blocked text", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "permission",
       expectedInput: "callback",
     });
@@ -185,7 +187,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows permission-specific message for disallowed command", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "permission",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -201,7 +203,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows rename-specific message for disallowed command", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "rename",
       expectedInput: "text",
       allowedCommands: ["/status"],
@@ -217,7 +219,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks voice input while rename interaction expects text", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "rename",
       expectedInput: "text",
     });
@@ -232,7 +234,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows question-specific message for blocked text", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "question",
       expectedInput: "callback",
     });
@@ -247,7 +249,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows question-specific message for disallowed command", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "question",
       expectedInput: "callback",
       allowedCommands: ["/status"],
@@ -263,7 +265,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows task cancel callback while text is expected", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "task",
       expectedInput: "text",
     });
@@ -278,7 +280,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("shows task-specific message for disallowed command", async () => {
-    startInteractionForTest({
+    startInteractionForTest(deps.interactionManager, {
       kind: "task",
       expectedInput: "text",
       allowedCommands: ["/status"],
@@ -294,7 +296,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks disallowed command while busy with generic blocked message", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("/new");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -306,7 +308,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks plain text while busy and suggests the queue when it is disabled", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -321,7 +323,7 @@ describe("interactionGuardMiddleware", () => {
 
   it("passes queued media to its handler while busy", async () => {
     vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     const ctx = {
       chat: { id: 1 },
       message: { photo: [{ file_id: "photo-file-id" }] },
@@ -337,8 +339,8 @@ describe("interactionGuardMiddleware", () => {
 
   it("does not pass media through a blocking interaction to the queue", async () => {
     vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
-    startInteractionForTest({ kind: "permission", expectedInput: "callback" });
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    startInteractionForTest(deps.interactionManager, { kind: "permission", expectedInput: "callback" });
     const ctx = createVoiceContext();
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
 
@@ -349,7 +351,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("does not suggest the queue for a reply keyboard button pressed while busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("🧠 openrouter\nopenai/gpt-4o");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -361,9 +363,9 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("passes through after on-demand reconciliation clears stale busy state", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     mocked.reconcileForegroundBusyStateMock.mockImplementationOnce(async () => {
-      foregroundSessionState.markIdle("session-1");
+      deps.foregroundSessionState.markIdle("session-1");
     });
 
     const ctx = createTextContext("hello");
@@ -378,7 +380,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("keeps blocking after on-demand reconciliation leaves state busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createTextContext("hello");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -391,7 +393,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("blocks callback while busy without active question or permission", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("project:123");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -405,7 +407,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows abort, detach, status, help, and opencode_stop while busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     for (const command of ["/abort", "/detach", "/status", "/help", "/opencode_stop"]) {
       const ctx = createTextContext(command);
@@ -419,8 +421,8 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows active question callback while busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
-    startInteractionForTest({
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    startInteractionForTest(deps.interactionManager, {
       kind: "question",
       expectedInput: "mixed",
     });
@@ -435,8 +437,8 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("allows active permission callback while busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
-    startInteractionForTest({
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    startInteractionForTest(deps.interactionManager, {
       kind: "permission",
       expectedInput: "callback",
     });
@@ -452,7 +454,7 @@ describe("interactionGuardMiddleware", () => {
 
   it("queues a photo-only rich prompt while busy without downloading", async () => {
     mocked.getPromptQueueEnabled.mockReturnValue(true);
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     const ctx = createTextContext("");
     setIncomingPrompt(
       ctx,
@@ -480,7 +482,7 @@ describe("interactionGuardMiddleware", () => {
 
   it("rejects a rich photo prompt with an unknown media size while busy", async () => {
     mocked.getPromptQueueEnabled.mockReturnValue(true);
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     const ctx = createTextContext("");
     setIncomingPrompt(
       ctx,
@@ -502,7 +504,7 @@ describe("interactionGuardMiddleware", () => {
 
   it("rejects a rich photo aggregate above the media limit while busy", async () => {
     mocked.getPromptQueueEnabled.mockReturnValue(true);
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     const ctx = createTextContext("");
     setIncomingPrompt(
       ctx,
@@ -532,7 +534,7 @@ describe("interactionGuardMiddleware", () => {
 
   it("rejects a rich prompt when the queue is full", async () => {
     mocked.getPromptQueueEnabled.mockReturnValue(true);
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     for (let index = 0; index < MAX_QUEUED_PROMPTS; index++) {
       promptQueue.add(createIncomingPrompt(`queued ${index}`));
     }

@@ -3,7 +3,7 @@ import type {
   PermissionRequest,
   PermissionState,
 } from "../types/permission.js";
-import { interactionManager } from "./interaction-manager.js";
+import type { InteractionManager } from "./interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 
 /**
@@ -20,19 +20,21 @@ function createEmptyState(): PermissionState {
   };
 }
 
-class PermissionManager {
+export class PermissionManager {
   private resolvedRequestIDs = new Set<string>();
   private resolvedGeneration = 0;
 
+  constructor(private readonly interactionManager: InteractionManager) {}
+
   private get state(): PermissionState | null {
-    return interactionManager.getPayload("permission");
+    return this.interactionManager.getPayload("permission");
   }
 
   /**
    * Resolved ids only matter within one generation; a reset forgets them.
    */
   private getResolvedRequestIDs(): Set<string> {
-    const generation = interactionManager.getGeneration();
+    const generation = this.interactionManager.getGeneration();
     if (generation !== this.resolvedGeneration) {
       this.resolvedRequestIDs.clear();
       this.resolvedGeneration = generation;
@@ -83,7 +85,7 @@ class PermissionManager {
       return dropReason;
     }
 
-    if (interactionManager.getSnapshot()?.kind === "question") {
+    if (this.interactionManager.getSnapshot()?.kind === "question") {
       logger.info(
         `[PermissionManager] Poll is on screen, not registering permission: id=${request.id}`,
       );
@@ -93,7 +95,7 @@ class PermissionManager {
     let state = this.state;
     if (!state) {
       state = createEmptyState();
-      interactionManager.start({
+      this.interactionManager.start({
         kind: "permission",
         expectedInput: "callback",
         payload: state,
@@ -262,7 +264,7 @@ class PermissionManager {
    */
   resolveRequest(requestID: string): number[] {
     this.getResolvedRequestIDs().add(requestID);
-    interactionManager.dropWaitingPermission(requestID);
+    this.interactionManager.dropWaitingPermission(requestID);
 
     const state = this.state;
     const removedMessageIds: number[] = [];
@@ -296,7 +298,7 @@ class PermissionManager {
   }
 
   getGeneration(): number {
-    return interactionManager.getGeneration();
+    return this.interactionManager.getGeneration();
   }
 
   /**
@@ -322,14 +324,7 @@ class PermissionManager {
     );
 
     // Bump first, so a poll released by this clear carries the new generation.
-    interactionManager.bumpGeneration();
-    interactionManager.clearKind("permission", "permission_cleared");
-  }
-
-  __resetForTests(): void {
-    this.resolvedRequestIDs.clear();
-    this.resolvedGeneration = 0;
+    this.interactionManager.bumpGeneration();
+    this.interactionManager.clearKind("permission", "permission_cleared");
   }
 }
-
-export const permissionManager = new PermissionManager();

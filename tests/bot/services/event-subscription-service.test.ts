@@ -8,6 +8,7 @@ import { setRuntimeMode } from "../../../src/runtime/mode.js";
 import { resetSingletonState } from "../../helpers/reset-singleton-state.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   subscribeToEvents: vi.fn(),
@@ -410,6 +411,7 @@ function emitQuestionAsked(
 describe("bot/services/event-subscription-service", () => {
   let tempHome: string;
   let activeService: { cleanup(reason: string): void } | null = null;
+  let activeContainer: AppContainer;
 
   beforeEach(async () => {
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-telegram-token");
@@ -459,16 +461,12 @@ describe("bot/services/event-subscription-service", () => {
   }> {
     const [
       { createEventSubscriptionService },
-      { summaryAggregator },
       sessionService,
       settingsStore,
-      { assistantRunState },
     ] = await Promise.all([
         import("../../../src/bot/services/event-subscription-service.js"),
-        import("../../../src/app/managers/summary-aggregation-manager.js"),
         import("../../../src/app/services/session-service.js"),
         import("../../../src/app/stores/settings-store.js"),
-        import("../../../src/app/managers/assistant-run-state-manager.js"),
       ]);
 
     sessionService.setCurrentSession({
@@ -483,7 +481,9 @@ describe("bot/services/event-subscription-service", () => {
     settingsStore.setShowAssistantRunFooter(options.showAssistantRunFooter ?? true);
 
     const { bot, api } = createFakeBot();
-    const service = createEventSubscriptionService(createTestAppContainer());
+    activeContainer = createTestAppContainer();
+    const { summaryAggregator, assistantRunState } = activeContainer;
+    const service = createEventSubscriptionService(activeContainer);
     activeService = service;
     service.clearRuntimeState("test_setup");
     if (options.startAssistantRun) {
@@ -1169,10 +1169,7 @@ describe("bot/services/event-subscription-service", () => {
 
   it("clears permission prompts when OpenCode resolves pending requests", async () => {
     const { api, summaryAggregator } = await setupService(true);
-    const [{ permissionManager }, { interactionManager }] = await Promise.all([
-      import("../../../src/app/managers/permission-manager.js"),
-      import("../../../src/app/managers/interaction-manager.js"),
-    ]);
+    const { permissionManager, interactionManager } = activeContainer;
     api.sendMessage
       .mockResolvedValueOnce({ message_id: 500 })
       .mockResolvedValueOnce({ message_id: 501 });
@@ -1204,10 +1201,7 @@ describe("bot/services/event-subscription-service", () => {
 
   it("discards a permission prompt resolved while its Telegram message is being sent", async () => {
     const { api, summaryAggregator } = await setupService(true);
-    const [{ permissionManager }, { interactionManager }] = await Promise.all([
-      import("../../../src/app/managers/permission-manager.js"),
-      import("../../../src/app/managers/interaction-manager.js"),
-    ]);
+    const { permissionManager, interactionManager } = activeContainer;
     let resolveSend: (message: { message_id: number }) => void = () => {};
     const pendingSend = new Promise<{ message_id: number }>((resolve) => {
       resolveSend = resolve;
@@ -1233,17 +1227,9 @@ describe("bot/services/event-subscription-service", () => {
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 
-  async function loadInteractionModules() {
-    const [
-      { permissionManager },
-      { questionManager },
-      { interactionManager, clearAllInteractionState },
-    ] = await Promise.all([
-      import("../../../src/app/managers/permission-manager.js"),
-      import("../../../src/app/managers/question-manager.js"),
-      import("../../../src/app/managers/interaction-manager.js"),
-    ]);
-    return { permissionManager, questionManager, interactionManager, clearAllInteractionState };
+  function getInteractionManagers() {
+    const { permissionManager, questionManager, interactionManager } = activeContainer;
+    return { permissionManager, questionManager, interactionManager };
   }
 
   async function settle(): Promise<void> {
@@ -1253,7 +1239,7 @@ describe("bot/services/event-subscription-service", () => {
   async function showPollWithWaitingPermission(summaryAggregator: {
     processEvent(event: Event): void;
   }): Promise<void> {
-    const { questionManager, interactionManager } = await loadInteractionModules();
+    const { questionManager, interactionManager } = getInteractionManagers();
 
     emitQuestionAsked(summaryAggregator, "question-1");
     await vi.waitFor(() => {
@@ -1267,8 +1253,7 @@ describe("bot/services/event-subscription-service", () => {
 
   it("leaves a poll waiting while permissions are on screen and shows it after the last one", async () => {
     const { api, summaryAggregator } = await setupService(true);
-    const { permissionManager, questionManager, interactionManager } =
-      await loadInteractionModules();
+    const { permissionManager, questionManager, interactionManager } = getInteractionManagers();
     api.sendMessage.mockResolvedValueOnce({ message_id: 510 });
 
     emitPermissionAsked(summaryAggregator, "permission-1");
@@ -1294,8 +1279,7 @@ describe("bot/services/event-subscription-service", () => {
 
   it("leaves permissions waiting while a poll is on screen and shows them after cancel", async () => {
     const { api, summaryAggregator } = await setupService(true);
-    const { permissionManager, questionManager, interactionManager } =
-      await loadInteractionModules();
+    const { permissionManager, questionManager, interactionManager } = getInteractionManagers();
     let nextMessageId = 600;
     api.sendMessage.mockImplementation(async () => ({ message_id: nextMessageId++ }));
 
@@ -1316,8 +1300,7 @@ describe("bot/services/event-subscription-service", () => {
 
   it("never shows a waiting permission answered elsewhere", async () => {
     const { api, summaryAggregator } = await setupService(true);
-    const { permissionManager, questionManager, interactionManager } =
-      await loadInteractionModules();
+    const { permissionManager, questionManager, interactionManager } = getInteractionManagers();
 
     await showPollWithWaitingPermission(summaryAggregator);
 
@@ -1338,8 +1321,7 @@ describe("bot/services/event-subscription-service", () => {
 
   it("replaces the poll on screen without releasing the waiting permission", async () => {
     const { summaryAggregator } = await setupService(true);
-    const { permissionManager, questionManager, interactionManager } =
-      await loadInteractionModules();
+    const { permissionManager, questionManager, interactionManager } = getInteractionManagers();
 
     await showPollWithWaitingPermission(summaryAggregator);
 
@@ -1355,7 +1337,7 @@ describe("bot/services/event-subscription-service", () => {
 
   it("shows the waiting permission when the question tool fails", async () => {
     const { summaryAggregator } = await setupService(true);
-    const { permissionManager, questionManager } = await loadInteractionModules();
+    const { permissionManager, questionManager } = getInteractionManagers();
 
     await showPollWithWaitingPermission(summaryAggregator);
 
@@ -1370,7 +1352,7 @@ describe("bot/services/event-subscription-service", () => {
 
   it("drops a waiting poll when the question tool fails behind permissions", async () => {
     const { summaryAggregator } = await setupService(true);
-    const { permissionManager, interactionManager } = await loadInteractionModules();
+    const { permissionManager, interactionManager } = getInteractionManagers();
 
     emitPermissionAsked(summaryAggregator, "permission-1");
     await vi.waitFor(() => {
@@ -1390,14 +1372,13 @@ describe("bot/services/event-subscription-service", () => {
 
   it("drops a released request when a full reset lands before it is shown", async () => {
     const { api, summaryAggregator } = await setupService(true);
-    const { permissionManager, questionManager, interactionManager, clearAllInteractionState } =
-      await loadInteractionModules();
+    const { permissionManager, questionManager, interactionManager } = getInteractionManagers();
 
     await showPollWithWaitingPermission(summaryAggregator);
     const sendsBefore = api.sendMessage.mock.calls.length;
 
     questionManager.cancel();
-    clearAllInteractionState("abort_command");
+    interactionManager.reset("abort_command");
     await settle();
 
     expect(api.sendMessage).toHaveBeenCalledTimes(sendsBefore);
@@ -1412,7 +1393,7 @@ describe("bot/services/event-subscription-service", () => {
       import("../../../src/i18n/index.js"),
     ]);
     settingsStore.setCompactOutputMode(true);
-    const { questionManager } = await loadInteractionModules();
+    const { questionManager } = getInteractionManagers();
     const waitingPermissionText = t("progress.compact.waiting_permission");
     const hasWaitingPermissionLine = (): boolean =>
       collectSentTexts(api).some((text) => text.includes(waitingPermissionText));

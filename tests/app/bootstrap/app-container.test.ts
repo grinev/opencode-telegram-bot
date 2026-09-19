@@ -9,15 +9,6 @@ vi.mock("../../../src/opencode/events.js", () => ({
   stopEventListening: mocked.stopEventListening,
 }));
 
-import { assistantRunState } from "../../../src/app/managers/assistant-run-state-manager.js";
-import { backgroundSessionTracker } from "../../../src/app/managers/background-session-manager.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
-import { questionManager } from "../../../src/app/managers/question-manager.js";
-import { summaryAggregator } from "../../../src/app/managers/summary-aggregation-manager.js";
-import { scheduledTaskRuntime } from "../../../src/app/services/scheduled-task-runtime-service.js";
-import { pinnedMessageManager } from "../../../src/bot/pinned/pinned-message-manager.js";
-import { opencodeAutoRestartService } from "../../../src/opencode/auto-restart.js";
-import { opencodeReadyLifecycle } from "../../../src/opencode/ready-lifecycle.js";
 import { logger } from "../../../src/utils/logger.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
@@ -32,16 +23,62 @@ describe("app/bootstrap/app-container", () => {
 
   afterEach(() => {
     container.cleanupProcess("test_teardown");
-    opencodeReadyLifecycle.__resetForTests();
   });
 
-  it("holds the module instances", () => {
-    expect(container.interactionManager).toBe(interactionManager);
-    expect(container.summaryAggregator).toBe(summaryAggregator);
-    expect(container.pinnedMessageManager).toBe(pinnedMessageManager);
-    expect(container.scheduledTaskRuntime).toBe(scheduledTaskRuntime);
-    expect(container.opencodeAutoRestartService).toBe(opencodeAutoRestartService);
-    expect(container.opencodeReadyLifecycle).toBe(opencodeReadyLifecycle);
+  it("builds its own managers", () => {
+    const other = createTestAppContainer();
+
+    expect(other.interactionManager).not.toBe(container.interactionManager);
+    expect(other.summaryAggregator).not.toBe(container.summaryAggregator);
+    expect(other.pinnedMessageManager).not.toBe(container.pinnedMessageManager);
+    expect(other.scheduledTaskRuntime).not.toBe(container.scheduledTaskRuntime);
+    expect(other.opencodeAutoRestartService).not.toBe(container.opencodeAutoRestartService);
+    expect(other.opencodeReadyLifecycle).not.toBe(container.opencodeReadyLifecycle);
+  });
+
+  it("opens every stateful interaction on its own interaction slot", () => {
+    container.questionManager.startQuestions(
+      [{ header: "Q1", question: "Pick one", options: [{ label: "Yes", description: "" }] }],
+      "req-1",
+    );
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("question");
+    container.interactionManager.reset("test_reset");
+
+    container.permissionManager.startPermission(
+      {
+        id: "perm-1",
+        sessionID: "session-1",
+        permission: "bash",
+        patterns: ["npm test"],
+        metadata: {},
+        always: [],
+      },
+      101,
+    );
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("permission");
+    container.interactionManager.reset("test_reset");
+
+    container.renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("rename");
+    container.interactionManager.reset("test_reset");
+
+    container.taskCreationManager.start(
+      "project-1",
+      "D:/repo",
+      { providerID: "provider", modelID: "model", variant: null },
+      "build",
+    );
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("task");
+  });
+
+  it("wires auto-restart to its ready lifecycle and the runtime to its foreground state", () => {
+    const autoRestart = container.opencodeAutoRestartService as unknown as {
+      opencodeReadyLifecycle: unknown;
+    };
+    const runtime = container.scheduledTaskRuntime as unknown as { foregroundSessionState: unknown };
+
+    expect(autoRestart.opencodeReadyLifecycle).toBe(container.opencodeReadyLifecycle);
+    expect(runtime.foregroundSessionState).toBe(container.foregroundSessionState);
   });
 
   it("keeps one heartbeat and stops it on process cleanup", async () => {
@@ -69,21 +106,21 @@ describe("app/bootstrap/app-container", () => {
 
     container.setReadyRestoreHandler(first);
     container.setReadyRestoreHandler(second);
-    await opencodeReadyLifecycle.notifyReady("test_ready");
+    await container.opencodeReadyLifecycle.notifyReady("test_ready");
 
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledWith("test_ready");
 
     container.cleanupProcess("test_shutdown");
-    opencodeReadyLifecycle.notifyUnavailable("test_down");
-    await opencodeReadyLifecycle.notifyReady("test_ready_again");
+    container.opencodeReadyLifecycle.notifyUnavailable("test_down");
+    await container.opencodeReadyLifecycle.notifyReady("test_ready_again");
 
     expect(second).toHaveBeenCalledTimes(1);
   });
 
   it("stops event listening and clears runtime state on process cleanup", () => {
-    const aggregatorClear = vi.spyOn(summaryAggregator, "clear");
-    const runClear = vi.spyOn(assistantRunState, "clearAll");
+    const aggregatorClear = vi.spyOn(container.summaryAggregator, "clear");
+    const runClear = vi.spyOn(container.assistantRunState, "clearAll");
 
     container.cleanupProcess("test_shutdown");
 
@@ -93,33 +130,33 @@ describe("app/bootstrap/app-container", () => {
   });
 
   it("drops the open interaction on the interactions reset", () => {
-    questionManager.startQuestions(
+    container.questionManager.startQuestions(
       [{ header: "Q1", question: "Pick one", options: [{ label: "Yes", description: "" }] }],
       "req-1",
     );
-    expect(interactionManager.getSnapshot()?.kind).toBe("question");
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("question");
 
     container.resetInteractions("test_reset");
 
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("drops only the interaction of the failed scope on the interaction-error reset", () => {
-    questionManager.startQuestions(
+    container.questionManager.startQuestions(
       [{ header: "Q1", question: "Pick one", options: [{ label: "Yes", description: "" }] }],
       "req-1",
     );
 
     container.resetInteractionError("permission", "test_error");
-    expect(interactionManager.getSnapshot()?.kind).toBe("question");
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("question");
 
     container.resetInteractionError("question", "test_error");
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("clears only the aggregator on the aggregator reset", () => {
-    const aggregatorClear = vi.spyOn(summaryAggregator, "clear");
-    const runClear = vi.spyOn(assistantRunState, "clearAll");
+    const aggregatorClear = vi.spyOn(container.summaryAggregator, "clear");
+    const runClear = vi.spyOn(container.assistantRunState, "clearAll");
 
     container.resetAggregator();
 
@@ -128,8 +165,8 @@ describe("app/bootstrap/app-container", () => {
   });
 
   it("clears run and background state without stopping listening on the runtime-streams reset", () => {
-    const runClear = vi.spyOn(assistantRunState, "clearAll");
-    const trackerClear = vi.spyOn(backgroundSessionTracker, "clear");
+    const runClear = vi.spyOn(container.assistantRunState, "clearAll");
+    const trackerClear = vi.spyOn(container.backgroundSessionTracker, "clear");
 
     container.resetRuntimeStreams("test_reset");
 

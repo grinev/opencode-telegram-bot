@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
 import { taskListCommand } from "../../../src/bot/commands/tasklist-command.js";
 import { handleTaskListCallback } from "../../../src/bot/callbacks/scheduled-task-callback-handler.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   listScheduledTasksMock: vi.fn(),
@@ -71,14 +71,21 @@ function createCallbackContext(data: string, messageId: number): Context {
 }
 
 function createDeps() {
-  return createTestAppContainer({
+  return {
+    ...container,
     scheduledTaskRuntime: { removeTask: mocked.runtimeRemoveTaskMock } as never,
-  });
+  };
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot/commands/tasklist", () => {
   beforeEach(() => {
-    interactionManager.clear("test_setup");
+    container.interactionManager.clear("test_setup");
     mocked.listScheduledTasksMock.mockReset();
     mocked.getScheduledTaskMock.mockReset();
     mocked.removeScheduledTaskMock.mockReset();
@@ -93,7 +100,7 @@ describe("bot/commands/tasklist", () => {
     await taskListCommand(ctx as never, createDeps());
 
     expect(ctx.reply).toHaveBeenCalledWith(t("tasklist.empty"));
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("shows tasks from all projects in one list", async () => {
@@ -129,7 +136,7 @@ describe("bot/commands/tasklist", () => {
     expect(options.reply_markup.inline_keyboard[1]?.[0]?.text).toContain("Check weather forecast");
     expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("tasklist:cancel");
 
-    expect(interactionManager.getSnapshot()).toMatchObject({
+    expect(container.interactionManager.getSnapshot()).toMatchObject({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -141,7 +148,7 @@ describe("bot/commands/tasklist", () => {
   });
 
   it("opens task details without showing original schedule text", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -180,7 +187,7 @@ describe("bot/commands/tasklist", () => {
     expect(text.indexOf("🛠️ Build")).toBeLessThan(text.indexOf("Model: openai/gpt-5 (default)"));
     expect(text.indexOf("Model: openai/gpt-5 (default)")).toBeLessThan(text.indexOf("Every hour"));
 
-    expect(interactionManager.getSnapshot()).toMatchObject({
+    expect(container.interactionManager.getSnapshot()).toMatchObject({
       kind: "custom",
       metadata: {
         flow: "tasklist",
@@ -191,7 +198,7 @@ describe("bot/commands/tasklist", () => {
   });
 
   it("cancels task details interaction and removes message", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -206,7 +213,7 @@ describe("bot/commands/tasklist", () => {
     const handled = await handleTaskListCallback(ctx, createDeps());
 
     expect(handled).toBe(true);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
       text: t("common.cancelled"),
     });
@@ -214,7 +221,7 @@ describe("bot/commands/tasklist", () => {
   });
 
   it("deletes selected task and clears runtime scheduling", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -231,7 +238,7 @@ describe("bot/commands/tasklist", () => {
     expect(handled).toBe(true);
     expect(mocked.removeScheduledTaskMock).toHaveBeenCalledWith("task-2");
     expect(mocked.runtimeRemoveTaskMock).toHaveBeenCalledWith("task-2");
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
       text: t("tasklist.deleted_callback"),
     });
@@ -239,7 +246,7 @@ describe("bot/commands/tasklist", () => {
   });
 
   it("shows inactive alert for stale callbacks", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -260,7 +267,7 @@ describe("bot/commands/tasklist", () => {
   });
 
   it("truncates long ASCII prompt by byte length to fit Telegram limit", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -286,7 +293,7 @@ describe("bot/commands/tasklist", () => {
   });
 
   it("keeps short prompts intact without truncation", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -312,7 +319,7 @@ describe("bot/commands/tasklist", () => {
   });
 
   it("truncates non-ASCII prompts by byte length (Arabic/Cyrillic)", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {

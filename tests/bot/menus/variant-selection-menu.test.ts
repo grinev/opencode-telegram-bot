@@ -26,9 +26,9 @@ vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
 }));
 
 import { showVariantSelectionMenuAfterModelChange } from "../../../src/bot/menus/variant-selection-menu.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
+import { InteractionManager } from "../../../src/app/managers/interaction-manager.js";
 
-const deps = { interactionManager };
+const deps = { interactionManager: new InteractionManager() };
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 

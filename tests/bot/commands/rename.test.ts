@@ -5,10 +5,9 @@ import {
   handleRenameCancel,
   handleRenameTextAnswer,
 } from "../../../src/bot/callbacks/rename-callback-handler.js";
-import { renameManager } from "../../../src/app/managers/rename-manager.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentSession: {
@@ -65,18 +64,25 @@ function createRenameCallbackContext(messageId: number): Context {
 }
 
 function createDeps() {
-  return createTestAppContainer({
+  return {
+    ...container,
     pinnedMessageManager: {
       isInitialized: vi.fn(() => false),
       onSessionChange: mocked.pinnedOnSessionChangeMock,
     } as never,
-  });
+  };
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot/commands/rename", () => {
   beforeEach(() => {
-    renameManager.clear();
-    interactionManager.clear("test_setup");
+    container.renameManager.clear();
+    container.interactionManager.clear("test_setup");
 
     mocked.currentSession = {
       id: "session-1",
@@ -98,10 +104,10 @@ describe("bot/commands/rename", () => {
 
     await renameCommand(ctx as never, createDeps());
 
-    expect(renameManager.isWaitingForName()).toBe(true);
-    expect(renameManager.getMessageId()).toBe(555);
+    expect(container.renameManager.isWaitingForName()).toBe(true);
+    expect(container.renameManager.getMessageId()).toBe(555);
 
-    const interactionState = interactionManager.getSnapshot();
+    const interactionState = container.interactionManager.getSnapshot();
     expect(interactionState?.kind).toBe("rename");
     expect(interactionState?.expectedInput).toBe("text");
     expect(interactionState?.metadata.sessionId).toBe("session-1");
@@ -109,9 +115,9 @@ describe("bot/commands/rename", () => {
   });
 
   it("renames session on valid text and clears states", async () => {
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    renameManager.setMessageId(555);
-    interactionManager.transition({
+    container.renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    container.renameManager.setMessageId(555);
+    container.interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -132,14 +138,14 @@ describe("bot/commands/rename", () => {
     });
     expect(ctx.api.deleteMessage).toHaveBeenCalledWith(101, 555);
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.success", { title: "New title" }));
-    expect(renameManager.isWaitingForName()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.renameManager.isWaitingForName()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("keeps rename flow active on empty title", async () => {
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    renameManager.setMessageId(555);
-    interactionManager.transition({
+    container.renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    container.renameManager.setMessageId(555);
+    container.interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -150,14 +156,14 @@ describe("bot/commands/rename", () => {
     expect(handled).toBe(true);
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.empty_title"));
     expect(mocked.updateSessionMock).not.toHaveBeenCalled();
-    expect(renameManager.isWaitingForName()).toBe(true);
-    expect(interactionManager.getSnapshot()?.kind).toBe("rename");
+    expect(container.renameManager.isWaitingForName()).toBe(true);
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("rename");
   });
 
   it("keeps rename flow active on a present empty rich title", async () => {
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    renameManager.setMessageId(555);
-    interactionManager.transition({
+    container.renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    container.renameManager.setMessageId(555);
+    container.interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -167,13 +173,13 @@ describe("bot/commands/rename", () => {
 
     expect(handled).toBe(true);
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.empty_title"));
-    expect(renameManager.isWaitingForName()).toBe(true);
+    expect(container.renameManager.isWaitingForName()).toBe(true);
   });
 
   it("rejects stale rename cancel callback", async () => {
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    renameManager.setMessageId(555);
-    interactionManager.transition({
+    container.renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    container.renameManager.setMessageId(555);
+    container.interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -186,14 +192,14 @@ describe("bot/commands/rename", () => {
       text: t("rename.inactive_callback"),
       show_alert: true,
     });
-    expect(renameManager.isWaitingForName()).toBe(true);
-    expect(interactionManager.getSnapshot()?.kind).toBe("rename");
+    expect(container.renameManager.isWaitingForName()).toBe(true);
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("rename");
   });
 
   it("cancels active rename and clears states", async () => {
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    renameManager.setMessageId(555);
-    interactionManager.transition({
+    container.renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    container.renameManager.setMessageId(555);
+    container.interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -204,15 +210,15 @@ describe("bot/commands/rename", () => {
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalled();
     expect(ctx.editMessageText).toHaveBeenCalledWith(t("rename.cancelled"));
-    expect(renameManager.isWaitingForName()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.renameManager.isWaitingForName()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("does not forward the title as a prompt when session info is missing", async () => {
     // Waiting for a name, but the session behind it is gone.
-    renameManager.startWaiting("", "D:/repo", "Old title");
-    renameManager.setMessageId(555);
-    interactionManager.transition({
+    container.renameManager.startWaiting("", "D:/repo", "Old title");
+    container.renameManager.setMessageId(555);
+    container.interactionManager.transition({
       expectedInput: "text",
       metadata: { sessionId: "session-1", messageId: 555 },
     });
@@ -224,28 +230,28 @@ describe("bot/commands/rename", () => {
     expect(handled).toBe(true);
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.inactive"));
     expect(mocked.updateSessionMock).not.toHaveBeenCalled();
-    expect(renameManager.isWaitingForName()).toBe(false);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.renameManager.isWaitingForName()).toBe(false);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("closes the rename flow when another interaction takes the slot", async () => {
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    renameManager.setMessageId(555);
-    interactionManager.start({ kind: "inline", expectedInput: "callback" });
+    container.renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    container.renameManager.setMessageId(555);
+    container.interactionManager.start({ kind: "inline", expectedInput: "callback" });
 
     const ctx = createRenameTextContext("New title");
     const handled = await handleRenameTextAnswer(ctx, createDeps());
 
     expect(handled).toBe(false);
     expect(mocked.updateSessionMock).not.toHaveBeenCalled();
-    expect(renameManager.isWaitingForName()).toBe(false);
-    expect(interactionManager.getSnapshot()?.kind).toBe("inline");
+    expect(container.renameManager.isWaitingForName()).toBe(false);
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("inline");
   });
 
   it("answers a preempted rename cancel button as inactive", async () => {
-    renameManager.startWaiting("session-1", "D:/repo", "Old title");
-    renameManager.setMessageId(555);
-    interactionManager.start({ kind: "inline", expectedInput: "callback" });
+    container.renameManager.startWaiting("session-1", "D:/repo", "Old title");
+    container.renameManager.setMessageId(555);
+    container.interactionManager.start({ kind: "inline", expectedInput: "callback" });
 
     const ctx = createRenameCallbackContext(555);
     const handled = await handleRenameCancel(ctx, createDeps());
@@ -255,6 +261,6 @@ describe("bot/commands/rename", () => {
       text: t("rename.inactive_callback"),
       show_alert: true,
     });
-    expect(interactionManager.getSnapshot()?.kind).toBe("inline");
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("inline");
   });
 });

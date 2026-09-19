@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerMessageRouter } from "../../../src/bot/routers/message-router.js";
 import { QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../../../src/bot/message-patterns.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
@@ -56,7 +55,6 @@ describe("bot/routers/message-router", () => {
 
     beforeEach(() => {
       promptQueue.__resetForTests();
-      interactionManager.clear("message_router_test_reset");
     });
 
     it("removes the pressed prompt from the middle of the queue", async () => {

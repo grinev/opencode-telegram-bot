@@ -282,7 +282,7 @@ function normalizeSnapshotValue(value: unknown): unknown {
   return value;
 }
 
-class SummaryAggregator {
+export class SummaryAggregator {
   private currentSessionId: string | null = null;
   private textMessageStates: Map<string, TextMessageState> = new Map();
   private thinkingMessageStates: Map<string, ThinkingMessageState> = new Map();
@@ -2280,5 +2280,3 @@ class SummaryAggregator {
     }
   }
 }
-
-export const summaryAggregator = new SummaryAggregator();

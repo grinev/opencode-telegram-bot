@@ -15,10 +15,10 @@ import {
 import { t } from "../../../src/i18n/index.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { MAX_QUEUED_MEDIA_BYTES } from "../../../src/app/managers/prompt-queue-manager.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import * as settingsStore from "../../../src/app/stores/settings-store.js";
 import { initializePromptQueueDispatch } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 function createBaseContext(message: Record<string, unknown>): {
   ctx: Context;
@@ -121,7 +121,7 @@ function createDeps(overrides: Partial<MediaGroupHandlerDeps> = {}): {
   });
 
   const deps: MediaGroupHandlerDeps = {
-    ...createTestAppContainer(),
+    ...container,
     bot: {} as MediaGroupHandlerDeps["bot"],
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
     downloadFile: downloadMock,
@@ -142,12 +142,17 @@ async function addToHandler(handler: MediaGroupAttachmentHandler, ctx: Context):
   expect(next).not.toHaveBeenCalled();
 }
 
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
+
 describe("bot/handlers/media-group", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     flushPendingPromptMock.mockClear();
     promptQueue.__resetForTests();
-    foregroundSessionState.__resetForTests();
   });
 
   afterEach(() => {
@@ -201,7 +206,7 @@ describe("bot/handlers/media-group", () => {
 
   it("queues an album as one item while the agent is busy", async () => {
     vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
-    foregroundSessionState.markBusy("session-1", "/repo");
+    container.foregroundSessionState.markBusy("session-1", "/repo");
     const first = createPhotoContext({
       messageId: 20,
       smallFileId: "small-1",
@@ -235,7 +240,7 @@ describe("bot/handlers/media-group", () => {
 
   it("rejects an oversized busy album before downloading any item", async () => {
     vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
-    foregroundSessionState.markBusy("session-1", "/repo");
+    container.foregroundSessionState.markBusy("session-1", "/repo");
     const first = createPhotoContext({
       messageId: 20,
       smallFileId: "small-1",

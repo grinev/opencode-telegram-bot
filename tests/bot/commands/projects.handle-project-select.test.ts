@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
 import { t } from "../../../src/i18n/index.js";
 import { handleProjectSelect } from "../../../src/bot/callbacks/project-callback-handler.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   getProjectsMock: vi.fn(),
@@ -31,14 +31,20 @@ function createCallbackContext(data: string): Context {
 }
 
 function createDeps() {
-  return createTestAppContainer({
+  return {
+    ...container,
     resetInteractions: mocked.clearAllInteractionStateMock,
-  });
+  };
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot/commands/projects handleProjectSelect", () => {
   beforeEach(() => {
-    foregroundSessionState.__resetForTests();
     mocked.getProjectsMock.mockReset();
     mocked.ensureActiveInlineMenuMock.mockReset();
     mocked.clearAllInteractionStateMock.mockReset();
@@ -79,7 +85,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
   });
 
   it("blocks project selection callback while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("project:abc");
     const handled = await handleProjectSelect(ctx, createDeps());
@@ -92,7 +98,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
   });
 
   it("does not block permission callbacks while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("permission:once");
     const handled = await handleProjectSelect(ctx, createDeps());
@@ -103,7 +109,7 @@ describe("bot/commands/projects handleProjectSelect", () => {
   });
 
   it("does not block question callbacks while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createCallbackContext("question:select:0:1");
     const handled = await handleProjectSelect(ctx, createDeps());

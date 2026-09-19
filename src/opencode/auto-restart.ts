@@ -2,7 +2,7 @@ import { config } from "../config.js";
 import { isContainerRuntime } from "../runtime/container.js";
 import { logger } from "../utils/logger.js";
 import { opencodeClient } from "./client.js";
-import { opencodeReadyLifecycle } from "./ready-lifecycle.js";
+import type { OpencodeReadyLifecycle } from "./ready-lifecycle.js";
 import {
   resolveLocalOpencodeTarget,
   startLocalOpencodeServer,
@@ -76,6 +76,8 @@ export class OpencodeAutoRestartService {
   private checkInProgress = false;
   private serverWasHealthy = false;
 
+  constructor(private readonly opencodeReadyLifecycle: OpencodeReadyLifecycle) {}
+
   async start(): Promise<boolean> {
     if (this.started || !config.opencode.autoRestartEnabled) {
       return false;
@@ -135,13 +137,13 @@ export class OpencodeAutoRestartService {
         logger.debug(`[OpenCodeAutoRestart] Health-check succeeded: reason=${reason}`);
         if (!this.serverWasHealthy) {
           this.serverWasHealthy = true;
-          await opencodeReadyLifecycle.notifyReady(`auto_restart_${reason}`);
+          await this.opencodeReadyLifecycle.notifyReady(`auto_restart_${reason}`);
         }
         return;
       }
 
       this.serverWasHealthy = false;
-      opencodeReadyLifecycle.notifyUnavailable(`auto_restart_${reason}`);
+      this.opencodeReadyLifecycle.notifyUnavailable(`auto_restart_${reason}`);
 
       if (isContainerRuntime()) {
         logger.warn(
@@ -174,7 +176,7 @@ export class OpencodeAutoRestartService {
         `[OpenCodeAutoRestart] OpenCode server recovered: pid=${pid ?? "unknown"}, port=${this.localTarget.port}`,
       );
       this.serverWasHealthy = true;
-      await opencodeReadyLifecycle.notifyReady(`auto_restart_${reason}`);
+      await this.opencodeReadyLifecycle.notifyReady(`auto_restart_${reason}`);
     } catch (error) {
       logger.error("[OpenCodeAutoRestart] Failed to check or restart OpenCode server", error);
     } finally {
@@ -182,5 +184,3 @@ export class OpencodeAutoRestartService {
     }
   }
 }
-
-export const opencodeAutoRestartService = new OpencodeAutoRestartService();

@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { assistantRunState } from "../../../src/app/managers/assistant-run-state-manager.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { AssistantRunState } from "../../../src/app/managers/assistant-run-state-manager.js";
 import {
   STREAM_THROTTLE_BASE_MS,
   STREAM_THROTTLE_MAX_MS,
@@ -15,10 +15,15 @@ import {
 
 const MINUTE_MS = 60_000;
 
+let assistantRunState: AssistantRunState;
+
+beforeEach(() => {
+  assistantRunState = new AssistantRunState();
+});
+
 describe("bot/streaming/stream-throttle", () => {
   afterEach(() => {
     __resetStreamThrottleForTests();
-    assistantRunState.__resetForTests();
   });
 
   describe("resolveProgressiveThrottleMs", () => {

@@ -67,10 +67,12 @@ vi.mock("../../../src/bot/pinned/pinned-message-format.js", () => ({
 }));
 
 // Must import AFTER vi.mock calls
-const { pinnedMessageManager } = await import("../../../src/bot/pinned/pinned-message-manager.js");
+const { PinnedMessageManager } = await import("../../../src/bot/pinned/pinned-message-manager.js");
 const { __resetStreamThrottleForTests, noteStreamActivity } = await import(
   "../../../src/bot/streaming/stream-throttle.js"
 );
+
+let pinnedMessageManager: InstanceType<typeof PinnedMessageManager>;
 
 describe("pinned/manager", () => {
   afterEach(() => {
@@ -95,7 +97,7 @@ describe("pinned/manager", () => {
     };
 
     __resetStreamThrottleForTests();
-    // Reset manager state by re-initializing
+    pinnedMessageManager = new PinnedMessageManager();
     pinnedMessageManager.initialize(fakeApi as never, 123);
 
     mocked.getCurrentSession.mockReturnValue({ id: "ses-1", title: "Test Session" });
@@ -889,7 +891,7 @@ describe("pinned/manager", () => {
     });
 
     it("resets state without touching Telegram when not initialized", async () => {
-      pinnedMessageManager.__resetForTests();
+      pinnedMessageManager = new PinnedMessageManager();
       fakeApi.unpinAllChatMessages.mockClear();
 
       await pinnedMessageManager.clear();
@@ -1038,7 +1040,7 @@ describe("pinned/manager", () => {
 
     it("sends and pins a dashboard when turned on with a session", async () => {
       mocked.getPinnedDashboardEnabled.mockReturnValue(false);
-      pinnedMessageManager.__resetForTests();
+      pinnedMessageManager = new PinnedMessageManager();
       pinnedMessageManager.initialize(fakeApi as never, 123);
 
       await pinnedMessageManager.applyPinnedDashboardEnabled(true);
@@ -1148,7 +1150,7 @@ describe("pinned/manager", () => {
       fakeApi.pinChatMessage.mockRejectedValueOnce(new Error("Bad Request: too many requests"));
       await expect(pinnedMessageManager.applyPinnedDashboardEnabled(true)).rejects.toThrow();
       mocked.getPinnedMessageId.mockReturnValue(999);
-      pinnedMessageManager.__resetForTests();
+      pinnedMessageManager = new PinnedMessageManager();
       pinnedMessageManager.initialize(fakeApi as never, 123);
       fakeApi.sendMessage.mockClear();
       fakeApi.sendMessage.mockResolvedValue({ message_id: 1003 });

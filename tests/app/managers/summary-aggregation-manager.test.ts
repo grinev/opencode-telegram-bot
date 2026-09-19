@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Event } from "@opencode-ai/sdk/v2";
-import { summaryAggregator } from "../../../src/app/managers/summary-aggregation-manager.js";
+import { SummaryAggregator } from "../../../src/app/managers/summary-aggregation-manager.js";
 import { logger } from "../../../src/utils/logger.js";
 import { defined } from "../../helpers/defined.js";
 
@@ -17,6 +17,12 @@ vi.mock("../../../src/app/stores/settings-store.js", async () => {
     ...actual,
     getCurrentProject: mocked.getCurrentProjectMock,
   };
+});
+
+let summaryAggregator: SummaryAggregator;
+
+beforeEach(() => {
+  summaryAggregator = new SummaryAggregator();
 });
 
 describe("summary/aggregator", () => {

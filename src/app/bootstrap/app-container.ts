@@ -1,30 +1,25 @@
 import type { Bot, Context } from "grammy";
 import { createEventSubscriptionService } from "../../bot/services/event-subscription-service.js";
-import { keyboardManager } from "../../bot/keyboards/keyboard-manager.js";
-import { pinnedMessageManager } from "../../bot/pinned/pinned-message-manager.js";
-import { opencodeAutoRestartService } from "../../opencode/auto-restart.js";
+import { KeyboardManager } from "../../bot/keyboards/keyboard-manager.js";
+import { PinnedMessageManager } from "../../bot/pinned/pinned-message-manager.js";
+import { OpencodeAutoRestartService } from "../../opencode/auto-restart.js";
 import {
-  opencodeReadyLifecycle,
+  OpencodeReadyLifecycle,
   type OpencodeReadyHandler,
 } from "../../opencode/ready-lifecycle.js";
 import { logger } from "../../utils/logger.js";
-import { assistantRunState } from "../managers/assistant-run-state-manager.js";
-import { attachManager } from "../managers/attach-manager.js";
-import { backgroundSessionTracker } from "../managers/background-session-manager.js";
-import { externalUserInputSuppressionManager } from "../managers/external-input-suppression-manager.js";
-import { foregroundSessionState } from "../managers/foreground-session-state-manager.js";
-import {
-  clearAllInteractionState,
-  clearInteractionErrorState,
-  interactionManager,
-  type InteractionErrorScope,
-} from "../managers/interaction-manager.js";
-import { permissionManager } from "../managers/permission-manager.js";
-import { questionManager } from "../managers/question-manager.js";
-import { renameManager } from "../managers/rename-manager.js";
-import { taskCreationManager } from "../managers/scheduled-task-creation-manager.js";
-import { summaryAggregator } from "../managers/summary-aggregation-manager.js";
-import { scheduledTaskRuntime } from "../services/scheduled-task-runtime-service.js";
+import { AssistantRunState } from "../managers/assistant-run-state-manager.js";
+import { AttachManager } from "../managers/attach-manager.js";
+import { BackgroundSessionTracker } from "../managers/background-session-manager.js";
+import { ExternalUserInputSuppressionManager } from "../managers/external-input-suppression-manager.js";
+import { ForegroundSessionState } from "../managers/foreground-session-state-manager.js";
+import { InteractionManager, type InteractionErrorScope } from "../managers/interaction-manager.js";
+import { PermissionManager } from "../managers/permission-manager.js";
+import { QuestionManager } from "../managers/question-manager.js";
+import { RenameManager } from "../managers/rename-manager.js";
+import { TaskCreationManager } from "../managers/scheduled-task-creation-manager.js";
+import { SummaryAggregator } from "../managers/summary-aggregation-manager.js";
+import { ScheduledTaskRuntime } from "../services/scheduled-task-runtime-service.js";
 
 const HEARTBEAT_INTERVAL_MS = 5000;
 const HEARTBEAT_LOG_EVERY_TICKS = 6;
@@ -32,25 +27,27 @@ const HEARTBEAT_LOG_EVERY_TICKS = 6;
 /**
  * The application's dependencies and the single owner of process-lifetime
  * runtime: the event subscription, the heartbeat and the ready-restore handler.
- * Consumers name the members they use in their own deps type.
+ * It constructs every manager once; reset members delegate to them, and the
+ * state logic lives on the managers. Consumers name the members they use in
+ * their own deps type.
  */
 export interface AppContainer {
-  readonly assistantRunState: typeof assistantRunState;
-  readonly attachManager: typeof attachManager;
-  readonly backgroundSessionTracker: typeof backgroundSessionTracker;
-  readonly externalUserInputSuppressionManager: typeof externalUserInputSuppressionManager;
-  readonly foregroundSessionState: typeof foregroundSessionState;
-  readonly interactionManager: typeof interactionManager;
-  readonly keyboardManager: typeof keyboardManager;
-  readonly opencodeAutoRestartService: typeof opencodeAutoRestartService;
-  readonly opencodeReadyLifecycle: typeof opencodeReadyLifecycle;
-  readonly permissionManager: typeof permissionManager;
-  readonly pinnedMessageManager: typeof pinnedMessageManager;
-  readonly questionManager: typeof questionManager;
-  readonly renameManager: typeof renameManager;
-  readonly scheduledTaskRuntime: typeof scheduledTaskRuntime;
-  readonly summaryAggregator: typeof summaryAggregator;
-  readonly taskCreationManager: typeof taskCreationManager;
+  readonly assistantRunState: AssistantRunState;
+  readonly attachManager: AttachManager;
+  readonly backgroundSessionTracker: BackgroundSessionTracker;
+  readonly externalUserInputSuppressionManager: ExternalUserInputSuppressionManager;
+  readonly foregroundSessionState: ForegroundSessionState;
+  readonly interactionManager: InteractionManager;
+  readonly keyboardManager: KeyboardManager;
+  readonly opencodeAutoRestartService: OpencodeAutoRestartService;
+  readonly opencodeReadyLifecycle: OpencodeReadyLifecycle;
+  readonly permissionManager: PermissionManager;
+  readonly pinnedMessageManager: PinnedMessageManager;
+  readonly questionManager: QuestionManager;
+  readonly renameManager: RenameManager;
+  readonly scheduledTaskRuntime: ScheduledTaskRuntime;
+  readonly summaryAggregator: SummaryAggregator;
+  readonly taskCreationManager: TaskCreationManager;
 
   ensureEventSubscription(directory: string): Promise<void>;
   setTelegramContext(bot: Bot<Context> | null, chatId: number | null): void;
@@ -72,6 +69,11 @@ export interface AppContainer {
 }
 
 export function createAppContainer(): AppContainer {
+  const foregroundSessionState = new ForegroundSessionState();
+  const interactionManager = new InteractionManager();
+  const opencodeReadyLifecycle = new OpencodeReadyLifecycle();
+  const summaryAggregator = new SummaryAggregator();
+
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let unsubscribeReadyRestore: (() => void) | null = null;
 
@@ -88,22 +90,22 @@ export function createAppContainer(): AppContainer {
   };
 
   const container: AppContainer = {
-    assistantRunState,
-    attachManager,
-    backgroundSessionTracker,
-    externalUserInputSuppressionManager,
+    assistantRunState: new AssistantRunState(),
+    attachManager: new AttachManager(),
+    backgroundSessionTracker: new BackgroundSessionTracker(),
+    externalUserInputSuppressionManager: new ExternalUserInputSuppressionManager(),
     foregroundSessionState,
     interactionManager,
-    keyboardManager,
-    opencodeAutoRestartService,
+    keyboardManager: new KeyboardManager(),
+    opencodeAutoRestartService: new OpencodeAutoRestartService(opencodeReadyLifecycle),
     opencodeReadyLifecycle,
-    permissionManager,
-    pinnedMessageManager,
-    questionManager,
-    renameManager,
-    scheduledTaskRuntime,
+    permissionManager: new PermissionManager(interactionManager),
+    pinnedMessageManager: new PinnedMessageManager(),
+    questionManager: new QuestionManager(interactionManager),
+    renameManager: new RenameManager(interactionManager),
+    scheduledTaskRuntime: new ScheduledTaskRuntime(foregroundSessionState),
     summaryAggregator,
-    taskCreationManager,
+    taskCreationManager: new TaskCreationManager(interactionManager),
 
     ensureEventSubscription: (directory) => eventSubscriptionService.ensureEventSubscription(directory),
     setTelegramContext: (bot, chatId) => eventSubscriptionService.setTelegramContext(bot, chatId),
@@ -124,8 +126,8 @@ export function createAppContainer(): AppContainer {
       unsubscribeReadyRestore = opencodeReadyLifecycle.onReady(handler);
     },
 
-    resetInteractions: (reason) => clearAllInteractionState(reason),
-    resetInteractionError: (scope, reason) => clearInteractionErrorState(scope, reason),
+    resetInteractions: (reason) => interactionManager.reset(reason),
+    resetInteractionError: (scope, reason) => interactionManager.clearErrorScope(scope, reason),
     resetAggregator: () => summaryAggregator.clear(),
     resetRuntimeStreams: (reason) => eventSubscriptionService.clearRuntimeState(reason),
 

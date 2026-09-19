@@ -6,9 +6,6 @@ import {
   detachAttachedSession,
   restoreAttachedCurrentSession,
 } from "../../../src/app/services/attach-service.js";
-import { attachManager } from "../../../src/app/managers/attach-manager.js";
-import { questionManager } from "../../../src/app/managers/question-manager.js";
-import { permissionManager } from "../../../src/app/managers/permission-manager.js";
 import { createAttachPresentation } from "../../../src/bot/services/attach-presentation.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
@@ -83,7 +80,8 @@ vi.mock("../../../src/bot/menus/permission-menu.js", () => ({
 }));
 
 function createDeps(): AppContainer {
-  return createTestAppContainer({
+  return {
+    ...container,
     summaryAggregator: {
       setSession: mocked.setSessionSummaryMock,
       setBotAndChatId: mocked.setBotAndChatIdMock,
@@ -103,7 +101,7 @@ function createDeps(): AppContainer {
       initialize: mocked.keyboardInitializeMock,
       updateContext: mocked.keyboardUpdateContextMock,
     } as unknown as AppContainer["keyboardManager"],
-  });
+  };
 }
 
 function createBot(): Bot<Context> {
@@ -114,6 +112,12 @@ function createBot(): Bot<Context> {
   } as unknown as Bot<Context>;
 }
 
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
+
 describe("attach/service", () => {
   let deps: AppContainer;
 
@@ -122,11 +126,10 @@ describe("attach/service", () => {
       "../../../src/bot/streaming/stream-throttle.js"
     );
     __resetStreamThrottleForTests();
-    attachManager.__resetForTests();
     deps = createDeps();
     configureAttachPresentation(createAttachPresentation(deps));
-    questionManager.clear();
-    permissionManager.clear();
+    container.questionManager.clear();
+    container.permissionManager.clear();
 
     mocked.currentProject = {
       id: "project-1",
@@ -202,7 +205,7 @@ describe("attach/service", () => {
     expect(mocked.setSessionSummaryMock).toHaveBeenCalledWith("session-1");
     expect(mocked.setBotAndChatIdMock).toHaveBeenCalled();
     expect(mocked.pinnedSetAttachStateMock).toHaveBeenCalledWith(true, false);
-    expect(attachManager.getSnapshot()).toMatchObject({
+    expect(container.attachManager.getSnapshot()).toMatchObject({
       sessionId: "session-1",
       directory: "D:\\Projects\\Repo",
       busy: false,
@@ -272,7 +275,7 @@ describe("attach/service", () => {
 
     expect(restored).toBe(true);
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledWith("D:\\Projects\\Repo");
-    expect(attachManager.getSnapshot()?.sessionId).toBe("session-1");
+    expect(container.attachManager.getSnapshot()?.sessionId).toBe("session-1");
   });
 
   it("reuses a saved pinned message after restart instead of recreating it", async () => {
@@ -315,7 +318,7 @@ describe("attach/service", () => {
 
     expect(restored).toBe(false);
     expect(mocked.ensureEventSubscriptionMock).not.toHaveBeenCalled();
-    expect(attachManager.getSnapshot()).toBeNull();
+    expect(container.attachManager.getSnapshot()).toBeNull();
   });
 
   it("skips guarded startup restore when OpenCode server is unavailable", async () => {
@@ -367,14 +370,14 @@ describe("attach/service", () => {
     const { noteStreamActivity, getStreamThrottleMs } = await import(
       "../../../src/bot/streaming/stream-throttle.js"
     );
-    attachManager.attach("session-1", "D:\\Projects\\Repo");
+    container.attachManager.attach("session-1", "D:\\Projects\\Repo");
     noteStreamActivity("session-1", Date.now() - 10 * 60_000);
     expect(getStreamThrottleMs("session-1")).toBe(5_000);
 
     detachAttachedSession("detach_command", deps);
 
     expect(mocked.stopEventListeningMock).not.toHaveBeenCalled();
-    expect(attachManager.getSnapshot()).toBeNull();
+    expect(container.attachManager.getSnapshot()).toBeNull();
     expect(getStreamThrottleMs("session-1")).toBe(1_000);
   });
 });

@@ -157,7 +157,7 @@ async function createDeliverySender() {
 
 describe("app/services/scheduled-task-runtime-service", () => {
   let ScheduledTaskRuntimeClass: typeof import("../../../src/app/services/scheduled-task-runtime-service.js").ScheduledTaskRuntime;
-  let foregroundSessionState: typeof import("../../../src/app/managers/foreground-session-state-manager.js").foregroundSessionState;
+  let ForegroundSessionStateClass: typeof import("../../../src/app/managers/foreground-session-state-manager.js").ForegroundSessionState;
 
   beforeEach(() => {
     mocked.tasks = [];
@@ -172,10 +172,11 @@ describe("app/services/scheduled-task-runtime-service", () => {
   it("queues scheduled task result while foreground session is busy and flushes later", async () => {
     ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
       await import("../../../src/app/services/scheduled-task-runtime-service.js"));
-    ({ foregroundSessionState } = await import("../../../src/app/managers/foreground-session-state-manager.js"));
-    foregroundSessionState.__resetForTests();
+    ({ ForegroundSessionState: ForegroundSessionStateClass } =
+      await import("../../../src/app/managers/foreground-session-state-manager.js"));
+    const foregroundSessionState = new ForegroundSessionStateClass();
 
-    const runtime = new ScheduledTaskRuntimeClass();
+    const runtime = new ScheduledTaskRuntimeClass(foregroundSessionState);
     mocked.tasks = [createTask({ nextRunAt: "2026-03-16T09:59:00.000Z" })];
     mocked.executeScheduledTaskMock.mockResolvedValue({
       taskId: "task-1",
@@ -221,17 +222,18 @@ describe("app/services/scheduled-task-runtime-service", () => {
     );
     expect(footerCall).not.toHaveProperty("options");
 
-    runtime.__resetForTests();
+    runtime.shutdown();
     vi.useRealTimers();
   });
 
   it("keeps recurring task after execution error and schedules next run", async () => {
     ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
       await import("../../../src/app/services/scheduled-task-runtime-service.js"));
-    ({ foregroundSessionState } = await import("../../../src/app/managers/foreground-session-state-manager.js"));
-    foregroundSessionState.__resetForTests();
+    ({ ForegroundSessionState: ForegroundSessionStateClass } =
+      await import("../../../src/app/managers/foreground-session-state-manager.js"));
+    const foregroundSessionState = new ForegroundSessionStateClass();
 
-    const runtime = new ScheduledTaskRuntimeClass();
+    const runtime = new ScheduledTaskRuntimeClass(foregroundSessionState);
     mocked.tasks = [createTask({ kind: "cron", nextRunAt: "2026-03-16T16:59:00.000Z" })];
     mocked.executeScheduledTaskMock.mockResolvedValue({
       taskId: "task-1",
@@ -265,17 +267,18 @@ describe("app/services/scheduled-task-runtime-service", () => {
       }),
     );
 
-    runtime.__resetForTests();
+    runtime.shutdown();
     vi.useRealTimers();
   });
 
   it("sends the timeout error text returned by executor", async () => {
     ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
       await import("../../../src/app/services/scheduled-task-runtime-service.js"));
-    ({ foregroundSessionState } = await import("../../../src/app/managers/foreground-session-state-manager.js"));
-    foregroundSessionState.__resetForTests();
+    ({ ForegroundSessionState: ForegroundSessionStateClass } =
+      await import("../../../src/app/managers/foreground-session-state-manager.js"));
+    const foregroundSessionState = new ForegroundSessionStateClass();
 
-    const runtime = new ScheduledTaskRuntimeClass();
+    const runtime = new ScheduledTaskRuntimeClass(foregroundSessionState);
     mocked.tasks = [createTask({ nextRunAt: "2026-03-16T09:59:00.000Z" })];
     mocked.executeScheduledTaskMock.mockResolvedValue({
       taskId: "task-1",
@@ -301,17 +304,18 @@ describe("app/services/scheduled-task-runtime-service", () => {
       }),
     );
 
-    runtime.__resetForTests();
+    runtime.shutdown();
     vi.useRealTimers();
   });
 
   it("does not start the same scheduled task twice while it is already running", async () => {
     ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
       await import("../../../src/app/services/scheduled-task-runtime-service.js"));
-    ({ foregroundSessionState } = await import("../../../src/app/managers/foreground-session-state-manager.js"));
-    foregroundSessionState.__resetForTests();
+    ({ ForegroundSessionState: ForegroundSessionStateClass } =
+      await import("../../../src/app/managers/foreground-session-state-manager.js"));
+    const foregroundSessionState = new ForegroundSessionStateClass();
 
-    const runtime = new ScheduledTaskRuntimeClass();
+    const runtime = new ScheduledTaskRuntimeClass(foregroundSessionState);
     mocked.tasks = [createTask({ kind: "cron", nextRunAt: "2026-03-16T10:00:00.000Z" })];
     mocked.executeScheduledTaskMock.mockReturnValue(new Promise(() => undefined));
 
@@ -325,7 +329,7 @@ describe("app/services/scheduled-task-runtime-service", () => {
 
     expect(mocked.executeScheduledTaskMock).toHaveBeenCalledTimes(1);
 
-    runtime.__resetForTests();
+    runtime.shutdown();
     vi.useRealTimers();
   });
 });

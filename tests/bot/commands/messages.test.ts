@@ -9,10 +9,10 @@ import {
   handleMessagesCallback,
   type MessagesCallbackDeps,
 } from "../../../src/bot/callbacks/message-history-callback-handler.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -110,20 +110,7 @@ function createCallbackContext(data: string, messageId: number): Context {
   } as unknown as Context;
 }
 
-const testDeps = {
-  ...createTestAppContainer({
-    ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
-    keyboardManager: {
-      updateAgent: mocked.keyboardUpdateAgentMock,
-      updateModel: mocked.keyboardUpdateModelMock,
-    } as never,
-  }),
-  bot: {
-    api: {
-      sendMessage: vi.fn().mockResolvedValue({ message_id: 999 }),
-    },
-  },
-} as unknown as MessagesCallbackDeps;
+let testDeps: MessagesCallbackDeps;
 
 function makeUserMessage(id: string, text: string, created: number) {
   return {
@@ -136,9 +123,28 @@ function makeUserMessage(id: string, text: string, created: number) {
   };
 }
 
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+  testDeps = {
+    ...container,
+    ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
+    keyboardManager: {
+      updateAgent: mocked.keyboardUpdateAgentMock,
+      updateModel: mocked.keyboardUpdateModelMock,
+    } as never,
+    bot: {
+      api: {
+        sendMessage: vi.fn().mockResolvedValue({ message_id: 999 }),
+      },
+    },
+  } as unknown as MessagesCallbackDeps;
+});
+
 describe("bot/commands/messages", () => {
   beforeEach(() => {
-    interactionManager.clear("test_setup");
+    container.interactionManager.clear("test_setup");
 
     mocked.currentProject = {
       id: "project-1",
@@ -236,7 +242,7 @@ describe("bot/commands/messages", () => {
     expect(options.reply_markup.inline_keyboard[1]?.[0]?.text).toContain("[10:03] older prompt");
     expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("messages:cancel");
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");
     expect(state?.expectedInput).toBe("callback");
     expect(state?.metadata.flow).toBe("messages");
@@ -303,7 +309,7 @@ describe("bot/commands/messages", () => {
     // msg-2 and msg-3 should not be present
     expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("messages:cancel");
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.metadata.messages).toEqual([
       { id: "msg-1", text: "first message", created: time1 },
     ]);
@@ -316,7 +322,7 @@ describe("bot/commands/messages", () => {
       created: new Date(2026, 4, 30, 12, index).getTime(),
     }));
 
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -341,12 +347,12 @@ describe("bot/commands/messages", () => {
     expect(text).toBe(t("messages.select_page", { page: 2 }));
     expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("messages:select:10");
     expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("messages:page:0");
-    expect(interactionManager.getSnapshot()?.metadata.page).toBe(1);
+    expect(container.interactionManager.getSnapshot()?.metadata.page).toBe(1);
   });
 
   it("opens full message and provides placeholder actions", async () => {
     const created = new Date(2026, 4, 30, 9, 8).getTime();
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -373,12 +379,12 @@ describe("bot/commands/messages", () => {
     expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("messages:fork");
     expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("messages:back");
     expect(options.reply_markup.inline_keyboard[2]?.[1]?.callback_data).toBe("messages:cancel");
-    expect(interactionManager.getSnapshot()?.metadata.stage).toBe("detail");
+    expect(container.interactionManager.getSnapshot()?.metadata.stage).toBe("detail");
   });
 
   it("returns to list from message detail on back", async () => {
     const messages = [{ id: "msg-1", text: "full prompt text", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -401,12 +407,12 @@ describe("bot/commands/messages", () => {
       t("messages.select"),
       expect.objectContaining({ reply_markup: expect.any(Object) }),
     );
-    expect(interactionManager.getSnapshot()?.metadata.stage).toBe("list");
+    expect(container.interactionManager.getSnapshot()?.metadata.stage).toBe("list");
   });
 
   it("closes menu on cancel from detail", async () => {
     const messages = [{ id: "msg-1", text: "full prompt text", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -429,12 +435,12 @@ describe("bot/commands/messages", () => {
       text: t("common.cancelled"),
     });
     expect(ctx.deleteMessage).toHaveBeenCalledTimes(1);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("closes menu on cancel from list", async () => {
     const messages = [{ id: "msg-1", text: "full prompt text", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -456,12 +462,12 @@ describe("bot/commands/messages", () => {
       text: t("common.cancelled"),
     });
     expect(ctx.deleteMessage).toHaveBeenCalledTimes(1);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("reverts message successfully", async () => {
     const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -491,12 +497,12 @@ describe("bot/commands/messages", () => {
     expect(ctx.editMessageText).toHaveBeenCalledWith(
       t("messages.revert_success", { text: "test prompt" }),
     );
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("handles revert error", async () => {
     const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -524,12 +530,12 @@ describe("bot/commands/messages", () => {
       messageID: "msg-1",
     });
     expect(ctx.editMessageText).toHaveBeenCalledWith(t("messages.revert_error"));
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("rejects revert from list stage", async () => {
     const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -557,7 +563,7 @@ describe("bot/commands/messages", () => {
 
   it("handles successful fork", async () => {
     const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -605,12 +611,12 @@ describe("bot/commands/messages", () => {
     expect(ctx.editMessageText).toHaveBeenCalledWith(
       t("messages.fork_success", { text: "test prompt" }),
     );
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("pulls the forked session settings before attaching and syncs the keyboard state", async () => {
     const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -657,7 +663,7 @@ describe("bot/commands/messages", () => {
 
   it("handles fork error", async () => {
     const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -685,12 +691,12 @@ describe("bot/commands/messages", () => {
       directory: "D:\\Projects\\Repo",
     });
     expect(ctx.editMessageText).toHaveBeenCalledWith(t("messages.fork_error"));
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("rejects fork from list stage", async () => {
     const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -717,7 +723,7 @@ describe("bot/commands/messages", () => {
   });
 
   it("handles stale callback as inactive", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {

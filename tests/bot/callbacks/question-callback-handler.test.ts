@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
-import { questionManager } from "../../../src/app/managers/question-manager.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { showCurrentQuestion } from "../../../src/bot/menus/question-menu.js";
 import {
   handleQuestionCallback,
@@ -11,6 +9,7 @@ import type { Question } from "../../../src/app/types/question.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const QUESTION_ONE: Question = {
   header: "Q1",
@@ -86,19 +85,25 @@ function createTextContext(text: string, api: Context["api"]): Context {
 }
 
 function createDeps() {
-  return createTestAppContainer();
+  return container;
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot question menu/callbacks", () => {
   beforeEach(() => {
-    questionManager.clear();
-    interactionManager.clear("test_setup");
+    container.questionManager.clear();
+    container.interactionManager.clear("test_setup");
   });
 
   it("shows question details and keyboard in one message", async () => {
     const api = createApi([100]);
 
-    questionManager.startQuestions([QUESTION_ONE], "req-1");
+    container.questionManager.startQuestions([QUESTION_ONE], "req-1");
     await showCurrentQuestion(api, 123, createDeps());
 
     expect(api.sendRichMessage).toHaveBeenNthCalledWith(
@@ -123,10 +128,10 @@ describe("bot question menu/callbacks", () => {
     );
     expect(api.sendRichMessage).toHaveBeenCalledTimes(1);
     expect(api.sendMessage).not.toHaveBeenCalled();
-    expect(questionManager.getMessageIds()).toEqual([100]);
-    expect(questionManager.getActiveMessageId()).toBe(100);
+    expect(container.questionManager.getMessageIds()).toEqual([100]);
+    expect(container.questionManager.getActiveMessageId()).toBe(100);
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("question");
     expect(state?.expectedInput).toBe("callback");
     expect(state?.metadata.requestID).toBe("req-1");
@@ -148,7 +153,7 @@ describe("bot question menu/callbacks", () => {
       deleteMessage: vi.fn().mockResolvedValue(true),
     } as unknown as Context["api"];
 
-    questionManager.startQuestions([QUESTION_ONE], "req-fallback");
+    container.questionManager.startQuestions([QUESTION_ONE], "req-fallback");
     await showCurrentQuestion(api, 123, createDeps());
 
     expect(sendRichMessage).toHaveBeenCalledTimes(1);
@@ -159,7 +164,7 @@ describe("bot question menu/callbacks", () => {
       expect.stringContaining("❓ 1/1 Q1\n\nPick one\n\nYes — accept\n\nNo — decline"),
       expect.objectContaining({ reply_markup: expect.anything() }),
     );
-    expect(questionManager.getActiveMessageId()).toBe(801);
+    expect(container.questionManager.getActiveMessageId()).toBe(801);
   });
 
   it("renders an option without a description as a bold label only", async () => {
@@ -170,7 +175,7 @@ describe("bot question menu/callbacks", () => {
       options: [{ label: "Only label", description: "" }],
     };
 
-    questionManager.startQuestions([question], "req-bare");
+    container.questionManager.startQuestions([question], "req-bare");
     await showCurrentQuestion(api, 123, createDeps());
 
     const calls = (api.sendRichMessage as unknown as { mock: { calls: unknown[][] } }).mock.calls;
@@ -190,7 +195,7 @@ describe("bot question menu/callbacks", () => {
       options: [{ label: "Option", description: "description" }],
     };
 
-    questionManager.startQuestions([longQuestion], "req-long");
+    container.questionManager.startQuestions([longQuestion], "req-long");
     await showCurrentQuestion(api, 123, createDeps());
 
     const calls = (api.sendRichMessage as unknown as { mock: { calls: unknown[][] } }).mock.calls;
@@ -217,22 +222,22 @@ describe("bot question menu/callbacks", () => {
   it("switches to mixed mode on custom callback and accepts custom text", async () => {
     const api = createApi([101, 102]);
 
-    questionManager.startQuestions([QUESTION_ONE, QUESTION_TWO], "req-2");
+    container.questionManager.startQuestions([QUESTION_ONE, QUESTION_TWO], "req-2");
     await showCurrentQuestion(api, 123, createDeps());
 
     const customCtx = createCallbackContext("question:custom:0", 101, api);
     await handleQuestionCallback(customCtx, createDeps());
 
-    expect(questionManager.isWaitingForCustomInput(0)).toBe(true);
-    expect(interactionManager.getSnapshot()?.expectedInput).toBe("mixed");
+    expect(container.questionManager.isWaitingForCustomInput(0)).toBe(true);
+    expect(container.interactionManager.getSnapshot()?.expectedInput).toBe("mixed");
 
     const textCtx = createTextContext("My custom answer", api);
     await handleQuestionTextAnswer(textCtx, createDeps());
 
-    expect(questionManager.getCustomAnswer(0)).toBe("My custom answer");
-    expect(questionManager.getCurrentIndex()).toBe(1);
-    expect(questionManager.getActiveMessageId()).toBe(102);
-    expect(interactionManager.getSnapshot()?.expectedInput).toBe("callback");
+    expect(container.questionManager.getCustomAnswer(0)).toBe("My custom answer");
+    expect(container.questionManager.getCurrentIndex()).toBe(1);
+    expect(container.questionManager.getActiveMessageId()).toBe(102);
+    expect(container.interactionManager.getSnapshot()?.expectedInput).toBe("callback");
 
     expect(api.deleteMessage).toHaveBeenCalledWith(123, 101);
   });
@@ -240,7 +245,7 @@ describe("bot question menu/callbacks", () => {
   it("deletes the question message after single-choice selection", async () => {
     const api = createApi([701, 702]);
 
-    questionManager.startQuestions([QUESTION_ONE, QUESTION_TWO], "req-8");
+    container.questionManager.startQuestions([QUESTION_ONE, QUESTION_TWO], "req-8");
     await showCurrentQuestion(api, 123, createDeps());
 
     const selectCtx = createCallbackContext("question:select:0:0", 701, api);
@@ -248,14 +253,14 @@ describe("bot question menu/callbacks", () => {
 
     expect(handled).toBe(true);
     expect(selectCtx.deleteMessage).toHaveBeenCalledOnce();
-    expect(questionManager.getCurrentIndex()).toBe(1);
-    expect(questionManager.getActiveMessageId()).toBe(702);
+    expect(container.questionManager.getCurrentIndex()).toBe(1);
+    expect(container.questionManager.getActiveMessageId()).toBe(702);
   });
 
   it("rejects stale callback from old question message", async () => {
     const api = createApi([200]);
 
-    questionManager.startQuestions([QUESTION_ONE], "req-3");
+    container.questionManager.startQuestions([QUESTION_ONE], "req-3");
     await showCurrentQuestion(api, 123, createDeps());
 
     const staleCtx = createCallbackContext("question:select:0:0", 199, api);
@@ -266,17 +271,17 @@ describe("bot question menu/callbacks", () => {
       text: t("question.inactive_callback"),
       show_alert: true,
     });
-    expect(questionManager.getSelectedOptions(0)).toEqual(new Set<number>());
+    expect(container.questionManager.getSelectedOptions(0)).toEqual(new Set<number>());
   });
 
   it("answers the callback when the current question is already gone", async () => {
     const api = createApi([250]);
 
-    questionManager.startQuestions([QUESTION_ONE], "req-stale");
+    container.questionManager.startQuestions([QUESTION_ONE], "req-stale");
     await showCurrentQuestion(api, 123, createDeps());
     // Index past the last question: the message is still active, but there is
     // nothing to answer anymore.
-    questionManager.nextQuestion();
+    container.questionManager.nextQuestion();
 
     const ctx = createCallbackContext("question:select:0:0", 250, api);
     const handled = await handleQuestionCallback(ctx, createDeps());
@@ -291,7 +296,7 @@ describe("bot question menu/callbacks", () => {
   it("cancels poll and clears question interaction", async () => {
     const api = createApi([300]);
 
-    questionManager.startQuestions([QUESTION_ONE], "req-4");
+    container.questionManager.startQuestions([QUESTION_ONE], "req-4");
     await showCurrentQuestion(api, 123, createDeps());
 
     const cancelCtx = createCallbackContext("question:cancel:0", 300, api);
@@ -301,15 +306,15 @@ describe("bot question menu/callbacks", () => {
     expect(cancelCtx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("common.cancelled") });
     expect(cancelCtx.editMessageText).toHaveBeenCalledWith(t("question.cancelled"));
     expect(api.deleteMessage).not.toHaveBeenCalled();
-    expect(questionManager.isActive()).toBe(false);
-    expect(questionManager.getTotalQuestions()).toBe(0);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.questionManager.isActive()).toBe(false);
+    expect(container.questionManager.getTotalQuestions()).toBe(0);
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("requires at least one selected option on multiple submit", async () => {
     const api = createApi([400]);
 
-    questionManager.startQuestions([MULTIPLE_QUESTION], "req-5");
+    container.questionManager.startQuestions([MULTIPLE_QUESTION], "req-5");
     await showCurrentQuestion(api, 123, createDeps());
 
     const submitCtx = createCallbackContext("question:submit:0", 400, api);
@@ -320,13 +325,13 @@ describe("bot question menu/callbacks", () => {
       text: t("question.select_one_required_callback"),
       show_alert: true,
     });
-    expect(questionManager.isActive()).toBe(true);
+    expect(container.questionManager.isActive()).toBe(true);
   });
 
   it("updates question message on multiple selection with compact button label", async () => {
     const api = createApi([500]);
 
-    questionManager.startQuestions([MULTIPLE_QUESTION], "req-6");
+    container.questionManager.startQuestions([MULTIPLE_QUESTION], "req-6");
     await showCurrentQuestion(api, 123, createDeps());
 
     const selectCtx = createCallbackContext("question:select:0:0", 500, api);
@@ -358,13 +363,13 @@ describe("bot question menu/callbacks", () => {
   it("keeps requiring custom button before accepting text answer", async () => {
     const api = createApi([600]);
 
-    questionManager.startQuestions([QUESTION_ONE], "req-7");
+    container.questionManager.startQuestions([QUESTION_ONE], "req-7");
     await showCurrentQuestion(api, 123, createDeps());
 
     const textCtx = createTextContext("Typed without custom button", api);
     await handleQuestionTextAnswer(textCtx, createDeps());
 
     expect(textCtx.reply).toHaveBeenCalledWith(t("question.use_custom_button_first"));
-    expect(questionManager.getCurrentIndex()).toBe(0);
+    expect(container.questionManager.getCurrentIndex()).toBe(0);
   });
 });

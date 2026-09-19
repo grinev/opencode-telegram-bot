@@ -34,17 +34,18 @@ vi.mock("../../src/utils/logger.js", () => ({
   },
 }));
 
-import { opencodeReadyLifecycle } from "../../src/opencode/ready-lifecycle.js";
+import { OpencodeReadyLifecycle } from "../../src/opencode/ready-lifecycle.js";
 import {
   refreshSessionCacheAfterOpencodeReady,
   refreshSessionCacheIfOpencodeReady,
   type ReadyRefreshDeps,
 } from "../../src/opencode/ready-refresh.js";
 
-const deps: ReadyRefreshDeps = { opencodeReadyLifecycle };
+let deps: ReadyRefreshDeps;
 
 describe("opencode/ready-refresh", () => {
   beforeEach(() => {
+    deps = { opencodeReadyLifecycle: new OpencodeReadyLifecycle() };
     mocked.healthMock.mockReset();
     mocked.warmupSessionDirectoryCacheMock.mockReset();
     mocked.reconcileStoredModelSelectionMock.mockReset();

@@ -68,7 +68,25 @@ function isAgentRequestKind(kind: InteractionState["kind"]): boolean {
   return kind === "question" || kind === "permission";
 }
 
-class InteractionManager {
+export type InteractionErrorScope =
+  | "question"
+  | "permission"
+  | "rename"
+  | "taskCreation"
+  | "interaction"
+  | "none";
+
+const SCOPE_TO_INTERACTION_KIND: Record<
+  Exclude<InteractionErrorScope, "interaction" | "none">,
+  StatefulInteractionKind
+> = {
+  question: "question",
+  permission: "permission",
+  rename: "rename",
+  taskCreation: "task",
+};
+
+export class InteractionManager {
   private state: ActiveInteraction | null = null;
   private waiting: WaitingAgentRequest | null = null;
   private generation = 0;
@@ -215,9 +233,49 @@ class InteractionManager {
    * prompts still being sent as stale.
    */
   reset(reason: InteractionClearReason): void {
+    const interactionSnapshot = this.getSnapshot();
+    const waitingKind = this.getWaitingKind();
+
     this.waiting = null;
     this.bumpGeneration();
     this.drop(reason);
+
+    const message =
+      `[InteractionCleanup] Cleared state: reason=${reason}, ` +
+      `interactionKind=${interactionSnapshot?.kind || "none"}, waiting=${waitingKind || "none"}`;
+
+    if (interactionSnapshot !== null || waitingKind !== null) {
+      logger.info(message);
+      return;
+    }
+
+    logger.debug(message);
+  }
+
+  /**
+   * Drops only what a failed handler in the given scope may have left behind.
+   */
+  clearErrorScope(scope: InteractionErrorScope, reason: InteractionClearReason): void {
+    if (scope === "none") {
+      return;
+    }
+
+    const stateBefore = this.getSnapshot();
+
+    if (scope === "interaction") {
+      this.clear(reason);
+    } else {
+      if (scope === "permission") {
+        // Bump first, so a poll released by this clear carries the new generation.
+        this.bumpGeneration();
+      }
+
+      this.clearKind(SCOPE_TO_INTERACTION_KIND[scope], reason);
+    }
+
+    logger.debug(
+      `[InteractionCleanup] Cleared scoped state: reason=${reason}, scope=${scope}, interactionKind=${stateBefore?.kind || "none"}`,
+    );
   }
 
   getGeneration(): number {
@@ -283,13 +341,6 @@ class InteractionManager {
     this.onWaitingRequestReady = listener;
   }
 
-  __resetForTests(): void {
-    this.state = null;
-    this.waiting = null;
-    this.generation = 0;
-    this.onWaitingRequestReady = null;
-  }
-
   private drop(reason: InteractionClearReason): InteractionState["kind"] | null {
     if (!this.state) {
       return null;
@@ -303,68 +354,4 @@ class InteractionManager {
     this.state = null;
     return kind;
   }
-}
-
-export const interactionManager = new InteractionManager();
-
-export type InteractionErrorScope =
-  | "question"
-  | "permission"
-  | "rename"
-  | "taskCreation"
-  | "interaction"
-  | "none";
-
-const SCOPE_TO_INTERACTION_KIND: Record<
-  Exclude<InteractionErrorScope, "interaction" | "none">,
-  StatefulInteractionKind
-> = {
-  question: "question",
-  permission: "permission",
-  rename: "rename",
-  taskCreation: "task",
-};
-
-export function clearInteractionErrorState(
-  scope: InteractionErrorScope,
-  reason: string,
-): void {
-  if (scope === "none") {
-    return;
-  }
-
-  const stateBefore = interactionManager.getSnapshot();
-
-  if (scope === "interaction") {
-    interactionManager.clear(reason);
-  } else {
-    if (scope === "permission") {
-      // Bump first, so a poll released by this clear carries the new generation.
-      interactionManager.bumpGeneration();
-    }
-
-    interactionManager.clearKind(SCOPE_TO_INTERACTION_KIND[scope], reason);
-  }
-
-  logger.debug(
-    `[InteractionCleanup] Cleared scoped state: reason=${reason}, scope=${scope}, interactionKind=${stateBefore?.kind || "none"}`,
-  );
-}
-
-export function clearAllInteractionState(reason: string): void {
-  const interactionSnapshot = interactionManager.getSnapshot();
-  const waitingKind = interactionManager.getWaitingKind();
-
-  interactionManager.reset(reason);
-
-  const message =
-    `[InteractionCleanup] Cleared state: reason=${reason}, ` +
-    `interactionKind=${interactionSnapshot?.kind || "none"}, waiting=${waitingKind || "none"}`;
-
-  if (interactionSnapshot !== null || waitingKind !== null) {
-    logger.info(message);
-    return;
-  }
-
-  logger.debug(message);
 }

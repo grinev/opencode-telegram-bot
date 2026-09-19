@@ -9,7 +9,7 @@ function normalizeExternalUserInputText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
 }
 
-class ExternalUserInputSuppressionManager {
+export class ExternalUserInputSuppressionManager {
   private entriesBySession = new Map<string, SuppressionEntry[]>();
 
   register(sessionId: string, text: string, now: number = Date.now()): void {
@@ -55,10 +55,6 @@ class ExternalUserInputSuppressionManager {
     this.entriesBySession.clear();
   }
 
-  __resetForTests(): void {
-    this.clearAll();
-  }
-
   private prune(now: number): void {
     for (const [sessionId, sessionEntries] of this.entriesBySession.entries()) {
       const activeEntries = sessionEntries.filter((entry) => now - entry.createdAt <= SUPPRESSION_TTL_MS);
@@ -71,5 +67,3 @@ class ExternalUserInputSuppressionManager {
     }
   }
 }
-
-export const externalUserInputSuppressionManager = new ExternalUserInputSuppressionManager();

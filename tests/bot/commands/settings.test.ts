@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
 import { settingsCommand } from "../../../src/bot/commands/settings-command.js";
 import { handleSettingsCallback } from "../../../src/bot/callbacks/settings-callback-handler.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { ar } from "../../../src/i18n/ar.js";
 import { de } from "../../../src/i18n/de.js";
@@ -28,6 +27,7 @@ import {
   SETTINGS_TTS_CALLBACK,
 } from "../../../src/bot/menus/settings-menu.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   getCompactOutputModeMock: vi.fn(),
@@ -78,13 +78,20 @@ vi.mock("../../../src/app/services/tts-service.js", () => ({
 }));
 
 function createDeps() {
-  return createTestAppContainer({
+  return {
+    ...container,
     pinnedMessageManager: {
       initialize: vi.fn(),
       applyPinnedDashboardEnabled: mocked.applyPinnedDashboardEnabledMock,
     } as never,
-  });
+  };
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot/commands/settings-command", () => {
   beforeEach(() => {
@@ -114,7 +121,7 @@ describe("bot/commands/settings-command", () => {
     mocked.getPinnedDashboardEnabledMock.mockReturnValue(true);
     mocked.applyPinnedDashboardEnabledMock.mockResolvedValue(undefined);
     mocked.getPromptQueueEnabledMock.mockReturnValue(false);
-    interactionManager.clear("settings_test_reset");
+    container.interactionManager.clear("settings_test_reset");
   });
 
   it("shows settings menu with current compact output and TTS modes", async () => {
@@ -249,11 +256,11 @@ describe("bot/callbacks/settings-callback-handler", () => {
     mocked.getPinnedDashboardEnabledMock.mockReturnValue(true);
     mocked.applyPinnedDashboardEnabledMock.mockResolvedValue(undefined);
     mocked.getPromptQueueEnabledMock.mockReturnValue(false);
-    interactionManager.clear("settings_test_reset");
+    container.interactionManager.clear("settings_test_reset");
   });
 
   function activateSettingsMenu(): void {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "inline",
       expectedInput: "callback",
       metadata: {

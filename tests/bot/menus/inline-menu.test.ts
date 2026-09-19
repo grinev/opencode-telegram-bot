@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Context, InlineKeyboard } from "grammy";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import {
   appendInlineMenuCancelButton,
   ensureActiveInlineMenu,
@@ -10,8 +9,9 @@ import { handleInlineMenuCancel } from "../../../src/bot/callbacks/inline-menu-c
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
-const deps = createTestAppContainer();
+let deps: AppContainer;
 
 function createReplyContext(messageId: number = 1): Context {
   return {
@@ -45,9 +45,13 @@ function getCallbackData(button: unknown): string | undefined {
   return maybeButton.callback_data;
 }
 
+beforeEach(() => {
+  deps = createTestAppContainer();
+});
+
 describe("bot/menus/inline-menu", () => {
   beforeEach(() => {
-    interactionManager.clear("test_setup");
+    deps.interactionManager.clear("test_setup");
   });
 
   it("adds unified cancel button to inline keyboard", () => {
@@ -108,7 +112,7 @@ describe("bot/menus/inline-menu", () => {
 
     expect(getCallbackData(defined(lastRow[0]))).toBe("inline:cancel:model");
 
-    const state = interactionManager.getSnapshot();
+    const state = deps.interactionManager.getSnapshot();
     expect(state?.kind).toBe("inline");
     expect(state?.expectedInput).toBe("callback");
     expect(state?.metadata.menuKind).toBe("model");
@@ -120,7 +124,7 @@ describe("bot/menus/inline-menu", () => {
   });
 
   it("accepts callback from active inline menu", async () => {
-    interactionManager.start({
+    deps.interactionManager.start({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -138,7 +142,7 @@ describe("bot/menus/inline-menu", () => {
   });
 
   it("rejects stale callback when menu kind does not match", async () => {
-    interactionManager.start({
+    deps.interactionManager.start({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -159,7 +163,7 @@ describe("bot/menus/inline-menu", () => {
   });
 
   it("handles unified inline cancel callback and clears state", async () => {
-    interactionManager.start({
+    deps.interactionManager.start({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -173,13 +177,13 @@ describe("bot/menus/inline-menu", () => {
     const handled = await handleInlineMenuCancel(ctx, deps);
 
     expect(handled).toBe(true);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(deps.interactionManager.getSnapshot()).toBeNull();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("common.cancelled") });
     expect(ctx.deleteMessage).toHaveBeenCalledTimes(1);
   });
 
   it("supports legacy compact cancel callback", async () => {
-    interactionManager.start({
+    deps.interactionManager.start({
       kind: "inline",
       expectedInput: "callback",
       metadata: {
@@ -193,6 +197,6 @@ describe("bot/menus/inline-menu", () => {
     const handled = await handleInlineMenuCancel(ctx, deps);
 
     expect(handled).toBe(true);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(deps.interactionManager.getSnapshot()).toBeNull();
   });
 });

@@ -37,13 +37,6 @@ vi.mock("../../src/opencode/process.js", () => ({
   startLocalOpencodeServer: mocked.startLocalOpencodeServerMock,
 }));
 
-vi.mock("../../src/opencode/ready-lifecycle.js", () => ({
-  opencodeReadyLifecycle: {
-    notifyReady: mocked.notifyReadyMock,
-    notifyUnavailable: mocked.notifyUnavailableMock,
-  },
-}));
-
 vi.mock("../../src/utils/logger.js", () => ({
   logger: {
     debug: mocked.loggerDebugMock,
@@ -54,6 +47,12 @@ vi.mock("../../src/utils/logger.js", () => ({
 }));
 
 import { OpencodeAutoRestartService } from "../../src/opencode/auto-restart.js";
+import type { OpencodeReadyLifecycle } from "../../src/opencode/ready-lifecycle.js";
+
+const readyLifecycle = {
+  notifyReady: mocked.notifyReadyMock,
+  notifyUnavailable: mocked.notifyUnavailableMock,
+} as unknown as OpencodeReadyLifecycle;
 
 function createChildProcess(pid: number): ChildProcess {
   return {
@@ -99,7 +98,7 @@ describe("opencode/auto-restart", () => {
   });
 
   it("does nothing when auto-restart is disabled", async () => {
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     await service.start();
 
@@ -112,7 +111,7 @@ describe("opencode/auto-restart", () => {
     mocked.config.opencode.autoRestartEnabled = true;
     mocked.config.opencode.apiUrl = "https://example.com";
     mocked.resolveLocalOpencodeTargetMock.mockReturnValue(null);
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     await service.start();
 
@@ -128,7 +127,7 @@ describe("opencode/auto-restart", () => {
     mocked.config.opencode.autoRestartEnabled = true;
     vi.stubEnv("OPENCODE_TELEGRAM_CONTAINER", "1");
     mocked.healthMock.mockRejectedValue(new Error("offline"));
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     await service.start();
 
@@ -146,7 +145,7 @@ describe("opencode/auto-restart", () => {
     mocked.config.opencode.autoRestartEnabled = true;
     vi.stubEnv("OPENCODE_TELEGRAM_CONTAINER", "1");
     mocked.healthMock.mockResolvedValue(healthyResponse());
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     await service.start();
 
@@ -159,7 +158,7 @@ describe("opencode/auto-restart", () => {
   it("does not start a process when the server is healthy", async () => {
     mocked.config.opencode.autoRestartEnabled = true;
     mocked.healthMock.mockResolvedValue(healthyResponse());
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     await service.start();
 
@@ -177,7 +176,7 @@ describe("opencode/auto-restart", () => {
     mocked.healthMock
       .mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce(healthyResponse());
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     await service.start();
 
@@ -200,7 +199,7 @@ describe("opencode/auto-restart", () => {
     mocked.healthMock
       .mockReturnValueOnce(new Promise(() => undefined))
       .mockResolvedValueOnce(healthyResponse());
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     const startPromise = service.start();
     await vi.advanceTimersByTimeAsync(3000);
@@ -220,7 +219,7 @@ describe("opencode/auto-restart", () => {
     mocked.config.opencode.autoRestartEnabled = true;
     mocked.config.opencode.monitorIntervalSec = 300;
     mocked.healthMock.mockResolvedValue(healthyResponse());
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     await service.start();
     await vi.advanceTimersByTimeAsync(300_000);
@@ -237,7 +236,7 @@ describe("opencode/auto-restart", () => {
     mocked.healthMock
       .mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce(healthyResponse());
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     await service.start();
 
@@ -257,7 +256,7 @@ describe("opencode/auto-restart", () => {
       .mockResolvedValueOnce(healthyResponse())
       .mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce(healthyResponse());
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
 
     await service.start();
     await vi.advanceTimersByTimeAsync(300_000);
@@ -273,7 +272,7 @@ describe("opencode/auto-restart", () => {
     mocked.config.opencode.autoRestartEnabled = true;
     mocked.config.opencode.monitorIntervalSec = 1;
     mocked.healthMock.mockResolvedValueOnce(healthyResponse());
-    const service = new OpencodeAutoRestartService();
+    const service = new OpencodeAutoRestartService(readyLifecycle);
     await service.start();
 
     let resolveHealth: (value: ReturnType<typeof unhealthyResponse>) => void = () => undefined;

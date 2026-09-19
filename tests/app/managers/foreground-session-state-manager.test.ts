@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
+import { ForegroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
+
+let foregroundSessionState: ForegroundSessionState;
+
+beforeEach(() => {
+  foregroundSessionState = new ForegroundSessionState();
+});
 
 describe("app/managers/foreground-session-state-manager", () => {
-  beforeEach(() => {
-    foregroundSessionState.__resetForTests();
-  });
-
   it("tracks busy sessions with their directory", () => {
     foregroundSessionState.markBusy("session-1", "D:/repo");
 

@@ -1,5 +1,12 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { renameManager } from "../../../src/app/managers/rename-manager.js";
+import { RenameManager } from "../../../src/app/managers/rename-manager.js";
+import { InteractionManager } from "../../../src/app/managers/interaction-manager.js";
+
+let renameManager: RenameManager;
+
+beforeEach(() => {
+  renameManager = new RenameManager(new InteractionManager());
+});
 
 describe("renameManager", () => {
   beforeEach(() => {

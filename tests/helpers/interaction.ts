@@ -1,4 +1,4 @@
-import { interactionManager } from "../../src/app/managers/interaction-manager.js";
+import type { InteractionManager } from "../../src/app/managers/interaction-manager.js";
 import type {
   InteractionKind,
   InteractionState,
@@ -10,10 +10,13 @@ type TestInteractionOptions = Omit<StartInteractionOptions, "kind" | "payload"> 
 };
 
 /**
- * Opens the interaction slot for guard-level tests that only care about the
+ * Opens the given interaction slot for guard-level tests that only care about the
  * kind, filling a stateful kind with empty data.
  */
-export function startInteractionForTest(options: TestInteractionOptions): InteractionState {
+export function startInteractionForTest(
+  interactionManager: InteractionManager,
+  options: TestInteractionOptions,
+): InteractionState {
   switch (options.kind) {
     case "question":
       return interactionManager.start({

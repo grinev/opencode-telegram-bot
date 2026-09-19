@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
 import { mcpsCommand } from "../../../src/bot/commands/mcp-catalog-command.js";
 import { handleMcpsCallback } from "../../../src/bot/callbacks/mcp-catalog-callback-handler.js";
-import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -66,12 +66,18 @@ function createCallbackContext(data: string, messageId: number): Context {
 }
 
 function createDeps() {
-  return createTestAppContainer();
+  return container;
 }
+
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
 
 describe("bot/commands/mcps", () => {
   beforeEach(() => {
-    interactionManager.clear("test_setup");
+    container.interactionManager.clear("test_setup");
 
     mocked.currentProject = {
       id: "project-1",
@@ -125,7 +131,7 @@ describe("bot/commands/mcps", () => {
     expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("mcps:select:1");
     expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("mcps:cancel");
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");
     expect(state?.expectedInput).toBe("callback");
     expect(state?.metadata.flow).toBe("mcps");
@@ -143,7 +149,7 @@ describe("bot/commands/mcps", () => {
   });
 
   it("transitions to detail view after selecting a server", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -167,7 +173,7 @@ describe("bot/commands/mcps", () => {
       expect.objectContaining({ reply_markup: expect.any(Object) }),
     );
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");
     expect(state?.metadata.stage).toBe("detail");
     expect(state?.metadata.serverName).toBe("github");
@@ -182,7 +188,7 @@ describe("bot/commands/mcps", () => {
       error: null,
     });
 
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -204,7 +210,7 @@ describe("bot/commands/mcps", () => {
       directory: "D:/Projects/Repo",
     });
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.metadata.stage).toBe("detail");
     expect(state?.metadata.serverName).toBe("filesystem");
   });
@@ -218,7 +224,7 @@ describe("bot/commands/mcps", () => {
       error: null,
     });
 
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -240,7 +246,7 @@ describe("bot/commands/mcps", () => {
       directory: "D:/Projects/Repo",
     });
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.metadata.stage).toBe("detail");
     expect(state?.metadata.serverName).toBe("github");
   });
@@ -253,7 +259,7 @@ describe("bot/commands/mcps", () => {
       error: null,
     });
 
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -275,12 +281,12 @@ describe("bot/commands/mcps", () => {
       expect.objectContaining({ reply_markup: expect.any(Object) }),
     );
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     expect(state?.metadata.stage).toBe("list");
   });
 
   it("cancels and deletes message", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -298,11 +304,11 @@ describe("bot/commands/mcps", () => {
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("common.cancelled") });
     expect(ctx.deleteMessage).toHaveBeenCalledTimes(1);
-    expect(interactionManager.getSnapshot()).toBeNull();
+    expect(container.interactionManager.getSnapshot()).toBeNull();
   });
 
   it("handles stale callback as inactive", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -322,11 +328,11 @@ describe("bot/commands/mcps", () => {
       text: t("inline.inactive_callback"),
       show_alert: true,
     });
-    expect(interactionManager.getSnapshot()?.kind).toBe("custom");
+    expect(container.interactionManager.getSnapshot()?.kind).toBe("custom");
   });
 
   it("does not show enable button for needs_auth status", async () => {
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {
@@ -380,7 +386,7 @@ describe("bot/commands/mcps", () => {
     expect(callbackData).toBe("mcps:select:0");
     expect(Buffer.byteLength(callbackData ?? "", "utf-8")).toBeLessThanOrEqual(64);
 
-    const state = interactionManager.getSnapshot();
+    const state = container.interactionManager.getSnapshot();
     const servers = state?.metadata.servers as Array<{ name: string }> | undefined;
     expect(servers?.[0]?.name).toBe(longServerName);
   });
@@ -388,7 +394,7 @@ describe("bot/commands/mcps", () => {
   it("shows toggle error on API failure", async () => {
     mocked.mcpConnectMock.mockResolvedValue({ error: new Error("Connection failed") });
 
-    interactionManager.start({
+    container.interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
       metadata: {

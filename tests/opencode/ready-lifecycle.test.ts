@@ -14,11 +14,16 @@ vi.mock("../../src/utils/logger.js", () => ({
   },
 }));
 
-import { opencodeReadyLifecycle } from "../../src/opencode/ready-lifecycle.js";
+import { OpencodeReadyLifecycle } from "../../src/opencode/ready-lifecycle.js";
+
+let opencodeReadyLifecycle: OpencodeReadyLifecycle;
+
+beforeEach(() => {
+  opencodeReadyLifecycle = new OpencodeReadyLifecycle();
+});
 
 describe("opencode/ready-lifecycle", () => {
   beforeEach(() => {
-    opencodeReadyLifecycle.__resetForTests();
     mocked.loggerDebugMock.mockReset();
     mocked.loggerInfoMock.mockReset();
     mocked.loggerWarnMock.mockReset();

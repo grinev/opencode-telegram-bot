@@ -191,4 +191,3 @@ class BackgroundSessionTracker {
 }
 
 export { BackgroundSessionTracker };
-export const backgroundSessionTracker = new BackgroundSessionTracker();

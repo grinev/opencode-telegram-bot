@@ -1,6 +1,6 @@
 import type { ParsedTaskSchedule, ScheduledTaskModel, TaskCreationState } from "../types/scheduled-task.js";
 import { cloneParsedTaskSchedule, cloneScheduledTaskModel } from "../types/scheduled-task.js";
-import { interactionManager } from "./interaction-manager.js";
+import type { InteractionManager } from "./interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 
 function cloneState(state: TaskCreationState): TaskCreationState {
@@ -11,9 +11,11 @@ function cloneState(state: TaskCreationState): TaskCreationState {
   };
 }
 
-class TaskCreationManager {
+export class TaskCreationManager {
+  constructor(private readonly interactionManager: InteractionManager) {}
+
   private get state(): TaskCreationState | null {
-    return interactionManager.getPayload("task");
+    return this.interactionManager.getPayload("task");
   }
 
   private update(changes: Partial<TaskCreationState>): TaskCreationState | null {
@@ -44,7 +46,7 @@ class TaskCreationManager {
       previewMessageId: null,
       promptRequestMessageId: null,
     };
-    interactionManager.start({ kind: "task", expectedInput: "text", payload: state });
+    this.interactionManager.start({ kind: "task", expectedInput: "text", payload: state });
 
     logger.info(`[TaskCreationManager] Started task creation flow for project=${projectWorktree}`);
 
@@ -133,8 +135,6 @@ class TaskCreationManager {
     }
 
     logger.debug("[TaskCreationManager] Clearing task creation state");
-    interactionManager.clearKind("task", "task_creation_cleared");
+    this.interactionManager.clearKind("task", "task_creation_cleared");
   }
 }
-
-export const taskCreationManager = new TaskCreationManager();

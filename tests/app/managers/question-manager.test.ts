@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { questionManager } from "../../../src/app/managers/question-manager.js";
+import { beforeEach, describe, expect, it } from "vitest";
+import { QuestionManager } from "../../../src/app/managers/question-manager.js";
 import type { Question } from "../../../src/app/types/question.js";
+import { InteractionManager } from "../../../src/app/managers/interaction-manager.js";
 
 const SINGLE_QUESTION: Question = {
   question: "Pick one option",
@@ -21,6 +22,12 @@ const MULTIPLE_QUESTION: Question = {
     { label: "Gamma", description: "third" },
   ],
 };
+
+let questionManager: QuestionManager;
+
+beforeEach(() => {
+  questionManager = new QuestionManager(new InteractionManager());
+});
 
 describe("questionManager", () => {
   it("starts poll and moves through questions", () => {

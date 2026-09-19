@@ -1,15 +1,17 @@
 import type { RenameState } from "../types/rename.js";
-import { interactionManager } from "./interaction-manager.js";
+import type { InteractionManager } from "./interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 
-class RenameManager {
+export class RenameManager {
+  constructor(private readonly interactionManager: InteractionManager) {}
+
   private get state(): RenameState | null {
-    return interactionManager.getPayload("rename");
+    return this.interactionManager.getPayload("rename");
   }
 
   startWaiting(sessionId: string, directory: string, currentTitle: string): void {
     logger.info(`[RenameManager] Starting rename flow for session: ${sessionId}`);
-    interactionManager.start({
+    this.interactionManager.start({
       kind: "rename",
       expectedInput: "text",
       payload: {
@@ -55,8 +57,6 @@ class RenameManager {
 
   clear(): void {
     logger.debug("[RenameManager] Clearing rename state");
-    interactionManager.clearKind("rename", "rename_cleared");
+    this.interactionManager.clearKind("rename", "rename_cleared");
   }
 }
-
-export const renameManager = new RenameManager();

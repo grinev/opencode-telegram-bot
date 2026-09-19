@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
 import { newCommand } from "../../../src/bot/commands/new-command.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   sessionCreateMock: vi.fn(),
@@ -64,22 +64,26 @@ function createContext(): Context {
 
 function createDeps() {
   return {
-    ...createTestAppContainer({
-      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
-      resetInteractions: vi.fn(),
-      keyboardManager: {
-        initialize: vi.fn(),
-        updateAgent: vi.fn(),
-        getContextInfo: vi.fn(() => null),
-      } as never,
-    }),
+    ...container,
+    ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    resetInteractions: vi.fn(),
+    keyboardManager: {
+      initialize: vi.fn(),
+      updateAgent: vi.fn(),
+      getContextInfo: vi.fn(() => null),
+    } as never,
     bot: { api: {} } as Bot<Context>,
   };
 }
 
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
+
 describe("bot/commands/new", () => {
   beforeEach(() => {
-    foregroundSessionState.__resetForTests();
     mocked.sessionCreateMock.mockReset();
     mocked.getCurrentProjectMock.mockReset();
     mocked.attachToSessionMock.mockReset();
@@ -94,7 +98,7 @@ describe("bot/commands/new", () => {
   });
 
   it("blocks new session creation while foreground session is busy", async () => {
-    foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+    container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
 
     const ctx = createContext();
     await newCommand(ctx as never, createDeps());

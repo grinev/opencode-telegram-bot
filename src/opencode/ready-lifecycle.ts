@@ -2,7 +2,7 @@ import { logger } from "../utils/logger.js";
 
 export type OpencodeReadyHandler = (reason: string) => Promise<void> | void;
 
-class OpencodeReadyLifecycle {
+export class OpencodeReadyLifecycle {
   private ready = false;
   private handlers = new Set<OpencodeReadyHandler>();
 
@@ -47,11 +47,4 @@ class OpencodeReadyLifecycle {
     logger.warn(`[OpenCodeReady] OpenCode server became unavailable: reason=${reason}`);
     return true;
   }
-
-  __resetForTests(): void {
-    this.ready = false;
-    this.handlers.clear();
-  }
 }
-
-export const opencodeReadyLifecycle = new OpencodeReadyLifecycle();

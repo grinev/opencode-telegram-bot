@@ -11,10 +11,10 @@ vi.mock("../../../src/bot/handlers/message-merger.js", () => ({
 import { handlePhotoMessage, type PhotoHandlerDeps } from "../../../src/bot/handlers/photo-handler.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
-import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";
 import * as settingsStore from "../../../src/app/stores/settings-store.js";
 import { initializePromptQueueDispatch } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
+import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 function createPhotoContext(caption = "Describe this"): { ctx: Context; replyMock: ReturnType<typeof vi.fn> } {
   const replyMock = vi.fn().mockResolvedValue({ message_id: 100 });
@@ -47,7 +47,7 @@ function createDeps(overrides: Partial<PhotoHandlerDeps> = {}): {
   });
   const getCapabilitiesMock = vi.fn().mockResolvedValue({ input: { image: true } });
   const deps: PhotoHandlerDeps = {
-    ...createTestAppContainer(),
+    ...container,
     bot: {} as PhotoHandlerDeps["bot"],
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
     downloadFile: downloadMock,
@@ -61,17 +61,22 @@ function createDeps(overrides: Partial<PhotoHandlerDeps> = {}): {
   return { deps, processPromptMock, downloadMock, getCapabilitiesMock };
 }
 
+let container: AppContainer;
+
+beforeEach(() => {
+  container = createTestAppContainer();
+});
+
 describe("bot/handlers/photo-handler", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     flushPendingPromptMock.mockClear();
     promptQueue.__resetForTests();
-    foregroundSessionState.__resetForTests();
   });
 
   it("queues a photo without downloading it while the agent is busy", async () => {
     vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
-    foregroundSessionState.markBusy("session-1", "/repo");
+    container.foregroundSessionState.markBusy("session-1", "/repo");
     const { ctx } = createPhotoContext("release screenshot");
     const { deps, processPromptMock } = createDeps();
 
