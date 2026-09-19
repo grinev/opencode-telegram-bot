@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Context, NextFunction } from "grammy";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   flushPendingPrompt: vi.fn(),
@@ -28,8 +29,7 @@ describe("bot/routers/command-router", () => {
     const bot = { command: vi.fn(), use: vi.fn() };
 
     registerCommandRouter(bot as never, {
-      ensureEventSubscription: vi.fn(),
-      clearRuntimeState: vi.fn(),
+      container: createTestAppContainer({ ensureEventSubscription: vi.fn(), resetRuntimeStreams: vi.fn() }),
     });
 
     expect(bot.command.mock.calls.map(([command]) => command)).toEqual([
@@ -61,8 +61,7 @@ describe("bot/routers/command-router", () => {
     const bot = { command: vi.fn(), use: vi.fn() };
     const next = vi.fn();
     registerCommandRouter(bot as never, {
-      ensureEventSubscription: vi.fn(),
-      clearRuntimeState: vi.fn(),
+      container: createTestAppContainer({ ensureEventSubscription: vi.fn(), resetRuntimeStreams: vi.fn() }),
     });
     const middleware = defined(bot.use.mock.calls[0]?.[0]);
     const ctx = { chat: { id: 123 }, message: { text: "/new" } } as unknown as Context;
@@ -73,15 +72,14 @@ describe("bot/routers/command-router", () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("passes clearRuntimeState to the opencode_stop handler", async () => {
+  it("passes the container's runtime-streams reset to the opencode_stop handler", async () => {
     const bot = { command: vi.fn(), use: vi.fn() };
     const clearRuntimeState = vi.fn();
     mocked.opencodeStopCommand.mockReset();
     mocked.opencodeStopCommand.mockResolvedValue(undefined);
 
     registerCommandRouter(bot as never, {
-      ensureEventSubscription: vi.fn(),
-      clearRuntimeState,
+      container: createTestAppContainer({ resetRuntimeStreams: clearRuntimeState }),
     });
 
     const stopRegistration = bot.command.mock.calls.find(([command]) => command === "opencode_stop");

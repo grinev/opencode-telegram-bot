@@ -113,6 +113,7 @@ vi.mock("../../../src/bot/menus/file-browser-menu.js", () => ({
 }));
 
 import { registerCallbackRouter } from "../../../src/bot/callbacks/callback-router.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const tableHandlers = [
   mocked.handleAgentSelect,
@@ -300,8 +301,7 @@ describe("bot/callbacks/callback-router", () => {
 function registerAndGetCallback() {
   const bot = { on: vi.fn() };
   registerCallbackRouter(bot as never, {
-    ensureEventSubscription: vi.fn(),
-    setTelegramContext: vi.fn(),
+    container: createTestAppContainer({ ensureEventSubscription: vi.fn(), setTelegramContext: vi.fn() }),
   });
   return defined(bot.on.mock.calls[0]?.[1]) as (ctx: Context) => Promise<void>;
 }

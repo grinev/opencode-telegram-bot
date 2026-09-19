@@ -1,4 +1,5 @@
 import type { Bot, Context, NextFunction } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
 import { settingsCommand } from "../commands/settings-command.js";
 import { opencodeStartCommand } from "../commands/opencode-start-command.js";
@@ -32,8 +33,7 @@ import { sendMessageWithMarkdownFallback } from "../messages/send-with-markdown-
 import { t } from "../../i18n/index.js";
 
 interface CommandRouterDeps {
-  ensureEventSubscription: (directory: string) => Promise<void>;
-  clearRuntimeState: (reason: string) => void;
+  container: AppContainer;
   localCommandRegistry?: LocalCommandRegistry;
 }
 
@@ -86,7 +86,7 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
   bot.command("settings", settingsCommand);
   bot.command("opencode_start", opencodeStartCommand);
   bot.command("opencode_stop", (ctx) =>
-    opencodeStopCommand(ctx, { clearRuntimeState: deps.clearRuntimeState }),
+    opencodeStopCommand(ctx, { clearRuntimeState: deps.container.resetRuntimeStreams }),
   );
   bot.command("projects", projectsCommand);
   bot.command("worktree", worktreeCommand);
@@ -94,7 +94,9 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
   bot.command("ls", lsCommand);
   bot.command("sessions", sessionsCommand);
   bot.command("messages", messagesCommand);
-  bot.command("new", (ctx) => newCommand(ctx, { bot, ensureEventSubscription: deps.ensureEventSubscription }));
+  bot.command("new", (ctx) =>
+    newCommand(ctx, { bot, ensureEventSubscription: deps.container.ensureEventSubscription }),
+  );
   bot.command("abort", abortCommand);
   bot.command("detach", detachCommand);
   bot.command("task", taskCommand);

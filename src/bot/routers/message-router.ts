@@ -1,7 +1,6 @@
 import type { Bot, Context } from "grammy";
 import { config } from "../../config.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
-import { questionManager } from "../../app/managers/question-manager.js";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { handleTaskTextInput } from "../commands/task-command.js";
@@ -22,7 +21,6 @@ import {
   VARIANT_BUTTON_TEXT_PATTERN,
 } from "../message-patterns.js";
 import { promptQueue } from "../../app/managers/prompt-queue-manager.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { findQueuedPromptByButtonLabel } from "../keyboards/queued-prompt-button.js";
 import { handleDocumentMessage } from "../handlers/document-handler.js";
 import { createMediaGroupAttachmentMiddleware } from "../handlers/media-group-handler.js";
@@ -35,11 +33,13 @@ import { getIncomingPrompt } from "../handlers/rich-message-handler.js";
 import { handleUnsupportedMessage } from "../handlers/unsupported-message-handler.js";
 
 interface MessageRouterDeps {
-  ensureEventSubscription: (directory: string) => Promise<void>;
-  setTelegramContext: (bot: Bot<Context>, chatId: number) => void;
+  container: AppContainer;
 }
 
-async function blockMenuWhileInteractionActive(ctx: Context): Promise<boolean> {
+async function blockMenuWhileInteractionActive(
+  ctx: Context,
+  interactionManager: AppContainer["interactionManager"],
+): Promise<boolean> {
   const activeInteraction = interactionManager.getSnapshot();
   if (!activeInteraction) {
     return false;
@@ -53,12 +53,13 @@ async function blockMenuWhileInteractionActive(ctx: Context): Promise<boolean> {
 }
 
 export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps): void {
+  const { container } = deps;
   bot.on("message:text", unknownCommandMiddleware);
 
   bot.hears(QUEUED_PROMPT_BUTTON_TEXT_PATTERN, async (ctx) => {
     logger.debug(`[Bot] Queued prompt button pressed: ${ctx.message?.text}`);
 
-    if (await blockMenuWhileInteractionActive(ctx)) {
+    if (await blockMenuWhileInteractionActive(ctx, container.interactionManager)) {
       return;
     }
 
@@ -67,7 +68,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
 
     if (queuedPrompt) {
       promptQueue.removeById(queuedPrompt.id);
-      const keyboard = keyboardManager.getKeyboard();
+      const keyboard = container.keyboardManager.getKeyboard();
       await ctx.reply(t("queue.removed"), keyboard ? { reply_markup: keyboard } : {});
       return;
     }
@@ -75,7 +76,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     // The queue was drained or cleared after Telegram rendered the keyboard the
     // user pressed. Never fall through to the prompt handler: that would send
     // the button label itself to OpenCode as a prompt.
-    const keyboard = keyboardManager.getKeyboard();
+    const keyboard = container.keyboardManager.getKeyboard();
     await ctx.reply(t("queue.not_found"), keyboard ? { reply_markup: keyboard } : {});
   });
 
@@ -83,7 +84,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     logger.debug(`[Bot] Agent button pressed: ${ctx.message?.text}`);
 
     try {
-      if (await blockMenuWhileInteractionActive(ctx)) {
+      if (await blockMenuWhileInteractionActive(ctx, container.interactionManager)) {
         return;
       }
 
@@ -98,7 +99,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     logger.debug(`[Bot] Model button pressed: ${ctx.message?.text}`);
 
     try {
-      if (await blockMenuWhileInteractionActive(ctx)) {
+      if (await blockMenuWhileInteractionActive(ctx, container.interactionManager)) {
         return;
       }
 
@@ -113,7 +114,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     logger.debug(`[Bot] Context button pressed: ${ctx.message?.text}`);
 
     try {
-      if (await blockMenuWhileInteractionActive(ctx)) {
+      if (await blockMenuWhileInteractionActive(ctx, container.interactionManager)) {
         return;
       }
 
@@ -128,7 +129,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     logger.debug(`[Bot] Variant button pressed: ${ctx.message?.text}`);
 
     try {
-      if (await blockMenuWhileInteractionActive(ctx)) {
+      if (await blockMenuWhileInteractionActive(ctx, container.interactionManager)) {
         return;
       }
 
@@ -150,17 +151,17 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     await next();
   });
 
-  const voicePromptDeps = { bot, ensureEventSubscription: deps.ensureEventSubscription };
+  const voicePromptDeps = { bot, ensureEventSubscription: container.ensureEventSubscription };
 
   bot.on("message:voice", async (ctx) => {
     logger.debug(`[Bot] Received voice message, chatId=${ctx.chat.id}`);
-    deps.setTelegramContext(bot, ctx.chat.id);
+    container.setTelegramContext(bot, ctx.chat.id);
     await handleVoiceMessage(ctx, voicePromptDeps);
   });
 
   bot.on("message:audio", async (ctx) => {
     logger.debug(`[Bot] Received audio message, chatId=${ctx.chat.id}`);
-    deps.setTelegramContext(bot, ctx.chat.id);
+    container.setTelegramContext(bot, ctx.chat.id);
     await handleVoiceMessage(ctx, voicePromptDeps);
   });
 
@@ -168,20 +169,20 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     "message",
     createMediaGroupAttachmentMiddleware({
       bot,
-      ensureEventSubscription: deps.ensureEventSubscription,
+      ensureEventSubscription: container.ensureEventSubscription,
     }),
   );
 
   bot.on("message:photo", async (ctx) => {
     logger.debug(`[Bot] Received photo message, chatId=${ctx.chat.id}`);
-    deps.setTelegramContext(bot, ctx.chat.id);
-    await handlePhotoMessage(ctx, { bot, ensureEventSubscription: deps.ensureEventSubscription });
+    container.setTelegramContext(bot, ctx.chat.id);
+    await handlePhotoMessage(ctx, { bot, ensureEventSubscription: container.ensureEventSubscription });
   });
 
   bot.on("message:document", async (ctx) => {
     logger.debug(`[Bot] Received document message, chatId=${ctx.chat.id}`);
-    deps.setTelegramContext(bot, ctx.chat.id);
-    await handleDocumentMessage(ctx, { bot, ensureEventSubscription: deps.ensureEventSubscription });
+    container.setTelegramContext(bot, ctx.chat.id);
+    await handleDocumentMessage(ctx, { bot, ensureEventSubscription: container.ensureEventSubscription });
   });
 
   bot.on("message:text", async (ctx) => {
@@ -191,13 +192,13 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     }
     const { text } = input;
 
-    deps.setTelegramContext(bot, ctx.chat.id);
+    container.setTelegramContext(bot, ctx.chat.id);
 
     if (text.startsWith("/")) {
       return;
     }
 
-    if (questionManager.isActive()) {
+    if (container.questionManager.isActive()) {
       await handleQuestionTextAnswer(ctx);
       return;
     }
@@ -217,7 +218,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
       return;
     }
 
-    const promptDeps = { bot, ensureEventSubscription: deps.ensureEventSubscription };
+    const promptDeps = { bot, ensureEventSubscription: container.ensureEventSubscription };
     const handledCatalogTextArgs = await handleCatalogTextArguments(ctx, promptDeps);
     if (handledCatalogTextArgs) {
       return;

@@ -64,6 +64,7 @@ import { normalizeRichMessage } from "../../src/bot/handlers/rich-message-handle
 import { interactionGuardMiddleware } from "../../src/bot/middleware/interaction-guard.js";
 import { registerCommandRouter } from "../../src/bot/routers/command-router.js";
 import { registerMessageRouter } from "../../src/bot/routers/message-router.js";
+import { createTestAppContainer } from "../helpers/app-container.js";
 
 const BOT_INFO: UserFromGetMe = {
   id: 1,
@@ -100,14 +101,13 @@ function createRoutingBot(): RoutingBot {
   });
   bot.on("message:rich_message", normalizeRichMessage);
   bot.use(interactionGuardMiddleware);
-  registerCommandRouter(bot, {
-    ensureEventSubscription: vi.fn(),
-    clearRuntimeState: vi.fn(),
-  });
-  registerMessageRouter(bot, {
+  const container = createTestAppContainer({
     ensureEventSubscription: vi.fn(),
     setTelegramContext: vi.fn(),
+    resetRuntimeStreams: vi.fn(),
   });
+  registerCommandRouter(bot, { container });
+  registerMessageRouter(bot, { container });
   return { bot, replies };
 }
 

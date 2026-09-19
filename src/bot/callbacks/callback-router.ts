@@ -1,4 +1,5 @@
 import type { Bot, Context } from "grammy";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import {
   clearInteractionErrorState,
   type InteractionErrorScope,
@@ -46,8 +47,7 @@ interface CallbackRoute {
 }
 
 interface CallbackRouterDeps {
-  ensureEventSubscription: (directory: string) => Promise<void>;
-  setTelegramContext: (bot: Bot<Context>, chatId: number) => void;
+  container: AppContainer;
 }
 
 function parseCallbackPrefix(data: string): string | null {
@@ -77,7 +77,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
           (ctx) =>
             handleCommandsCallback(ctx, {
               bot,
-              ensureEventSubscription: deps.ensureEventSubscription,
+              ensureEventSubscription: deps.container.ensureEventSubscription,
             }),
         ],
         errorScope: "interaction",
@@ -103,7 +103,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
           (ctx) =>
             handleMessagesCallback(ctx, {
               bot,
-              ensureEventSubscription: deps.ensureEventSubscription,
+              ensureEventSubscription: deps.container.ensureEventSubscription,
             }),
         ],
         errorScope: "interaction",
@@ -129,7 +129,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
         handlers: [
           (ctx) =>
             handleOpenCallback(ctx, {
-              ensureEventSubscription: deps.ensureEventSubscription,
+              ensureEventSubscription: deps.container.ensureEventSubscription,
             }),
         ],
         errorScope: "interaction",
@@ -146,7 +146,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
         handlers: [
           (ctx) =>
             handleProjectSelect(ctx, {
-              ensureEventSubscription: deps.ensureEventSubscription,
+              ensureEventSubscription: deps.container.ensureEventSubscription,
             }),
         ],
         errorScope: "interaction",
@@ -159,7 +159,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
         handlers: [
           (ctx) =>
             handleProjectSelect(ctx, {
-              ensureEventSubscription: deps.ensureEventSubscription,
+              ensureEventSubscription: deps.container.ensureEventSubscription,
             }),
         ],
         errorScope: "interaction",
@@ -181,7 +181,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
           (ctx) =>
             handleSessionSelect(ctx, {
               bot,
-              ensureEventSubscription: deps.ensureEventSubscription,
+              ensureEventSubscription: deps.container.ensureEventSubscription,
             }),
         ],
         errorScope: "interaction",
@@ -199,7 +199,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
           (ctx) =>
             handleSkillsCallback(ctx, {
               bot,
-              ensureEventSubscription: deps.ensureEventSubscription,
+              ensureEventSubscription: deps.container.ensureEventSubscription,
             }),
         ],
         errorScope: "interaction",
@@ -224,7 +224,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
         handlers: [
           (ctx) =>
             handleWorktreeCallback(ctx, {
-              ensureEventSubscription: deps.ensureEventSubscription,
+              ensureEventSubscription: deps.container.ensureEventSubscription,
             }),
         ],
         errorScope: "interaction",
@@ -238,7 +238,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
     logger.debug(`[Bot] Callback context: from=${ctx.from?.id}, chat=${ctx.chat?.id}`);
 
     if (ctx.chat) {
-      deps.setTelegramContext(bot, ctx.chat.id);
+      deps.container.setTelegramContext(bot, ctx.chat.id);
     }
 
     let errorScope: InteractionErrorScope = "interaction";
@@ -247,7 +247,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
       // Pre-hooks run before prefix dispatch.
       const handledBackgroundSession = await handleBackgroundSessionOpen(ctx, {
         bot,
-        ensureEventSubscription: deps.ensureEventSubscription,
+        ensureEventSubscription: deps.container.ensureEventSubscription,
       });
       if (handledBackgroundSession) {
         logger.debug(`[Bot] Callback handled: data=${data}, handler=backgroundSession`);

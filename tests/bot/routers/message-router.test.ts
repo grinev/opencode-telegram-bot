@@ -5,6 +5,7 @@ import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 
 describe("bot/routers/message-router", () => {
@@ -15,8 +16,7 @@ describe("bot/routers/message-router", () => {
     };
 
     registerMessageRouter(bot as never, {
-      ensureEventSubscription: vi.fn(),
-      setTelegramContext: vi.fn(),
+      container: createTestAppContainer({ ensureEventSubscription: vi.fn(), setTelegramContext: vi.fn() }),
     });
 
     expect(bot.hears).toHaveBeenCalledTimes(5);
@@ -40,8 +40,7 @@ describe("bot/routers/message-router", () => {
       const bot = { on: vi.fn(), hears: vi.fn() };
 
       registerMessageRouter(bot as never, {
-        ensureEventSubscription: vi.fn(),
-        setTelegramContext: vi.fn(),
+        container: createTestAppContainer({ ensureEventSubscription: vi.fn(), setTelegramContext: vi.fn() }),
       });
 
       return defined(bot.hears.mock.calls[0]?.[1]) as (ctx: unknown, next: () => Promise<void>) => Promise<void>;

@@ -12,13 +12,12 @@ vi.mock("../../src/bot/telegram-client-options.js", () => ({
   createTelegramBotOptions: () => ({ client: { fetch: mocked.fetch } }),
 }));
 
-import {
-  cleanupBotRuntime,
-  createBot,
-  shouldRetryTelegramServerError,
-} from "../../src/bot/index.js";
+import { createBot, shouldRetryTelegramServerError } from "../../src/bot/index.js";
+import { createTestAppContainer } from "../helpers/app-container.js";
 import { telegramOutageNoticeService } from "../../src/app/services/telegram-outage-notice-service.js";
 import { flushTelegramOutageNotices } from "../../src/bot/telegram-outage-notices.js";
+
+const container = createTestAppContainer();
 
 function telegramApiResponse(errorCode: number, result?: unknown): { json(): Promise<unknown> } {
   if (errorCode === 200) {
@@ -38,7 +37,7 @@ function telegramApiResponse(errorCode: number, result?: unknown): { json(): Pro
 
 describe("bot Telegram 5xx retry policy", () => {
   afterEach(() => {
-    cleanupBotRuntime("test");
+    container.cleanupProcess("test");
     telegramOutageNoticeService.__resetForTests();
     vi.useRealTimers();
     mocked.fetch.mockReset();
@@ -74,7 +73,7 @@ describe("bot Telegram 5xx retry policy", () => {
     mocked.fetch
       .mockResolvedValueOnce(telegramApiResponse(502))
       .mockResolvedValueOnce(telegramApiResponse(200, true));
-    const bot = createBot();
+    const bot = createBot(container);
 
     const result = bot.api.editMessageText(123, 456, "updated");
     await vi.advanceTimersByTimeAsync(1000);
@@ -85,7 +84,7 @@ describe("bot Telegram 5xx retry policy", () => {
 
   it("does not retry a transient server error when creating a message", async () => {
     mocked.fetch.mockResolvedValueOnce(telegramApiResponse(502));
-    const bot = createBot();
+    const bot = createBot(container);
 
     await expect(bot.api.sendMessage(123, "hello")).rejects.toMatchObject({ error_code: 502 });
     expect(mocked.fetch).toHaveBeenCalledTimes(1);
@@ -96,7 +95,7 @@ describe("bot Telegram 5xx retry policy", () => {
     mocked.fetch
       .mockResolvedValueOnce(telegramApiResponse(429))
       .mockResolvedValueOnce(telegramApiResponse(200, { message_id: 1 }));
-    const bot = createBot();
+    const bot = createBot(container);
 
     const result = bot.api.sendMessage(123, "hello");
     await vi.advanceTimersByTimeAsync(1000);
@@ -111,7 +110,7 @@ describe("bot Telegram 5xx retry policy", () => {
     mocked.fetch
       .mockRejectedValueOnce(refused)
       .mockResolvedValueOnce(telegramApiResponse(200, { message_id: 1 }));
-    const bot = createBot();
+    const bot = createBot(container);
 
     const result = bot.api.sendMessage(123, "hello");
     await vi.advanceTimersByTimeAsync(1000);
@@ -123,7 +122,7 @@ describe("bot Telegram 5xx retry policy", () => {
   it("does not retry a connection reset when creating a message", async () => {
     const reset = Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
     mocked.fetch.mockRejectedValueOnce(reset);
-    const bot = createBot();
+    const bot = createBot(container);
 
     await expect(bot.api.sendMessage(123, "hello")).rejects.toThrow(
       "Network request for 'sendMessage' failed!",
@@ -133,7 +132,7 @@ describe("bot Telegram 5xx retry policy", () => {
 
   it("does not retry a rate limit when sending an outage notice", async () => {
     mocked.fetch.mockResolvedValue(telegramApiResponse(429));
-    const bot = createBot();
+    const bot = createBot(container);
     telegramOutageNoticeService.markAssistantReplyUndelivered();
 
     await flushTelegramOutageNotices({ api: bot.api, chatId: 123 });
@@ -154,7 +153,7 @@ describe("bot Telegram 5xx retry policy", () => {
       )
       .mockRejectedValueOnce(refused)
       .mockResolvedValue(telegramApiResponse(200, { message_id: 2 }));
-    const bot = createBot();
+    const bot = createBot(container);
     telegramOutageNoticeService.markAssistantReplyUndelivered();
 
     const notice = flushTelegramOutageNotices({ api: bot.api, chatId: 123 });
@@ -173,7 +172,7 @@ describe("bot Telegram 5xx retry policy", () => {
 
   it("does not apply the API transformer retry to startup-managed methods", async () => {
     mocked.fetch.mockResolvedValue(telegramApiResponse(429));
-    const bot = createBot();
+    const bot = createBot(container);
 
     await expect(bot.api.getWebhookInfo()).rejects.toMatchObject({ error_code: 429 });
     expect(mocked.fetch).toHaveBeenCalledTimes(1);

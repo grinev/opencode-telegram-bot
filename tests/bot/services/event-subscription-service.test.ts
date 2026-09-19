@@ -7,6 +7,7 @@ import type { Event } from "@opencode-ai/sdk/v2";
 import { setRuntimeMode } from "../../../src/runtime/mode.js";
 import { resetSingletonState } from "../../helpers/reset-singleton-state.js";
 import { defined } from "../../helpers/defined.js";
+import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   subscribeToEvents: vi.fn(),
@@ -482,7 +483,7 @@ describe("bot/services/event-subscription-service", () => {
     settingsStore.setShowAssistantRunFooter(options.showAssistantRunFooter ?? true);
 
     const { bot, api } = createFakeBot();
-    const service = createEventSubscriptionService();
+    const service = createEventSubscriptionService(createTestAppContainer());
     activeService = service;
     service.clearRuntimeState("test_setup");
     if (options.startAssistantRun) {

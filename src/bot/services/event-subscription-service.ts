@@ -4,11 +4,7 @@ import { fileURLToPath } from "url";
 import { Bot, Context, InputFile } from "grammy";
 import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
-import {
-  summaryAggregator,
-  type SubagentInfo,
-  type ToolInfo,
-} from "../../app/managers/summary-aggregation-manager.js";
+import type { SubagentInfo, ToolInfo } from "../../app/managers/summary-aggregation-manager.js";
 import {
   formatCompactToolActivity,
   formatCompactToolInfo,
@@ -36,8 +32,6 @@ import { getCurrentSession } from "../../app/services/session-service.js";
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
-import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
-import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
 import {
   reconcileBusyState,
@@ -57,9 +51,6 @@ import {
   sendRenderedBotPart,
 } from "../messages/telegram-text.js";
 import { formatAssistantRunFooter } from "../../app/formatters/assistant-run-footer-formatter.js";
-import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
-import { scheduledTaskRuntime } from "../../app/services/scheduled-task-runtime-service.js";
-import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
 import { ResponseStreamer, type StreamingMessagePayload } from "../streaming/response-streamer.js";
 import { ToolCallStreamer, type ToolStreamKey } from "../streaming/tool-call-streamer.js";
 import { RunningToolTracker, type RunningToolTick } from "../streaming/running-tool-tracker.js";
@@ -68,12 +59,10 @@ import {
   getSessionStreamThrottleMs,
   resetStreamThrottle,
 } from "../streaming/stream-throttle.js";
-import { attachManager } from "../../app/managers/attach-manager.js";
 import {
   markAttachedSessionBusy,
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
-import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
 import {
   prepareAssistantFinalStreamingPayload,
   prepareAssistantStreamingPayload,
@@ -87,16 +76,11 @@ import { deliverExternalUserInputNotification } from "../messages/external-user-
 import { dispatchNextQueuedPrompt } from "../handlers/prompt-queue-dispatch.js";
 import { telegramOutageNoticeService } from "../../app/services/telegram-outage-notice-service.js";
 import { flushTelegramOutageNotices } from "../telegram-outage-notices.js";
-import {
-  backgroundSessionTracker,
-  type BackgroundSessionNotification,
-} from "../../app/managers/background-session-manager.js";
+import type { BackgroundSessionNotification } from "../../app/managers/background-session-manager.js";
 import { buildBackgroundSessionOpenKeyboard } from "../menus/session-selection-menu.js";
-import { questionManager } from "../../app/managers/question-manager.js";
-import { permissionManager } from "../../app/managers/permission-manager.js";
 import { showCurrentQuestion } from "../menus/question-menu.js";
 import { showPermissionRequest, syncPermissionInteractionState } from "../menus/permission-menu.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import type { PermissionRequest } from "../../app/types/permission.js";
 import type { Question } from "../../app/types/question.js";
 import { stopEventListening, subscribeToEvents } from "../../opencode/events.js";
@@ -127,8 +111,26 @@ export interface BotEventSubscriptionService {
   cleanup(reason: string): void;
 }
 
-export function createEventSubscriptionService(): BotEventSubscriptionService {
-  return new EventSubscriptionService();
+export type EventSubscriptionServiceDeps = Pick<
+  AppContainer,
+  | "assistantRunState"
+  | "attachManager"
+  | "backgroundSessionTracker"
+  | "externalUserInputSuppressionManager"
+  | "foregroundSessionState"
+  | "interactionManager"
+  | "keyboardManager"
+  | "permissionManager"
+  | "pinnedMessageManager"
+  | "questionManager"
+  | "scheduledTaskRuntime"
+  | "summaryAggregator"
+>;
+
+export function createEventSubscriptionService(
+  deps: EventSubscriptionServiceDeps,
+): BotEventSubscriptionService {
+  return new EventSubscriptionService(deps);
 }
 
 class EventSubscriptionService implements BotEventSubscriptionService {
@@ -153,7 +155,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   >();
   private readonly subagentSnapshots = new Map<string, SubagentInfo[]>();
 
-  constructor() {
+  constructor(private readonly deps: EventSubscriptionServiceDeps) {
     this.runningToolTracker = new RunningToolTracker({
       thresholdMs: TOOL_ELAPSED_THRESHOLD_MS,
       tickIntervalMs: TOOL_ELAPSED_TICK_INTERVAL_MS,
@@ -389,7 +391,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
     // Decide and open the slot in one synchronous step: a permission or a
     // reset may have landed during the flushes.
-    if (generation !== null && generation !== interactionManager.getGeneration()) {
+    if (generation !== null && generation !== this.deps.interactionManager.getGeneration()) {
       logger.info(`[Bot] Dropping waiting poll after a reset: requestID=${requestID}`);
       return;
     }
@@ -398,9 +400,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       return;
     }
 
-    const previousMessageIds = questionManager.isActive() ? questionManager.getMessageIds() : [];
-    if (!questionManager.startQuestions(questions, requestID)) {
-      interactionManager.waitQuestion(questions, requestID, sessionId);
+    const previousMessageIds = this.deps.questionManager.isActive() ? this.deps.questionManager.getMessageIds() : [];
+    if (!this.deps.questionManager.startQuestions(questions, requestID)) {
+      this.deps.interactionManager.waitQuestion(questions, requestID, sessionId);
       return;
     }
 
@@ -430,7 +432,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
     const currentSession = getCurrentSession();
     const isCurrent = currentSession?.id === request.sessionID;
-    const isSubagent = summaryAggregator.isSubagentSession(request.sessionID);
+    const isSubagent = this.deps.summaryAggregator.isSubagentSession(request.sessionID);
     if (!currentSession || (!isCurrent && !isSubagent)) {
       return;
     }
@@ -441,13 +443,13 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     ]);
 
     // Decide in one synchronous step: a poll or a reset may have landed during the flushes.
-    if (permissionManager.getDropReason(request, generation)) {
+    if (this.deps.permissionManager.getDropReason(request, generation)) {
       logger.debug(`[Bot] Dropping stale or resolved permission request: requestID=${request.id}`);
       return;
     }
 
-    if (interactionManager.getSnapshot()?.kind === "question") {
-      interactionManager.waitPermission(request);
+    if (this.deps.interactionManager.getSnapshot()?.kind === "question") {
+      this.deps.interactionManager.waitPermission(request);
       return;
     }
 
@@ -616,7 +618,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   }
 
   clearRuntimeState = (reason: string): void => {
-    backgroundSessionTracker.clear();
+    this.deps.backgroundSessionTracker.clear();
     this.nextDraftId = 1;
     this.clearAllResponseStreams(reason);
     this.toolCallStreamer.clearAll(reason);
@@ -625,12 +627,12 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     this.thinkingSections.clear();
     this.sessionCompletionTasks.clear();
     this.clearToolElapsedState(null, reason);
-    assistantRunState.clearAll(reason);
+    this.deps.assistantRunState.clearAll(reason);
   };
 
   cleanup(reason: string): void {
     stopEventListening();
-    summaryAggregator.clear();
+    this.deps.summaryAggregator.clear();
     this.clearRuntimeState(reason);
     this.setTelegramContext(null, null);
   }
@@ -641,15 +643,15 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       return;
     }
 
-    summaryAggregator.setTypingIndicatorEnabled(true);
-    backgroundSessionTracker.setDirectory(directory);
-    backgroundSessionTracker.setOnNotification(this.deliverBackgroundSessionNotification);
+    this.deps.summaryAggregator.setTypingIndicatorEnabled(true);
+    this.deps.backgroundSessionTracker.setDirectory(directory);
+    this.deps.backgroundSessionTracker.setOnNotification(this.deliverBackgroundSessionNotification);
 
     if (!config.bot.trackBackgroundSessions) {
-      backgroundSessionTracker.clear();
+      this.deps.backgroundSessionTracker.clear();
     }
 
-    summaryAggregator.setOnCleared(() => {
+    this.deps.summaryAggregator.setOnCleared(() => {
       this.toolMessageBatcher.clearAll("summary_aggregator_clear");
       this.toolCallStreamer.clearAll("summary_aggregator_clear");
       this.clearAllResponseStreams("summary_aggregator_clear");
@@ -658,7 +660,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       this.clearToolElapsedState(null, "summary_aggregator_clear");
     });
 
-    summaryAggregator.setOnPartial((sessionId, messageId, messageText) => {
+    this.deps.summaryAggregator.setOnPartial((sessionId, messageId, messageText) => {
       if (!this.botInstance || !this.chatIdInstance) {
         return;
       }
@@ -683,7 +685,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       this.enqueueAssistantResponse(sessionId, messageId, preparedStreamPayload);
     });
 
-    summaryAggregator.setOnComplete((sessionId, messageId, messageText, completionInfo) => {
+    this.deps.summaryAggregator.setOnComplete((sessionId, messageId, messageText, completionInfo) => {
       void this.enqueueSessionCompletionTask(sessionId, async () => {
         if (!this.botInstance || !this.chatIdInstance) {
           logger.error("Bot or chat ID not available for sending message");
@@ -693,8 +695,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           this.toolCallStreamer.clearSession(sessionId, "bot_context_missing");
           this.compactProgressStreamer.clearSession(sessionId, "bot_context_missing");
           this.clearToolElapsedState(sessionId, "bot_context_missing");
-          assistantRunState.clearRun(sessionId, "bot_context_missing");
-          foregroundSessionState.markIdle(sessionId);
+          this.deps.assistantRunState.clearRun(sessionId, "bot_context_missing");
+          this.deps.foregroundSessionState.markIdle(sessionId);
           return;
         }
 
@@ -706,9 +708,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           this.toolCallStreamer.clearSession(sessionId, "session_mismatch");
           this.compactProgressStreamer.clearSession(sessionId, "session_mismatch");
           this.clearToolElapsedState(sessionId, "session_mismatch");
-          assistantRunState.clearRun(sessionId, "session_mismatch");
-          foregroundSessionState.markIdle(sessionId);
-          await scheduledTaskRuntime.flushDeferredDeliveries();
+          this.deps.assistantRunState.clearRun(sessionId, "session_mismatch");
+          this.deps.foregroundSessionState.markIdle(sessionId);
+          await this.deps.scheduledTaskRuntime.flushDeferredDeliveries();
           return;
         }
 
@@ -716,7 +718,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         const chatId = this.chatIdInstance;
 
         try {
-          assistantRunState.markResponseCompleted(sessionId, {
+          this.deps.assistantRunState.markResponseCompleted(sessionId, {
             agent: completionInfo.agent,
             providerID: completionInfo.providerID,
             modelID: completionInfo.modelID,
@@ -775,19 +777,19 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           this.toolCallStreamer.clearSession(sessionId, "assistant_finalize_failed");
           this.compactProgressStreamer.clearSession(sessionId, "assistant_finalize_failed");
           this.clearToolElapsedState(sessionId, "assistant_finalize_failed");
-          assistantRunState.clearRun(sessionId, "assistant_finalize_failed");
+          this.deps.assistantRunState.clearRun(sessionId, "assistant_finalize_failed");
           logger.error("Failed to send message to Telegram:", err);
           logger.error(`[Bot] Dropped the assistant response for session ${sessionId}`);
-          foregroundSessionState.markIdle(sessionId);
+          this.deps.foregroundSessionState.markIdle(sessionId);
           telegramOutageNoticeService.markAssistantReplyUndelivered();
           await flushTelegramOutageNotices({ api: botApi, chatId });
         } finally {
-          await scheduledTaskRuntime.flushDeferredDeliveries();
+          await this.deps.scheduledTaskRuntime.flushDeferredDeliveries();
         }
       });
     });
 
-    summaryAggregator.setOnExternalUserInput(async (sessionId, _messageId, messageText) => {
+    this.deps.summaryAggregator.setOnExternalUserInput(async (sessionId, _messageId, messageText) => {
       void this.enqueueSessionCompletionTask(sessionId, async () => {
         if (!this.botInstance || !this.chatIdInstance) {
           return;
@@ -801,7 +803,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             sessionId,
             text: messageText,
             consumeSuppressedInput: (incomingSessionId, incomingText) =>
-              externalUserInputSuppressionManager.consume(incomingSessionId, incomingText),
+              this.deps.externalUserInputSuppressionManager.consume(incomingSessionId, incomingText),
           });
         } catch (err) {
           logger.error("[Bot] Failed to deliver external user input to Telegram:", err);
@@ -809,7 +811,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       });
     });
 
-    summaryAggregator.setOnRootToolUpdate((toolInfo) => {
+    this.deps.summaryAggregator.setOnRootToolUpdate((toolInfo) => {
       const currentSession = getCurrentSession();
       if (!currentSession || currentSession.id !== toolInfo.sessionId) {
         return;
@@ -884,7 +886,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
     });
 
-    summaryAggregator.setOnTool(async (toolInfo) => {
+    this.deps.summaryAggregator.setOnTool(async (toolInfo) => {
       if (!this.botInstance || !this.chatIdInstance) {
         logger.error("Bot or chat ID not available for sending tool notification");
         return;
@@ -922,7 +924,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
     });
 
-    summaryAggregator.setOnSubagent(async (sessionId, subagents) => {
+    this.deps.summaryAggregator.setOnSubagent(async (sessionId, subagents) => {
       if (!this.botInstance || !this.chatIdInstance) {
         return;
       }
@@ -969,7 +971,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
     });
 
-    summaryAggregator.setOnToolFile(async (fileInfo) => {
+    this.deps.summaryAggregator.setOnToolFile(async (fileInfo) => {
       if (!this.botInstance || !this.chatIdInstance) {
         logger.error("Bot or chat ID not available for sending file");
         return;
@@ -1006,20 +1008,20 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
     });
 
-    summaryAggregator.setOnQuestion(async (questions, requestID, sessionId) => {
+    this.deps.summaryAggregator.setOnQuestion(async (questions, requestID, sessionId) => {
       await this.presentQuestion(questions, requestID, sessionId, null);
     });
 
-    summaryAggregator.setOnQuestionError(async () => {
-      if (!questionManager.isActive()) {
-        interactionManager.dropWaitingQuestion();
+    this.deps.summaryAggregator.setOnQuestionError(async () => {
+      if (!this.deps.questionManager.isActive()) {
+        this.deps.interactionManager.dropWaitingQuestion();
         return;
       }
 
       logger.info("[Bot] Question tool failed, clearing active poll and deleting messages");
 
-      const messageIds = questionManager.getMessageIds();
-      questionManager.clear();
+      const messageIds = this.deps.questionManager.getMessageIds();
+      this.deps.questionManager.clear();
 
       for (const messageId of messageIds) {
         if (this.chatIdInstance) {
@@ -1030,11 +1032,11 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
     });
 
-    summaryAggregator.setOnPermission(async (request) => {
-      await this.presentPermission(request, permissionManager.getGeneration());
+    this.deps.summaryAggregator.setOnPermission(async (request) => {
+      await this.presentPermission(request, this.deps.permissionManager.getGeneration());
     });
 
-    interactionManager.setOnWaitingRequestReady((request, generation) => {
+    this.deps.interactionManager.setOnWaitingRequestReady((request, generation) => {
       const present = async (): Promise<void> => {
         if (request.kind === "question") {
           await this.presentQuestion(
@@ -1056,10 +1058,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       });
     });
 
-    summaryAggregator.setOnPermissionReplied(async (_sessionId, requestID) => {
-      const messageIds = permissionManager.resolveRequest(requestID);
-      const interaction = interactionManager.getSnapshot();
-      if (!permissionManager.isActive() || !interaction || interaction.kind === "permission") {
+    this.deps.summaryAggregator.setOnPermissionReplied(async (_sessionId, requestID) => {
+      const messageIds = this.deps.permissionManager.resolveRequest(requestID);
+      const interaction = this.deps.interactionManager.getSnapshot();
+      if (!this.deps.permissionManager.isActive() || !interaction || interaction.kind === "permission") {
         syncPermissionInteractionState({ resolvedRequestID: requestID });
       }
 
@@ -1082,7 +1084,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
     });
 
-    summaryAggregator.setOnThinking(async (update) => {
+    this.deps.summaryAggregator.setOnThinking(async (update) => {
       if (!this.botInstance || !this.chatIdInstance) {
         return;
       }
@@ -1104,8 +1106,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           this.compactProgressStreamer.updateThinking(update.sessionId);
         }
 
-        if (update.isFirstUpdate && pinnedMessageManager.isInitialized()) {
-          await pinnedMessageManager.refresh();
+        if (update.isFirstUpdate && this.deps.pinnedMessageManager.isInitialized()) {
+          await this.deps.pinnedMessageManager.refresh();
         }
         return;
       }
@@ -1137,12 +1139,12 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         deliverThinkingMessage(update.sessionId, this.toolMessageBatcher);
       }
 
-      if (update.isFirstUpdate && pinnedMessageManager.isInitialized()) {
-        await pinnedMessageManager.refresh();
+      if (update.isFirstUpdate && this.deps.pinnedMessageManager.isInitialized()) {
+        await this.deps.pinnedMessageManager.refresh();
       }
     });
 
-    summaryAggregator.setOnThinkingFinished((sessionId, messageId) => {
+    this.deps.summaryAggregator.setOnThinkingFinished((sessionId, messageId) => {
       if (!this.botInstance || !this.chatIdInstance) {
         return;
       }
@@ -1158,8 +1160,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       });
     });
 
-    summaryAggregator.setOnTokens(async (tokens, isCompleted) => {
-      if (!pinnedMessageManager.isInitialized()) {
+    this.deps.summaryAggregator.setOnTokens(async (tokens, isCompleted) => {
+      if (!this.deps.pinnedMessageManager.isInitialized()) {
         return;
       }
 
@@ -1169,7 +1171,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         );
 
         const contextSize = tokens.input + tokens.cacheRead;
-        const contextLimit = pinnedMessageManager.getContextLimit();
+        const contextLimit = this.deps.pinnedMessageManager.getContextLimit();
 
         if (!isCompleted && contextSize === 0) {
           logger.debug("[Bot] Skipping zero-token intermediate update");
@@ -1177,45 +1179,45 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         }
 
         if (contextLimit > 0) {
-          keyboardManager.updateContext(contextSize, contextLimit);
+          this.deps.keyboardManager.updateContext(contextSize, contextLimit);
         }
-        pinnedMessageManager.updateTokensSilent(tokens);
+        this.deps.pinnedMessageManager.updateTokensSilent(tokens);
 
         if (isCompleted) {
-          await pinnedMessageManager.onMessageComplete(tokens);
+          await this.deps.pinnedMessageManager.onMessageComplete(tokens);
         }
       } catch (err) {
         logger.error("[Bot] Error updating pinned message with tokens:", err);
       }
     });
 
-    summaryAggregator.setOnCost(async (cost) => {
-      if (!pinnedMessageManager.isInitialized()) {
+    this.deps.summaryAggregator.setOnCost(async (cost) => {
+      if (!this.deps.pinnedMessageManager.isInitialized()) {
         return;
       }
 
       try {
         logger.debug(`[Bot] Cost update: $${cost.toFixed(2)}`);
-        await pinnedMessageManager.onCostUpdate(cost);
+        await this.deps.pinnedMessageManager.onCostUpdate(cost);
       } catch (err) {
         logger.error("[Bot] Error updating cost:", err);
       }
     });
 
-    summaryAggregator.setOnSessionCompacted(async (sessionId, directory) => {
-      if (!pinnedMessageManager.isInitialized()) {
+    this.deps.summaryAggregator.setOnSessionCompacted(async (sessionId, directory) => {
+      if (!this.deps.pinnedMessageManager.isInitialized()) {
         return;
       }
 
       try {
         logger.info(`[Bot] Session compacted, reloading context: ${sessionId}`);
-        await pinnedMessageManager.onSessionCompacted(sessionId, directory);
+        await this.deps.pinnedMessageManager.onSessionCompacted(sessionId, directory);
       } catch (err) {
         logger.error("[Bot] Error reloading context after compaction:", err);
       }
     });
 
-    summaryAggregator.setOnSessionIdle(async (sessionId) => {
+    this.deps.summaryAggregator.setOnSessionIdle(async (sessionId) => {
       resetStreamThrottle(sessionId);
       await markAttachedSessionIdle(sessionId);
       // Dropped immediately when this session is no longer current: the early
@@ -1231,20 +1233,20 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
       await this.sessionCompletionTasks.get(sessionId)?.catch(() => undefined);
 
-      const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
+      const completedRun = this.deps.assistantRunState.finishRun(sessionId, "session_idle");
       clearPromptResponseMode(sessionId);
 
       if (!this.botInstance || !this.chatIdInstance) {
         this.compactProgressStreamer.clearSession(sessionId, "session_idle");
-        foregroundSessionState.markIdle(sessionId);
+        this.deps.foregroundSessionState.markIdle(sessionId);
         return;
       }
 
       const currentSession = getCurrentSession();
       if (!currentSession || currentSession.id !== sessionId) {
         this.compactProgressStreamer.clearSession(sessionId, "session_idle");
-        foregroundSessionState.markIdle(sessionId);
-        await scheduledTaskRuntime.flushDeferredDeliveries();
+        this.deps.foregroundSessionState.markIdle(sessionId);
+        await this.deps.scheduledTaskRuntime.flushDeferredDeliveries();
         return;
       }
 
@@ -1280,21 +1282,21 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       } catch (err) {
         logger.error("[Bot] Failed to send session idle footer:", err);
       } finally {
-        foregroundSessionState.markIdle(sessionId);
-        await scheduledTaskRuntime.flushDeferredDeliveries();
+        this.deps.foregroundSessionState.markIdle(sessionId);
+        await this.deps.scheduledTaskRuntime.flushDeferredDeliveries();
         void dispatchNextQueuedPrompt();
       }
     });
 
-    summaryAggregator.setOnSessionError(async (sessionId, message) => {
+    this.deps.summaryAggregator.setOnSessionError(async (sessionId, message) => {
       await markAttachedSessionIdle(sessionId);
       this.clearToolElapsedState(sessionId, "session_error");
 
       if (!this.botInstance || !this.chatIdInstance) {
         clearPromptResponseMode(sessionId);
         this.compactProgressStreamer.clearSession(sessionId, "session_error_no_bot_context");
-        assistantRunState.clearRun(sessionId, "session_error_no_bot_context");
-        foregroundSessionState.markIdle(sessionId);
+        this.deps.assistantRunState.clearRun(sessionId, "session_error_no_bot_context");
+        this.deps.foregroundSessionState.markIdle(sessionId);
         return;
       }
 
@@ -1304,16 +1306,16 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           this.clearAssistantResponseSession(sessionId, "session_error_not_current");
         this.toolCallStreamer.clearSession(sessionId, "session_error_not_current");
         this.compactProgressStreamer.clearSession(sessionId, "session_error_not_current");
-        assistantRunState.clearRun(sessionId, "session_error_not_current");
-        foregroundSessionState.markIdle(sessionId);
-        await scheduledTaskRuntime.flushDeferredDeliveries();
+        this.deps.assistantRunState.clearRun(sessionId, "session_error_not_current");
+        this.deps.foregroundSessionState.markIdle(sessionId);
+        await this.deps.scheduledTaskRuntime.flushDeferredDeliveries();
         return;
       }
 
       this.clearAssistantResponseSession(sessionId, "session_error");
       this.compactProgressStreamer.clearSession(sessionId, "session_error");
       clearPromptResponseMode(sessionId);
-      assistantRunState.clearRun(sessionId, "session_error");
+      this.deps.assistantRunState.clearRun(sessionId, "session_error");
       await Promise.all([
         this.toolMessageBatcher.flushSession(sessionId, "session_error"),
         this.toolCallStreamer.breakSession(sessionId, "session_error"),
@@ -1322,8 +1324,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       const normalizedMessage = message.trim() || t("common.unknown_error");
       if (shouldSuppressUserAbortSessionError(sessionId, normalizedMessage)) {
         logger.debug(`[Bot] Suppressed user-initiated abort error: session=${sessionId}`);
-        foregroundSessionState.markIdle(sessionId);
-        await scheduledTaskRuntime.flushDeferredDeliveries();
+        this.deps.foregroundSessionState.markIdle(sessionId);
+        await this.deps.scheduledTaskRuntime.flushDeferredDeliveries();
         return;
       }
 
@@ -1338,12 +1340,12 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           logger.error("[Bot] Failed to send session.error message:", err);
         });
 
-      foregroundSessionState.markIdle(sessionId);
-      await scheduledTaskRuntime.flushDeferredDeliveries();
+      this.deps.foregroundSessionState.markIdle(sessionId);
+      await this.deps.scheduledTaskRuntime.flushDeferredDeliveries();
       void dispatchNextQueuedPrompt();
     });
 
-    summaryAggregator.setOnSessionRetry(async ({ sessionId, message }) => {
+    this.deps.summaryAggregator.setOnSessionRetry(async ({ sessionId, message }) => {
       if (!this.botInstance || !this.chatIdInstance) {
         return;
       }
@@ -1368,25 +1370,25 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       this.toolCallStreamer.replaceByPrefix(sessionId, SESSION_RETRY_PREFIX, retryMessage);
     });
 
-    summaryAggregator.setOnSessionDiff(async (sessionId, diffs) => {
+    this.deps.summaryAggregator.setOnSessionDiff(async (sessionId, diffs) => {
       if (isCompactProgressMode()) {
         for (const diff of diffs) {
           this.compactProgressStreamer.addFileChange(sessionId, diff.file);
         }
       }
 
-      if (!pinnedMessageManager.isInitialized()) {
+      if (!this.deps.pinnedMessageManager.isInitialized()) {
         return;
       }
 
       try {
-        await pinnedMessageManager.onSessionDiff(diffs);
+        await this.deps.pinnedMessageManager.onSessionDiff(diffs);
       } catch (err) {
         logger.error("[Bot] Error updating session diff:", err);
       }
     });
 
-    summaryAggregator.setOnFileChange((change) => {
+    this.deps.summaryAggregator.setOnFileChange((change) => {
       if (isCompactProgressMode()) {
         const currentSession = getCurrentSession();
         if (currentSession) {
@@ -1394,16 +1396,16 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         }
       }
 
-      if (!pinnedMessageManager.isInitialized()) {
+      if (!this.deps.pinnedMessageManager.isInitialized()) {
         return;
       }
-      pinnedMessageManager.addFileChange(change);
+      this.deps.pinnedMessageManager.addFileChange(change);
     });
 
-    pinnedMessageManager.setOnKeyboardUpdate(async (tokensUsed, tokensLimit) => {
+    this.deps.pinnedMessageManager.setOnKeyboardUpdate(async (tokensUsed, tokensLimit) => {
       try {
         logger.debug(`[Bot] Updating keyboard with context: ${tokensUsed}/${tokensLimit}`);
-        keyboardManager.updateContext(tokensUsed, tokensLimit);
+        this.deps.keyboardManager.updateContext(tokensUsed, tokensLimit);
       } catch (err) {
         logger.error("[Bot] Error updating keyboard context:", err);
       }
@@ -1415,7 +1417,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         void reconcileBusyState(directory);
       }
 
-      const attached = attachManager.getSnapshot();
+      const attached = this.deps.attachManager.getSnapshot();
       const eventSessionId = this.getEventSessionId(event as EventStreamItem);
       if (
         attached &&
@@ -1439,10 +1441,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
 
       if (config.bot.trackBackgroundSessions) {
-        backgroundSessionTracker.processEvent(event, getCurrentSession()?.id ?? null);
+        this.deps.backgroundSessionTracker.processEvent(event, getCurrentSession()?.id ?? null);
       }
 
-      summaryAggregator.processEvent(event);
+      this.deps.summaryAggregator.processEvent(event);
     }).catch((err) => {
       logger.error("Failed to subscribe to events:", err);
     });
@@ -1636,11 +1638,11 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   }
 
   private getCurrentReplyKeyboard = () => {
-    if (!keyboardManager.isInitialized()) {
+    if (!this.deps.keyboardManager.isInitialized()) {
       return undefined;
     }
 
-    return keyboardManager.getKeyboard();
+    return this.deps.keyboardManager.getKeyboard();
   };
 
   private prepareDocumentCaption(caption: string): string {

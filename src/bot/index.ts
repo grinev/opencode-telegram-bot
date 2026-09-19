@@ -1,13 +1,11 @@
 import { Bot, Context } from "grammy";
 import { config } from "../config.js";
 import { getCurrentProject } from "../app/stores/settings-store.js";
-import { attachManager } from "../app/managers/attach-manager.js";
-import { clearAllInteractionState } from "../app/managers/interaction-manager.js";
+import type { AppContainer } from "../app/bootstrap/app-container.js";
 import {
   configureAttachPresentation,
   restoreAttachedCurrentSession,
 } from "../app/services/attach-service.js";
-import { opencodeReadyLifecycle } from "../opencode/ready-lifecycle.js";
 import { logger } from "../utils/logger.js";
 import { safeBackgroundTask } from "../utils/safe-background-task.js";
 import { withTelegramRateLimitRetry } from "../utils/telegram-rate-limit-retry.js";
@@ -25,17 +23,8 @@ import {
   registerCommandRouter,
 } from "./routers/command-router.js";
 import { registerMessageRouter } from "./routers/message-router.js";
-import {
-  createEventSubscriptionService,
-  type BotEventSubscriptionService,
-} from "./services/event-subscription-service.js";
 import { createAttachPresentation } from "./services/attach-presentation.js";
 import { createTelegramBotOptions } from "./telegram-client-options.js";
-
-let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-let unsubscribeReadyRestore: (() => void) | null = null;
-
-const eventSubscriptionService: BotEventSubscriptionService = createEventSubscriptionService();
 
 const TRANSIENT_RETRY_SAFE_TELEGRAM_METHODS = new Set([
   "editMessageReplyMarkup",
@@ -84,34 +73,31 @@ function isTelegramApiErrorResponse(response: unknown): response is TelegramApiE
   );
 }
 
-export function createBot(localCommandRegistry = LocalCommandRegistry.empty()): Bot<Context> {
-  clearAllInteractionState("bot_startup");
-  attachManager.clear("bot_startup");
-  eventSubscriptionService.clearRuntimeState("bot_startup");
-
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
+export function createBot(
+  container: AppContainer,
+  localCommandRegistry = LocalCommandRegistry.empty(),
+): Bot<Context> {
+  container.resetInteractions("bot_startup");
+  container.attachManager.clear("bot_startup");
+  container.resetRuntimeStreams("bot_startup");
 
   const botOptions = createTelegramBotOptions(config.telegram);
   const bot = new Bot(config.telegram.token, botOptions);
 
   configureAttachPresentation(createAttachPresentation());
 
-  eventSubscriptionService.setTelegramContext(bot, config.telegram.allowedUserId);
+  container.setTelegramContext(bot, config.telegram.allowedUserId);
 
   initializePromptQueueDispatch({
     bot,
-    ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
+    ensureEventSubscription: container.ensureEventSubscription,
   });
 
-  unsubscribeReadyRestore?.();
-  unsubscribeReadyRestore = opencodeReadyLifecycle.onReady(async (reason) => {
+  container.setReadyRestoreHandler(async (reason) => {
     const restored = await restoreAttachedCurrentSession({
       bot,
       chatId: config.telegram.allowedUserId,
-      ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
+      ensureEventSubscription: container.ensureEventSubscription,
       forceFullRestore: true,
     });
 
@@ -122,20 +108,14 @@ export function createBot(localCommandRegistry = LocalCommandRegistry.empty()): 
 
     const currentProject = getCurrentProject();
     if (config.bot.trackBackgroundSessions && currentProject?.worktree) {
-      await eventSubscriptionService.ensureEventSubscription(currentProject.worktree);
+      await container.ensureEventSubscription(currentProject.worktree);
       logger.info(
         `[Bot] Started background session tracking after OpenCode ready: reason=${reason}, directory=${currentProject.worktree}`,
       );
     }
   });
 
-  let heartbeatCounter = 0;
-  heartbeatTimer = setInterval(() => {
-    heartbeatCounter++;
-    if (heartbeatCounter % 6 === 0) {
-      logger.debug(`[Bot] Heartbeat #${heartbeatCounter} - event loop alive`);
-    }
-  }, 5000);
+  container.startHeartbeat();
 
   let lastGetUpdatesTime = Date.now();
   bot.api.config.use(async (prev, method, payload, signal) => {
@@ -209,19 +189,9 @@ export function createBot(localCommandRegistry = LocalCommandRegistry.empty()): 
   bot.use((ctx, next) => ensureCommandsInitialized(ctx, next, localCommandRegistry));
   bot.use((ctx, next) => interactionGuardMiddleware(ctx, next, localCommandRegistry));
 
-  registerCommandRouter(bot, {
-    ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
-    clearRuntimeState: (reason) => eventSubscriptionService.clearRuntimeState(reason),
-    localCommandRegistry,
-  });
-  registerCallbackRouter(bot, {
-    ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
-    setTelegramContext: eventSubscriptionService.setTelegramContext,
-  });
-  registerMessageRouter(bot, {
-    ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
-    setTelegramContext: eventSubscriptionService.setTelegramContext,
-  });
+  registerCommandRouter(bot, { container, localCommandRegistry });
+  registerCallbackRouter(bot, { container });
+  registerMessageRouter(bot, { container });
 
   safeBackgroundTask({
     taskName: "bot.clearGlobalCommands",
@@ -248,7 +218,7 @@ export function createBot(localCommandRegistry = LocalCommandRegistry.empty()): 
 
   bot.catch((err) => {
     logger.error("[Bot] Unhandled error in bot:", err);
-    clearAllInteractionState("bot_unhandled_error");
+    container.resetInteractions("bot_unhandled_error");
     if (err.ctx) {
       logger.error(
         "[Bot] Error context - update type:",
@@ -260,26 +230,18 @@ export function createBot(localCommandRegistry = LocalCommandRegistry.empty()): 
   return bot;
 }
 
-export function restoreFollowedSessionOnPollingStart(bot: Bot<Context>): void {
+export function restoreFollowedSessionOnPollingStart(
+  bot: Bot<Context>,
+  container: AppContainer,
+): void {
   safeBackgroundTask({
     taskName: "bot.restoreAfterPollingStart",
     task: () =>
       restoreAttachedCurrentSession({
         bot,
         chatId: config.telegram.allowedUserId,
-        ensureEventSubscription: eventSubscriptionService.ensureEventSubscription,
+        ensureEventSubscription: container.ensureEventSubscription,
         forceFullRestore: true,
       }),
   });
-}
-
-export function cleanupBotRuntime(reason: string): void {
-  unsubscribeReadyRestore?.();
-  unsubscribeReadyRestore = null;
-  eventSubscriptionService.cleanup(reason);
-
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
 }

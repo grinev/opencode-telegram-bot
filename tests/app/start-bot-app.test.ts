@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi, type MockInstance } from "vitest"
 
 const mocked = vi.hoisted(() => ({
   createBotMock: vi.fn(),
-  cleanupBotRuntimeMock: vi.fn(),
+  cleanupProcessMock: vi.fn(),
   autoRestartStartMock: vi.fn(),
   autoRestartStopMock: vi.fn(),
   notifyOpencodeReadyIfHealthyMock: vi.fn(),
@@ -36,21 +36,29 @@ const mocked = vi.hoisted(() => ({
   },
 }));
 
+const container = vi.hoisted(() => ({
+  cleanupProcess: mocked.cleanupProcessMock,
+  opencodeAutoRestartService: {
+    start: mocked.autoRestartStartMock,
+    stop: mocked.autoRestartStopMock,
+  },
+  scheduledTaskRuntime: {
+    initialize: mocked.scheduledTaskInitializeMock,
+    shutdown: mocked.scheduledTaskShutdownMock,
+  },
+}));
+
+vi.mock("../../src/app/bootstrap/app-container.js", () => ({
+  createAppContainer: () => container,
+}));
+
 vi.mock("../../src/bot/index.js", () => ({
-  cleanupBotRuntime: mocked.cleanupBotRuntimeMock,
   createBot: mocked.createBotMock,
   restoreFollowedSessionOnPollingStart: mocked.restoreFollowedSessionOnPollingStartMock,
 }));
 
 vi.mock("../../src/config.js", () => ({
   config: mocked.config,
-}));
-
-vi.mock("../../src/opencode/auto-restart.js", () => ({
-  opencodeAutoRestartService: {
-    start: mocked.autoRestartStartMock,
-    stop: mocked.autoRestartStopMock,
-  },
 }));
 
 vi.mock("../../src/opencode/ready-refresh.js", () => ({
@@ -61,13 +69,6 @@ vi.mock("../../src/opencode/ready-refresh.js", () => ({
 vi.mock("../../src/app/stores/settings-store.js", () => ({
   flushSettings: mocked.flushSettingsMock,
   loadSettings: mocked.loadSettingsMock,
-}));
-
-vi.mock("../../src/app/services/scheduled-task-runtime-service.js", () => ({
-  scheduledTaskRuntime: {
-    initialize: mocked.scheduledTaskInitializeMock,
-    shutdown: mocked.scheduledTaskShutdownMock,
-  },
 }));
 
 vi.mock("../../src/app/services/model-selection-service.js", () => ({
@@ -178,7 +179,7 @@ describe("app/start-bot-app", () => {
 
   beforeEach(() => {
     mocked.createBotMock.mockReset();
-    mocked.cleanupBotRuntimeMock.mockReset();
+    mocked.cleanupProcessMock.mockReset();
     mocked.autoRestartStartMock.mockReset();
     mocked.autoRestartStopMock.mockReset();
     mocked.notifyOpencodeReadyIfHealthyMock.mockReset();
@@ -362,6 +363,22 @@ describe("app/start-bot-app", () => {
 
     releaseStart();
     await appPromise;
+  });
+
+  it("cleans up the container runtime beside auto-restart and the scheduler on SIGINT", async () => {
+    const { bot, releaseStart, appPromise } = await startAppWithPendingBot();
+
+    expectHandler("SIGINT")();
+
+    expect(mocked.cleanupProcessMock).toHaveBeenCalledWith("app_shutdown_sigint");
+    expect(mocked.autoRestartStopMock).toHaveBeenCalledTimes(1);
+    expect(mocked.scheduledTaskShutdownMock).toHaveBeenCalledTimes(1);
+    expect(bot.stop).toHaveBeenCalledTimes(1);
+
+    releaseStart();
+    await appPromise;
+
+    expect(mocked.cleanupProcessMock).toHaveBeenLastCalledWith("app_shutdown_complete");
   });
 
   it("flushes the log file after settings before the forced shutdown exit", async () => {
@@ -652,7 +669,8 @@ describe("app/start-bot-app", () => {
 
     await startBotApp();
 
+    expect(mocked.createBotMock).toHaveBeenCalledWith(container, expect.anything());
     expect(bot).toMatchObject({ botInfo: { username: "test_bot" } });
-    expect(mocked.restoreFollowedSessionOnPollingStartMock).toHaveBeenCalledWith(bot);
+    expect(mocked.restoreFollowedSessionOnPollingStartMock).toHaveBeenCalledWith(bot, container);
   });
 });
