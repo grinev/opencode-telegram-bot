@@ -26,6 +26,7 @@ describe("bot/handlers/tts-response-handler", () => {
     const result = await sendTtsResponseForSession({
       api: { sendAudio: sendAudioMock, sendMessage: sendMessageMock },
       sessionId: "session-1",
+      promptMessageId: "prompt-1",
       chatId: 123,
       text: "Hello from audio",
       consumeResponseMode: () => "text_and_tts",
@@ -51,6 +52,7 @@ describe("bot/handlers/tts-response-handler", () => {
     const result = await sendTtsResponseForSession({
       api: { sendAudio: sendAudioMock, sendMessage: sendMessageMock },
       sessionId: "session-1",
+      promptMessageId: "prompt-1",
       chatId: 123,
       text: "Hello from text",
       consumeResponseMode: () => "text_only",
@@ -72,6 +74,7 @@ describe("bot/handlers/tts-response-handler", () => {
     const result = await sendTtsResponseForSession({
       api: { sendAudio: sendAudioMock, sendMessage: sendMessageMock },
       sessionId: "session-1",
+      promptMessageId: "prompt-1",
       chatId: 123,
       text: "Hello from audio",
       consumeResponseMode: () => "text_and_tts",
@@ -97,6 +100,7 @@ describe("bot/handlers/tts-response-handler", () => {
     const result = await sendTtsResponseForSession({
       api: { sendAudio: sendAudioMock, sendMessage: sendMessageMock },
       sessionId: "session-1",
+      promptMessageId: "prompt-1",
       chatId: 123,
       text: "Hello from audio",
       consumeResponseMode: () => "text_and_tts",

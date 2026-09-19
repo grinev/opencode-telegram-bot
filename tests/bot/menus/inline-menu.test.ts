@@ -13,6 +13,7 @@ import { defined } from "../../helpers/defined.js";
 function createReplyContext(messageId: number = 1): Context {
   return {
     chat: { id: 100 },
+    api: { editMessageReplyMarkup: vi.fn().mockResolvedValue(undefined) },
     reply: vi.fn().mockResolvedValue({ message_id: messageId }),
     answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
     deleteMessage: vi.fn().mockResolvedValue(undefined),
@@ -114,6 +115,41 @@ describe("bot/menus/inline-menu", () => {
       favorites: [{ providerID: "openai", modelID: "gpt-4o" }],
       recent: [],
     });
+  });
+
+  it("does not overwrite a question that wins while the menu reply is in flight", async () => {
+    let resolveReply: (message: { message_id: number }) => void = () => {};
+    const ctx = createReplyContext(42);
+    (ctx.reply as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      () =>
+        new Promise<{ message_id: number }>((resolve) => {
+          resolveReply = resolve;
+        }),
+    );
+    const keyboard = new InlineKeyboard().text("Compact output", "settings:compact_output");
+
+    const opening = replyWithInlineMenu(ctx, {
+      menuKind: "settings",
+      text: "Settings",
+      keyboard,
+    });
+    expect(interactionManager.getSnapshot()?.metadata.reservationId).toEqual(expect.any(String));
+
+    interactionManager.start({
+      kind: "question",
+      expectedInput: "text",
+      metadata: { requestId: "question-1" },
+    });
+    resolveReply({ message_id: 42 });
+
+    await expect(opening).resolves.toBeNull();
+    expect(interactionManager.getSnapshot()).toEqual(
+      expect.objectContaining({
+        kind: "question",
+        metadata: { requestId: "question-1" },
+      }),
+    );
+    expect(ctx.api.editMessageReplyMarkup).toHaveBeenCalledWith(100, 42);
   });
 
   it("accepts callback from active inline menu", async () => {

@@ -527,6 +527,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     this.sessionCompletionTasks.clear();
     this.clearToolElapsedState(null, reason);
     assistantRunState.clearAll(reason);
+    externalUserInputSuppressionManager.clearAll();
   };
 
   cleanup(reason: string): void {
@@ -588,7 +589,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       void this.enqueueSessionCompletionTask(sessionId, async () => {
         if (!this.botInstance || !this.chatIdInstance) {
           logger.error("Bot or chat ID not available for sending message");
-          clearPromptResponseMode(sessionId);
+          if (completionInfo.parentMessageId) {
+            clearPromptResponseMode(sessionId, completionInfo.parentMessageId);
+          }
           this.clearAssistantResponseStream(sessionId, messageId, "bot_context_missing");
           this.clearThinkingStream(sessionId, messageId, "bot_context_missing");
           this.toolCallStreamer.clearSession(sessionId, "bot_context_missing");
@@ -601,7 +604,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
         const currentSession = getCurrentSession();
         if (currentSession?.id !== sessionId) {
-          clearPromptResponseMode(sessionId);
+          if (completionInfo.parentMessageId) {
+            clearPromptResponseMode(sessionId, completionInfo.parentMessageId);
+          }
           this.clearAssistantResponseStream(sessionId, messageId, "session_mismatch");
           this.clearThinkingStream(sessionId, messageId, "session_mismatch");
           this.toolCallStreamer.clearSession(sessionId, "session_mismatch");
@@ -666,11 +671,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
           await sendTtsResponseForSession({
             api: botApi,
             sessionId,
+            promptMessageId: completionInfo.parentMessageId,
             chatId,
             text: messageText,
           });
         } catch (err) {
-          clearPromptResponseMode(sessionId);
+          if (completionInfo.parentMessageId) {
+            clearPromptResponseMode(sessionId, completionInfo.parentMessageId);
+          }
           this.clearThinkingStream(sessionId, messageId, "assistant_finalize_failed");
           this.compactProgressStreamer.clearSession(sessionId, "assistant_finalize_failed");
           assistantRunState.clearRun(sessionId, "assistant_finalize_failed");
@@ -684,7 +692,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       });
     });
 
-    summaryAggregator.setOnExternalUserInput(async (sessionId, _messageId, messageText) => {
+    summaryAggregator.setOnExternalUserInput(async (sessionId, messageId, messageText) => {
       void this.enqueueSessionCompletionTask(sessionId, async () => {
         if (!this.botInstance || !this.chatIdInstance) {
           return;
@@ -696,9 +704,13 @@ class EventSubscriptionService implements BotEventSubscriptionService {
             chatId: this.chatIdInstance,
             currentSessionId: getCurrentSession()?.id ?? null,
             sessionId,
+            messageId,
             text: messageText,
-            consumeSuppressedInput: (incomingSessionId, incomingText) =>
-              externalUserInputSuppressionManager.consume(incomingSessionId, incomingText),
+            consumeSuppressedInput: (incomingSessionId, incomingMessageId) =>
+              externalUserInputSuppressionManager.consumeMessage(
+                incomingSessionId,
+                incomingMessageId,
+              ),
           });
         } catch (err) {
           logger.error("[Bot] Failed to deliver external user input to Telegram:", err);
@@ -1160,7 +1172,6 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       await this.sessionCompletionTasks.get(sessionId)?.catch(() => undefined);
 
       const completedRun = assistantRunState.finishRun(sessionId, "session_idle");
-      clearPromptResponseMode(sessionId);
 
       if (!this.botInstance || !this.chatIdInstance) {
         this.compactProgressStreamer.clearSession(sessionId, "session_idle");
@@ -1219,7 +1230,6 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       this.clearToolElapsedState(sessionId, "session_error");
 
       if (!this.botInstance || !this.chatIdInstance) {
-        clearPromptResponseMode(sessionId);
         this.compactProgressStreamer.clearSession(sessionId, "session_error_no_bot_context");
         assistantRunState.clearRun(sessionId, "session_error_no_bot_context");
         foregroundSessionState.markIdle(sessionId);
@@ -1228,8 +1238,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       const currentSession = getCurrentSession();
       if (!currentSession || currentSession.id !== sessionId) {
-        clearPromptResponseMode(sessionId);
-          this.clearAssistantResponseSession(sessionId, "session_error_not_current");
+        this.clearAssistantResponseSession(sessionId, "session_error_not_current");
         this.toolCallStreamer.clearSession(sessionId, "session_error_not_current");
         this.compactProgressStreamer.clearSession(sessionId, "session_error_not_current");
         assistantRunState.clearRun(sessionId, "session_error_not_current");
@@ -1240,7 +1249,6 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       this.clearAssistantResponseSession(sessionId, "session_error");
       this.compactProgressStreamer.clearSession(sessionId, "session_error");
-      clearPromptResponseMode(sessionId);
       assistantRunState.clearRun(sessionId, "session_error");
       await Promise.all([
         this.toolMessageBatcher.flushSession(sessionId, "session_error"),

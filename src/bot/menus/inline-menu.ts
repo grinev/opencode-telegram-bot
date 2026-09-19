@@ -1,4 +1,5 @@
 import { Context, InlineKeyboard } from "grammy";
+import { randomUUID } from "node:crypto";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import type { InteractionMetadata, InteractionState } from "../../app/types/interaction.js";
 import { logger } from "../../utils/logger.js";
@@ -101,8 +102,27 @@ export function appendInlineMenuCancelButton(
 export async function replyWithInlineMenu(
   ctx: Context,
   options: InlineMenuReplyOptions,
-): Promise<number> {
+): Promise<number | null> {
   const keyboard = appendInlineMenuCancelButton(options.keyboard, options.menuKind);
+  const activeMenu = getActiveInlineMenuMetadata(interactionManager.getSnapshot());
+  if (options.menuKind === "settings" && activeMenu?.menuKind === "settings") {
+    interactionManager.clear("settings_menu_reopened");
+  }
+  const reservationId = randomUUID();
+  const reserved = interactionManager.tryStart({
+    kind: "inline",
+    expectedInput: "callback",
+    metadata: {
+      ...options.metadata,
+      menuKind: options.menuKind,
+      reservationId,
+    },
+  });
+  if (!reserved) {
+    await ctx.reply(t("interaction.blocked.finish_current"));
+    return null;
+  }
+
   const replyOptions: {
     reply_markup: InlineKeyboard;
     parse_mode?: "Markdown" | "HTML";
@@ -114,17 +134,27 @@ export async function replyWithInlineMenu(
     replyOptions.parse_mode = options.parseMode;
   }
 
-  const message = await ctx.reply(options.text, replyOptions);
+  let message;
+  try {
+    message = await ctx.reply(options.text, replyOptions);
+  } catch (error) {
+    interactionManager.clearIfMetadata("reservationId", reservationId, "inline_send_failed");
+    throw error;
+  }
 
-  interactionManager.start({
-    kind: "inline",
-    expectedInput: "callback",
+  const finalized = interactionManager.transitionIfMetadata("reservationId", reservationId, {
     metadata: {
       ...options.metadata,
       menuKind: options.menuKind,
       messageId: message.message_id,
     },
   });
+  if (!finalized) {
+    if (ctx.chat) {
+      await ctx.api.editMessageReplyMarkup(ctx.chat.id, message.message_id).catch(() => {});
+    }
+    return null;
+  }
 
   logger.debug(
     `[InlineMenu] Opened menu: kind=${options.menuKind}, messageId=${message.message_id}`,

@@ -41,6 +41,7 @@ const mocked = vi.hoisted(() => ({
   ensureEventSubscriptionMock: vi.fn(),
   safeBackgroundTaskMock: vi.fn(),
   suppressionRegisterMock: vi.fn(),
+  suppressionDiscardMock: vi.fn(),
   attachToSessionMock: vi.fn(),
 }));
 
@@ -107,7 +108,8 @@ vi.mock("../../../src/utils/safe-background-task.js", () => ({
 
 vi.mock("../../../src/app/managers/external-input-suppression-manager.js", () => ({
   externalUserInputSuppressionManager: {
-    register: mocked.suppressionRegisterMock,
+    registerMessage: mocked.suppressionRegisterMock,
+    discardMessage: mocked.suppressionDiscardMock,
   },
 }));
 
@@ -222,6 +224,7 @@ describe("bot/commands/commands", () => {
     mocked.ensureEventSubscriptionMock.mockReset();
     mocked.safeBackgroundTaskMock.mockReset();
     mocked.suppressionRegisterMock.mockReset();
+    mocked.suppressionDiscardMock.mockReset();
     mocked.attachToSessionMock.mockReset();
     mocked.attachToSessionMock.mockResolvedValue({
       busy: false,
@@ -339,9 +342,13 @@ describe("bot/commands/commands", () => {
       },
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
-    expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "/poem");
+    expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith(
+      "session-1",
+      expect.any(String),
+    );
     expect(mocked.sessionCommandMock).toHaveBeenCalledWith({
       sessionID: "session-1",
+      messageID: expect.any(String),
       directory: "D:\\Projects\\Repo",
       command: "poem",
       arguments: "",
@@ -380,10 +387,11 @@ describe("bot/commands/commands", () => {
     );
     expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith(
       "session-1",
-      "/poem about spring",
+      expect.any(String),
     );
     expect(mocked.sessionCommandMock).toHaveBeenCalledWith({
       sessionID: "session-1",
+      messageID: expect.any(String),
       directory: "D:\\Projects\\Repo",
       command: "poem",
       arguments: "about spring",
