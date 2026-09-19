@@ -178,14 +178,15 @@ function hasActiveStream(sessionId: string): boolean {
   return mocked.reconciliationStreamer.current?.hasActiveStream(sessionId) ?? false;
 }
 
-/** The raw SSE handler the service passed to subscribeToEvents. */
+/** Feeds raw events to the handler the service passed to subscribeToEvents. */
 function getEventDispatcher(): (event: unknown) => void {
   const subscription = mocked.subscribeToEvents.mock.calls.at(-1);
   if (!subscription) {
     throw new Error("subscribeToEvents was never called");
   }
 
-  return subscription[1] as (event: unknown) => void;
+  const handler = subscription[1] as (envelope: { directory: string; event: unknown }) => void;
+  return (event) => handler({ directory: "D:/repo", event });
 }
 
 function emitExternalUserMessage(aggregator: Aggregator, text: string): void {

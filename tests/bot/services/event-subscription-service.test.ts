@@ -1341,8 +1341,10 @@ describe("bot/services/event-subscription-service", () => {
 
     await showPollWithWaitingPermission(summaryAggregator);
 
-    const aggregator = summaryAggregator as unknown as { onQuestionErrorCallback: () => void };
-    aggregator.onQuestionErrorCallback();
+    const aggregator = summaryAggregator as unknown as {
+      onQuestionErrorCallback: (sessionId: string) => void;
+    };
+    aggregator.onQuestionErrorCallback("session-1");
 
     await vi.waitFor(() => {
       expect(permissionManager.getPendingCount()).toBe(1);
@@ -1363,8 +1365,10 @@ describe("bot/services/event-subscription-service", () => {
       expect(interactionManager.getWaitingKind()).toBe("question");
     });
 
-    const aggregator = summaryAggregator as unknown as { onQuestionErrorCallback: () => void };
-    aggregator.onQuestionErrorCallback();
+    const aggregator = summaryAggregator as unknown as {
+      onQuestionErrorCallback: (sessionId: string) => void;
+    };
+    aggregator.onQuestionErrorCallback("session-1");
 
     expect(interactionManager.getWaitingKind()).toBeNull();
     expect(permissionManager.getPendingCount()).toBe(1);

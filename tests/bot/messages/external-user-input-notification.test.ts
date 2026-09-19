@@ -38,11 +38,11 @@ describe("bot/messages/external-user-input-notification", () => {
     expect(notification?.text).toContain(`${"x".repeat(1997)}\\.\\.\\.`);
   });
 
-  it("sends external user input when session matches and it is not suppressed", async () => {
+  it("sends external user input when the session is in the foreground and it is not suppressed", async () => {
     const delivered = await deliverExternalUserInputNotification({
       api: { sendMessage: vi.fn() } as never,
       chatId: 777,
-      currentSessionId: "session-1",
+      isForegroundSession: true,
       sessionId: "session-1",
       text: "Review the parser",
       consumeSuppressedInput: vi.fn().mockReturnValue(false),
@@ -64,7 +64,7 @@ describe("bot/messages/external-user-input-notification", () => {
     const delivered = await deliverExternalUserInputNotification({
       api: { sendMessage: vi.fn() } as never,
       chatId: 777,
-      currentSessionId: "session-1",
+      isForegroundSession: true,
       sessionId: "session-1",
       text: "Review the parser",
       consumeSuppressedInput,
@@ -75,11 +75,11 @@ describe("bot/messages/external-user-input-notification", () => {
     expect(mocked.sendBotTextMock).not.toHaveBeenCalled();
   });
 
-  it("does not send notification when the current session differs", async () => {
+  it("does not send notification when the session is not in the foreground", async () => {
     const delivered = await deliverExternalUserInputNotification({
       api: { sendMessage: vi.fn() } as never,
       chatId: 777,
-      currentSessionId: "session-2",
+      isForegroundSession: false,
       sessionId: "session-1",
       text: "Review the parser",
       consumeSuppressedInput: vi.fn().mockReturnValue(false),

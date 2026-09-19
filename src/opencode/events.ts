@@ -4,7 +4,13 @@ import { logger } from "../utils/logger.js";
 import { isRecord } from "../utils/type-guards.js";
 import { isExpectedOpencodeUnavailableError } from "../utils/opencode-error.js";
 
-type EventCallback = (event: Event) => void;
+/** A normalized event together with the directory it came from. */
+export interface EventEnvelope {
+  directory: string;
+  event: Event;
+}
+
+export type EventCallback = (envelope: EventEnvelope) => void;
 type EventStreamSource = "global" | "legacy";
 type EventStreamSubscription = {
   source: EventStreamSource;
@@ -138,9 +144,9 @@ function isSameDirectory(left: string, right: string): boolean {
   return normalizeDirectoryForComparison(left) === normalizeDirectoryForComparison(right);
 }
 
-function normalizeGlobalEvent(rawEvent: unknown, directory: string): Event | null {
+function normalizeGlobalEvent(rawEvent: unknown, directory: string): EventEnvelope | null {
   if (isEventLike(rawEvent)) {
-    return rawEvent;
+    return { directory, event: rawEvent };
   }
 
   if (!isRecord(rawEvent) || !("payload" in rawEvent)) {
@@ -158,10 +164,14 @@ function normalizeGlobalEvent(rawEvent: unknown, directory: string): Event | nul
     return null;
   }
 
-  return rawEvent.payload;
+  return { directory: eventDirectory || directory, event: rawEvent.payload };
 }
 
-function normalizeEvent(rawEvent: unknown, source: EventStreamSource, directory: string): Event | null {
+function normalizeEvent(
+  rawEvent: unknown,
+  source: EventStreamSource,
+  directory: string,
+): EventEnvelope | null {
   if (source === "global") {
     return normalizeGlobalEvent(rawEvent, directory);
   }
@@ -171,7 +181,7 @@ function normalizeEvent(rawEvent: unknown, source: EventStreamSource, directory:
     return null;
   }
 
-  return rawEvent;
+  return { directory, event: rawEvent };
 }
 
 async function subscribeToGlobalEventStream(signal: AbortSignal): Promise<EventStreamSubscription> {
@@ -300,7 +310,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
               continue;
             }
 
-            if (normalizedEvent.type !== "server.connected") {
+            if (normalizedEvent.event.type !== "server.connected") {
               usefulEventCount++;
             }
 

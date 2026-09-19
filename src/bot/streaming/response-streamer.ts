@@ -32,19 +32,23 @@ interface ResponseStreamerCompleteOptions {
 
 interface ResponseStreamerOptions {
   throttleMs: StreamThrottleMs;
+  // Each transport callback also receives the session the stream belongs to.
   sendPart: (
     part: TelegramRenderedPart,
-    options?: TelegramSendMessageOptions,
+    options: TelegramSendMessageOptions | undefined,
+    sessionId: string,
   ) => Promise<{ messageId: number; deliveredSignature: string; degradedToPlain?: boolean }>;
   editPart: (
     messageId: number,
     part: TelegramRenderedPart,
-    options?: TelegramEditMessageOptions,
+    options: TelegramEditMessageOptions | undefined,
+    sessionId: string,
   ) => Promise<{ deliveredSignature: string; degradedToPlain?: boolean }>;
-  deleteText: (messageId: number) => Promise<void>;
+  deleteText: (messageId: number, sessionId: string) => Promise<void>;
   completePart?: (
     part: TelegramRenderedPart,
-    options?: TelegramSendMessageOptions,
+    options: TelegramSendMessageOptions | undefined,
+    sessionId: string,
   ) => Promise<{ messageId: number; deliveredSignature: string }>;
 }
 
@@ -270,7 +274,7 @@ export class ResponseStreamer {
             ? enableNotificationForOptions(completionPayload.sendOptions)
             : completionPayload.sendOptions;
           notifyNextCompletePart = false;
-          const result = await this.completePart(part, completeOptions);
+          const result = await this.completePart(part, completeOptions, sessionId);
           realMessageIds.push(result.messageId);
         }
         state.telegramMessageIds = realMessageIds;
@@ -521,7 +525,7 @@ export class ResponseStreamer {
       }
 
       try {
-        await this.deleteText(messageId);
+        await this.deleteText(messageId, state.sessionId);
       } catch (error) {
         logger.warn(
           `[ResponseStreamer] Failed to delete broken stream message: session=${state.sessionId}, message=${state.messageId}, telegramMessageId=${messageId}, reason=${reason}`,
@@ -555,7 +559,7 @@ export class ResponseStreamer {
           continue;
         }
 
-        const result = await this.editPart(currentMessageId, part, payload.editOptions);
+        const result = await this.editPart(currentMessageId, part, payload.editOptions, state.sessionId);
         state.lastSentSignatures[index] = result.deliveredSignature;
         if (result.degradedToPlain) {
           this.markStreamPlainOnly(state, null, "transport_degraded_to_plain");
@@ -563,7 +567,7 @@ export class ResponseStreamer {
         continue;
       }
 
-      const result = await this.sendPart(part, payload.sendOptions);
+      const result = await this.sendPart(part, payload.sendOptions, state.sessionId);
       state.telegramMessageIds[index] = result.messageId;
       state.lastSentSignatures[index] = result.deliveredSignature;
       if (result.degradedToPlain) {
@@ -574,7 +578,7 @@ export class ResponseStreamer {
     for (let index = state.telegramMessageIds.length - 1; index >= payload.parts.length; index--) {
       const messageId = state.telegramMessageIds[index];
       if (messageId) {
-        await this.deleteText(messageId);
+        await this.deleteText(messageId, state.sessionId);
       }
       state.telegramMessageIds.pop();
       state.lastSentSignatures.pop();

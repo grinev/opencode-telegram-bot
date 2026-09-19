@@ -52,7 +52,7 @@ describe("bot/streaming/response-streamer", () => {
     await vi.advanceTimersByTimeAsync(500);
 
     expect(sendPart).toHaveBeenCalledTimes(1);
-    expect(sendPart).toHaveBeenCalledWith(plainPart("second"), undefined);
+    expect(sendPart).toHaveBeenCalledWith(plainPart("second"), undefined, "s1");
     expect(editPart).not.toHaveBeenCalled();
     expect(deleteText).not.toHaveBeenCalled();
   });
@@ -87,8 +87,8 @@ describe("bot/streaming/response-streamer", () => {
       expect(sendPart).toHaveBeenCalledTimes(2);
     });
 
-    expect(sendPart).toHaveBeenNthCalledWith(1, plainPart("part-1"), undefined);
-    expect(sendPart).toHaveBeenNthCalledWith(2, plainPart("part-2"), undefined);
+    expect(sendPart).toHaveBeenNthCalledWith(1, plainPart("part-1"), undefined, "s1");
+    expect(sendPart).toHaveBeenNthCalledWith(2, plainPart("part-2"), undefined, "s1");
     expect(editPart).not.toHaveBeenCalled();
     expect(deleteText).not.toHaveBeenCalled();
   });
@@ -119,7 +119,7 @@ describe("bot/streaming/response-streamer", () => {
     expect(result.telegramMessageIds).toEqual([1]);
     expect(sendPart).toHaveBeenCalledTimes(1);
     expect(editPart).toHaveBeenCalledTimes(1);
-    expect(editPart).toHaveBeenCalledWith(1, plainPart("final"), undefined);
+    expect(editPart).toHaveBeenCalledWith(1, plainPart("final"), undefined, "s1");
     expect(deleteText).not.toHaveBeenCalled();
   });
 
@@ -150,7 +150,7 @@ describe("bot/streaming/response-streamer", () => {
       expect(deleteText).toHaveBeenCalledTimes(1);
     });
 
-    expect(deleteText).toHaveBeenCalledWith(11);
+    expect(deleteText).toHaveBeenCalledWith(11, "s1");
   });
 
   it("retries after Telegram rate limits", async () => {
@@ -219,7 +219,7 @@ describe("bot/streaming/response-streamer", () => {
     expect(result.streamed).toBe(false);
     expect(result.telegramMessageIds).toEqual([]);
     expect(deleteText).toHaveBeenCalledTimes(1);
-    expect(deleteText).toHaveBeenCalledWith(42);
+    expect(deleteText).toHaveBeenCalledWith(42, "s1");
     expect(sendPart).toHaveBeenCalledTimes(1);
   });
 
@@ -334,7 +334,7 @@ describe("bot/streaming/response-streamer", () => {
     expect(completedAfterClear.telegramMessageIds).toEqual([]);
     expect(editPart).not.toHaveBeenCalled();
     expect(deleteText).not.toHaveBeenCalled();
-    expect(sendPart).toHaveBeenNthCalledWith(2, plainPart("new partial"), undefined);
+    expect(sendPart).toHaveBeenNthCalledWith(2, plainPart("new partial"), undefined, "s1");
   });
 
   it("keeps visible partial messages when clearing all streams", async () => {
@@ -440,7 +440,7 @@ describe("bot/streaming/response-streamer", () => {
       await streamer.complete("s1", "m1", { parts: [quotedPart("reasoning", true)] });
 
       expect(editPart).toHaveBeenCalledTimes(1);
-      expect(editPart).toHaveBeenCalledWith(700, quotedPart("reasoning", true), undefined);
+      expect(editPart).toHaveBeenCalledWith(700, quotedPart("reasoning", true), undefined, "s1");
     });
   });
 
@@ -471,7 +471,7 @@ describe("bot/streaming/response-streamer", () => {
 
       expect(result.streamed).toBe(true);
       expect(editPart).toHaveBeenCalledTimes(1);
-      expect(editPart).toHaveBeenCalledWith(300, plainPart("hello there"), undefined);
+      expect(editPart).toHaveBeenCalledWith(300, plainPart("hello there"), undefined, "s1");
       expect(deleteText).not.toHaveBeenCalled();
     });
 
@@ -503,7 +503,7 @@ describe("bot/streaming/response-streamer", () => {
 
       expect(result.streamed).toBe(true);
       expect(editPart).toHaveBeenCalledTimes(2);
-      expect(editPart).toHaveBeenNthCalledWith(2, 400, plainPart("hello there"), undefined);
+      expect(editPart).toHaveBeenNthCalledWith(2, 400, plainPart("hello there"), undefined, "s1");
       expect(deleteText).not.toHaveBeenCalled();
     });
 
@@ -579,7 +579,7 @@ describe("bot/streaming/response-streamer", () => {
       const result = await streamer.complete("s1", "m1", { parts: [richPart("hello there")] });
 
       expect(result.streamed).toBe(false);
-      expect(deleteText).toHaveBeenCalledWith(600);
+      expect(deleteText).toHaveBeenCalledWith(600, "s1");
     });
 
     it("still skips unchanged payloads after switching to plain text", async () => {
@@ -652,7 +652,7 @@ describe("bot/streaming/response-streamer", () => {
       expect(result.streamed).toBe(true);
       expect(result.telegramMessageIds).toEqual([100]);
       expect(completePart).toHaveBeenCalledTimes(1);
-      expect(completePart).toHaveBeenCalledWith(plainPart("final"), undefined);
+      expect(completePart).toHaveBeenCalledWith(plainPart("final"), undefined, "s1");
     });
 
     it("persists multi-part drafts via completePart", async () => {
@@ -692,8 +692,8 @@ describe("bot/streaming/response-streamer", () => {
       expect(result.streamed).toBe(true);
       expect(result.telegramMessageIds).toEqual([200, 201]);
       expect(completePart).toHaveBeenCalledTimes(2);
-      expect(completePart).toHaveBeenNthCalledWith(1, plainPart("part-1-final"), undefined);
-      expect(completePart).toHaveBeenNthCalledWith(2, plainPart("part-2-final"), undefined);
+      expect(completePart).toHaveBeenNthCalledWith(1, plainPart("part-1-final"), undefined, "s1");
+      expect(completePart).toHaveBeenNthCalledWith(2, plainPart("part-2-final"), undefined, "s1");
     });
 
     it("can notify only the first final draft part", async () => {
@@ -738,10 +738,10 @@ describe("bot/streaming/response-streamer", () => {
       );
 
       expect(result.streamed).toBe(true);
-      expect(completePart).toHaveBeenNthCalledWith(1, plainPart("part-1-final"), {});
+      expect(completePart).toHaveBeenNthCalledWith(1, plainPart("part-1-final"), {}, "s1");
       expect(completePart).toHaveBeenNthCalledWith(2, plainPart("part-2-final"), {
         disable_notification: true,
-      });
+      }, "s1");
     });
 
     it("keeps final draft parts silent by default", async () => {
@@ -781,7 +781,7 @@ describe("bot/streaming/response-streamer", () => {
       expect(result.streamed).toBe(true);
       expect(completePart).toHaveBeenCalledWith(plainPart("final"), {
         disable_notification: true,
-      });
+      }, "s1");
     });
 
     it("returns streamed=false when completePart fails", async () => {
@@ -877,6 +877,6 @@ describe("bot/streaming/response-streamer", () => {
 
     await vi.advanceTimersByTimeAsync(1);
     expect(editPart).toHaveBeenCalledTimes(1);
-    expect(editPart).toHaveBeenCalledWith(1, plainPart("second"), undefined);
+    expect(editPart).toHaveBeenCalledWith(1, plainPart("second"), undefined, "s1");
   });
 });

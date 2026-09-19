@@ -101,7 +101,7 @@ type ToolFileCallback = (fileInfo: ToolFileInfo) => void;
 
 type QuestionCallback = (questions: Question[], requestID: string, sessionId: string) => void;
 
-type QuestionErrorCallback = () => void;
+type QuestionErrorCallback = (sessionId: string) => void;
 
 type ThinkingCallback = (update: ThinkingUpdate) => void;
 
@@ -115,9 +115,9 @@ export interface TokensInfo {
   cacheWrite: number;
 }
 
-type TokensCallback = (tokens: TokensInfo, isCompleted: boolean) => void;
+type TokensCallback = (sessionId: string, tokens: TokensInfo, isCompleted: boolean) => void;
 
-type CostCallback = (cost: number) => void;
+type CostCallback = (sessionId: string, cost: number) => void;
 
 export type SubagentStatus = "pending" | "running" | "completed" | "error";
 
@@ -169,7 +169,7 @@ type PermissionRepliedCallback = (sessionId: string, requestID: string) => void 
 
 type SessionDiffCallback = (sessionId: string, diffs: FileChange[]) => void;
 
-type FileChangeCallback = (change: FileChange) => void;
+type FileChangeCallback = (sessionId: string, change: FileChange) => void;
 
 type ClearedCallback = () => void;
 
@@ -597,6 +597,23 @@ export class SummaryAggregator {
    */
   isSubagentSession(sessionId: string): boolean {
     return this.isTrackedChildSession(sessionId);
+  }
+
+  /**
+   * The root session a tracked session belongs to, found by walking its parents;
+   * an untracked session is its own root.
+   */
+  getRootSessionId(sessionId: string): string {
+    const visited = new Set<string>();
+    let rootSessionId = sessionId;
+    let parentSessionId = this.trackedSessionParents.get(rootSessionId);
+    while (parentSessionId && !visited.has(parentSessionId)) {
+      visited.add(rootSessionId);
+      rootSessionId = parentSessionId;
+      parentSessionId = this.trackedSessionParents.get(rootSessionId);
+    }
+
+    return rootSessionId;
   }
 
   private getQueue(map: Map<string, string[]>, parentSessionId: string): string[] {
@@ -1237,7 +1254,7 @@ export class SummaryAggregator {
           `[Aggregator] Tokens: input=${tokens.input}, output=${tokens.output}, reasoning=${tokens.reasoning}, cacheRead=${tokens.cacheRead}, cacheWrite=${tokens.cacheWrite}, completed=${isCompleted}`,
         );
         // Call synchronously so keyboardManager is updated before onComplete sends the reply
-        this.onTokensCallback(tokens, isCompleted);
+        this.onTokensCallback(info.sessionID, tokens, isCompleted);
       }
 
       if (isCompleted) {
@@ -1261,7 +1278,7 @@ export class SummaryAggregator {
         // Extract and report cost
         if (this.onCostCallback && assistantInfo.cost !== undefined) {
           logger.debug(`[Aggregator] Cost: $${assistantInfo.cost.toFixed(2)}`);
-          this.onCostCallback(assistantInfo.cost);
+          this.onCostCallback(info.sessionID, assistantInfo.cost);
         }
 
         if (this.onCompleteCallback && finalText.length > 0) {
@@ -1463,8 +1480,9 @@ export class SummaryAggregator {
             `[Aggregator] Question tool failed with error, clearing active poll. callID=${part.callID}`,
           );
           if (this.onQuestionErrorCallback) {
+            const sessionId = part.sessionID;
             setImmediate(() => {
-              this.onQuestionErrorCallback!();
+              this.onQuestionErrorCallback!(sessionId);
             });
           }
           return;
@@ -1524,7 +1542,7 @@ export class SummaryAggregator {
           }
 
           if (preparedFileContext.fileChange && this.onFileChangeCallback) {
-            this.onFileChangeCallback(preparedFileContext.fileChange);
+            this.onFileChangeCallback(part.sessionID, preparedFileContext.fileChange);
           }
         }
       }
