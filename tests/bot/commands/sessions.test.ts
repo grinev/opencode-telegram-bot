@@ -46,11 +46,11 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
+  listSessions: mocked.sessionListMock,
+  getSessionMessages: mocked.sessionMessagesMock,
+  opencodeV2: {
     session: {
-      list: mocked.sessionListMock,
       get: mocked.sessionGetMock,
-      messages: mocked.sessionMessagesMock,
     },
   },
 }));
@@ -130,17 +130,6 @@ type SessionStub = {
   };
 };
 
-type SessionMessageStub = {
-  info: {
-    role: "user" | "assistant";
-    summary?: boolean;
-    time: {
-      created: number;
-    };
-  };
-  parts: Array<{ type: string; text?: string }>;
-};
-
 function createSession(index: number): SessionStub {
   return {
     id: `session-${index + 1}`,
@@ -154,19 +143,14 @@ function createSession(index: number): SessionStub {
 
 function createSessionMessage(
   role: "user" | "assistant",
-  text: string | null,
+  text: string,
   created: number,
-  summary = false,
-): SessionMessageStub {
+): { id: string; role: "user" | "assistant"; text: string; created: number } {
   return {
-    info: {
-      role,
-      summary,
-      time: {
-        created,
-      },
-    },
-    parts: text === null ? [] : [{ type: "text", text }],
+    id: `${role}-${created}`,
+    role,
+    text,
+    created,
   };
 }
 
@@ -412,7 +396,7 @@ describe("bot/commands/sessions", () => {
 
   it("resolves the project agent before sending the keyboard for an existing session", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
-      data: createSession(0),
+      data: { data: createSession(0) },
       error: null,
     });
     mocked.resolveProjectAgentMock.mockResolvedValueOnce("plan");
@@ -458,7 +442,7 @@ describe("bot/commands/sessions", () => {
 
   it("pulls the settings of the selected session before attaching to it", async () => {
     const session = createSession(0);
-    mocked.sessionGetMock.mockResolvedValueOnce({ data: session, error: null });
+    mocked.sessionGetMock.mockResolvedValueOnce({ data: { data: session }, error: null });
 
     interactionManager.start({
       kind: "inline",
@@ -478,7 +462,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("puts the pulled model on the keyboard sent with the selection message", async () => {
-    mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
+    mocked.sessionGetMock.mockResolvedValueOnce({ data: { data: createSession(0) }, error: null });
 
     interactionManager.start({
       kind: "inline",
@@ -503,7 +487,7 @@ describe("bot/commands/sessions", () => {
 
   it("pulls the settings when a background session notification is opened", async () => {
     const session = createSession(0);
-    mocked.sessionGetMock.mockResolvedValueOnce({ data: session, error: null });
+    mocked.sessionGetMock.mockResolvedValueOnce({ data: { data: session }, error: null });
 
     const handled = await handleBackgroundSessionOpen(
       createCallbackContext("background-session:session-1", 456),
@@ -548,7 +532,7 @@ describe("bot/commands/sessions", () => {
 
   it("selects a background session without an active sessions menu", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
-      data: createSession(0),
+      data: { data: createSession(0) },
       error: null,
     });
 
@@ -558,7 +542,6 @@ describe("bot/commands/sessions", () => {
     expect(handled).toBe(true);
     expect(mocked.sessionGetMock).toHaveBeenCalledWith({
       sessionID: "session-1",
-      directory: "/repo",
     });
     expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith({
       id: "session-1",
@@ -589,7 +572,7 @@ describe("bot/commands/sessions", () => {
 
   it("sends the full latest assistant response after opening an assistant background notification", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
-      data: createSession(0),
+      data: { data: createSession(0) },
       error: null,
     });
     const latestResponse = `Final assistant response. ${"More details. ".repeat(380)}`.trimEnd();
@@ -597,7 +580,6 @@ describe("bot/commands/sessions", () => {
       data: [
         createSessionMessage("assistant", "Old assistant response", 100),
         createSessionMessage("user", "User prompt should not be forwarded", 200),
-        createSessionMessage("assistant", "Summary should be ignored", 300, true),
         createSessionMessage("assistant", latestResponse, 400),
       ],
       error: null,
@@ -622,11 +604,7 @@ describe("bot/commands/sessions", () => {
     const previousSendCount = sendMessageMock.mock.calls.length;
     await taskOptions.task();
 
-    expect(mocked.sessionMessagesMock).toHaveBeenCalledWith({
-      sessionID: "session-1",
-      directory: "/repo",
-      limit: 20,
-    });
+    expect(mocked.sessionMessagesMock).toHaveBeenCalledWith("session-1", 20);
 
     const assistantResponseCalls = sendMessageMock.mock.calls.slice(previousSendCount);
     expect(assistantResponseCalls.length).toBeGreaterThan(1);
@@ -638,7 +616,7 @@ describe("bot/commands/sessions", () => {
 
   it("does not send preview or latest assistant response for background question notifications", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
-      data: createSession(0),
+      data: { data: createSession(0) },
       error: null,
     });
 
@@ -652,7 +630,7 @@ describe("bot/commands/sessions", () => {
 
   it("keeps background session button usable when another inline menu is active", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
-      data: createSession(0),
+      data: { data: createSession(0) },
       error: null,
     });
     interactionManager.start({
@@ -670,7 +648,6 @@ describe("bot/commands/sessions", () => {
     expect(handled).toBe(true);
     expect(mocked.sessionGetMock).toHaveBeenCalledWith({
       sessionID: "session-1",
-      directory: "/repo",
     });
     expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith({
       id: "session-1",
@@ -682,7 +659,7 @@ describe("bot/commands/sessions", () => {
 
   it("keeps successful background selection when removing the button fails", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
-      data: createSession(0),
+      data: { data: createSession(0) },
       error: null,
     });
 

@@ -31,6 +31,8 @@ const mocked = vi.hoisted(() => ({
   commandListMock: vi.fn(),
   sessionStatusMock: vi.fn(),
   sessionCreateMock: vi.fn(),
+  sessionSwitchAgentMock: vi.fn(),
+  sessionSwitchModelMock: vi.fn(),
   sessionCommandMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
   clearSessionMock: vi.fn(),
@@ -70,12 +72,16 @@ vi.mock("../../../src/opencode/client.js", () => ({
     command: {
       list: mocked.commandListMock,
     },
+  },
+  getBusySessionStatuses: mocked.sessionStatusMock,
+  opencodeV2: {
     session: {
-      status: mocked.sessionStatusMock,
       create: mocked.sessionCreateMock,
-      command: mocked.sessionCommandMock,
+      switchAgent: mocked.sessionSwitchAgentMock,
+      switchModel: mocked.sessionSwitchModelMock,
     },
   },
+  directApi: mocked.sessionCommandMock,
 }));
 
 vi.mock("../../../src/app/managers/summary-aggregation-manager.js", () => ({
@@ -212,6 +218,8 @@ describe("bot/commands/commands", () => {
     mocked.commandListMock.mockReset();
     mocked.sessionStatusMock.mockReset();
     mocked.sessionCreateMock.mockReset();
+    mocked.sessionSwitchAgentMock.mockReset();
+    mocked.sessionSwitchModelMock.mockReset();
     mocked.sessionCommandMock.mockReset();
     mocked.setCurrentSessionMock.mockReset();
     mocked.clearSessionMock.mockReset();
@@ -238,6 +246,8 @@ describe("bot/commands/commands", () => {
       },
       error: null,
     });
+    mocked.sessionSwitchAgentMock.mockResolvedValue({ data: null, error: null });
+    mocked.sessionSwitchModelMock.mockResolvedValue({ data: null, error: null });
     mocked.sessionCommandMock.mockResolvedValue({ data: {}, error: null });
   });
 
@@ -340,15 +350,11 @@ describe("bot/commands/commands", () => {
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
     expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith("session-1", "/poem");
-    expect(mocked.sessionCommandMock).toHaveBeenCalledWith({
-      sessionID: "session-1",
-      directory: "D:\\Projects\\Repo",
-      command: "poem",
-      arguments: "",
-      agent: "build",
-      model: "openai/gpt-5",
-      variant: "default",
-    });
+    expect(mocked.sessionCommandMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/session/session-1/command",
+      { name: "poem" },
+    );
   });
 
   it("executes selected command with arguments from text message", async () => {
@@ -382,15 +388,11 @@ describe("bot/commands/commands", () => {
       "session-1",
       "/poem about spring",
     );
-    expect(mocked.sessionCommandMock).toHaveBeenCalledWith({
-      sessionID: "session-1",
-      directory: "D:\\Projects\\Repo",
-      command: "poem",
-      arguments: "about spring",
-      agent: "build",
-      model: "openai/gpt-5",
-      variant: "default",
-    });
+    expect(mocked.sessionCommandMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/session/session-1/command",
+      { name: "poem", text: "about spring" },
+    );
   });
 
   it("notifies the user when session.command reports an error while attached", async () => {

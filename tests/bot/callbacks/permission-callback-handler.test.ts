@@ -18,9 +18,11 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    permission: {
-      reply: mocked.permissionReplyMock,
+  opencodeV2: {
+    session: {
+      permission: {
+        reply: mocked.permissionReplyMock,
+      },
     },
   },
 }));
@@ -126,7 +128,11 @@ describe("bot permission menu/callbacks", () => {
       id: "project-1",
       worktree: "D:/repo",
     };
-    mocked.currentSession = null;
+    mocked.currentSession = {
+      id: "session-1",
+      title: "Session",
+      directory: "D:/repo",
+    };
   });
 
   it("starts permission interaction and stores message id", async () => {
@@ -287,8 +293,8 @@ describe("bot permission menu/callbacks", () => {
     await flushMicrotasks();
 
     expect(mocked.permissionReplyMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
       requestID: "perm-valid",
-      directory: "D:/repo",
       reply: "always",
     });
 
@@ -318,13 +324,13 @@ describe("bot permission menu/callbacks", () => {
 
     expect(mocked.permissionReplyMock).toHaveBeenCalledTimes(2);
     expect(mocked.permissionReplyMock).toHaveBeenNthCalledWith(1, {
+      sessionID: "session-1",
       requestID: "perm-1",
-      directory: "D:/repo",
       reply: "always",
     });
     expect(mocked.permissionReplyMock).toHaveBeenNthCalledWith(2, {
+      sessionID: "session-1",
       requestID: "perm-duplicate",
-      directory: "D:/repo",
       reply: "always",
     });
     expect(permissionManager.isActive()).toBe(false);
@@ -435,8 +441,8 @@ describe("bot permission menu/callbacks", () => {
     await flushMicrotasks();
 
     expect(mocked.permissionReplyMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
       requestID: "perm-1",
-      directory: "D:/repo",
       reply: "once",
     });
 
@@ -460,8 +466,8 @@ describe("bot permission menu/callbacks", () => {
     await flushMicrotasks();
 
     expect(mocked.permissionReplyMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
       requestID: "perm-2",
-      directory: "D:/repo",
       reply: "reject",
     });
 

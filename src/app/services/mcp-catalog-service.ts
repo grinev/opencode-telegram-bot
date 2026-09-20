@@ -1,15 +1,11 @@
 import type { McpStatus } from "@opencode-ai/sdk/v2";
-import { opencodeClient } from "../../opencode/client.js";
+import { directApi } from "../../opencode/client.js";
 import { logger } from "../../utils/logger.js";
 import { isRecord } from "../../utils/type-guards.js";
 
 export interface McpCatalogServerItem {
   name: string;
   status: McpStatus;
-}
-
-function normalizeDirectoryForMcpApi(directory: string): string {
-  return directory.replace(/\\/g, "/");
 }
 
 const MCP_STATUS_NAMES = [
@@ -106,16 +102,15 @@ export function parseMcpCatalogServers(value: unknown): McpCatalogServerItem[] |
   return servers;
 }
 
-export async function loadMcpCatalog(projectDirectory: string): Promise<McpCatalogServerItem[]> {
-  const { data, error } = await opencodeClient.mcp.status({
-    directory: normalizeDirectoryForMcpApi(projectDirectory),
-  });
+export async function loadMcpCatalog(_projectDirectory: string): Promise<McpCatalogServerItem[]> {
+  // v2: GET /api/mcp -> { location, data: [{ name, status, ... }] }
+  const { data, error } = await directApi<{ data: unknown }>("GET", "/api/mcp");
 
   if (error || !data) {
     throw error || new Error("No MCP status data received");
   }
 
-  const servers = parseMcpCatalogServers(data);
+  const servers = parseMcpCatalogServers(data.data);
   if (!servers) {
     throw new Error("Invalid MCP status data format");
   }
@@ -124,24 +119,16 @@ export async function loadMcpCatalog(projectDirectory: string): Promise<McpCatal
 }
 
 export async function toggleMcpCatalogServer(
-  projectDirectory: string,
+  _projectDirectory: string,
   serverName: string,
   enable: boolean,
 ): Promise<void> {
-  const params = {
-    name: serverName,
-    directory: normalizeDirectoryForMcpApi(projectDirectory),
-  };
-
-  if (enable) {
-    const { error } = await opencodeClient.mcp.connect(params);
-    if (error) {
-      throw error;
-    }
-    return;
-  }
-
-  const { error } = await opencodeClient.mcp.disconnect(params);
+  // v2: POST /api/experimental/mcp/{server}/connect|disconnect
+  const action = enable ? "connect" : "disconnect";
+  const { error } = await directApi(
+    "POST",
+    `/api/experimental/mcp/${encodeURIComponent(serverName)}/${action}`,
+  );
   if (error) {
     throw error;
   }

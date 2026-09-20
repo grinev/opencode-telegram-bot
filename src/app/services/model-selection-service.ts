@@ -1,6 +1,6 @@
 import { getCurrentModel, setCurrentModel } from "../stores/settings-store.js";
 import { config } from "../../config.js";
-import { opencodeClient } from "../../opencode/client.js";
+import { fetchModelCatalog } from "../../opencode/catalog.js";
 import { isServerUnavailableError } from "../../utils/opencode-error.js";
 import { logger } from "../../utils/logger.js";
 import type {
@@ -98,7 +98,7 @@ async function getValidModelKeys(options?: {
   modelCatalogFetchInFlight = (async () => {
     try {
       logger.debug("[ModelManager] Refreshing model catalog from OpenCode API");
-      const response = await opencodeClient.config.providers();
+      const response = await fetchModelCatalog();
 
       if (response.error || !response.data) {
         logModelCatalogRefreshFailure(response.error, "error");
@@ -115,14 +115,18 @@ async function getValidModelKeys(options?: {
       const allModels: FavoriteModel[] = [];
       const providers: ProviderInfo[] = [];
       const modelsByProvider = new Map<string, FavoriteModel[]>();
+      const enabledModels = response.data.models.filter((model) => model.enabled !== false);
 
       for (const provider of response.data.providers) {
         const providerModels: FavoriteModel[] = [];
 
-        for (const modelID of Object.keys(provider.models)) {
-          validModelKeys.add(getModelKey(provider.id, modelID));
-          allModels.push({ providerID: provider.id, modelID });
-          providerModels.push({ providerID: provider.id, modelID });
+        for (const model of enabledModels) {
+          if (model.providerID !== provider.id) {
+            continue;
+          }
+          validModelKeys.add(getModelKey(provider.id, model.id));
+          allModels.push({ providerID: provider.id, modelID: model.id });
+          providerModels.push({ providerID: provider.id, modelID: model.id });
         }
 
         providerModels.sort((a, b) => a.modelID.localeCompare(b.modelID));

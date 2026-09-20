@@ -9,11 +9,7 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock("../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    global: {
-      health: mocked.healthMock,
-    },
-  },
+  getServerInfo: mocked.healthMock,
 }));
 
 vi.mock("../../src/app/services/session-cache-service.js", () => ({

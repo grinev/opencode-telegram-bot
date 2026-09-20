@@ -1,23 +1,22 @@
-import { opencodeClient } from "./client.js";
-import { Event } from "@opencode-ai/sdk/v2";
+import { opencodeV2 } from "./client.js";
 import { logger } from "../utils/logger.js";
 import { isRecord } from "../utils/type-guards.js";
 import { isExpectedOpencodeUnavailableError } from "../utils/opencode-error.js";
 
-type EventCallback = (event: Event) => void;
-type EventStreamSource = "global" | "legacy";
+// Bridge event: v2 envelope {type, data, location?} reshaped into the
+// legacy {type, properties} form the bot's managers consume.
+// Type names are translated where v2 renamed them; unknown types pass
+// through untouched with properties = data.
+export interface BotEvent {
+  type: string;
+  properties: Record<string, unknown>;
+}
+
+type EventCallback = (event: BotEvent) => void;
+type EventStreamSource = "v2";
 type EventStreamSubscription = {
   source: EventStreamSource;
   stream: AsyncGenerator<unknown, unknown, unknown>;
-};
-type EventSubscriptionResult = {
-  stream?: AsyncGenerator<unknown, unknown, unknown> | null;
-};
-type OptionalGlobalEventApi = {
-  event?: (options?: { signal?: AbortSignal }) => Promise<EventSubscriptionResult>;
-};
-type OptionalGlobalEventClient = {
-  global?: OptionalGlobalEventApi;
 };
 
 const RECONNECT_BASE_DELAY_MS = 1000;
@@ -33,6 +32,12 @@ let activeDirectory: string | null = null;
 let streamAbortController: AbortController | null = null;
 let listenerGeneration = 0;
 let consecutiveTimeouts = 0;
+
+// Tool calls stream across several events (input.started -> input.ended ->
+// called -> success/failed). Track the tool name and parsed input by callID so
+// `called`/`success` can be reshaped into a single message.part.updated.
+const toolNameByCallId = new Map<string, string>();
+const toolInputByCallId = new Map<string, Record<string, unknown>>();
 
 type StreamReadResult =
   | { type: "next"; result: IteratorResult<unknown, unknown> }
@@ -125,8 +130,28 @@ function isEventStreamIdleTimeoutError(error: unknown): boolean {
   return error instanceof Error && error.message === SSE_IDLE_TIMEOUT_ERROR;
 }
 
-function isEventLike(value: unknown): value is Event {
-  return isRecord(value) && typeof value.type === "string" && isRecord(value.properties);
+function isV2Envelope(value: unknown): value is {
+  type: string;
+  data?: unknown;
+  location?: { directory?: string };
+} {
+  return (
+    isRecord(value) &&
+    typeof value.type === "string" &&
+    (value.data === undefined || isRecord(value.data) || value.data === null)
+  );
+}
+
+function asProperties(data: unknown): Record<string, unknown> {
+  return isRecord(data) ? data : {};
+}
+
+function str(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function num(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
 }
 
 function normalizeDirectoryForComparison(directory: string): string {
@@ -138,67 +163,268 @@ function isSameDirectory(left: string, right: string): boolean {
   return normalizeDirectoryForComparison(left) === normalizeDirectoryForComparison(right);
 }
 
-function normalizeGlobalEvent(rawEvent: unknown, directory: string): Event | null {
-  if (isEventLike(rawEvent)) {
-    return rawEvent;
+// v2 tool inputs use `path` where the legacy aggregator reads `filePath`
+// (write/edit). Normalize so the file-attachment pipeline works unchanged.
+function normalizeToolInput(tool: string, input: Record<string, unknown>): Record<string, unknown> {
+  if ((tool === "write" || tool === "edit") && input.filePath === undefined && typeof input.path === "string") {
+    return { ...input, filePath: input.path };
   }
+  return input;
+}
 
-  if (!isRecord(rawEvent) || !("payload" in rawEvent)) {
-    logger.debug("[Events] Ignoring global event with unknown shape");
+// v2 `session.tool.success` carries diff info under `metadata.files[0]`
+// ({file, patch, additions, deletions}); the legacy aggregator expects
+// `metadata.filediff` + `metadata.diff`. Rebuild the legacy shape.
+function buildToolMetadata(tool: string, metadata: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (tool !== "edit" && tool !== "apply_patch") {
+    return undefined;
+  }
+  const files = Array.isArray(metadata?.files) ? metadata.files : [];
+  const first = isRecord(files[0]) ? files[0] : undefined;
+  if (!first) {
+    return undefined;
+  }
+  const file = str(first.file);
+  const patch = str(first.patch);
+  if (!file || !patch) {
+    return undefined;
+  }
+  return {
+    filediff: {
+      file,
+      additions: num(first.additions) ?? 0,
+      deletions: num(first.deletions) ?? 0,
+    },
+    diff: patch,
+  };
+}
+
+function buildToolPart(
+  data: Record<string, unknown>,
+  status: string,
+  tool: string,
+  input: Record<string, unknown>,
+  metadata?: Record<string, unknown>,
+): BotEvent | null {
+  const sessionID = str(data.sessionID);
+  const messageID = str(data.assistantMessageID);
+  const callID = str(data.id);
+  if (!sessionID || !messageID || !callID) {
+    return null;
+  }
+  return {
+    type: "message.part.updated",
+    properties: {
+      part: {
+        type: "tool",
+        sessionID,
+        messageID,
+        id: callID,
+        tool,
+        callID,
+        state: {
+          status,
+          input,
+          ...(metadata !== undefined ? { metadata } : {}),
+        },
+      },
+    },
+  };
+}
+
+function translateV2Event(type: string, data: Record<string, unknown>): BotEvent | null {
+  const sessionID = str(data.sessionID);
+  switch (type) {
+    case "session.text.delta":
+    case "session.reasoning.delta": {
+      const assistantMessageID = str(data.assistantMessageID);
+      const ordinal = num(data.ordinal) ?? 0;
+      const delta = str(data.delta);
+      if (!sessionID || !assistantMessageID || !delta) {
+        return null;
+      }
+      return {
+        type: "message.part.delta",
+        properties: {
+          sessionID,
+          messageID: assistantMessageID,
+          partID: `text-${ordinal}`,
+          delta,
+          type: type === "session.reasoning.delta" ? "reasoning" : "text",
+        },
+      };
+    }
+    case "session.execution.succeeded":
+    case "session.execution.interrupted": {
+      if (!sessionID) {
+        return null;
+      }
+      return { type: "session.idle", properties: { sessionID } };
+    }
+    case "session.execution.failed": {
+      if (!sessionID) {
+        return null;
+      }
+      return { type: "session.error", properties: { sessionID, error: data.error } };
+    }
+    case "session.retry.scheduled": {
+      if (!sessionID) {
+        return null;
+      }
+      const error = isRecord(data.error) ? data.error : {};
+      return {
+        type: "session.status",
+        properties: {
+          sessionID,
+          status: {
+            type: "retry",
+            message: str(error.message) ?? "Unknown retry error",
+            attempt: num(data.attempt),
+            next: num(data.at),
+          },
+        },
+      };
+    }
+    case "session.step.started": {
+      if (!sessionID) {
+        return null;
+      }
+      return { type: "session.status", properties: { sessionID, status: { type: "busy" } } };
+    }
+    case "permission.asked": {
+      const id = str(data.id);
+      if (!id || !sessionID) {
+        return null;
+      }
+      const source = isRecord(data.source) ? data.source : {};
+      return {
+        type: "permission.asked",
+        properties: {
+          id,
+          sessionID,
+          permission: data.action,
+          patterns: Array.isArray(data.resources) ? data.resources : [],
+          metadata: asProperties(data.metadata),
+          always: Array.isArray(data.save) ? data.save : [],
+          tool: {
+            messageID: str(source.messageID) ?? "",
+            callID: str(source.id) ?? "",
+          },
+        },
+      };
+    }
+    case "question.asked": {
+      const id = str(data.id);
+      if (!id || !sessionID) {
+        return null;
+      }
+      return { type: "question.asked", properties: { id, sessionID, questions: data.questions } };
+    }
+    case "session.created": {
+      if (!sessionID) {
+        return null;
+      }
+      const location = isRecord(data.location) ? data.location : {};
+      return {
+        type: "session.created",
+        properties: {
+          ...data,
+          info: {
+            id: sessionID,
+            directory: str(location.directory),
+            time: { updated: num(data.created) ?? Date.now() },
+          },
+        },
+      };
+    }
+    case "session.compaction.ended": {
+      if (!sessionID) {
+        return null;
+      }
+      return { type: "session.compacted", properties: { sessionID } };
+    }
+    case "session.tool.input.started": {
+      const callID = str(data.id);
+      const name = str(data.name);
+      if (callID && name) {
+        toolNameByCallId.set(callID, name);
+      }
+      // Input-only lifecycle event; the real tool part is emitted on `called`.
+      return null;
+    }
+    case "session.tool.called": {
+      const callID = str(data.id);
+      if (!callID) {
+        return null;
+      }
+      const tool = toolNameByCallId.get(callID);
+      if (!tool) {
+        return null;
+      }
+      const input = isRecord(data.input) ? data.input : {};
+      toolInputByCallId.set(callID, input);
+      return buildToolPart(data, "running", tool, normalizeToolInput(tool, input));
+    }
+    case "session.tool.success": {
+      const callID = str(data.id);
+      if (!callID) {
+        return null;
+      }
+      const tool = toolNameByCallId.get(callID);
+      if (!tool) {
+        return null;
+      }
+      const rawInput = toolInputByCallId.get(callID) ?? {};
+      const input = normalizeToolInput(tool, rawInput);
+      const metadata = buildToolMetadata(tool, isRecord(data.metadata) ? data.metadata : undefined);
+      return buildToolPart(data, "completed", tool, input, metadata);
+    }
+    case "session.tool.failed": {
+      const callID = str(data.id);
+      if (!callID) {
+        return null;
+      }
+      const tool = toolNameByCallId.get(callID);
+      if (!tool) {
+        return null;
+      }
+      const input = normalizeToolInput(tool, toolInputByCallId.get(callID) ?? {});
+      return buildToolPart(data, "error", tool, input);
+    }
+    default:
+      // passthrough: same type name, properties = data (v2 kept most names).
+      return { type, properties: { ...data } };
+  }
+}
+
+function normalizeEvent(rawEvent: unknown, directory: string): BotEvent | null {
+  if (!isV2Envelope(rawEvent)) {
+    logger.debug("[Events] Ignoring event with unknown shape");
     return null;
   }
 
-  const eventDirectory = typeof rawEvent.directory === "string" ? rawEvent.directory : null;
+  // v2 events carry location.directory; events without location (execution,
+  // usage, deletion) are kept — downstream matches by sessionID.
+  const eventDirectory =
+    rawEvent.location && typeof rawEvent.location.directory === "string"
+      ? rawEvent.location.directory
+      : null;
   if (eventDirectory && !isSameDirectory(eventDirectory, directory)) {
     return null;
   }
 
-  if (!isEventLike(rawEvent.payload)) {
-    logger.debug("[Events] Ignoring global event with unknown payload shape");
-    return null;
-  }
-
-  return rawEvent.payload;
+  return translateV2Event(rawEvent.type, asProperties(rawEvent.data));
 }
 
-function normalizeEvent(rawEvent: unknown, source: EventStreamSource, directory: string): Event | null {
-  if (source === "global") {
-    return normalizeGlobalEvent(rawEvent, directory);
-  }
-
-  if (!isEventLike(rawEvent)) {
-    logger.debug("[Events] Ignoring legacy event with unknown shape");
-    return null;
-  }
-
-  return rawEvent;
-}
-
-async function subscribeToGlobalEventStream(signal: AbortSignal): Promise<EventStreamSubscription> {
-  const globalEvents = (opencodeClient as OptionalGlobalEventClient).global;
-  if (!globalEvents?.event) {
-    throw new Error("Global event subscription is not available");
-  }
-
-  const result = await globalEvents.event({ signal });
-  if (!result.stream) {
+async function subscribeToEventStream(_signal: AbortSignal): Promise<EventStreamSubscription> {
+  const result = await opencodeV2.event.subscribe();
+  const stream = (result as unknown as { stream?: AsyncGenerator<unknown, unknown, unknown> })
+    .stream;
+  if (!stream) {
     throw new Error(FATAL_NO_STREAM_ERROR);
   }
 
-  return { source: "global", stream: result.stream };
-}
-
-async function subscribeToLegacyEventStream(
-  directory: string,
-  signal: AbortSignal,
-): Promise<EventStreamSubscription> {
-  const result = await opencodeClient.event.subscribe({ directory }, { signal });
-
-  if (!result.stream) {
-    throw new Error(FATAL_NO_STREAM_ERROR);
-  }
-
-  return { source: "legacy", stream: result.stream };
+  return { source: "v2", stream };
 }
 
 export async function subscribeToEvents(directory: string, callback: EventCallback): Promise<void> {
@@ -226,41 +452,31 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
 
   try {
     let reconnectAttempt = 0;
-    let useLegacyEventsOnce = false;
 
     while (isListening && activeDirectory === directory && !controller.signal.aborted) {
       let attemptAbort: ReturnType<typeof createAttemptAbortController> | null = null;
       try {
-        let subscription: EventStreamSubscription;
         attemptAbort = createAttemptAbortController(controller.signal);
-        if (useLegacyEventsOnce) {
-          useLegacyEventsOnce = false;
-          subscription = await subscribeToLegacyEventStream(directory, attemptAbort.controller.signal);
-        } else {
-          try {
-            subscription = await subscribeToGlobalEventStream(attemptAbort.controller.signal);
-            logger.debug(`Using global OpenCode event stream for ${directory}`);
-          } catch (error) {
-            if (controller.signal.aborted || !isListening || activeDirectory !== directory) {
-              throw error;
-            }
-
-            if (isExpectedOpencodeUnavailableError(error)) {
-              throw error;
-            }
-
-            logger.warn(
-              `Global event stream unavailable for ${directory}, falling back to project event stream`,
-              error,
-            );
-            subscription = await subscribeToLegacyEventStream(directory, attemptAbort.controller.signal);
+        let subscription: EventStreamSubscription;
+        try {
+          subscription = await subscribeToEventStream(attemptAbort.controller.signal);
+          logger.debug(`Using v2 OpenCode event stream for ${directory}`);
+        } catch (error) {
+          if (controller.signal.aborted || !isListening || activeDirectory !== directory) {
+            throw error;
           }
+
+          if (isExpectedOpencodeUnavailableError(error)) {
+            throw error;
+          }
+
+          logger.warn(`Event stream unavailable for ${directory}, will retry`, error);
+          throw error;
         }
 
         reconnectAttempt = 0;
         consecutiveTimeouts = 0;
         eventStream = subscription.stream;
-        let usefulEventCount = 0;
 
         try {
           while (isListening && activeDirectory === directory && !controller.signal.aborted) {
@@ -295,13 +511,9 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
             // This allows grammY to handle getUpdates between SSE events
             await new Promise<void>((resolve) => setImmediate(resolve));
 
-            const normalizedEvent = normalizeEvent(event, subscription.source, directory);
+            const normalizedEvent = normalizeEvent(event, directory);
             if (!normalizedEvent) {
               continue;
-            }
-
-            if (normalizedEvent.type !== "server.connected") {
-              usefulEventCount++;
             }
 
             if (eventCallback) {
@@ -335,14 +547,6 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
 
         if (!isListening || activeDirectory !== directory || controller.signal.aborted) {
           break;
-        }
-
-        if (subscription.source === "global" && usefulEventCount === 0) {
-          useLegacyEventsOnce = true;
-          logger.warn(
-            `Global event stream ended without project events for ${directory}, falling back to project event stream`,
-          );
-          continue;
         }
 
         reconnectAttempt++;

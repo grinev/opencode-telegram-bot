@@ -1,8 +1,9 @@
 import type { Context, NextFunction } from "grammy";
-import type { FilePartInput, Model } from "@opencode-ai/sdk/v2";
+import type { FilePartInput } from "@opencode-ai/sdk/v2";
 import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
 import { getModelCapabilities, supportsInput } from "../../app/services/model-capabilities-service.js";
+import type { ModelCapabilitiesInfo } from "../../app/services/model-capabilities-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { logger } from "../../utils/logger.js";
 import {
@@ -80,7 +81,7 @@ export interface MediaGroupHandlerDeps extends ProcessPromptDeps {
   getModelCapabilities?: (
     providerId: string,
     modelId: string,
-  ) => Promise<Model["capabilities"] | null>;
+  ) => Promise<ModelCapabilitiesInfo | null>;
   getStoredModel?: () => { providerID: string; modelID: string };
   processPrompt?: (
     ctx: Context,

@@ -1,6 +1,6 @@
 import { Context } from "grammy";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
-import { opencodeClient } from "../../opencode/client.js";
+import { opencodeV2 } from "../../opencode/client.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
@@ -53,12 +53,9 @@ export async function handleCompactConfirm(ctx: Context): Promise<boolean> {
       `[ContextHandler] Calling summarize with sessionID=${session.id}, directory=${session.directory}, model=${storedModel.providerID}/${storedModel.modelID}`,
     );
 
-    // Call summarize API (AI compaction)
-    const { error } = await opencodeClient.session.summarize({
+    // Call compact API (AI compaction runs with the session's current model)
+    const { error } = await opencodeV2.session.compact({
       sessionID: session.id,
-      directory: session.directory,
-      providerID: storedModel.providerID,
-      modelID: storedModel.modelID,
     });
 
     if (error) {

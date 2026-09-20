@@ -25,11 +25,7 @@ vi.mock("../../../src/config.js", () => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    global: {
-      health: mocked.healthMock,
-    },
-  },
+  getServerInfo: mocked.healthMock,
 }));
 
 vi.mock("../../../src/opencode/process.js", () => ({

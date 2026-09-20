@@ -1,5 +1,5 @@
 import type { Bot, Context } from "grammy";
-import { opencodeClient } from "../../opencode/client.js";
+import { getBusySessionStatuses, opencodeV2 } from "../../opencode/client.js";
 import { isOpencodeServerHealthy } from "../../opencode/ready-refresh.js";
 import { summaryAggregator } from "../managers/summary-aggregation-manager.js";
 import { questionManager } from "../managers/question-manager.js";
@@ -79,10 +79,10 @@ async function restorePendingQuestion(
   bot: Bot<Context>,
   chatId: number,
   sessionId: string,
-  directory: string,
+  _directory: string,
 ): Promise<boolean> {
-  const { data, error } = await opencodeClient.question.list({
-    directory,
+  const { data, error } = await opencodeV2.session.question.list({
+    sessionID: sessionId,
   });
 
   if (error || !data) {
@@ -94,7 +94,7 @@ async function restorePendingQuestion(
     return false;
   }
 
-  const pendingQuestion = data.find((request) => request.sessionID === sessionId);
+  const pendingQuestion = data.data[0];
   if (!pendingQuestion || !attachPresentation) {
     return false;
   }
@@ -108,10 +108,10 @@ async function restorePendingPermissions(
   bot: Bot<Context>,
   chatId: number,
   sessionId: string,
-  directory: string,
+  _directory: string,
 ): Promise<number> {
-  const { data, error } = await opencodeClient.permission.list({
-    directory,
+  const { data, error } = await opencodeV2.session.permission.list({
+    sessionID: sessionId,
   });
 
   if (error || !data) {
@@ -123,7 +123,15 @@ async function restorePendingPermissions(
     return 0;
   }
 
-  const pendingPermissions = data.filter((request) => request.sessionID === sessionId);
+  // v2 PermissionV2Request -> bot PermissionRequest
+  const pendingPermissions: PermissionRequest[] = data.data.map((request) => ({
+    id: request.id,
+    sessionID: request.sessionID,
+    permission: request.action,
+    patterns: request.resources,
+    metadata: request.metadata ?? {},
+    always: request.save ?? [],
+  }));
   if (!attachPresentation) {
     return 0;
   }
@@ -156,9 +164,7 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
     summaryAggregator.setBotAndChatId(bot, chatId);
   }
 
-  const { data: statuses, error: statusesError } = await opencodeClient.session.status({
-    directory: session.directory,
-  });
+  const { data: statuses, error: statusesError } = await getBusySessionStatuses();
 
   if (statusesError) {
     if (isExpectedOpencodeUnavailableError(statusesError)) {

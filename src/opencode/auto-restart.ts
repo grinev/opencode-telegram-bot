@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { isContainerRuntime } from "../runtime/container.js";
 import { logger } from "../utils/logger.js";
-import { opencodeClient } from "./client.js";
+import { getServerInfo } from "./client.js";
 import { opencodeReadyLifecycle } from "./ready-lifecycle.js";
 import {
   resolveLocalOpencodeTarget,
@@ -40,7 +40,7 @@ async function withTimeout<T>(
 
 async function isOpencodeServerHealthy(): Promise<boolean> {
   try {
-    const result = await withTimeout(opencodeClient.global.health(), HEALTH_CHECK_TIMEOUT_MS);
+    const result = await withTimeout(getServerInfo(), HEALTH_CHECK_TIMEOUT_MS);
     if (result === HEALTH_CHECK_TIMED_OUT) {
       logger.warn(
         `[OpenCodeAutoRestart] Health-check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`,
@@ -49,7 +49,7 @@ async function isOpencodeServerHealthy(): Promise<boolean> {
     }
 
     const { data, error } = result;
-    return !error && data?.healthy === true;
+    return !error && data !== null;
   } catch {
     return false;
   }

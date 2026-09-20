@@ -2,15 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defined } from "../../helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
-  opencodeClient: {
+  opencodeV2: {
     session: {
-      list: vi.fn().mockResolvedValue({ data: [] }),
-      messages: vi.fn().mockResolvedValue({ data: [] }),
-      diff: vi.fn().mockResolvedValue({ data: [] }),
+      messages: vi.fn().mockResolvedValue({ data: { data: [] } }),
       get: vi.fn().mockResolvedValue({ data: null }),
     },
-    config: { get: vi.fn().mockResolvedValue({ data: {} }) },
   },
+  directApi: vi.fn().mockResolvedValue({ data: [] }),
   getCurrentSession: vi.fn(),
   getCurrentProject: vi.fn(),
   getPinnedMessageId: vi.fn().mockReturnValue(null),
@@ -23,7 +21,10 @@ const mocked = vi.hoisted(() => ({
   formatModelDisplayName: vi.fn(() => "test-model"),
 }));
 
-vi.mock("../../../src/opencode/client.js", () => ({ opencodeClient: mocked.opencodeClient }));
+vi.mock("../../../src/opencode/client.js", () => ({
+  opencodeV2: mocked.opencodeV2,
+  directApi: mocked.directApi,
+}));
 vi.mock("../../../src/app/services/worktree-service.js", () => ({
   getGitWorktreeContext: mocked.getGitWorktreeContext,
 }));
@@ -106,9 +107,9 @@ describe("pinned/manager", () => {
     mocked.getModelContextLimit.mockResolvedValue(204800);
     mocked.getPinnedMessageId.mockReturnValue(null);
     mocked.getPinnedDashboardEnabled.mockReturnValue(true);
-    mocked.opencodeClient.session.messages.mockResolvedValue({ data: [] });
-    mocked.opencodeClient.session.diff.mockResolvedValue({ data: [] });
-    mocked.opencodeClient.session.get.mockResolvedValue({ data: null });
+    mocked.opencodeV2.session.messages.mockResolvedValue({ data: { data: [] } });
+    mocked.directApi.mockResolvedValue({ data: [] });
+    mocked.opencodeV2.session.get.mockResolvedValue({ data: null });
     mocked.getGitWorktreeContext.mockResolvedValue({
       mainProjectPath: "D:/repo",
       activeWorktreePath: "D:/repo",
@@ -119,55 +120,41 @@ describe("pinned/manager", () => {
   });
 
   describe("loadContextFromHistory", () => {
-    it("restores the latest non-summary non-zero context instead of the historical peak", async () => {
+    it("loads context tokens and cost from the latest assistant message", async () => {
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
-      mocked.opencodeClient.session.messages.mockResolvedValue({
-        data: [
-          {
-            info: {
-              role: "assistant",
-              time: { created: 200 },
-              tokens: { input: 300, cache: { read: 100 } },
-              cost: 0.5,
-            },
-            parts: [],
-          },
-          {
-            info: {
-              role: "assistant",
+      mocked.opencodeV2.session.messages.mockResolvedValue({
+        data: {
+          data: [
+            {
+              type: "assistant",
               time: { created: 100 },
               tokens: { input: 900, cache: { read: 100 } },
               cost: 0.25,
             },
-            parts: [],
-          },
-          {
-            info: {
-              role: "assistant",
+            {
+              type: "assistant",
+              time: { created: 200 },
+              tokens: { input: 300, cache: { read: 100 } },
+              cost: 0.5,
+            },
+            {
+              type: "compaction",
+              id: "compaction-1",
+              reason: "auto",
+              summary: "summary",
+              recent: "recent",
               time: { created: 300 },
-              tokens: { input: 0, cache: { read: 0 } },
-              cost: 0.1,
             },
-            parts: [],
-          },
-          {
-            info: {
-              role: "assistant",
-              summary: true,
-              time: { created: 400 },
-              tokens: { input: 1500, cache: { read: 0 } },
-              cost: 4,
-            },
-            parts: [],
-          },
-        ],
+          ],
+        },
+        error: null,
       });
 
       await pinnedMessageManager.loadContextFromHistory("ses-1", "D:/repo");
 
       const state = pinnedMessageManager.getState();
       expect(state.tokensUsed).toBe(400);
-      expect(state.cost).toBeCloseTo(0.85);
+      expect(state.cost).toBeCloseTo(0.75);
     });
   });
 
@@ -512,13 +499,14 @@ describe("pinned/manager", () => {
   });
 
   describe("loading file diffs on session change", () => {
-    it("uses session.diff() results and ignores entries without a file", async () => {
-      mocked.opencodeClient.session.diff.mockResolvedValue({
+    it("uses session diff results and ignores entries without a file", async () => {
+      mocked.directApi.mockResolvedValue({
         data: [
           { file: "D:/repo/src/a.ts", additions: 3, deletions: 1 },
           { additions: 9, deletions: 9 },
           { file: "D:/repo/src/b.ts", additions: 0, deletions: 2 },
         ],
+        error: null,
       });
 
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
@@ -527,7 +515,7 @@ describe("pinned/manager", () => {
         { file: "D:/repo/src/a.ts", additions: 3, deletions: 1 },
         { file: "D:/repo/src/b.ts", additions: 0, deletions: 2 },
       ]);
-      expect(mocked.opencodeClient.session.messages).not.toHaveBeenCalled();
+      expect(mocked.opencodeV2.session.messages).not.toHaveBeenCalled();
       expect(fakeApi.editMessageText).toHaveBeenCalledWith(
         123,
         999,
@@ -535,69 +523,61 @@ describe("pinned/manager", () => {
       );
     });
 
-    it("falls back to tool parts from session messages when session.diff() is empty", async () => {
-      mocked.opencodeClient.session.messages.mockResolvedValue({
-        data: [
-          {
-            info: { role: "assistant" },
-            parts: [
-              {
-                type: "tool",
-                tool: "edit",
-                state: {
-                  status: "completed",
-                  metadata: { filediff: { file: "D:/repo/src/a.ts", additions: 2, deletions: 1 } },
+    it("falls back to tool parts from session messages when session diff is empty", async () => {
+      mocked.opencodeV2.session.messages.mockResolvedValue({
+        data: {
+          data: [
+            {
+              type: "assistant",
+              content: [
+                {
+                  type: "tool",
+                  name: "edit",
+                  state: { status: "completed", outputPaths: ["D:/repo/src/a.ts"] },
                 },
-              },
-              {
-                type: "tool",
-                tool: "apply_patch",
-                state: {
-                  status: "completed",
-                  metadata: { filediff: { file: "D:/repo/src/a.ts", additions: 3, deletions: 0 } },
+                {
+                  type: "tool",
+                  name: "apply_patch",
+                  state: { status: "completed", outputPaths: ["D:/repo/src/a.ts"] },
                 },
-              },
-              {
-                type: "tool",
-                tool: "write",
-                state: {
-                  status: "completed",
-                  input: { filePath: "D:/repo/src/b.ts", content: "one\ntwo\nthree" },
-                },
-              },
-              {
-                type: "tool",
-                tool: "bash",
-                state: { status: "completed", input: { command: "npm test" } },
-              },
-              {
-                type: "tool",
-                tool: "edit",
-                state: {
-                  status: "running",
-                  metadata: {
-                    filediff: { file: "D:/repo/src/pending.ts", additions: 5, deletions: 5 },
+                {
+                  type: "tool",
+                  name: "write",
+                  state: {
+                    status: "completed",
+                    input: { filePath: "D:/repo/src/b.ts", content: "one\ntwo\nthree" },
                   },
                 },
-              },
-              { type: "text", text: "done" },
-            ],
-          },
-        ],
+                {
+                  type: "tool",
+                  name: "bash",
+                  state: { status: "completed", input: { command: "npm test" } },
+                },
+                {
+                  type: "tool",
+                  name: "edit",
+                  state: { status: "running", outputPaths: ["D:/repo/src/pending.ts"] },
+                },
+                { type: "text", text: "done" },
+              ],
+            },
+          ],
+        },
+        error: null,
       });
 
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
 
       expect(pinnedMessageManager.getState().changedFiles).toEqual([
-        { file: "D:/repo/src/a.ts", additions: 5, deletions: 1 },
-        { file: "D:/repo/src/b.ts", additions: 3, deletions: 0 },
+        { file: "D:/repo/src/a.ts", additions: 0, deletions: 0 },
+        { file: "D:/repo/src/b.ts", additions: 0, deletions: 0 },
       ]);
     });
 
     it("leaves the diff list empty when neither source reports file changes", async () => {
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
 
-      expect(mocked.opencodeClient.session.messages).toHaveBeenCalledTimes(1);
+      expect(mocked.opencodeV2.session.messages).toHaveBeenCalledTimes(1);
       expect(pinnedMessageManager.getState().changedFiles).toEqual([]);
     });
 
@@ -606,8 +586,8 @@ describe("pinned/manager", () => {
 
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
 
-      expect(mocked.opencodeClient.session.diff).not.toHaveBeenCalled();
-      expect(mocked.opencodeClient.session.messages).not.toHaveBeenCalled();
+      expect(mocked.directApi).not.toHaveBeenCalled();
+      expect(mocked.opencodeV2.session.messages).not.toHaveBeenCalled();
     });
   });
 
@@ -689,7 +669,7 @@ describe("pinned/manager", () => {
     });
 
     it("restores the file diffs of the session it reattaches to", async () => {
-      mocked.opencodeClient.session.diff.mockResolvedValue({
+      mocked.directApi.mockResolvedValue({
         data: [{ file: "D:/repo/src/a.ts", additions: 4, deletions: 0 }],
       });
 
@@ -786,18 +766,18 @@ describe("pinned/manager", () => {
     });
 
     it("reloads context from history after a compaction", async () => {
-      mocked.opencodeClient.session.messages.mockResolvedValue({
-        data: [
-          {
-            info: {
-              role: "assistant",
+      mocked.opencodeV2.session.messages.mockResolvedValue({
+        data: {
+          data: [
+            {
+              type: "assistant",
               time: { created: 100 },
               tokens: { input: 700, cache: { read: 300 } },
               cost: 0.3,
             },
-            parts: [],
-          },
-        ],
+          ],
+        },
+        error: null,
       });
 
       await pinnedMessageManager.onSessionCompacted("ses-1", "D:/repo");
@@ -814,7 +794,7 @@ describe("pinned/manager", () => {
         cacheRead: 0,
         cacheWrite: 0,
       });
-      mocked.opencodeClient.session.messages.mockResolvedValue({ error: { message: "boom" } });
+      mocked.opencodeV2.session.messages.mockResolvedValue({ error: { message: "boom" } });
 
       await pinnedMessageManager.loadContextFromHistory("ses-1", "D:/repo");
 

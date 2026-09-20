@@ -1,6 +1,6 @@
 import { CommandContext, Context } from "grammy";
 import { config } from "../../config.js";
-import { opencodeClient } from "../../opencode/client.js";
+import { getServerInfo } from "../../opencode/client.js";
 import { resolveLocalOpencodeTarget, startLocalOpencodeServer } from "../../opencode/process.js";
 import { opencodeReadyLifecycle } from "../../opencode/ready-lifecycle.js";
 import { logger } from "../../utils/logger.js";
@@ -13,7 +13,7 @@ const SERVER_READY_POLL_INTERVAL_MS = 500;
 const HEALTH_CHECK_TIMEOUT_MS = 3_000;
 const HEALTH_CHECK_TIMED_OUT = Symbol("health-check-timed-out");
 
-type HealthCheckResult = Awaited<ReturnType<typeof opencodeClient.global.health>>;
+type HealthCheckResult = Awaited<ReturnType<typeof getServerInfo>>;
 
 async function healthWithTimeout(
   timeoutMs: number = HEALTH_CHECK_TIMEOUT_MS,
@@ -23,7 +23,7 @@ async function healthWithTimeout(
 
   try {
     return await Promise.race([
-      opencodeClient.global.health({ signal: controller.signal }),
+      getServerInfo({ signal: controller.signal }),
       new Promise<typeof HEALTH_CHECK_TIMED_OUT>((resolve) => {
         timeout = setTimeout(() => {
           controller.abort();
@@ -62,7 +62,7 @@ async function waitForServerReady(maxWaitMs: number = 10000): Promise<boolean> {
 
   while (Date.now() - startTime < maxWaitMs) {
     const health = await getHealthIfAvailable();
-    if (health?.data?.healthy) {
+    if (health && !health.error && health.data) {
       return true;
     }
 
@@ -92,9 +92,9 @@ export async function opencodeStartCommand(ctx: CommandContext<Context>) {
     // Check if server is already accessible.
     try {
       const health = await getHealthIfAvailable();
-      const data = health?.data;
+      const data = health && !health.error ? health.data : null;
 
-      if (data?.healthy) {
+      if (data) {
         await ctx.reply(
           t("opencode_start.already_running", { version: data.version || t("common.unknown") }),
         );

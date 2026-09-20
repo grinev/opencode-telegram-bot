@@ -1,7 +1,7 @@
 /**
  * Variant Manager - manages model variants (reasoning modes)
  */
-import { opencodeClient } from "../../opencode/client.js";
+import { fetchModelCatalog, findCatalogModel } from "../../opencode/catalog.js";
 import { getCurrentModel, setCurrentModel } from "../stores/settings-store.js";
 import { getStoredModel } from "./model-selection-service.js";
 import { logger } from "../../utils/logger.js";
@@ -18,20 +18,14 @@ export async function getAvailableVariants(
   modelID: string,
 ): Promise<VariantInfo[]> {
   try {
-    const { data, error } = await opencodeClient.config.providers();
+    const { data, error } = await fetchModelCatalog();
 
     if (error || !data) {
       logger.warn("[VariantManager] Failed to fetch providers:", error);
       return [{ id: "default" }];
     }
 
-    const provider = data.providers.find((p) => p.id === providerID);
-    if (!provider) {
-      logger.warn(`[VariantManager] Provider ${providerID} not found`);
-      return [{ id: "default" }];
-    }
-
-    const model = provider.models[modelID];
+    const model = findCatalogModel(data, providerID, modelID);
     if (!model) {
       logger.warn(`[VariantManager] Model ${modelID} not found in provider ${providerID}`);
       return [{ id: "default" }];
@@ -40,14 +34,11 @@ export async function getAvailableVariants(
     // Start with default variant (always present)
     const variants: VariantInfo[] = [{ id: "default" }];
 
-    if (model.variants) {
+    if (model.variants.length > 0) {
       // Add other variants from API (excluding default if it's already there)
-      const apiVariants = Object.entries(model.variants)
-        .filter(([id]) => id !== "default")
-        .map(([id, info]) => ({
-          id,
-          disabled: (info as { disabled?: boolean }).disabled,
-        }));
+      const apiVariants = model.variants
+        .filter((variant) => variant.id !== "default")
+        .map((variant) => ({ id: variant.id }));
 
       variants.push(...apiVariants);
       logger.debug(

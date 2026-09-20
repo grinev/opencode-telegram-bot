@@ -1,4 +1,4 @@
-import { opencodeClient } from "../../opencode/client.js";
+import { fetchModelCatalog } from "../../opencode/catalog.js";
 import { logger } from "../../utils/logger.js";
 import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";
 
@@ -27,7 +27,7 @@ async function refreshContextLimitCache(): Promise<void> {
 
   providersFetchInFlight = (async () => {
     try {
-      const { data, error } = await opencodeClient.config.providers();
+      const { data, error } = await fetchModelCatalog();
 
       if (error || !data) {
         if (isExpectedOpencodeUnavailableError(error)) {
@@ -39,11 +39,12 @@ async function refreshContextLimitCache(): Promise<void> {
       }
 
       contextLimitCache.clear();
-      for (const provider of data.providers) {
-        for (const [modelID, model] of Object.entries(provider.models)) {
-          if (model?.limit?.context) {
-            contextLimitCache.set(getModelKey(provider.id, modelID), model.limit.context);
-          }
+      for (const model of data.models) {
+        if (model.enabled !== false && model.limit?.context) {
+          contextLimitCache.set(
+            getModelKey(model.providerID, model.id),
+            model.limit.context,
+          );
         }
       }
 

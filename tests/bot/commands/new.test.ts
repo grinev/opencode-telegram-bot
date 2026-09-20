@@ -12,7 +12,7 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
+  opencodeV2: {
     session: {
       create: mocked.sessionCreateMock,
     },
@@ -121,7 +121,14 @@ describe("bot/commands/new", () => {
 
   it("creates and immediately follows the new session", async () => {
     mocked.sessionCreateMock.mockResolvedValueOnce({
-      data: { id: "session-2", title: "Session Two" },
+      data: {
+        data: {
+          id: "session-2",
+          title: "Session Two",
+          location: { directory: "/repo" },
+          time: { updated: 123 },
+        },
+      },
       error: null,
     });
 

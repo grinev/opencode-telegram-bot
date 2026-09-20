@@ -1,4 +1,4 @@
-import { opencodeClient } from "../../opencode/client.js";
+import { opencodeV2 } from "../../opencode/client.js";
 import { getCurrentAgent, getCurrentProject, setCurrentAgent } from "../stores/settings-store.js";
 import { getCurrentSession } from "./session-service.js";
 import { getStoredModel, selectModel } from "./model-selection-service.js";
@@ -13,23 +13,47 @@ import type { AgentInfo } from "../types/agent.js";
 export async function getAvailableAgents(): Promise<AgentInfo[]> {
   try {
     const project = getCurrentProject();
-    const { data: agents, error } = await opencodeClient.app.agents(
-      project ? { directory: project.worktree } : undefined,
-    );
+    const listParams =
+      project !== null && project !== undefined
+        ? { location: { directory: project.worktree } }
+        : undefined;
+    const { data: agentsBody, error } = await opencodeV2.agent.list(listParams);
 
     if (error) {
       logger.error("[AgentManager] Failed to fetch agents:", error);
       return [];
     }
 
-    if (!agents) {
+    if (!agentsBody) {
       return [];
     }
 
-    // Filter out hidden agents and subagents (only show primary and all)
-    const filtered = agents.filter(
-      (agent) => !agent.hidden && (agent.mode === "primary" || agent.mode === "all"),
-    );
+    // Filter out hidden agents and subagents (only show primary and all).
+    // v2 AgentV2Info.id is the canonical identifier (lowercase, used for
+    // switchAgent); `name` is a display label and must NOT be used as the id.
+    const filtered: AgentInfo[] = agentsBody.data
+      .filter((agent) => !agent.hidden && (agent.mode === "primary" || agent.mode === "all"))
+      .map((agent) => {
+        const info: AgentInfo = {
+          name: agent.id,
+          mode: agent.mode,
+        };
+        if (agent.description !== undefined) {
+          info.description = agent.description;
+        }
+        if (agent.hidden !== undefined) {
+          info.hidden = agent.hidden;
+        }
+        // v2 ModelRef is {id, providerID, variant?}; AgentInfo expects
+        // {modelID, providerID} + top-level variant.
+        if (agent.model !== undefined) {
+          info.model = { modelID: agent.model.id, providerID: agent.model.providerID };
+        }
+        if (agent.model?.variant !== undefined) {
+          info.variant = agent.model.variant;
+        }
+        return info;
+      });
 
     logger.debug(`[AgentManager] Fetched ${filtered.length} available agents`);
     return filtered;
@@ -95,23 +119,19 @@ export async function fetchCurrentAgent(): Promise<string> {
   }
 
   try {
-    const { data: messages, error } = await opencodeClient.session.messages({
+    const { data: messagesBody, error } = await opencodeV2.session.messages({
       sessionID: session.id,
-      directory: project.worktree,
       limit: 1,
     });
 
-    if (error || !messages || messages.length === 0) {
+    if (error || !messagesBody || messagesBody.data.length === 0) {
       logger.debug("[AgentManager] No messages found, using stored agent");
       return resolveProjectAgent(storedAgent ?? DEFAULT_AGENT);
     }
 
-    const lastMessage = messages[0];
-    if (!lastMessage) {
-      logger.debug("[AgentManager] No messages found, using stored agent");
-      return resolveProjectAgent(storedAgent ?? DEFAULT_AGENT);
-    }
-    const lastAgent = lastMessage.info.agent;
+    const lastMessage = messagesBody.data[0];
+    const lastAgent =
+      lastMessage && lastMessage.type === "assistant" ? lastMessage.agent : undefined;
     logger.debug(`[AgentManager] Current agent from session: ${lastAgent}`);
 
     // If user explicitly selected an agent in bot settings, prefer it.

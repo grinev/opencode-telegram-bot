@@ -1,5 +1,5 @@
 import { InlineKeyboard } from "grammy";
-import { opencodeClient } from "../../opencode/client.js";
+import { listSessions } from "../../opencode/client.js";
 import { getDateLocale, t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 
@@ -123,7 +123,7 @@ export async function loadSessionPage(
   const startIndex = page * pageSize;
   const endExclusive = startIndex + pageSize;
 
-  const { data: sessions, error } = await opencodeClient.session.list({
+  const { data: sessions, error } = await listSessions({
     directory,
     limit: endExclusive + SESSION_FETCH_EXTRA_COUNT,
     roots: true,

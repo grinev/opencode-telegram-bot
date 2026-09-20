@@ -3,8 +3,10 @@ import { parseTaskSchedule } from "../../../src/app/services/scheduled-task-sche
 
 const mocked = vi.hoisted(() => ({
   sessionCreateMock: vi.fn(),
+  sessionWaitMock: vi.fn(),
   sessionPromptMock: vi.fn(),
-  sessionDeleteMock: vi.fn(),
+  sessionMessagesMock: vi.fn(),
+  directApiMock: vi.fn(),
   cleanupIgnoresMock: vi.fn(),
   registerIgnoreMock: vi.fn(),
   loggerErrorMock: vi.fn(),
@@ -12,13 +14,15 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
+  opencodeV2: {
     session: {
       create: mocked.sessionCreateMock,
-      prompt: mocked.sessionPromptMock,
-      delete: mocked.sessionDeleteMock,
+      wait: mocked.sessionWaitMock,
     },
   },
+  sendSessionPrompt: mocked.sessionPromptMock,
+  getSessionMessages: mocked.sessionMessagesMock,
+  directApi: mocked.directApiMock,
 }));
 
 vi.mock("../../../src/utils/logger.js", () => ({
@@ -35,43 +39,45 @@ vi.mock("../../../src/app/services/scheduled-task-session-ignore-service.js", ()
   registerScheduledTaskSessionIgnore: mocked.registerIgnoreMock,
 }));
 
+function parserResponse(text: string) {
+  return { data: [{ role: "assistant", text }], error: null };
+}
+
 describe("app/services/scheduled-task-schedule-parser-service", () => {
   beforeEach(() => {
     mocked.sessionCreateMock.mockReset();
+    mocked.sessionWaitMock.mockReset();
     mocked.sessionPromptMock.mockReset();
-    mocked.sessionDeleteMock.mockReset();
+    mocked.sessionMessagesMock.mockReset();
+    mocked.directApiMock.mockReset();
     mocked.cleanupIgnoresMock.mockReset();
     mocked.registerIgnoreMock.mockReset();
     mocked.loggerErrorMock.mockReset();
     mocked.loggerWarnMock.mockReset();
 
     mocked.sessionCreateMock.mockResolvedValue({
-      data: { id: "temp-session", directory: "D:/Projects/Repo" },
+      data: { data: { id: "temp-session" } },
       error: null,
     });
-    mocked.sessionDeleteMock.mockResolvedValue({ data: true, error: null });
+    mocked.sessionWaitMock.mockResolvedValue({ data: undefined, error: null });
+    mocked.sessionPromptMock.mockResolvedValue({ data: undefined, error: null });
+    mocked.directApiMock.mockResolvedValue({ data: null, error: null });
     mocked.cleanupIgnoresMock.mockResolvedValue(0);
     mocked.registerIgnoreMock.mockResolvedValue(undefined);
   });
 
   it("parses recurring schedule JSON and removes temporary session", async () => {
-    mocked.sessionPromptMock.mockResolvedValue({
-      data: {
-        parts: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              kind: "cron",
-              cron: "*/5 * * * *",
-              timezone: "UTC",
-              summary: "Every 5 minutes",
-              nextRunAt: "2026-03-15T10:05:00.000Z",
-            }),
-          },
-        ],
-      },
-      error: null,
-    });
+    mocked.sessionMessagesMock.mockResolvedValue(
+      parserResponse(
+        JSON.stringify({
+          kind: "cron",
+          cron: "*/5 * * * *",
+          timezone: "UTC",
+          summary: "Every 5 minutes",
+          nextRunAt: "2026-03-15T10:05:00.000Z",
+        }),
+      ),
+    );
 
     const result = await parseTaskSchedule("every 5 minutes", "D:/Projects/Repo");
 
@@ -83,36 +89,29 @@ describe("app/services/scheduled-task-schedule-parser-service", () => {
       nextRunAt: "2026-03-15T10:05:00.000Z",
     });
     expect(mocked.sessionCreateMock).toHaveBeenCalledWith({
-      directory: "D:/Projects/Repo",
-      title: "Scheduled task schedule parser",
+      location: { directory: "D:/Projects/Repo" },
     });
     expect(mocked.cleanupIgnoresMock).toHaveBeenCalledTimes(1);
     expect(mocked.registerIgnoreMock).toHaveBeenCalledWith("temp-session");
-    expect(mocked.sessionDeleteMock).toHaveBeenCalledWith({ sessionID: "temp-session" });
+    expect(mocked.directApiMock).toHaveBeenCalledWith("DELETE", "/api/session/temp-session");
   });
 
   it("parses one-time schedule from fenced JSON", async () => {
-    mocked.sessionPromptMock.mockResolvedValue({
-      data: {
-        parts: [
-          {
-            type: "text",
-            text: [
-              "```json",
-              JSON.stringify({
-                kind: "once",
-                runAt: "2026-03-16T12:00:00.000Z",
-                timezone: "UTC",
-                summary: "Tomorrow at 12:00",
-                nextRunAt: "2026-03-16T12:00:00.000Z",
-              }),
-              "```",
-            ].join("\n"),
-          },
-        ],
-      },
-      error: null,
-    });
+    mocked.sessionMessagesMock.mockResolvedValue(
+      parserResponse(
+        [
+          "```json",
+          JSON.stringify({
+            kind: "once",
+            runAt: "2026-03-16T12:00:00.000Z",
+            timezone: "UTC",
+            summary: "Tomorrow at 12:00",
+            nextRunAt: "2026-03-16T12:00:00.000Z",
+          }),
+          "```",
+        ].join("\n"),
+      ),
+    );
 
     const result = await parseTaskSchedule("tomorrow at 12:00", "D:/Projects/Repo");
 
@@ -123,41 +122,30 @@ describe("app/services/scheduled-task-schedule-parser-service", () => {
       summary: "Tomorrow at 12:00",
       nextRunAt: "2026-03-16T12:00:00.000Z",
     });
-    expect(mocked.sessionDeleteMock).toHaveBeenCalledWith({ sessionID: "temp-session" });
+    expect(mocked.directApiMock).toHaveBeenCalledWith("DELETE", "/api/session/temp-session");
   });
 
   it("cleans up temporary session when parser returns invalid JSON", async () => {
-    mocked.sessionPromptMock.mockResolvedValue({
-      data: {
-        parts: [{ type: "text", text: "not json" }],
-      },
-      error: null,
-    });
+    mocked.sessionMessagesMock.mockResolvedValue(parserResponse("not json"));
 
     await expect(parseTaskSchedule("every friday", "D:/Projects/Repo")).rejects.toThrow(
       "invalid JSON",
     );
-    expect(mocked.sessionDeleteMock).toHaveBeenCalledWith({ sessionID: "temp-session" });
+    expect(mocked.directApiMock).toHaveBeenCalledWith("DELETE", "/api/session/temp-session");
   });
 
   it("passes the provided model and variant to the parser prompt", async () => {
-    mocked.sessionPromptMock.mockResolvedValue({
-      data: {
-        parts: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              kind: "once",
-              runAt: "2026-03-16T12:00:00.000Z",
-              timezone: "UTC",
-              summary: "Tomorrow at 12:00",
-              nextRunAt: "2026-03-16T12:00:00.000Z",
-            }),
-          },
-        ],
-      },
-      error: null,
-    });
+    mocked.sessionMessagesMock.mockResolvedValue(
+      parserResponse(
+        JSON.stringify({
+          kind: "once",
+          runAt: "2026-03-16T12:00:00.000Z",
+          timezone: "UTC",
+          summary: "Tomorrow at 12:00",
+          nextRunAt: "2026-03-16T12:00:00.000Z",
+        }),
+      ),
+    );
 
     await parseTaskSchedule("tomorrow at 12:00", "D:/Projects/Repo", {
       providerID: "lmstudio",
@@ -167,30 +155,23 @@ describe("app/services/scheduled-task-schedule-parser-service", () => {
 
     expect(mocked.sessionPromptMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: { providerID: "lmstudio", modelID: "qwen_qwen3_8-27b" },
-        variant: "low",
+        model: { providerID: "lmstudio", modelID: "qwen_qwen3_8-27b", variant: "low" },
       }),
     );
   });
 
   it("omits model from the parser prompt when none is provided", async () => {
-    mocked.sessionPromptMock.mockResolvedValue({
-      data: {
-        parts: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              kind: "cron",
-              cron: "*/5 * * * *",
-              timezone: "UTC",
-              summary: "Every 5 minutes",
-              nextRunAt: "2026-03-15T10:05:00.000Z",
-            }),
-          },
-        ],
-      },
-      error: null,
-    });
+    mocked.sessionMessagesMock.mockResolvedValue(
+      parserResponse(
+        JSON.stringify({
+          kind: "cron",
+          cron: "*/5 * * * *",
+          timezone: "UTC",
+          summary: "Every 5 minutes",
+          nextRunAt: "2026-03-15T10:05:00.000Z",
+        }),
+      ),
+    );
 
     await parseTaskSchedule("every 5 minutes", "D:/Projects/Repo");
 
@@ -199,6 +180,5 @@ describe("app/services/scheduled-task-schedule-parser-service", () => {
       unknown
     >;
     expect(promptOptions.model).toBeUndefined();
-    expect(promptOptions.variant).toBeUndefined();
   });
 });

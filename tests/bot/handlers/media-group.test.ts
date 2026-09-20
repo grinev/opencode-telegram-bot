@@ -115,7 +115,7 @@ function createDeps(overrides: Partial<MediaGroupHandlerDeps> = {}): {
     filePath: `documents/${fileId}`,
   }));
   const getCapabilitiesMock = vi.fn().mockResolvedValue({
-    input: { image: true, pdf: true },
+    input: ["text", "image", "pdf"],
   });
 
   const deps: MediaGroupHandlerDeps = {
@@ -390,7 +390,7 @@ describe("bot/handlers/media-group", () => {
       mimeType: "image/png",
     });
     const { deps, processPromptMock, downloadMock } = createDeps({
-      getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: false, pdf: true } }),
+      getModelCapabilities: vi.fn().mockResolvedValue({ input: ["text", "pdf"] }),
     });
     const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
 

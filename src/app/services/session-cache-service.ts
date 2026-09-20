@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { opencodeClient } from "../../opencode/client.js";
+import { listSessions, opencodeClient } from "../../opencode/client.js";
 import { getSessionDirectoryCache, setSessionDirectoryCache } from "../stores/settings-store.js";
 import { isServerUnavailableError } from "../../utils/opencode-error.js";
 import { isRecord } from "../../utils/type-guards.js";
@@ -18,7 +18,6 @@ const CACHE_VERSION = 1;
 const INITIAL_WARMUP_LIMIT = 1000;
 const INCREMENTAL_SYNC_LIMIT = 1000;
 const MAX_CACHED_DIRECTORIES = 10;
-const SYNC_SAFETY_WINDOW_MS = 60_000;
 const SYNC_COOLDOWN_MS = 60_000;
 const STORAGE_FALLBACK_SCAN_LIMIT = 200;
 const SQLITE_FALLBACK_QUERY_LIMIT = 200;
@@ -171,15 +170,13 @@ function upsertDirectory(worktree: string, lastUpdated: number): boolean {
 
 function buildListParams(options?: {
   force?: boolean;
-}): { limit: number; start?: number } {
+}): { limit: number } {
   if (options?.force || cacheData.lastSyncedUpdatedAt === 0) {
     return { limit: INITIAL_WARMUP_LIMIT };
   }
 
-  return {
-    limit: INCREMENTAL_SYNC_LIMIT,
-    start: Math.max(0, cacheData.lastSyncedUpdatedAt - SYNC_SAFETY_WINDOW_MS),
-  };
+  // v2 list has cursor pagination but no timestamp offset; refetch the window.
+  return { limit: INCREMENTAL_SYNC_LIMIT };
 }
 
 function createVirtualProjectId(worktree: string): string {
@@ -192,7 +189,7 @@ async function runSync(options?: { force?: boolean }): Promise<void> {
 
   const shouldPrune = options?.force || cacheData.lastSyncedUpdatedAt === 0;
   const params = buildListParams(options);
-  const { data: sessions, error } = await opencodeClient.session.list(params);
+  const { data: sessions, error } = await listSessions(params);
 
   if (error || !sessions) {
     throw error || new Error("No session list received from server");

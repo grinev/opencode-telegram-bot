@@ -1,18 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Event } from "@opencode-ai/sdk/v2";
 
-const { globalEventMock, subscribeMock } = vi.hoisted(() => {
+const { subscribeMock } = vi.hoisted(() => {
   return {
-    globalEventMock: vi.fn(),
     subscribeMock: vi.fn(),
   };
 });
 
 vi.mock("../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    global: {
-      event: globalEventMock,
-    },
+  opencodeV2: {
     event: {
       subscribe: subscribeMock,
     },
@@ -35,13 +30,20 @@ function createStream<T>(events: T[]): AsyncGenerator<T, void, unknown> {
   })();
 }
 
-function createOpenStream<T>(events: T[], signal: AbortSignal): AsyncGenerator<T, void, unknown> {
+function createOpenStream(): AsyncGenerator<unknown, void, unknown> {
   return (async function* () {
-    for (const event of events) {
-      yield event;
+    while (true) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
     }
+  })();
+}
 
-    while (!signal.aborted) {
+function createDelayedOpenStream<T>(event: T, delayMs: number): AsyncGenerator<T, void, unknown> {
+  return (async function* () {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    yield event;
+
+    while (true) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
   })();
@@ -53,38 +55,23 @@ function createDeferredStream<T>(eventPromise: Promise<T>): AsyncGenerator<T, vo
   })();
 }
 
-function createAbortableStream(signal: AbortSignal): AsyncGenerator<Event, void, unknown> {
-  return (async function* () {
-    while (!signal.aborted) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-  })();
-}
-
-function createDelayedOpenStream<T>(
-  event: T,
-  signal: AbortSignal,
-  delayMs: number,
-): AsyncGenerator<T, void, unknown> {
-  return (async function* () {
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-    yield event;
-
-    while (!signal.aborted) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-  })();
-}
-
 function flushImmediate(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
+// v2 SSE envelope: { type, data, location? }. Unknown types pass through with
+// properties = data; the bot managers consume the {type, properties} shape.
+function makeV2Event(
+  type: string,
+  data: Record<string, unknown> = {},
+  directory: string | null = "D:/repo",
+) {
+  return directory === null ? { type, data } : { type, data, location: { directory } };
+}
+
 describe("opencode/events", () => {
   beforeEach(() => {
-    globalEventMock.mockReset();
     subscribeMock.mockReset();
-    globalEventMock.mockRejectedValue(new Error("global events unavailable"));
   });
 
   afterEach(() => {
@@ -94,8 +81,8 @@ describe("opencode/events", () => {
   });
 
   it("subscribes to stream and forwards events to callback", async () => {
-    const eventA = { type: "session.status", properties: { sessionID: "s1" } } as Event;
-    const eventB = { type: "session.idle", properties: { sessionID: "s1" } } as Event;
+    const eventA = makeV2Event("session.status", { sessionID: "s1" });
+    const eventB = makeV2Event("session.idle", { sessionID: "s1" });
     subscribeMock.mockResolvedValueOnce({ stream: createStream([eventA, eventB]) });
 
     const callback = vi.fn();
@@ -108,18 +95,146 @@ describe("opencode/events", () => {
     stopEventListening();
     await subscription;
 
-    expect(subscribeMock).toHaveBeenCalledWith(
-      { directory: "D:/repo" },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
+    expect(subscribeMock).toHaveBeenCalledTimes(1);
     expect(callback).toHaveBeenCalledTimes(2);
-    expect(defined(callback.mock.calls[0]?.[0])).toEqual(eventA);
-    expect(defined(callback.mock.calls[1]?.[0])).toEqual(eventB);
+    expect(defined(callback.mock.calls[0]?.[0])).toEqual({
+      type: "session.status",
+      properties: { sessionID: "s1" },
+    });
+    expect(defined(callback.mock.calls[1]?.[0])).toEqual({
+      type: "session.idle",
+      properties: { sessionID: "s1" },
+    });
+  });
+
+  it("translates v2 execution events into legacy types", async () => {
+    const eventA = makeV2Event("session.execution.succeeded", { sessionID: "s1" });
+    subscribeMock.mockResolvedValueOnce({ stream: createStream([eventA]) });
+
+    const callback = vi.fn();
+    const subscription = subscribeToEvents("D:/repo", callback);
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+    await flushImmediate();
+
+    stopEventListening();
+    await subscription;
+
+    expect(defined(callback.mock.calls[0]?.[0])).toEqual({
+      type: "session.idle",
+      properties: { sessionID: "s1" },
+    });
+  });
+
+  it("bridges tool lifecycle events into message.part.updated tool parts", async () => {
+    const callID = "call_123";
+    const events = [
+      makeV2Event("session.tool.input.started", {
+        sessionID: "s1",
+        assistantMessageID: "m1",
+        id: callID,
+        name: "write",
+      }),
+      makeV2Event("session.tool.called", {
+        sessionID: "s1",
+        assistantMessageID: "m1",
+        id: callID,
+        input: { path: "D:/repo/out.txt", content: "hello" },
+        executed: false,
+      }),
+      makeV2Event("session.tool.success", {
+        sessionID: "s1",
+        assistantMessageID: "m1",
+        id: callID,
+        content: [{ type: "text", text: "Created file" }],
+        metadata: { truncated: false },
+      }),
+    ];
+    subscribeMock.mockResolvedValueOnce({ stream: createStream(events) });
+
+    const callback = vi.fn();
+    const subscription = subscribeToEvents("D:/repo", callback);
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(2);
+    });
+    await flushImmediate();
+
+    stopEventListening();
+    await subscription;
+
+    const running = defined(callback.mock.calls[0]?.[0]);
+    expect(running.type).toBe("message.part.updated");
+    expect((running.properties as { part: Record<string, unknown> }).part).toEqual({
+      type: "tool",
+      sessionID: "s1",
+      messageID: "m1",
+      id: callID,
+      tool: "write",
+      callID,
+      state: {
+        status: "running",
+        input: { path: "D:/repo/out.txt", content: "hello", filePath: "D:/repo/out.txt" },
+      },
+    });
+
+    const completed = defined(callback.mock.calls[1]?.[0]);
+    expect((completed.properties as { part: Record<string, unknown> }).part.state).toMatchObject({
+      status: "completed",
+    });
+  });
+
+  it("reconstructs edit diff metadata from session.tool.success", async () => {
+    const callID = "call_edit";
+    const events = [
+      makeV2Event("session.tool.input.started", {
+        sessionID: "s1",
+        assistantMessageID: "m1",
+        id: callID,
+        name: "edit",
+      }),
+      makeV2Event("session.tool.called", {
+        sessionID: "s1",
+        assistantMessageID: "m1",
+        id: callID,
+        input: { path: "D:/repo/a.ts", oldString: "x", newString: "y" },
+      }),
+      makeV2Event("session.tool.success", {
+        sessionID: "s1",
+        assistantMessageID: "m1",
+        id: callID,
+        content: [{ type: "text", text: "Edited a.ts" }],
+        metadata: {
+          files: [{ file: "a.ts", patch: "Index: a.ts\n...", status: "modified", additions: 1, deletions: 1 }],
+          truncated: false,
+        },
+      }),
+    ];
+    subscribeMock.mockResolvedValueOnce({ stream: createStream(events) });
+
+    const callback = vi.fn();
+    const subscription = subscribeToEvents("D:/repo", callback);
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(2);
+    });
+    await flushImmediate();
+
+    stopEventListening();
+    await subscription;
+
+    const completed = defined(callback.mock.calls[1]?.[0]);
+    const part = (completed.properties as { part: Record<string, unknown> }).part;
+    const state = part.state as { status: string; metadata: Record<string, unknown> };
+    expect(state.status).toBe("completed");
+    expect(state.metadata).toEqual({
+      filediff: { file: "a.ts", additions: 1, deletions: 1 },
+      diff: "Index: a.ts\n...",
+    });
   });
 
   it("logs callback errors without failing event delivery", async () => {
-    const eventA = { type: "session.status", properties: { sessionID: "s1" } } as Event;
-    const eventB = { type: "session.idle", properties: { sessionID: "s1" } } as Event;
+    const eventA = makeV2Event("session.status", { sessionID: "s1" });
+    const eventB = makeV2Event("session.idle", { sessionID: "s1" });
     subscribeMock.mockResolvedValueOnce({ stream: createStream([eventA, eventB]) });
     const callbackError = new Error("callback failed");
     const loggerErrorSpy = vi.spyOn(logger, "error").mockImplementation(() => undefined);
@@ -143,45 +258,15 @@ describe("opencode/events", () => {
     loggerErrorSpy.mockRestore();
   });
 
-  it("unwraps global event payloads before forwarding them", async () => {
-    const event = { type: "session.idle", properties: { sessionID: "s1" } } as Event;
-    globalEventMock.mockImplementationOnce(function (this: { event?: unknown }) {
-      expect(this.event).toBe(globalEventMock);
-      return Promise.resolve({
-        stream: createStream([{ directory: "D:/repo", payload: event }]),
-      });
-    });
+  it("ignores events from other directories", async () => {
+    const event = makeV2Event("session.idle", { sessionID: "s1" }, "D:/other");
+    subscribeMock.mockResolvedValueOnce({ stream: createStream([event]) });
 
     const callback = vi.fn();
     const subscription = subscribeToEvents("D:/repo", callback);
 
     await vi.waitFor(() => {
-      expect(callback).toHaveBeenCalledWith(event);
-    });
-    await flushImmediate();
-
-    stopEventListening();
-    await subscription;
-
-    expect(globalEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(subscribeMock).not.toHaveBeenCalled();
-  });
-
-  it("ignores global events from other directories", async () => {
-    const event = { type: "session.idle", properties: { sessionID: "s1" } } as Event;
-    globalEventMock.mockImplementation(async (options: { signal: AbortSignal }) => {
-      return {
-        stream: createOpenStream([{ directory: "D:/other", payload: event }], options.signal),
-      };
-    });
-
-    const callback = vi.fn();
-    const subscription = subscribeToEvents("D:/repo", callback);
-
-    await vi.waitFor(() => {
-      expect(globalEventMock).toHaveBeenCalledTimes(1);
+      expect(subscribeMock).toHaveBeenCalledTimes(1);
     });
     await flushImmediate();
 
@@ -189,102 +274,32 @@ describe("opencode/events", () => {
     await subscription;
 
     expect(callback).not.toHaveBeenCalled();
-    expect(subscribeMock).not.toHaveBeenCalled();
   });
 
-  it("matches global event directories across Windows slash and drive casing differences", async () => {
-    const event = { type: "session.idle", properties: { sessionID: "s1" } } as Event;
-    globalEventMock.mockResolvedValueOnce({
-      stream: createStream([{ directory: "d:/repo/", payload: event }]),
-    });
+  it("matches event directories across Windows slash and drive casing differences", async () => {
+    const event = makeV2Event("session.idle", { sessionID: "s1" }, "d:/repo/");
+    subscribeMock.mockResolvedValueOnce({ stream: createStream([event]) });
 
     const callback = vi.fn();
     const subscription = subscribeToEvents("D:\\repo", callback);
 
     await vi.waitFor(() => {
-      expect(callback).toHaveBeenCalledWith(event);
+      expect(callback).toHaveBeenCalledTimes(1);
     });
     await flushImmediate();
 
     stopEventListening();
     await subscription;
 
-    expect(subscribeMock).not.toHaveBeenCalled();
-  });
-
-  it("falls back to legacy project events when global stream is unavailable", async () => {
-    const event = { type: "session.idle", properties: { sessionID: "s1" } } as Event;
-    globalEventMock.mockRejectedValueOnce(new Error("global stream failed"));
-    subscribeMock.mockResolvedValueOnce({ stream: createStream([event]) });
-
-    const callback = vi.fn();
-    const subscription = subscribeToEvents("D:/repo", callback);
-
-    await vi.waitFor(() => {
-      expect(callback).toHaveBeenCalledWith(event);
+    expect(defined(callback.mock.calls[0]?.[0])).toEqual({
+      type: "session.idle",
+      properties: { sessionID: "s1" },
     });
-    await flushImmediate();
-
-    stopEventListening();
-    await subscription;
-
-    expect(globalEventMock).toHaveBeenCalledTimes(1);
-    expect(subscribeMock).toHaveBeenCalledWith(
-      { directory: "D:/repo" },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-  });
-
-  it("does not fall back to legacy events when OpenCode is unavailable", async () => {
-    const event = { type: "session.idle", properties: { sessionID: "s1" } } as Event;
-    globalEventMock
-      .mockRejectedValueOnce(new Error("fetch failed"))
-      .mockImplementationOnce(async (options: { signal: AbortSignal }) => {
-        return { stream: createOpenStream([{ directory: "D:/repo", payload: event }], options.signal) };
-      });
-
-    const callback = vi.fn();
-    const subscription = subscribeToEvents("D:/repo", callback);
-
-    await vi.waitFor(
-      () => {
-        expect(callback).toHaveBeenCalledWith(event);
-      },
-      { timeout: 3000 },
-    );
-    await flushImmediate();
-
-    stopEventListening();
-    await subscription;
-
-    expect(globalEventMock).toHaveBeenCalledTimes(2);
-    expect(subscribeMock).not.toHaveBeenCalled();
-  });
-
-  it("falls back to legacy project events when global stream ends without project events", async () => {
-    const event = { type: "session.idle", properties: { sessionID: "s1" } } as Event;
-    const serverConnected = { type: "server.connected", properties: {} } as Event;
-    globalEventMock.mockResolvedValueOnce({ stream: createStream([{ payload: serverConnected }]) });
-    subscribeMock.mockResolvedValueOnce({ stream: createStream([event]) });
-
-    const callback = vi.fn();
-    const subscription = subscribeToEvents("D:/repo", callback);
-
-    await vi.waitFor(() => {
-      expect(callback).toHaveBeenCalledWith(event);
-    });
-    await flushImmediate();
-
-    stopEventListening();
-    await subscription;
-
-    expect(globalEventMock).toHaveBeenCalledTimes(1);
-    expect(subscribeMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not create duplicate subscription for same directory while active", async () => {
-    subscribeMock.mockImplementation(async (_params, options: { signal: AbortSignal }) => {
-      return { stream: createAbortableStream(options.signal) };
+    subscribeMock.mockImplementation(async () => {
+      return { stream: createOpenStream() };
     });
 
     const firstCallback = vi.fn();
@@ -302,15 +317,12 @@ describe("opencode/events", () => {
   });
 
   it("aborts previous stream when directory changes", async () => {
-    let firstSignal: { aborted: boolean } | null = null;
-
     subscribeMock
-      .mockImplementationOnce(async (_params, options: { signal: AbortSignal }) => {
-        firstSignal = options.signal;
-        return { stream: createAbortableStream(options.signal) };
+      .mockImplementationOnce(async () => {
+        return { stream: createOpenStream() };
       })
-      .mockImplementationOnce(async (_params, options: { signal: AbortSignal }) => {
-        return { stream: createAbortableStream(options.signal) };
+      .mockImplementationOnce(async () => {
+        return { stream: createOpenStream() };
       });
 
     const firstSubscription = subscribeToEvents("D:/repo-a", vi.fn());
@@ -326,7 +338,6 @@ describe("opencode/events", () => {
     });
 
     expect(subscribeMock).toHaveBeenCalledTimes(2);
-    expect(firstSignal).toEqual(expect.objectContaining({ aborted: true }));
 
     stopEventListening();
     await Promise.all([firstSubscription, secondSubscription]);
@@ -343,8 +354,8 @@ describe("opencode/events", () => {
   it("reconnects when stream ends unexpectedly", async () => {
     subscribeMock
       .mockResolvedValueOnce({ stream: createStream([]) })
-      .mockImplementationOnce(async (_params, options: { signal: AbortSignal }) => {
-        return { stream: createAbortableStream(options.signal) };
+      .mockImplementationOnce(async () => {
+        return { stream: createOpenStream() };
       });
 
     const subscription = subscribeToEvents("D:/repo", vi.fn());
@@ -363,8 +374,8 @@ describe("opencode/events", () => {
   it("reconnects after non-fatal stream error", async () => {
     subscribeMock
       .mockRejectedValueOnce(new Error("transient stream failure"))
-      .mockImplementationOnce(async (_params, options: { signal: AbortSignal }) => {
-        return { stream: createAbortableStream(options.signal) };
+      .mockImplementationOnce(async () => {
+        return { stream: createOpenStream() };
       });
 
     const subscription = subscribeToEvents("D:/repo", vi.fn());
@@ -385,11 +396,11 @@ describe("opencode/events", () => {
     __setSseIdleTimeoutForTests(10);
 
     subscribeMock
-      .mockImplementationOnce(async (_params, options: { signal: AbortSignal }) => {
-        return { stream: createAbortableStream(options.signal) };
+      .mockImplementationOnce(async () => {
+        return { stream: createOpenStream() };
       })
-      .mockImplementationOnce(async (_params, options: { signal: AbortSignal }) => {
-        return { stream: createAbortableStream(options.signal) };
+      .mockImplementationOnce(async () => {
+        return { stream: createOpenStream() };
       });
 
     const subscription = subscribeToEvents("D:/repo", vi.fn());
@@ -411,9 +422,9 @@ describe("opencode/events", () => {
   it("resets the idle timeout after receiving an event", async () => {
     __setSseIdleTimeoutForTests(40);
 
-    const event = { type: "session.status", properties: { sessionID: "s1" } } as Event;
-    subscribeMock.mockImplementation(async (_params, options: { signal: AbortSignal }) => {
-      return { stream: createDelayedOpenStream(event, options.signal, 15) };
+    const event = makeV2Event("session.status", { sessionID: "s1" });
+    subscribeMock.mockImplementation(async () => {
+      return { stream: createDelayedOpenStream(event, 15) };
     });
 
     const callback = vi.fn();
@@ -424,7 +435,7 @@ describe("opencode/events", () => {
     });
 
     await vi.waitFor(() => {
-      expect(callback).toHaveBeenCalledWith(event);
+      expect(callback).toHaveBeenCalledTimes(1);
     }, { timeout: 500 });
 
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -435,9 +446,9 @@ describe("opencode/events", () => {
   });
 
   it("does not deliver queued callback after listener is stopped", async () => {
-    const event = { type: "session.status", properties: { sessionID: "s1" } } as Event;
-    let resolveEvent: (event: Event) => void = () => {};
-    const eventPromise = new Promise<Event>((resolve) => {
+    const event = makeV2Event("session.status", { sessionID: "s1" });
+    let resolveEvent: (value: ReturnType<typeof makeV2Event>) => void = () => {};
+    const eventPromise = new Promise<ReturnType<typeof makeV2Event>>((resolve) => {
       resolveEvent = resolve;
     });
     subscribeMock.mockResolvedValueOnce({ stream: createDeferredStream(eventPromise) });

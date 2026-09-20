@@ -1373,10 +1373,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       }
 
       if (config.bot.trackBackgroundSessions) {
-        backgroundSessionTracker.processEvent(event, getCurrentSession()?.id ?? null);
+        backgroundSessionTracker.processEvent(event as never, getCurrentSession()?.id ?? null);
       }
 
-      summaryAggregator.processEvent(event);
+      summaryAggregator.processEvent(event as never);
     }).catch((err) => {
       logger.error("Failed to subscribe to events:", err);
     });

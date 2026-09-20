@@ -9,10 +9,11 @@ import {
 } from "../../app/services/file-download-service.js";
 import { isDocExtractorConfigured, extractDocument } from "../../app/services/document-extractor-service.js";
 import { getModelCapabilities, supportsInput } from "../../app/services/model-capabilities-service.js";
+import type { ModelCapabilitiesInfo } from "../../app/services/model-capabilities-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import type { FilePartInput, Model } from "@opencode-ai/sdk/v2";
+import type { FilePartInput } from "@opencode-ai/sdk/v2";
 import { flushPendingPrompt } from "./message-merger.js";
 import { createIncomingPrompt, type IncomingPrompt } from "../../app/types/prompt.js";
 import {
@@ -28,7 +29,7 @@ export interface DocumentHandlerDeps extends ProcessPromptDeps {
   getModelCapabilities?: (
     providerId: string,
     modelId: string,
-  ) => Promise<Model["capabilities"] | null>;
+  ) => Promise<ModelCapabilitiesInfo | null>;
   getStoredModel?: () => { providerID: string; modelID: string };
   processPrompt?: (
     ctx: Context,

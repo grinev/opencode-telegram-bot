@@ -11,9 +11,10 @@ const mocked = vi.hoisted(() => ({
     id: "project-1",
     worktree: "D:\\Projects\\Repo",
   } as { id: string; worktree: string } | null,
-  mcpStatusMock: vi.fn(),
-  mcpConnectMock: vi.fn(),
-  mcpDisconnectMock: vi.fn(),
+  directApiMock: vi.fn(),
+  servers: {} as Record<string, unknown>,
+  serversError: null as Error | null,
+  toggleError: null as Error | null,
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -21,13 +22,7 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    mcp: {
-      status: mocked.mcpStatusMock,
-      connect: mocked.mcpConnectMock,
-      disconnect: mocked.mcpDisconnectMock,
-    },
-  },
+  directApi: mocked.directApiMock,
 }));
 
 function createCommandContext(messageId: number): Context {
@@ -72,10 +67,17 @@ describe("bot/commands/mcps", () => {
       id: "project-1",
       worktree: "D:\\Projects\\Repo",
     };
+    mocked.servers = {};
+    mocked.serversError = null;
+    mocked.toggleError = null;
 
-    mocked.mcpStatusMock.mockReset();
-    mocked.mcpConnectMock.mockReset();
-    mocked.mcpDisconnectMock.mockReset();
+    mocked.directApiMock.mockReset();
+    mocked.directApiMock.mockImplementation((method: string, path: string) => {
+      if (method === "GET" && path === "/api/mcp") {
+        return Promise.resolve({ data: { data: mocked.servers }, error: mocked.serversError });
+      }
+      return Promise.resolve({ data: null, error: mocked.toggleError });
+    });
   });
 
   it("shows empty message when no project is selected", async () => {
@@ -88,7 +90,7 @@ describe("bot/commands/mcps", () => {
   });
 
   it("shows empty message when no MCP servers configured", async () => {
-    mocked.mcpStatusMock.mockResolvedValue({ data: {}, error: null });
+    mocked.servers = {};
 
     const ctx = createCommandContext(101);
     await mcpsCommand(ctx as never);
@@ -97,18 +99,15 @@ describe("bot/commands/mcps", () => {
   });
 
   it("shows MCP servers list and starts custom interaction", async () => {
-    mocked.mcpStatusMock.mockResolvedValue({
-      data: {
-        filesystem: { status: "connected" },
-        github: { status: "disabled" },
-      },
-      error: null,
-    });
+    mocked.servers = {
+      filesystem: { status: "connected" },
+      github: { status: "disabled" },
+    };
 
     const ctx = createCommandContext(102);
     await mcpsCommand(ctx as never);
 
-    expect(mocked.mcpStatusMock).toHaveBeenCalledWith({ directory: "D:/Projects/Repo" });
+    expect(mocked.directApiMock).toHaveBeenCalledWith("GET", "/api/mcp");
     expect(ctx.reply).toHaveBeenCalledTimes(1);
 
     const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
@@ -129,7 +128,7 @@ describe("bot/commands/mcps", () => {
   });
 
   it("shows fetch error when API fails", async () => {
-    mocked.mcpStatusMock.mockResolvedValue({ data: null, error: new Error("API error") });
+    mocked.serversError = new Error("API error");
 
     const ctx = createCommandContext(103);
     await mcpsCommand(ctx as never);
@@ -169,13 +168,9 @@ describe("bot/commands/mcps", () => {
   });
 
   it("disables a connected server", async () => {
-    mocked.mcpDisconnectMock.mockResolvedValue({ error: null });
-    mocked.mcpStatusMock.mockResolvedValue({
-      data: {
-        filesystem: { status: "disabled" },
-      },
-      error: null,
-    });
+    mocked.servers = {
+      filesystem: { status: "disabled" },
+    };
 
     interactionManager.start({
       kind: "custom",
@@ -194,10 +189,10 @@ describe("bot/commands/mcps", () => {
     const handled = await handleMcpsCallback(ctx);
 
     expect(handled).toBe(true);
-    expect(mocked.mcpDisconnectMock).toHaveBeenCalledWith({
-      name: "filesystem",
-      directory: "D:/Projects/Repo",
-    });
+    expect(mocked.directApiMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/experimental/mcp/filesystem/disconnect",
+    );
 
     const state = interactionManager.getSnapshot();
     expect(state?.metadata.stage).toBe("detail");
@@ -205,13 +200,9 @@ describe("bot/commands/mcps", () => {
   });
 
   it("enables a disabled server", async () => {
-    mocked.mcpConnectMock.mockResolvedValue({ error: null });
-    mocked.mcpStatusMock.mockResolvedValue({
-      data: {
-        github: { status: "connected" },
-      },
-      error: null,
-    });
+    mocked.servers = {
+      github: { status: "connected" },
+    };
 
     interactionManager.start({
       kind: "custom",
@@ -230,10 +221,10 @@ describe("bot/commands/mcps", () => {
     const handled = await handleMcpsCallback(ctx);
 
     expect(handled).toBe(true);
-    expect(mocked.mcpConnectMock).toHaveBeenCalledWith({
-      name: "github",
-      directory: "D:/Projects/Repo",
-    });
+    expect(mocked.directApiMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/experimental/mcp/github/connect",
+    );
 
     const state = interactionManager.getSnapshot();
     expect(state?.metadata.stage).toBe("detail");
@@ -241,12 +232,9 @@ describe("bot/commands/mcps", () => {
   });
 
   it("returns to list view on back button", async () => {
-    mocked.mcpStatusMock.mockResolvedValue({
-      data: {
-        filesystem: { status: "connected" },
-      },
-      error: null,
-    });
+    mocked.servers = {
+      filesystem: { status: "connected" },
+    };
 
     interactionManager.start({
       kind: "custom",
@@ -356,12 +344,9 @@ describe("bot/commands/mcps", () => {
 
   it("keeps callback data short for long MCP server names", async () => {
     const longServerName = "very-long-mcp-server-name-".repeat(5);
-    mocked.mcpStatusMock.mockResolvedValue({
-      data: {
-        [longServerName]: { status: "connected" },
-      },
-      error: null,
-    });
+    mocked.servers = {
+      [longServerName]: { status: "connected" },
+    };
 
     const ctx = createCommandContext(850);
     await mcpsCommand(ctx as never);
@@ -381,7 +366,7 @@ describe("bot/commands/mcps", () => {
   });
 
   it("shows toggle error on API failure", async () => {
-    mocked.mcpConnectMock.mockResolvedValue({ error: new Error("Connection failed") });
+    mocked.toggleError = new Error("Connection failed");
 
     interactionManager.start({
       kind: "custom",

@@ -32,12 +32,12 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
+  opencodeV2: {
     session: {
-      abort: mocked.abortMock,
-      status: mocked.statusMock,
+      interrupt: mocked.abortMock,
     },
   },
+  getBusySessionStatuses: mocked.statusMock,
 }));
 
 vi.mock("../../../src/app/managers/assistant-run-state-manager.js", () => ({
@@ -313,31 +313,6 @@ describe("bot/commands/abort", () => {
 
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.warn_unconfirmed"));
     expectAbortStateReleased("abort_unconfirmed");
-  });
-
-  it("releases local busy state when abort result is not confirmed", async () => {
-    mocked.currentSession = {
-      id: "session-1",
-      title: "Session",
-      directory: "D:/repo",
-    };
-    markSessionBusy();
-
-    mocked.abortMock.mockResolvedValue({ data: false, error: null });
-
-    const editMessageTextMock = vi.fn().mockResolvedValue(undefined);
-    const ctx = {
-      chat: { id: 777 },
-      reply: vi.fn().mockResolvedValue({ message_id: 88 }),
-      api: {
-        editMessageText: editMessageTextMock,
-      },
-    } as unknown as Context;
-
-    await abortCommand(ctx as never);
-
-    expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.warn_maybe_finished"));
-    expectAbortStateReleased("abort_maybe_finished");
   });
 
   it("releases local busy state when abort request times out", async () => {

@@ -38,11 +38,7 @@ vi.mock("../../../src/utils/logger.js", () => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    global: {
-      health: mocked.healthMock,
-    },
-  },
+  getServerInfo: mocked.healthMock,
 }));
 
 vi.mock("../../../src/app/services/session-service.js", () => ({

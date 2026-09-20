@@ -1,15 +1,15 @@
 import { reconcileStoredModelSelection } from "../app/services/model-selection-service.js";
 import { warmupSessionDirectoryCache } from "../app/services/session-cache-service.js";
 import { logger } from "../utils/logger.js";
-import { opencodeClient } from "./client.js";
+import { getServerInfo } from "./client.js";
 import { opencodeReadyLifecycle } from "./ready-lifecycle.js";
 
 let readyRefreshRegistered = false;
 
 export async function isOpencodeServerHealthy(): Promise<boolean> {
   try {
-    const { data, error } = await opencodeClient.global.health();
-    return !error && data?.healthy === true;
+    const { data, error } = await getServerInfo();
+    return !error && data !== null;
   } catch {
     return false;
   }

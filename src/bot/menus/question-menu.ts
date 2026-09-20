@@ -1,6 +1,6 @@
 import { Context, InlineKeyboard } from "grammy";
 import { questionManager } from "../../app/managers/question-manager.js";
-import { opencodeClient } from "../../opencode/client.js";
+import { opencodeV2 } from "../../opencode/client.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { summaryAggregator } from "../../app/managers/summary-aggregation-manager.js";
@@ -199,10 +199,17 @@ async function sendAllAnswersToAgent(bot: Context["api"], chatId: number): Promi
   const requestID = questionManager.getRequestID();
   const totalQuestions = questionManager.getTotalQuestions();
   const directory = currentSession?.directory ?? currentProject?.worktree;
+  const sessionID = currentSession?.id;
 
   if (!directory) {
     logger.error("[QuestionHandler] No project for sending answers");
     await bot.sendMessage(chatId, t("question.no_active_project"));
+    return;
+  }
+
+  if (!sessionID) {
+    logger.error("[QuestionHandler] No session for sending answers");
+    await bot.sendMessage(chatId, t("question.no_active_request"));
     return;
   }
 
@@ -244,10 +251,10 @@ async function sendAllAnswersToAgent(bot: Context["api"], chatId: number): Promi
   safeBackgroundTask({
     taskName: "question.reply",
     task: () =>
-      opencodeClient.question.reply({
+      opencodeV2.session.question.reply({
+        sessionID,
         requestID,
-        directory,
-        answers: allAnswers,
+        questionV2Reply: { answers: allAnswers },
       }),
     onSuccess: ({ error }) => {
       if (error) {

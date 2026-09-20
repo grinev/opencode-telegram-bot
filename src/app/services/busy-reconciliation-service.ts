@@ -1,4 +1,4 @@
-import { opencodeClient } from "../../opencode/client.js";
+import { getBusySessionStatuses } from "../../opencode/client.js";
 import {
   foregroundSessionState,
   type ForegroundBusySession,
@@ -88,7 +88,7 @@ export async function reconcileBusyStateNow(directory: string, now: number = Dat
     return;
   }
 
-  const { data: statuses, error } = await opencodeClient.session.status({ directory });
+  const { data: statuses, error } = await getBusySessionStatuses();
   if (error || !statuses) {
     logger.warn("[BusyReconciliation] Failed to load session status", error);
     return;

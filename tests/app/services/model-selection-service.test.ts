@@ -61,12 +61,8 @@ vi.mock("../../../src/config.js", () => ({
   config: configMock,
 }));
 
-vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    config: {
-      providers: providersMock,
-    },
-  },
+vi.mock("../../../src/opencode/catalog.js", () => ({
+  fetchModelCatalog: providersMock,
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -94,13 +90,15 @@ import {
 } from "../../../src/app/services/model-selection-service.js";
 
 function createProvidersResponse(modelsByProvider: Record<string, string[]>) {
+  const providers = Object.entries(modelsByProvider).map(([providerID]) => ({
+    id: providerID,
+    name: providerID,
+  }));
+  const models = Object.entries(modelsByProvider).flatMap(([providerID, modelIDs]) =>
+    modelIDs.map((modelID) => ({ id: modelID, providerID, enabled: true })),
+  );
   return {
-    data: {
-      providers: Object.entries(modelsByProvider).map(([providerID, modelIDs]) => ({
-        id: providerID,
-        models: Object.fromEntries(modelIDs.map((modelID) => [modelID, { id: modelID }])),
-      })),
-    },
+    data: { providers, models },
     error: null,
   };
 }
@@ -569,9 +567,10 @@ describe("app/services/model-selection-service", () => {
       providersMock.mockResolvedValueOnce({
         data: {
           providers: [
-            { id: "openai", name: "OpenAI", models: { "gpt-4o": { id: "gpt-4o" } } },
-            { id: "anthropic", name: "Anthropic", models: {} },
+            { id: "openai", name: "OpenAI" },
+            { id: "anthropic", name: "Anthropic" },
           ],
+          models: [{ id: "gpt-4o", providerID: "openai", enabled: true }],
         },
         error: null,
       });

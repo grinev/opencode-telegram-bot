@@ -1,7 +1,7 @@
 import { Bot, Context } from "grammy";
 import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2";
-import type { Model } from "@opencode-ai/sdk/v2";
-import { opencodeClient } from "../../opencode/client.js";
+import type { PromptInputFileAttachment } from "@opencode-ai/sdk/v2";
+import { getBusySessionStatuses, opencodeV2, sendSessionPrompt, toV2FileAttachment } from "../../opencode/client.js";
 import {
   clearSession,
   getCurrentSession,
@@ -43,6 +43,7 @@ import {
   getModelCapabilities,
   supportsInput,
 } from "../../app/services/model-capabilities-service.js";
+import type { ModelCapabilitiesInfo } from "../../app/services/model-capabilities-service.js";
 import type { IncomingPrompt } from "../../app/types/prompt.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
@@ -78,16 +79,16 @@ export function consumePromptResponseMode(sessionId: string): PromptResponseMode
   return responseMode;
 }
 
-async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
+async function isSessionBusy(sessionId: string, _directory: string): Promise<boolean> {
   try {
-    const { data, error } = await opencodeClient.session.status({ directory });
+    const { data, error } = await getBusySessionStatuses();
 
     if (error || !data) {
       logger.warn("[Bot] Failed to check session status before prompt:", error);
       return false;
     }
 
-    const sessionStatus = (data as Record<string, { type?: string }>)[sessionId];
+    const sessionStatus = data[sessionId];
     if (!sessionStatus) {
       return false;
     }
@@ -131,7 +132,7 @@ export interface ProcessPromptDeps {
   getModelCapabilities?: (
     providerId: string,
     modelId: string,
-  ) => Promise<Model["capabilities"] | null>;
+  ) => Promise<ModelCapabilitiesInfo | null>;
   getStoredModel?: () => { providerID: string; modelID: string; variant?: string };
 }
 
@@ -205,14 +206,16 @@ export async function processUserPrompt(
   if (!currentSession) {
     await ctx.reply(t("bot.creating_session"));
 
-    const { data: session, error } = await opencodeClient.session.create({
-      directory: currentProject.worktree,
+    const { data: sessionBody, error } = await opencodeV2.session.create({
+      location: { directory: currentProject.worktree },
     });
 
-    if (error || !session) {
+    if (error || !sessionBody) {
       await ctx.reply(t("bot.create_session_error"));
       return false;
     }
+
+    const session = sessionBody.data;
 
     logger.info(
       `[Bot] Created new session: id=${session.id}, title="${session.title}", project=${currentProject.worktree}`,
@@ -225,7 +228,10 @@ export async function processUserPrompt(
     };
 
     setCurrentSession(currentSession);
-    await ingestSessionInfoForCache(session);
+    await ingestSessionInfoForCache({
+      directory: session.location.directory,
+      time: { updated: session.time.updated },
+    });
     createdNewSession = true;
   } else {
     logger.info(
@@ -319,17 +325,25 @@ export async function processUserPrompt(
     // above and would otherwise be missing from the logs.
     const filePartCount = parts.filter((part) => part.type === "file").length;
 
+    const promptText = parts
+      .filter((part) => part.type === "text")
+      .map((part) => (part as TextPartInput).text)
+      .join("\n");
+    const promptFiles = parts
+      .filter((part) => part.type === "file")
+      .map((part) => toV2FileAttachment(part as FilePartInput));
+
     const promptOptions: {
       sessionID: string;
-      directory: string;
-      parts: Array<TextPartInput | FilePartInput>;
+      text: string;
+      files: PromptInputFileAttachment[];
       model?: { providerID: string; modelID: string };
       agent?: string;
       variant?: string;
     } = {
       sessionID: currentSession.id,
-      directory: currentSession.directory,
-      parts,
+      text: promptText,
+      files: promptFiles,
       agent: currentAgent,
     };
 
@@ -382,7 +396,24 @@ export async function processUserPrompt(
     // The actual assistant result still arrives via the SSE event subscription.
     safeBackgroundTask({
       taskName: "session.promptAsync",
-      task: () => opencodeClient.session.promptAsync(promptOptions),
+      task: () =>
+        sendSessionPrompt({
+          sessionID: promptOptions.sessionID,
+          text: promptOptions.text,
+          files: promptOptions.files,
+          ...(promptOptions.agent !== undefined ? { agent: promptOptions.agent } : {}),
+          ...(promptOptions.model
+            ? {
+                model: {
+                  providerID: promptOptions.model.providerID,
+                  modelID: promptOptions.model.modelID,
+                  ...(promptOptions.variant !== undefined
+                    ? { variant: promptOptions.variant }
+                    : {}),
+                },
+              }
+            : {}),
+        }),
       onSuccess: ({ error }) => {
         if (error) {
           foregroundSessionState.markIdle(currentSession.id);

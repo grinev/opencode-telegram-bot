@@ -1,6 +1,6 @@
 import type { Api } from "grammy";
 import { logger } from "../../utils/logger.js";
-import { opencodeClient } from "../../opencode/client.js";
+import { directApi, opencodeV2 } from "../../opencode/client.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import {
@@ -173,18 +173,20 @@ class PinnedMessageManager {
   }
 
   /**
-   * Load context token usage from session history
+   * Load context token usage from the latest assistant message.
+   * The session record's tokens are cumulative (summed over every turn), so the
+   * current context size must be read from the most recent assistant message's
+   * per-message totals instead (input + cache.read).
    */
-  async loadContextFromHistory(sessionId: string, directory: string): Promise<void> {
+  async loadContextFromHistory(sessionId: string, _directory: string): Promise<void> {
     try {
       logger.debug(`[PinnedManager] Loading context from history for session: ${sessionId}`);
 
-      const { data: messagesData, error } = await opencodeClient.session.messages({
+      const { data: messagesBody, error } = await opencodeV2.session.messages({
         sessionID: sessionId,
-        directory,
       });
 
-      if (error || !messagesData) {
+      if (error || !messagesBody) {
         if (isExpectedOpencodeUnavailableError(error)) {
           logger.warn("[PinnedManager] OpenCode server unavailable; skipping session history load");
         } else {
@@ -193,50 +195,32 @@ class PinnedMessageManager {
         return;
       }
 
-      // Get the latest measured context size and total cost from session history
-      // Context = input + cache.read (cache.read contains previously cached context)
+      // Latest measured context size + total session cost from the history.
       let latestContextSize = 0;
       let latestContextCreated = Number.NEGATIVE_INFINITY;
       let totalCost = 0;
-      logger.debug(`[PinnedManager] Processing ${messagesData.length} messages from history`);
 
-      messagesData.forEach(({ info }) => {
-        if (info.role === "assistant") {
-          const assistantInfo = info as {
-            summary?: boolean;
-            tokens?: {
-              input: number;
-              cache?: { read: number };
-            };
-            time?: { created?: number };
-            cost?: number;
-          };
-
-          // Skip summary messages (technical, not real agent responses)
-          if (assistantInfo.summary) {
-            logger.debug(`[PinnedManager] Skipping summary message`);
-            return;
-          }
-
-          const input = assistantInfo.tokens?.input || 0;
-          const cacheRead = assistantInfo.tokens?.cache?.read || 0;
-          const contextSize = input + cacheRead;
-          const cost = assistantInfo.cost || 0;
-
-          logger.debug(
-            `[PinnedManager] Assistant message: input=${input}, cache.read=${cacheRead}, total=${contextSize}, cost=$${cost.toFixed(2)}`,
-          );
-
-          const created = assistantInfo.time?.created ?? 0;
-          if (contextSize > 0 && created >= latestContextCreated) {
-            latestContextSize = contextSize;
-            latestContextCreated = created;
-          }
-
-          // Accumulate total session cost
-          totalCost += cost;
+      for (const message of messagesBody.data) {
+        if (message.type !== "assistant") {
+          continue;
         }
-      });
+        const tokens = message.tokens;
+        if (!tokens) {
+          continue;
+        }
+        const input = tokens.input || 0;
+        const cacheRead = tokens.cache?.read || 0;
+        const contextSize = input + cacheRead;
+        const cost = message.cost || 0;
+        const created = message.time?.created ?? 0;
+
+        if (contextSize > 0 && created >= latestContextCreated) {
+          latestContextSize = contextSize;
+          latestContextCreated = created;
+        }
+
+        totalCost += cost;
+      }
 
       this.state.tokensUsed = latestContextSize;
       this.state.cost = totalCost;
@@ -436,16 +420,16 @@ class PinnedMessageManager {
         return;
       }
 
-      logger.debug(`[PinnedManager] loadDiffsFromApi: trying session.diff() for ${sessionId}`);
+      logger.debug(`[PinnedManager] loadDiffsFromApi: trying session diff for ${sessionId}`);
 
-      // Try session.diff() API first
-      const { data, error } = await opencodeClient.session.diff({
-        sessionID: sessionId,
-        directory: project.worktree,
-      });
+      // Try session diff API first (v2: GET /api/session/{id}/diff)
+      const { data, error } = await directApi<Array<{ file?: string; additions?: number; deletions?: number }>>(
+        "GET",
+        `/api/session/${sessionId}/diff`,
+      );
 
       logger.debug(
-        `[PinnedManager] session.diff() result: error=${!!error}, data.length=${data?.length ?? 0}`,
+        `[PinnedManager] session diff result: error=${!!error}, data.length=${data?.length ?? 0}`,
       );
 
       if (!error && data && data.length > 0) {
@@ -453,8 +437,8 @@ class PinnedMessageManager {
           .filter((d): d is typeof d & { file: string } => !!d.file)
           .map((d) => ({
             file: d.file,
-            additions: d.additions,
-            deletions: d.deletions,
+            additions: d.additions ?? 0,
+            deletions: d.deletions ?? 0,
           }));
         logger.info(
           `[PinnedManager] Loaded ${this.state.changedFiles.length} file diffs from session.diff()`,
@@ -478,16 +462,15 @@ class PinnedMessageManager {
   /**
    * Fallback: extract file changes from session message tool parts
    */
-  private async loadDiffsFromMessages(sessionId: string, directory: string): Promise<void> {
+  private async loadDiffsFromMessages(sessionId: string, _directory: string): Promise<void> {
     try {
       logger.debug(`[PinnedManager] loadDiffsFromMessages: fetching messages for ${sessionId}`);
 
-      const { data: messagesData, error } = await opencodeClient.session.messages({
+      const { data: messagesBody, error } = await opencodeV2.session.messages({
         sessionID: sessionId,
-        directory,
       });
 
-      if (error || !messagesData) {
+      if (error || !messagesBody) {
         if (isExpectedOpencodeUnavailableError(error)) {
           logger.debug("[PinnedManager] OpenCode server unavailable; skipping diff message restore");
         } else {
@@ -496,6 +479,7 @@ class PinnedMessageManager {
         return;
       }
 
+      const messagesData = messagesBody.data;
       logger.debug(`[PinnedManager] loadDiffsFromMessages: ${messagesData.length} messages`);
 
       const filesMap = new Map<string, FileChange>();
@@ -503,71 +487,41 @@ class PinnedMessageManager {
       let toolCount = 0;
       let fileToolCount = 0;
 
-      for (const { parts } of messagesData) {
-        for (const part of parts) {
-          if (part.type !== "tool") continue;
+      // v2 assistant content carries tool calls as {type:"tool", name, state:{status,input,outputPaths?}}
+      for (const message of messagesData) {
+        if (message.type !== "assistant") {
+          continue;
+        }
+        for (const part of message.content) {
+          if (part.type !== "tool") {
+            continue;
+          }
           toolCount++;
 
-          const toolPart = part as {
-            tool: string;
-            state: {
-              status: string;
-              input?: { [key: string]: unknown };
-              metadata?: { [key: string]: unknown };
-            };
-          };
+          const toolName = part.name;
+          const state = part.state;
+          if (state.status !== "completed") {
+            continue;
+          }
 
-          if (toolPart.state.status !== "completed") continue;
-
-          if (
-            toolPart.tool === "edit" ||
-            toolPart.tool === "write" ||
-            toolPart.tool === "apply_patch"
-          ) {
+          if (toolName === "edit" || toolName === "write" || toolName === "patch") {
             fileToolCount++;
           }
 
-          if (
-            (toolPart.tool === "edit" || toolPart.tool === "apply_patch") &&
-            toolPart.state.metadata &&
-            "filediff" in toolPart.state.metadata
-          ) {
-            const filediff = toolPart.state.metadata.filediff as {
-              file?: string;
-              additions?: number;
-              deletions?: number;
-            };
-            if (filediff.file) {
-              const existing = filesMap.get(filediff.file);
-              if (existing) {
-                existing.additions += filediff.additions || 0;
-                existing.deletions += filediff.deletions || 0;
-              } else {
-                filesMap.set(filediff.file, {
-                  file: filediff.file,
-                  additions: filediff.additions || 0,
-                  deletions: filediff.deletions || 0,
-                });
-              }
+          const paths = new Set<string>();
+          for (const outputPath of state.outputPaths ?? []) {
+            paths.add(outputPath);
+          }
+          if (toolName === "write") {
+            const filePath = (state.input as { filePath?: unknown }).filePath;
+            if (typeof filePath === "string" && filePath.length > 0) {
+              paths.add(filePath);
             }
-          } else if (
-            toolPart.tool === "write" &&
-            toolPart.state.input &&
-            "filePath" in toolPart.state.input &&
-            "content" in toolPart.state.input
-          ) {
-            const filePath = toolPart.state.input.filePath as string;
-            const content = toolPart.state.input.content as string;
-            const lines = content.split("\n").length;
-            const existing = filesMap.get(filePath);
-            if (existing) {
-              existing.additions += lines;
-            } else {
-              filesMap.set(filePath, {
-                file: filePath,
-                additions: lines,
-                deletions: 0,
-              });
+          }
+
+          for (const file of paths) {
+            if (!filesMap.has(file)) {
+              filesMap.set(file, { file, additions: 0, deletions: 0 });
             }
           }
         }
@@ -607,14 +561,13 @@ class PinnedMessageManager {
     }
 
     try {
-      const { data: sessionData } = await opencodeClient.session.get({
+      const { data: sessionBody } = await opencodeV2.session.get({
         sessionID: session.id,
-        directory: project.worktree,
       });
 
-      if (sessionData && sessionData.title !== this.state.sessionTitle) {
-        this.state.sessionTitle = sessionData.title;
-        logger.debug(`[PinnedManager] Session title refreshed: ${sessionData.title}`);
+      if (sessionBody && sessionBody.data.title !== this.state.sessionTitle) {
+        this.state.sessionTitle = sessionBody.data.title;
+        logger.debug(`[PinnedManager] Session title refreshed: ${sessionBody.data.title}`);
       }
     } catch (err) {
       if (isExpectedOpencodeUnavailableError(err)) {

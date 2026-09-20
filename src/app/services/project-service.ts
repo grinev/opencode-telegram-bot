@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { opencodeClient } from "../../opencode/client.js";
+import { directApi } from "../../opencode/client.js";
 import { config } from "../../config.js";
 import { getCachedSessionProjects } from "./session-cache-service.js";
 import { logger } from "../../utils/logger.js";
@@ -10,11 +10,18 @@ interface InternalProject extends ProjectInfo {
   lastUpdated: number;
 }
 
+// opencode v2: GET /api/project -> [{ id, canonical, time: { created, updated }, vcs?, sandboxes? }]
+interface V2Project {
+  id: string;
+  canonical: string;
+  time?: { created?: number; updated?: number };
+}
+
 async function getResolvedProjects(options?: {
   includeLinkedWorktrees?: boolean;
 }): Promise<InternalProject[]> {
   const includeLinkedWorktrees = options?.includeLinkedWorktrees === true;
-  const { data: projects, error } = await opencodeClient.project.list();
+  const { data: projects, error } = await directApi<V2Project[]>("GET", "/api/project");
 
   if (error || !projects) {
     throw error || new Error("No data received from server");
@@ -22,8 +29,8 @@ async function getResolvedProjects(options?: {
 
   const apiProjects: InternalProject[] = projects.map((project) => ({
     id: project.id,
-    worktree: project.worktree,
-    name: project.name || project.worktree,
+    worktree: project.canonical,
+    name: projectName(project.canonical),
     lastUpdated: project.time?.updated ?? 0,
   }));
 
@@ -129,6 +136,11 @@ function worktreeKey(worktree: string): string {
 
 function isWindowsWorktreePath(worktree: string): boolean {
   return process.platform === "win32" || /^[a-zA-Z]:[\\/]/.test(worktree) || /^\\\\/.test(worktree);
+}
+
+function projectName(canonical: string): string {
+  const pathModule = isWindowsWorktreePath(canonical) ? path.win32 : path.posix;
+  return pathModule.basename(canonical) || canonical;
 }
 
 export async function getProjects(): Promise<ProjectInfo[]> {

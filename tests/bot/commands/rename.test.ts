@@ -21,11 +21,7 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    session: {
-      update: mocked.updateSessionMock,
-    },
-  },
+  directApi: mocked.updateSessionMock,
 }));
 
 vi.mock("../../../src/app/services/session-service.js", () => ({
@@ -118,11 +114,11 @@ describe("bot/commands/rename", () => {
     const handled = await handleRenameTextAnswer(ctx);
 
     expect(handled).toBe(true);
-    expect(mocked.updateSessionMock).toHaveBeenCalledWith({
-      sessionID: "session-1",
-      directory: "D:/repo",
-      title: "New title",
-    });
+    expect(mocked.updateSessionMock).toHaveBeenCalledWith(
+      "PATCH",
+      "/api/session/session-1",
+      { title: "New title" },
+    );
     expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith({
       id: "session-1",
       title: "New title",

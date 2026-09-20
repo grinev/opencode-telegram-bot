@@ -1,5 +1,5 @@
 import { CommandContext, Context } from "grammy";
-import { opencodeClient } from "../../opencode/client.js";
+import { getBusySessionStatuses, opencodeV2 } from "../../opencode/client.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
 import { logger } from "../../utils/logger.js";
@@ -33,7 +33,7 @@ async function releaseAbortBusyState(sessionId: string, reason: string): Promise
 
 async function pollSessionStatus(
   sessionId: string,
-  directory: string,
+  _directory: string,
   maxWaitMs: number = 5000,
 ): Promise<SessionState> {
   const startedAt = Date.now();
@@ -41,7 +41,7 @@ async function pollSessionStatus(
 
   while (Date.now() - startedAt < maxWaitMs) {
     try {
-      const { data, error } = await opencodeClient.session.status({ directory });
+      const { data, error } = await getBusySessionStatuses();
 
       if (error || !data) {
         break;
@@ -108,34 +108,19 @@ export async function abortCurrentOperation(
       }
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
     markUserAbortRequested(currentSession.id);
 
     try {
-      const { data: abortResult, error: abortError } = await opencodeClient.session.abort(
-        {
-          sessionID: currentSession.id,
-          directory: currentSession.directory,
-        },
-        { signal: controller.signal },
-      );
-
-      clearTimeout(timeoutId);
+      // v2 interrupt answers 204 with no payload; confirmation happens via the status poll below.
+      const { error: abortError } = await opencodeV2.session.interrupt({
+        sessionID: currentSession.id,
+      });
 
       if (abortError) {
         logger.warn("[Abort] Abort request failed:", abortError);
         await releaseAbortBusyState(currentSession.id, "abort_unconfirmed");
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
           await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_unconfirmed"));
-        }
-        return;
-      }
-
-      if (abortResult !== true) {
-        await releaseAbortBusyState(currentSession.id, "abort_maybe_finished");
-        if (notifyUser && chatId !== null && waitingMessageId !== null) {
-          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_maybe_finished"));
         }
         return;
       }
@@ -157,7 +142,6 @@ export async function abortCurrentOperation(
         }
       }
     } catch (error) {
-      clearTimeout(timeoutId);
       await releaseAbortBusyState(currentSession.id, "abort_error");
 
       if (error instanceof Error && error.name === "AbortError") {

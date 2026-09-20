@@ -10,11 +10,7 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    session: {
-      status: mocked.sessionStatusMock,
-    },
-  },
+  getBusySessionStatuses: mocked.sessionStatusMock,
 }));
 
 vi.mock("../../../src/app/services/attach-service.js", () => ({

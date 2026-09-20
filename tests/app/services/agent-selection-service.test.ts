@@ -60,9 +60,9 @@ const mocked = vi.hoisted(() => {
 });
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    app: {
-      agents: mocked.appAgentsMock,
+  opencodeV2: {
+    agent: {
+      list: mocked.appAgentsMock,
     },
     session: {
       messages: mocked.sessionMessagesMock,
@@ -107,15 +107,15 @@ import {
 
 function createAgentResponse(
   agents: Array<{
-    name: string;
+    name?: string;
+    id?: string;
     mode: "primary" | "all" | "subagent";
     hidden?: boolean;
-    model?: { modelID: string; providerID: string };
-    variant?: string;
+    model?: { id: string; providerID: string; variant?: string };
   }>,
 ) {
   return {
-    data: agents,
+    data: { data: agents },
     error: null,
   };
 }
@@ -148,10 +148,10 @@ describe("agent/manager", () => {
     });
     mocked.appAgentsMock.mockResolvedValue(
       createAgentResponse([
-        { name: "orchestrator", mode: "primary" },
-        { name: "build", mode: "primary" },
-        { name: "summary", mode: "primary", hidden: true },
-        { name: "general", mode: "subagent" },
+        { id: "orchestrator", mode: "primary" },
+        { id: "build", mode: "primary" },
+        { id: "summary", mode: "primary", hidden: true },
+        { id: "general", mode: "subagent" },
       ]),
     );
 
@@ -172,8 +172,8 @@ describe("agent/manager", () => {
     mocked.setCurrentAgent("orchestrator");
     mocked.appAgentsMock.mockResolvedValue(
       createAgentResponse([
-        { name: "build", mode: "primary" },
-        { name: "plan", mode: "primary" },
+        { id: "build", mode: "primary" },
+        { id: "plan", mode: "primary" },
       ]),
     );
 
@@ -192,8 +192,8 @@ describe("agent/manager", () => {
     });
     mocked.appAgentsMock.mockResolvedValue(
       createAgentResponse([
-        { name: "plan", mode: "primary" },
-        { name: "orchestrator", mode: "primary" },
+        { id: "plan", mode: "primary" },
+        { id: "orchestrator", mode: "primary" },
       ]),
     );
 
@@ -212,8 +212,8 @@ describe("agent/manager", () => {
     mocked.setCurrentAgent("orchestrator");
     mocked.appAgentsMock.mockResolvedValue(
       createAgentResponse([
-        { name: "build", mode: "primary" },
-        { name: "plan", mode: "primary" },
+        { id: "build", mode: "primary" },
+        { id: "plan", mode: "primary" },
       ]),
     );
 
@@ -247,9 +247,9 @@ describe("applyAgentConfiguredSettings", () => {
     mocked.appAgentsMock.mockResolvedValue(
       createAgentResponse([
         {
-          name: "plan",
+          id: "plan",
           mode: "primary",
-          model: { providerID: "opencode-go", modelID: "kimi" },
+          model: { providerID: "opencode-go", id: "kimi" },
         },
       ]),
     );
@@ -269,9 +269,9 @@ describe("applyAgentConfiguredSettings", () => {
     mocked.appAgentsMock.mockResolvedValue(
       createAgentResponse([
         {
-          name: "plan",
+          id: "plan",
           mode: "primary",
-          variant: "low",
+          model: { id: "", providerID: "", variant: "low" },
         },
       ]),
     );
@@ -287,10 +287,9 @@ describe("applyAgentConfiguredSettings", () => {
     mocked.appAgentsMock.mockResolvedValue(
       createAgentResponse([
         {
-          name: "plan",
+          id: "plan",
           mode: "primary",
-          model: { providerID: "opencode-go", modelID: "kimi" },
-          variant: "max",
+          model: { providerID: "opencode-go", id: "kimi", variant: "max" },
         },
       ]),
     );
@@ -308,7 +307,7 @@ describe("applyAgentConfiguredSettings", () => {
 
   it("leaves setters untouched when the agent names neither", async () => {
     mocked.appAgentsMock.mockResolvedValue(
-      createAgentResponse([{ name: "plan", mode: "primary" }]),
+      createAgentResponse([{ id: "plan", mode: "primary" }]),
     );
 
     const modelApplied = await applyAgentConfiguredSettings("plan");
@@ -332,10 +331,9 @@ describe("applyAgentConfiguredSettings", () => {
     mocked.appAgentsMock.mockResolvedValue(
       createAgentResponse([
         {
-          name: "plan",
+          id: "plan",
           mode: "primary",
-          model: { providerID: "", modelID: "kimi" },
-          variant: "low",
+          model: { providerID: "", id: "kimi", variant: "low" },
         },
       ]),
     );
@@ -351,10 +349,9 @@ describe("applyAgentConfiguredSettings", () => {
     mocked.appAgentsMock.mockResolvedValue(
       createAgentResponse([
         {
-          name: "plan",
+          id: "plan",
           mode: "primary",
-          model: { providerID: "opencode-go", modelID: "kimi" },
-          variant: "",
+          model: { providerID: "opencode-go", id: "kimi", variant: "" },
         },
       ]),
     );

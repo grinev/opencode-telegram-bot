@@ -27,7 +27,7 @@ import {
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
 import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
-import { opencodeClient } from "../../opencode/client.js";
+import { directApi, getBusySessionStatuses, opencodeV2, toError } from "../../opencode/client.js";
 import {
   buildCommandsConfirmKeyboard,
   buildCommandsListKeyboard,
@@ -171,16 +171,16 @@ export function clearCommandsInteraction(reason: string): void {
   }
 }
 
-async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
+async function isSessionBusy(sessionId: string, _directory: string): Promise<boolean> {
   try {
-    const { data, error } = await opencodeClient.session.status({ directory });
+    const { data, error } = await getBusySessionStatuses();
 
     if (error || !data) {
       logger.warn("[Commands] Failed to check session status before command:", error);
       return false;
     }
 
-    const sessionStatus = (data as Record<string, { type?: string }>)[sessionId];
+    const sessionStatus = data[sessionId];
     if (!sessionStatus) {
       return false;
     }
@@ -217,14 +217,16 @@ async function ensureSessionForProject(
 
   await ctx.reply(t("bot.creating_session"));
 
-  const { data: session, error } = await opencodeClient.session.create({
-    directory: projectDirectory,
+  const { data: sessionBody, error } = await opencodeV2.session.create({
+    location: { directory: projectDirectory },
   });
 
-  if (error || !session) {
+  if (error || !sessionBody) {
     await ctx.reply(t("bot.create_session_error"));
     return null;
   }
+
+  const session = sessionBody.data;
 
   const sessionInfo: SessionInfo = {
     id: session.id,
@@ -233,7 +235,10 @@ async function ensureSessionForProject(
   };
 
   setCurrentSession(sessionInfo);
-  await ingestSessionInfoForCache(session);
+  await ingestSessionInfoForCache({
+    directory: session.location.directory,
+    time: { updated: session.time.updated },
+  });
   await ctx.reply(t("bot.session_created", { title: session.title }));
 
   return sessionInfo;
@@ -272,10 +277,6 @@ export async function executeCommand(
 
   const currentAgent = await resolveProjectAgent(getStoredAgent());
   const storedModel = getStoredModel();
-  const model =
-    storedModel.providerID && storedModel.modelID
-      ? `${storedModel.providerID}/${storedModel.modelID}`
-      : undefined;
 
   foregroundSessionState.markBusy(session.id, session.directory);
   await markAttachedSessionBusy(session.id);
@@ -292,16 +293,39 @@ export async function executeCommand(
 
   safeBackgroundTask({
     taskName: "session.command",
-    task: () =>
-      opencodeClient.session.command({
-        sessionID: session.id,
-        directory: session.directory,
-        command: params.commandName,
-        arguments: args,
-        agent: currentAgent,
-        ...(model !== undefined ? { model } : {}),
-        ...(storedModel.variant !== undefined ? { variant: storedModel.variant } : {}),
-      }),
+    task: async () => {
+      // v2 runs the command with the session's agent/model: switch first.
+      if (currentAgent) {
+        const { error: agentError } = await opencodeV2.session.switchAgent({
+          sessionID: session.id,
+          agent: currentAgent,
+        });
+        if (agentError) {
+          return { data: null, error: toError(agentError, "Failed to switch agent") };
+        }
+      }
+      if (storedModel.providerID && storedModel.modelID) {
+        const modelRef: { providerID: string; id: string; variant?: string } = {
+          providerID: storedModel.providerID,
+          id: storedModel.modelID,
+        };
+        if (storedModel.variant) {
+          modelRef.variant = storedModel.variant;
+        }
+        const { error: modelError } = await opencodeV2.session.switchModel({
+          sessionID: session.id,
+          model: modelRef,
+        });
+        if (modelError) {
+          return { data: null, error: toError(modelError, "Failed to switch model") };
+        }
+      }
+      return directApi(
+        "POST",
+        `/api/session/${session.id}/command`,
+        args ? { name: params.commandName, text: args } : { name: params.commandName },
+      );
+    },
     onSuccess: ({ error }) => {
       if (error) {
         foregroundSessionState.markIdle(session.id);

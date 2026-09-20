@@ -1,5 +1,5 @@
 import { CommandContext, Context } from "grammy";
-import { opencodeClient } from "../../opencode/client.js";
+import { getServerInfo } from "../../opencode/client.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
@@ -16,7 +16,7 @@ import { getBotVersion } from "../../runtime/bot-version.js";
 
 export async function statusCommand(ctx: CommandContext<Context>) {
   try {
-    const { data, error } = await opencodeClient.global.health();
+    const { data, error } = await getServerInfo();
 
     if (error || !data) {
       throw error || new Error("No data received from server");

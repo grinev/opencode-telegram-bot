@@ -1,7 +1,6 @@
 /**
  * Session Settings Service - adopts the agent and model a session last ran with
  */
-import type { Session } from "@opencode-ai/sdk/v2";
 import { selectAgent } from "./agent-selection-service.js";
 import { selectModel } from "./model-selection-service.js";
 import { logger } from "../../utils/logger.js";
@@ -14,7 +13,11 @@ import { logger } from "../../utils/logger.js";
  * own, so a model without a variant is stored at "default".
  * @param session Session to read the settings from
  */
-export function applySessionSettings(session: Session): void {
+export function applySessionSettings(session: {
+  id: string;
+  agent?: string | undefined;
+  model?: { providerID: string; id: string; variant?: string } | undefined;
+}): void {
   const model = session.model;
 
   if (session.agent) {

@@ -1,6 +1,11 @@
 import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
-import { opencodeClient } from "../../opencode/client.js";
+import {
+  directApi,
+  getBusySessionStatuses,
+  opencodeV2,
+  sendSessionPrompt,
+} from "../../opencode/client.js";
 import { logger } from "../../utils/logger.js";
 import { extractErrorMessage } from "../../utils/opencode-error.js";
 import {
@@ -32,8 +37,8 @@ type PendingQuestionRequest = {
 type PendingPermissionRequest = {
   id: string;
   sessionID: string;
-  permission?: string;
-  patterns?: string[];
+  action?: string;
+  resources?: string[];
 };
 
 type PendingInteractiveRequest =
@@ -131,6 +136,48 @@ function toErrorMessage(error: unknown): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Fetch v2 messages and shape them like the legacy snapshots the result
+// analysis below expects (assistant text/tool/reasoning parts, finish, error).
+async function loadAssistantSnapshots(sessionId: string): Promise<AssistantMessageSnapshot[]> {
+  const { data, error } = await opencodeV2.session.messages({ sessionID: sessionId });
+  if (error || !data) {
+    throw error || new Error("Failed to load scheduled task messages");
+  }
+
+  const snapshots: AssistantMessageSnapshot[] = [];
+  for (const message of data.data) {
+    if (message.type === "user") {
+      continue;
+    }
+    if (message.type !== "assistant") {
+      continue;
+    }
+    const parts: MessagePartSnapshot[] = message.content.map((part) => {
+      if (part.type === "text" || part.type === "reasoning") {
+        return { type: part.type, text: part.text };
+      }
+      return {
+        type: "tool",
+        tool: part.name,
+        state: { status: part.state.status },
+      };
+    });
+    snapshots.push({
+      info: {
+        id: message.id,
+        role: "assistant",
+        ...(message.finish !== undefined ? { finish: message.finish } : {}),
+        ...(message.time.completed !== undefined
+          ? { time: { completed: message.time.completed } }
+          : {}),
+        ...(message.error !== undefined ? { error: message.error } : {}),
+      },
+      parts,
+    });
+  }
+  return snapshots;
 }
 
 function findLatestAssistantMessage(
@@ -249,11 +296,11 @@ function logEmptyAssistantResponseDiagnostics(
 
 async function loadPendingInteractiveRequest(
   sessionId: string,
-  directory: string,
+  _directory: string,
 ): Promise<PendingInteractiveRequest | null> {
   const [questionsResult, permissionsResult] = await Promise.all([
-    opencodeClient.question.list({ directory }),
-    opencodeClient.permission.list({ directory }),
+    opencodeV2.session.question.list({ sessionID: sessionId }),
+    opencodeV2.session.permission.list({ sessionID: sessionId }),
   ]);
 
   if (questionsResult.error) {
@@ -263,7 +310,7 @@ async function loadPendingInteractiveRequest(
     );
   }
 
-  const question = questionsResult.data?.find((request) => request.sessionID === sessionId);
+  const question = questionsResult.data?.data.find((item) => item.sessionID === sessionId);
   if (question) {
     return { kind: "question", request: question };
   }
@@ -275,7 +322,7 @@ async function loadPendingInteractiveRequest(
     );
   }
 
-  const permission = permissionsResult.data?.find((request) => request.sessionID === sessionId);
+  const permission = permissionsResult.data?.data.find((item) => item.sessionID === sessionId);
   if (permission) {
     return { kind: "permission", request: permission };
   }
@@ -285,13 +332,14 @@ async function loadPendingInteractiveRequest(
 
 async function rejectInteractiveRequest(
   request: PendingInteractiveRequest,
-  directory: string,
+  sessionID: string,
+  _directory: string,
 ): Promise<void> {
   try {
     if (request.kind === "question") {
-      const { error } = await opencodeClient.question.reject({
+      const { error } = await opencodeV2.session.question.reject({
+        sessionID,
         requestID: request.request.id,
-        directory,
       });
 
       if (error) {
@@ -304,9 +352,9 @@ async function rejectInteractiveRequest(
       return;
     }
 
-    const { error } = await opencodeClient.permission.reply({
+    const { error } = await opencodeV2.session.permission.reply({
+      sessionID,
       requestID: request.request.id,
-      directory,
       reply: "reject",
       message: INTERACTIVE_PERMISSION_REJECT_MESSAGE,
     });
@@ -325,9 +373,9 @@ async function rejectInteractiveRequest(
   }
 }
 
-async function abortScheduledTaskSession(sessionId: string, directory: string): Promise<void> {
+async function abortScheduledTaskSession(sessionId: string, _directory: string): Promise<void> {
   try {
-    const { error } = await opencodeClient.session.abort({ sessionID: sessionId, directory });
+    const { error } = await opencodeV2.session.interrupt({ sessionID: sessionId });
     if (error) {
       logger.warn(
         `[ScheduledTaskExecutor] Failed to abort interactive scheduled task session: sessionId=${sessionId}`,
@@ -361,30 +409,22 @@ async function failIfInteractiveRequest(
     ...(interactiveRequest.kind === "question"
       ? { questionCount: interactiveRequest.request.questions?.length ?? 0 }
       : {
-          permission: interactiveRequest.request.permission,
-          patterns: interactiveRequest.request.patterns,
+          permission: interactiveRequest.request.action,
+          patterns: interactiveRequest.request.resources,
         }),
   });
 
-  await rejectInteractiveRequest(interactiveRequest, directory);
+  await rejectInteractiveRequest(interactiveRequest, sessionId, directory);
   await abortScheduledTaskSession(sessionId, directory);
   throw new ScheduledTaskInteractiveRequestError(interactiveRequest.kind);
 }
 
 async function loadAssistantResult(
   sessionId: string,
-  directory: string,
+  _directory: string,
 ): Promise<ReturnType<typeof extractAssistantResult>> {
-  const { data: messages, error: messagesError } = await opencodeClient.session.messages({
-    sessionID: sessionId,
-    directory,
-  });
-
-  if (messagesError || !messages) {
-    throw messagesError || new Error("Failed to load scheduled task messages");
-  }
-
-  return extractAssistantResult(findLatestAssistantMessage(messages));
+  const snapshots = await loadAssistantSnapshots(sessionId);
+  return extractAssistantResult(findLatestAssistantMessage(snapshots));
 }
 
 async function waitForScheduledTaskResult(
@@ -435,15 +475,13 @@ async function waitForScheduledTaskResult(
 
     completedEmptyResultReadCount = 0;
 
-    const { data: statuses, error: statusError } = await opencodeClient.session.status({
-      directory,
-    });
+    const { data: statuses, error: statusError } = await getBusySessionStatuses();
     if (statusError || !statuses) {
       throw statusError || new Error("Failed to load scheduled task status");
     }
 
     const sessionStatus = statuses[sessionId];
-    const sessionIsActive = sessionStatus !== undefined && sessionStatus.type !== "idle";
+    const sessionIsActive = sessionStatus !== undefined;
 
     if (sessionIsActive) {
       hasObservedActivity = true;
@@ -504,29 +542,28 @@ export async function executeScheduledTask(
   try {
     await cleanupScheduledTaskSessionIgnores();
 
-    const { data: session, error: createError } = await opencodeClient.session.create({
-      directory: task.projectWorktree,
-      title: SCHEDULED_TASK_SESSION_TITLE,
+    const { data: sessionBody, error: createError } = await opencodeV2.session.create({
+      location: { directory: task.projectWorktree },
     });
 
-    if (createError || !session) {
+    if (createError || !sessionBody) {
       throw createError || new Error("Failed to create temporary scheduled task session");
     }
+
+    const session = sessionBody.data;
+    await directApi("PATCH", `/api/session/${session.id}`, { title: SCHEDULED_TASK_SESSION_TITLE });
 
     sessionId = session.id;
     await registerScheduledTaskSessionIgnore(session.id);
 
     const promptOptions: {
       sessionID: string;
-      directory: string;
-      parts: Array<{ type: "text"; text: string }>;
+      text: string;
       agent: string;
-      model?: { providerID: string; modelID: string };
-      variant?: string;
+      model?: { providerID: string; modelID: string; variant?: string };
     } = {
       sessionID: session.id,
-      directory: session.directory,
-      parts: [{ type: "text", text: task.prompt }],
+      text: task.prompt,
       agent: task.agent,
     };
 
@@ -535,19 +572,18 @@ export async function executeScheduledTask(
         providerID: task.model.providerID,
         modelID: task.model.modelID,
       };
+      if (task.model.variant) {
+        promptOptions.model.variant = task.model.variant;
+      }
     }
 
-    if (task.model.variant) {
-      promptOptions.variant = task.model.variant;
-    }
-
-    const { error: promptError } = await opencodeClient.session.promptAsync(promptOptions);
+    const { error: promptError } = await sendSessionPrompt(promptOptions);
 
     if (promptError) {
       throw promptError || new Error("Scheduled task prompt execution failed");
     }
 
-    const resultText = await waitForScheduledTaskResult(task.id, session.id, session.directory);
+    const resultText = await waitForScheduledTaskResult(task.id, session.id, task.projectWorktree);
 
     return {
       taskId: task.id,
@@ -581,7 +617,7 @@ export async function executeScheduledTask(
   } finally {
     if (sessionId && deleteTemporarySession) {
       try {
-        await opencodeClient.session.delete({ sessionID: sessionId });
+        await directApi("DELETE", `/api/session/${sessionId}`);
       } catch (error) {
         logger.warn(
           `[ScheduledTaskExecutor] Failed to delete temporary session: sessionId=${sessionId}`,

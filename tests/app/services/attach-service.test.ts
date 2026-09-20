@@ -52,18 +52,16 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
-  opencodeClient: {
-    global: {
-      health: mocked.healthMock,
-    },
+  getServerInfo: mocked.healthMock,
+  getBusySessionStatuses: mocked.sessionStatusMock,
+  opencodeV2: {
     session: {
-      status: mocked.sessionStatusMock,
-    },
-    question: {
-      list: mocked.questionListMock,
-    },
-    permission: {
-      list: mocked.permissionListMock,
+      question: {
+        list: mocked.questionListMock,
+      },
+      permission: {
+        list: mocked.permissionListMock,
+      },
     },
   },
 }));
@@ -148,9 +146,9 @@ describe("attach/service", () => {
       error: null,
     });
     mocked.questionListMock.mockReset();
-    mocked.questionListMock.mockResolvedValue({ data: [], error: null });
+    mocked.questionListMock.mockResolvedValue({ data: { data: [] }, error: null });
     mocked.permissionListMock.mockReset();
-    mocked.permissionListMock.mockResolvedValue({ data: [], error: null });
+    mocked.permissionListMock.mockResolvedValue({ data: { data: [] }, error: null });
     mocked.setSessionSummaryMock.mockReset();
     mocked.setBotAndChatIdMock.mockReset();
     mocked.pinnedIsInitializedMock.mockReset();
@@ -230,19 +228,21 @@ describe("attach/service", () => {
 
   it("restores a pending question when first following a session", async () => {
     mocked.questionListMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: "question-1",
-          sessionID: "session-1",
-          questions: [
-            {
-              header: "Q1",
-              question: "Continue?",
-              options: [{ label: "Yes", description: "continue" }],
-            },
-          ],
-        },
-      ],
+      data: {
+        data: [
+          {
+            id: "question-1",
+            sessionID: "session-1",
+            questions: [
+              {
+                header: "Q1",
+                question: "Continue?",
+                options: [{ label: "Yes", description: "continue" }],
+              },
+            ],
+          },
+        ],
+      },
       error: null,
     });
 
