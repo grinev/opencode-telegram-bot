@@ -1,5 +1,13 @@
 # OpenCode Telegram Bot
 
+> **This fork** ports the bot from OpenCode v1 to **OpenCode v2** (v2.0.11+).
+> Key changes live in `src/opencode/` and `src/app/services/`: the SDK client now
+> targets `@opencode-ai/sdk/v2` (namespace `client.v2.*`), uncovered routes go
+> through a thin `directApi()` bridge, and SSE events are translated from v2
+> shapes back to the v1-shaped aggregator. Full port notes (route drift v1→v2,
+> event mapping, decisions): [`PORTING.md`](PORTING.md).
+> Upstream: [grinev/opencode-telegram-bot](https://github.com/grinev/opencode-telegram-bot).
+
 [![npm version](https://img.shields.io/npm/v/@grinev/opencode-telegram-bot)](https://www.npmjs.com/package/@grinev/opencode-telegram-bot)
 [![CI](https://github.com/grinev/opencode-telegram-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/grinev/opencode-telegram-bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
