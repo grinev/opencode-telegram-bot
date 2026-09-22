@@ -95,8 +95,12 @@ function getStatusCode(error: unknown): number | null {
 }
 
 function isTelegramRateLimitError(error: unknown): boolean {
-  if (getStatusCode(error) === 429) {
-    return true;
+  const status = getStatusCode(error);
+  if (status !== null) {
+    return status === 429;
+  }
+  if (getSystemErrorCode(error) !== null) {
+    return false;
   }
 
   const message = getErrorMessage(error).toLowerCase();
@@ -143,9 +147,14 @@ function getNestedNetworkError(error: unknown): unknown {
   return error;
 }
 
+function getSystemErrorCode(error: unknown): string | null {
+  const networkError = getNestedNetworkError(error);
+  return readStringField(networkError, "code") ?? readStringField(error, "code");
+}
+
 export function isUnsentTelegramNetworkError(error: unknown): boolean {
   const networkError = getNestedNetworkError(error);
-  const code = readStringField(networkError, "code") ?? readStringField(error, "code");
+  const code = getSystemErrorCode(error);
   if (code !== null && CONNECT_NOT_ESTABLISHED_CODES.has(code)) {
     return true;
   }
@@ -163,7 +172,7 @@ export function isUnsentTelegramNetworkError(error: unknown): boolean {
 
 export function isTransientTelegramNetworkError(error: unknown): boolean {
   const networkError = getNestedNetworkError(error);
-  const code = readStringField(networkError, "code") ?? readStringField(error, "code");
+  const code = getSystemErrorCode(error);
   if (code !== null && TRANSIENT_NETWORK_ERROR_CODES.has(code)) {
     return true;
   }
@@ -175,6 +184,9 @@ export function isTransientTelegramServerError(error: unknown): boolean {
   const status = getStatusCode(error);
   if (status !== null) {
     return TRANSIENT_SERVER_ERROR_CODES.has(status);
+  }
+  if (getSystemErrorCode(error) !== null) {
+    return false;
   }
 
   const message = getErrorMessage(error);
@@ -214,11 +226,11 @@ export function getTelegramRetryAfterMs(
     return Math.max(1, Math.floor(fallbackDelayMs));
   }
 
-  if (isTransientTelegramServerError(error)) {
+  if (isUnsentTelegramNetworkError(error)) {
     return getServerErrorBackoffMs(attempt, fallbackDelayMs);
   }
 
-  if (isUnsentTelegramNetworkError(error)) {
+  if (isTransientTelegramServerError(error)) {
     return getServerErrorBackoffMs(attempt, fallbackDelayMs);
   }
 

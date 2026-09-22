@@ -81,6 +81,26 @@ describe("utils/telegram-rate-limit-retry", () => {
     expect(resetOperation).toHaveBeenCalledTimes(1);
   });
 
+  it("prioritizes a system network code over status-like URL text", async () => {
+    vi.useFakeTimers();
+    const networkError = Object.assign(
+      new Error("request to https://api.telegram.org/file/bot***/files/502/x.pdf failed"),
+      { code: "ECONNREFUSED" },
+    );
+    expect(isTransientTelegramServerError(networkError)).toBe(false);
+    expect(getTelegramRetryAfterMs(networkError, 500)).toBe(500);
+    const operation = vi.fn().mockRejectedValueOnce(networkError).mockResolvedValueOnce("ok");
+    const promise = withTelegramRateLimitRetry(operation, {
+      maxRetries: 2,
+      fallbackDelayMs: 500,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(promise).resolves.toBe("ok");
+    expect(operation).toHaveBeenCalledTimes(2);
+  });
+
   it("retries broader transient network errors only when explicitly enabled", async () => {
     vi.useFakeTimers();
     const reset = Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
