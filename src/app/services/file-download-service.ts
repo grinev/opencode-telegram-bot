@@ -26,9 +26,51 @@ export function buildTelegramFileUrl(filePath: string): string {
   return `${telegramFileUrlBase()}${config.telegram.token}/${filePath}`;
 }
 
+class TelegramFileDownloadResponseError extends Error {
+  readonly status: number;
+  readonly parameters?: { retry_after: number };
+
+  constructor(status: number, statusText: string, retryAfterSeconds: number | null) {
+    super(`Failed to download file: ${status} ${statusText}`);
+    this.status = status;
+    if (retryAfterSeconds !== null) {
+      this.parameters = { retry_after: retryAfterSeconds };
+    }
+  }
+}
+
+function redactBotToken(value: string): string {
+  return config.telegram.token ? value.replaceAll(config.telegram.token, "***") : value;
+}
+
 function sanitizeTelegramFileDownloadError(error: unknown): Error {
-  const message = error instanceof Error ? error.message : String(error);
-  return new Error(message.replaceAll(config.telegram.token, "***"));
+  if (!(error instanceof Error)) {
+    return new Error(redactBotToken(String(error)));
+  }
+
+  const sanitized = new Error(redactBotToken(error.message));
+  sanitized.name = error.name;
+  if (error.stack) {
+    sanitized.stack = redactBotToken(error.stack);
+  }
+
+  for (const field of ["code", "errno", "status", "type"] as const) {
+    const value = Reflect.get(error, field);
+    if (typeof value === "string" || typeof value === "number") {
+      Reflect.set(sanitized, field, value);
+    }
+  }
+
+  return sanitized;
+}
+
+function getRetryAfterSeconds(response: Awaited<ReturnType<typeof nodeFetch>>): number | null {
+  const value = response.headers.get("retry-after");
+  if (!value) {
+    return null;
+  }
+  const seconds = Number.parseInt(value, 10);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
 }
 
 export async function downloadTelegramFile(api: Api, fileId: string): Promise<DownloadedFile> {
@@ -64,26 +106,34 @@ export async function downloadTelegramFile(api: Api, fileId: string): Promise<Do
     };
   }
 
-  let response;
+  let buffer: Buffer;
   try {
-    response = await withTelegramRateLimitRetry(() => nodeFetch(fileUrl, fetchOptions), {
-      maxRetries: 3,
-      onRetry: ({ attempt, retryAfterMs }) => {
-        logger.warn(
-          `[FileDownload] Telegram file download failed before connecting; retrying in ${retryAfterMs}ms (attempt=${attempt})`,
-        );
+    buffer = await withTelegramRateLimitRetry(
+      async () => {
+        const response = await nodeFetch(fileUrl, fetchOptions);
+        if (!response.ok) {
+          throw new TelegramFileDownloadResponseError(
+            response.status,
+            response.statusText,
+            getRetryAfterSeconds(response),
+          );
+        }
+        return Buffer.from(await response.arrayBuffer());
       },
-    });
+      {
+        maxRetries: 3,
+        retryTransientServerErrors: true,
+        retryTransientNetworkErrors: true,
+        onRetry: ({ attempt, retryAfterMs }) => {
+          logger.warn(
+            `[FileDownload] Transient Telegram file download failure; retrying in ${retryAfterMs}ms (attempt=${attempt})`,
+          );
+        },
+      },
+    );
   } catch (error) {
     throw sanitizeTelegramFileDownloadError(error);
   }
-
-  if (!response.ok) {
-    throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
 
   logger.debug(`[FileDownload] Downloaded ${buffer.length} bytes`);
 

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getTelegramRetryAfterMs,
+  isTransientTelegramNetworkError,
   isTransientTelegramServerError,
   isUnsentTelegramNetworkError,
   withTelegramRateLimitRetry,
@@ -47,14 +48,16 @@ describe("utils/telegram-rate-limit-retry", () => {
     expect(
       isUnsentTelegramNetworkError(
         Object.assign(
-          new Error("Client network socket disconnected before secure TLS connection was established"),
+          new Error(
+            "Client network socket disconnected before secure TLS connection was established",
+          ),
           { code: "ECONNRESET" },
         ),
       ),
     ).toBe(true);
-    expect(isUnsentTelegramNetworkError(new Error("Network request for 'sendMessage' failed!"))).toBe(
-      false,
-    );
+    expect(
+      isUnsentTelegramNetworkError(new Error("Network request for 'sendMessage' failed!")),
+    ).toBe(false);
   });
 
   it("retries connection-not-established errors and does not retry a reset after write", async () => {
@@ -76,6 +79,23 @@ describe("utils/telegram-rate-limit-retry", () => {
       "socket hang up",
     );
     expect(resetOperation).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries broader transient network errors only when explicitly enabled", async () => {
+    vi.useFakeTimers();
+    const reset = Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
+    expect(isTransientTelegramNetworkError(reset)).toBe(true);
+    const operation = vi.fn().mockRejectedValueOnce(reset).mockResolvedValueOnce("ok");
+    const promise = withTelegramRateLimitRetry(operation, {
+      maxRetries: 2,
+      fallbackDelayMs: 500,
+      retryTransientNetworkErrors: true,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(promise).resolves.toBe("ok");
+    expect(operation).toHaveBeenCalledTimes(2);
   });
 
   it("does not retry non-retryable errors", async () => {

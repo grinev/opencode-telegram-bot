@@ -213,6 +213,7 @@ describe("downloadTelegramFile reverse-proxy wiring", () => {
   function makeFetchStub(): ReturnType<typeof vi.fn> {
     return nodeFetchMock.mockResolvedValue({
       ok: true,
+      headers: { get: () => null },
       arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
     });
   }
@@ -324,6 +325,7 @@ describe("downloadTelegramFile reverse-proxy wiring", () => {
     );
     nodeFetchMock.mockRejectedValueOnce(tlsError).mockResolvedValueOnce({
       ok: true,
+      headers: { get: () => null },
       arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
     });
 
@@ -343,14 +345,89 @@ describe("downloadTelegramFile reverse-proxy wiring", () => {
 
   it("redacts the bot token from download errors", async () => {
     nodeFetchMock.mockRejectedValueOnce(
-      new Error(
-        "request to https://api.telegram.org/file/botbot-token-xyz/voice/sample.ogg failed",
+      Object.assign(
+        new Error(
+          "request to https://api.telegram.org/file/botbot-token-xyz/voice/sample.ogg failed",
+        ),
+        { code: "CERT_HAS_EXPIRED" },
       ),
     );
 
     const { downloadTelegramFile } = await loadDownloadModule();
-    await expect(downloadTelegramFile(makeApiStub(), "fid")).rejects.toThrow(
-      "request to https://api.telegram.org/file/bot***/voice/sample.ogg failed",
+    const error = await downloadTelegramFile(makeApiStub(), "fid").catch(
+      (downloadError: unknown) => downloadError,
     );
+    expect(error).toMatchObject({
+      code: "CERT_HAS_EXPIRED",
+      message: "request to https://api.telegram.org/file/bot***/voice/sample.ogg failed",
+    });
+    expect((error as Error).stack).not.toContain("bot-token-xyz");
+  });
+
+  it.each([
+    {
+      status: 429,
+      statusText: "Too Many Requests",
+      retryAfter: "2",
+      delayMs: 2000,
+    },
+    { status: 502, statusText: "Bad Gateway", retryAfter: null, delayMs: 1000 },
+  ])(
+    "retries a transient $status response",
+    async ({ status, statusText, retryAfter, delayMs }) => {
+      vi.useFakeTimers();
+      nodeFetchMock.mockResolvedValueOnce({
+        ok: false,
+        status,
+        statusText,
+        headers: { get: (name: string) => (name === "retry-after" ? retryAfter : null) },
+      });
+      nodeFetchMock.mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+      });
+
+      try {
+        const { downloadTelegramFile } = await loadDownloadModule();
+        const downloadPromise = downloadTelegramFile(makeApiStub(), "fid");
+        await vi.advanceTimersByTimeAsync(delayMs);
+
+        await expect(downloadPromise).resolves.toEqual(
+          expect.objectContaining({ filePath: "voice/sample.ogg" }),
+        );
+        expect(nodeFetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("retries when reading a successful response body is interrupted", async () => {
+    vi.useFakeTimers();
+    const reset = Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
+    nodeFetchMock.mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => null },
+      arrayBuffer: () => Promise.reject(reset),
+    });
+    nodeFetchMock.mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => null },
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+    });
+
+    try {
+      const { downloadTelegramFile } = await loadDownloadModule();
+      const downloadPromise = downloadTelegramFile(makeApiStub(), "fid");
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(downloadPromise).resolves.toEqual(
+        expect.objectContaining({ filePath: "voice/sample.ogg" }),
+      );
+      expect(nodeFetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

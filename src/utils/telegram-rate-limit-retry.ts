@@ -19,6 +19,7 @@ interface TelegramRateLimitRetryOptions {
   maxRetries?: number;
   fallbackDelayMs?: number;
   retryTransientServerErrors?: boolean;
+  retryTransientNetworkErrors?: boolean;
   onRetry?: (info: RetryAttemptInfo) => void;
 }
 
@@ -110,6 +111,15 @@ const CONNECT_NOT_ESTABLISHED_CODES = new Set([
   "EHOSTUNREACH",
 ]);
 
+const TRANSIENT_NETWORK_ERROR_CODES = new Set([
+  ...CONNECT_NOT_ESTABLISHED_CODES,
+  "ECONNABORTED",
+  "ECONNRESET",
+  "EPIPE",
+  "EPROTO",
+  "ETIMEDOUT",
+]);
+
 function readStringField(value: unknown, key: string): string | null {
   if (typeof value !== "object" || value === null) {
     return null;
@@ -139,10 +149,22 @@ export function isUnsentTelegramNetworkError(error: unknown): boolean {
   if (code !== null && CONNECT_NOT_ESTABLISHED_CODES.has(code)) {
     return true;
   }
+  // A generic reset may happen after Telegram accepted a request and is unsafe
+  // to retry globally. Node's pre-TLS wording guarantees nothing was sent.
   if (
     code === "ECONNRESET" &&
     getErrorMessage(error).includes("before secure TLS connection was established")
   ) {
+    return true;
+  }
+  const type = readStringField(networkError, "type") ?? readStringField(error, "type");
+  return type === "request-timeout";
+}
+
+export function isTransientTelegramNetworkError(error: unknown): boolean {
+  const networkError = getNestedNetworkError(error);
+  const code = readStringField(networkError, "code") ?? readStringField(error, "code");
+  if (code !== null && TRANSIENT_NETWORK_ERROR_CODES.has(code)) {
     return true;
   }
   const type = readStringField(networkError, "type") ?? readStringField(error, "type");
@@ -210,13 +232,18 @@ export async function withTelegramRateLimitRetry<T>(
   const maxRetries = Math.max(0, Math.floor(options?.maxRetries ?? 3));
   const fallbackDelayMs = options?.fallbackDelayMs ?? 1000;
   const retryTransientServerErrors = options?.retryTransientServerErrors ?? false;
+  const retryTransientNetworkErrors = options?.retryTransientNetworkErrors ?? false;
 
   let attempt = 0;
   while (true) {
     try {
       return await operation();
     } catch (error) {
-      const retryAfterMs = getTelegramRetryAfterMs(error, fallbackDelayMs, attempt);
+      const retryAfterMs =
+        getTelegramRetryAfterMs(error, fallbackDelayMs, attempt) ??
+        (retryTransientNetworkErrors && isTransientTelegramNetworkError(error)
+          ? getServerErrorBackoffMs(attempt, fallbackDelayMs)
+          : null);
       if (
         retryAfterMs === null ||
         (!retryTransientServerErrors && isTransientTelegramServerError(error)) ||
