@@ -315,4 +315,42 @@ describe("downloadTelegramFile reverse-proxy wiring", () => {
     expect(agent).toBeInstanceOf(HttpsAgent);
     expect((agent as HttpsAgent).options.family).toBe(4);
   });
+
+  it("retries a download when the TLS connection fails before it is established", async () => {
+    vi.useFakeTimers();
+    const tlsError = Object.assign(
+      new Error("Client network socket disconnected before secure TLS connection was established"),
+      { code: "ECONNRESET" },
+    );
+    nodeFetchMock.mockRejectedValueOnce(tlsError).mockResolvedValueOnce({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+    });
+
+    try {
+      const { downloadTelegramFile } = await loadDownloadModule();
+      const downloadPromise = downloadTelegramFile(makeApiStub(), "fid");
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(downloadPromise).resolves.toEqual(
+        expect.objectContaining({ filePath: "voice/sample.ogg" }),
+      );
+      expect(nodeFetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("redacts the bot token from download errors", async () => {
+    nodeFetchMock.mockRejectedValueOnce(
+      new Error(
+        "request to https://api.telegram.org/file/botbot-token-xyz/voice/sample.ogg failed",
+      ),
+    );
+
+    const { downloadTelegramFile } = await loadDownloadModule();
+    await expect(downloadTelegramFile(makeApiStub(), "fid")).rejects.toThrow(
+      "request to https://api.telegram.org/file/bot***/voice/sample.ogg failed",
+    );
+  });
 });

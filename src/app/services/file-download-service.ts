@@ -3,6 +3,7 @@ import type { Api } from "grammy";
 import { Agent as HttpsAgent } from "https";
 import { config } from "../../config.js";
 import { logger } from "../../utils/logger.js";
+import { withTelegramRateLimitRetry } from "../../utils/telegram-rate-limit-retry.js";
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 const DEFAULT_TELEGRAM_API_ROOT = "https://api.telegram.org";
@@ -23,6 +24,11 @@ function telegramFileUrlBase(): string {
 
 export function buildTelegramFileUrl(filePath: string): string {
   return `${telegramFileUrlBase()}${config.telegram.token}/${filePath}`;
+}
+
+function sanitizeTelegramFileDownloadError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(message.replaceAll(config.telegram.token, "***"));
 }
 
 export async function downloadTelegramFile(api: Api, fileId: string): Promise<DownloadedFile> {
@@ -58,7 +64,19 @@ export async function downloadTelegramFile(api: Api, fileId: string): Promise<Do
     };
   }
 
-  const response = await nodeFetch(fileUrl, fetchOptions);
+  let response;
+  try {
+    response = await withTelegramRateLimitRetry(() => nodeFetch(fileUrl, fetchOptions), {
+      maxRetries: 3,
+      onRetry: ({ attempt, retryAfterMs }) => {
+        logger.warn(
+          `[FileDownload] Telegram file download failed before connecting; retrying in ${retryAfterMs}ms (attempt=${attempt})`,
+        );
+      },
+    });
+  } catch (error) {
+    throw sanitizeTelegramFileDownloadError(error);
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);

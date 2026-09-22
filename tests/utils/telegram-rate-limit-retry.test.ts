@@ -44,6 +44,14 @@ describe("utils/telegram-rate-limit-retry", () => {
     expect(isUnsentTelegramNetworkError({ error: { code: "EAI_AGAIN" } })).toBe(true);
     expect(isUnsentTelegramNetworkError({ error: { type: "request-timeout" } })).toBe(true);
     expect(isUnsentTelegramNetworkError({ error: { code: "ECONNRESET" } })).toBe(false);
+    expect(
+      isUnsentTelegramNetworkError(
+        Object.assign(
+          new Error("Client network socket disconnected before secure TLS connection was established"),
+          { code: "ECONNRESET" },
+        ),
+      ),
+    ).toBe(true);
     expect(isUnsentTelegramNetworkError(new Error("Network request for 'sendMessage' failed!"))).toBe(
       false,
     );

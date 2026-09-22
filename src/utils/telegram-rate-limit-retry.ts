@@ -139,6 +139,12 @@ export function isUnsentTelegramNetworkError(error: unknown): boolean {
   if (code !== null && CONNECT_NOT_ESTABLISHED_CODES.has(code)) {
     return true;
   }
+  if (
+    code === "ECONNRESET" &&
+    getErrorMessage(error).includes("before secure TLS connection was established")
+  ) {
+    return true;
+  }
   const type = readStringField(networkError, "type") ?? readStringField(error, "type");
   return type === "request-timeout";
 }
