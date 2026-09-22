@@ -492,8 +492,8 @@ function startFaultProxy(options) {
     };
 
     if (action?.type === "drop") {
-      dropClient();
       finish();
+      dropClient();
       return;
     }
 
