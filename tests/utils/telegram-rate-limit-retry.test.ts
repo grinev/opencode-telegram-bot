@@ -87,8 +87,15 @@ describe("utils/telegram-rate-limit-retry", () => {
       new Error("request to https://api.telegram.org/file/bot***/files/502/x.pdf failed"),
       { code: "ECONNREFUSED" },
     );
+    const rateLimitLikeNetworkError = Object.assign(
+      new Error(
+        "request to https://api.telegram.org/file/bot***/files/429/retry after 99/x.pdf failed",
+      ),
+      { code: "ECONNREFUSED" },
+    );
     expect(isTransientTelegramServerError(networkError)).toBe(false);
     expect(getTelegramRetryAfterMs(networkError, 500)).toBe(500);
+    expect(getTelegramRetryAfterMs(rateLimitLikeNetworkError, 500)).toBe(500);
     const operation = vi.fn().mockRejectedValueOnce(networkError).mockResolvedValueOnce("ok");
     const promise = withTelegramRateLimitRetry(operation, {
       maxRetries: 2,
