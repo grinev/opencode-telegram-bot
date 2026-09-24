@@ -279,8 +279,8 @@ Logs are written to `./logs` when running from sources and to the runtime config
 
 Runtime preferences are changed from `/settings` and stored in `settings.json`:
 
-- Compact output mode: the progress message appears as soon as the model starts thinking or writing
-- Delete progress on finish: available while compact output mode is on, removes the progress message when the run completes
+- Compact output mode: one progress message per stretch of work between replies and prompts, from the moment the model starts thinking or writing in that stretch. It is removed or marked finished when the reply or prompt lands, or when the run ends if nothing followed
+- Delete progress on finish: available while compact output mode is on, removes each of those progress messages when that stretch finishes
 - Thinking content display
 - Assistant run footer display
 - Pin session dashboard

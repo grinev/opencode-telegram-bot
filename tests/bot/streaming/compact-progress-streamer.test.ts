@@ -334,4 +334,153 @@ describe("bot/streaming/compact-progress-streamer", () => {
     expect(editText).toHaveBeenCalledTimes(1);
     expect(editText).toHaveBeenCalledWith("s1", 30, "⏳ Working\nsecond");
   });
+
+  it("flushes a pending card before close so the summary edits that message", async () => {
+    vi.useFakeTimers();
+
+    const sendText = vi.fn().mockResolvedValue(40);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({ throttleMs: 5000, sendText, editText });
+
+    streamer.updateActivity("s1", "working");
+    expect(sendText).not.toHaveBeenCalled();
+
+    await streamer.flushPending("s1");
+    await streamer.finalize("s1");
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenCalledWith("s1", "⏳ Working\nworking");
+    expect(editText).toHaveBeenCalledWith(
+      "s1",
+      40,
+      "✅ Finished Work\ntool calls: 0 · changed files: 0",
+    );
+  });
+
+  it("holds activity that arrives before close and puts it on the next card", async () => {
+    const sendText = vi.fn().mockResolvedValueOnce(50).mockResolvedValueOnce(51);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({ throttleMs: 0, sendText, editText });
+
+    streamer.updateActivity("s1", "first");
+    streamer.addToolCall("s1", "call-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    streamer.holdForClose("s1");
+    streamer.updateActivity("s1", "second");
+    streamer.addToolCall("s1", "call-2");
+    await streamer.finalize("s1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(editText).toHaveBeenCalledWith(
+      "s1",
+      50,
+      "✅ Finished Work\ntool calls: 1 · changed files: 0",
+    );
+    expect(sendText).toHaveBeenCalledWith("s1", "⏳ Working\nsecond");
+    expect(editText.mock.calls.some((call) => String(call[2]).includes("second"))).toBe(false);
+
+    await streamer.finalize("s1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(editText).toHaveBeenCalledWith(
+      "s1",
+      51,
+      "✅ Finished Work\ntool calls: 1 · changed files: 0",
+    );
+  });
+
+  it("drops held activity when the session is cleared", async () => {
+    const sendText = vi.fn().mockResolvedValue(60);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({ throttleMs: 0, sendText, editText });
+
+    streamer.updateActivity("s1", "working");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    streamer.holdForClose("s1");
+    streamer.updateActivity("s1", "later");
+    streamer.clearSession("s1", "assistant_finalize_failed");
+    await streamer.finalize("s1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(editText).not.toHaveBeenCalled();
+  });
+
+  it("coalesces flushes of a card that has not been sent yet", async () => {
+    let releaseSend: (messageId: number) => void = () => {};
+    const gate = new Promise<number>((resolve) => {
+      releaseSend = resolve;
+    });
+    const sendText = vi.fn().mockReturnValue(gate);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({ throttleMs: 5000, sendText, editText });
+
+    streamer.updateActivity("s1", "working");
+    const firstFlush = streamer.flushPending("s1");
+    const secondFlush = streamer.flushPending("s1");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    releaseSend(70);
+    await Promise.all([firstFlush, secondFlush]);
+    expect(editText).not.toHaveBeenCalled();
+  });
+
+  it("does not send a finished summary when the card never landed", async () => {
+    const sendText = vi.fn().mockRejectedValue(new Error("telegram down"));
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({ throttleMs: 0, sendText, editText });
+
+    streamer.updateActivity("s1", "working");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await streamer.finalize("s1");
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(editText).not.toHaveBeenCalled();
+  });
+
+  it("keeps a file change on the closing card instead of the next one", async () => {
+    const sendText = vi.fn().mockResolvedValueOnce(80).mockResolvedValueOnce(81);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({ throttleMs: 0, sendText, editText });
+
+    streamer.updateActivity("s1", "first");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    streamer.holdForClose("s1");
+    streamer.addFileChange("s1", "src/a.ts");
+    streamer.updateActivity("s1", "second");
+    await streamer.finalize("s1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await streamer.finalize("s1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(editText).toHaveBeenCalledWith(
+      "s1",
+      80,
+      "✅ Finished Work\ntool calls: 0 · changed files: 1",
+    );
+    expect(editText).toHaveBeenCalledWith(
+      "s1",
+      81,
+      "✅ Finished Work\ntool calls: 0 · changed files: 0",
+    );
+  });
+
+  it("puts held activity back on the open card when the close is abandoned", async () => {
+    const sendText = vi.fn().mockResolvedValue(90);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new CompactProgressStreamer({ throttleMs: 0, sendText, editText });
+
+    streamer.updateActivity("s1", "first");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    streamer.holdForClose("s1");
+    streamer.updateActivity("s1", "still working");
+    streamer.releaseHold("s1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(editText).toHaveBeenCalledWith("s1", 90, "⏳ Working\nstill working");
+  });
 });

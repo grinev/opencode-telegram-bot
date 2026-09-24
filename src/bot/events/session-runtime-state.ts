@@ -83,6 +83,7 @@ export class SessionRuntimeState {
   // message's full text.
   private readonly assistantLatestTexts = new Map<string, string>();
   private readonly assistantDeliveredTexts = new Map<string, string>();
+  private readonly assistantCompletionsStarted = new Set<string>();
   private readonly thinkingSections = new Map<string, ThinkingSection[]>();
   private readonly completionTasks = new Map<string, Promise<void>>();
   private readonly runningToolInfos = new Map<string, ToolInfo>();
@@ -192,6 +193,14 @@ export class SessionRuntimeState {
     return (
       this.assistantStreamModes.get(sessionKey(sessionId, messageId)) ?? getResponseStreamingMode()
     );
+  }
+
+  markAssistantCompletionStarted(sessionId: string, messageId: string): void {
+    this.assistantCompletionsStarted.add(sessionKey(sessionId, messageId));
+  }
+
+  isAssistantCompletionStarted(sessionId: string, messageId: string): boolean {
+    return this.assistantCompletionsStarted.has(sessionKey(sessionId, messageId));
   }
 
   enqueueAssistantResponse(
@@ -308,6 +317,11 @@ export class SessionRuntimeState {
     deleteSessionKeys(this.assistantStreamModes, sessionId);
     deleteSessionKeys(this.assistantLatestTexts, sessionId);
     deleteSessionKeys(this.assistantDeliveredTexts, sessionId);
+    for (const key of Array.from(this.assistantCompletionsStarted)) {
+      if (key.startsWith(`${sessionId}:`)) {
+        this.assistantCompletionsStarted.delete(key);
+      }
+    }
     this.assistantEditStreamer.clearSession(sessionId, reason);
     this.assistantDraftStreamer.clearSession(sessionId, reason);
   }

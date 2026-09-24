@@ -1,5 +1,6 @@
 import { logger } from "../../../utils/logger.js";
 import {
+  getDeleteCompactProgressOnFinish,
   getShowAssistantRunFooter,
   getShowThinkingContent,
 } from "../../../app/stores/settings-store.js";
@@ -16,7 +17,8 @@ import { prepareThinkingPayload } from "../../messages/thinking-rendering.js";
 import { deliverExternalUserInputNotification } from "../../messages/external-user-input-notification.js";
 import { telegramOutageNoticeService } from "../../../app/services/telegram-outage-notice-service.js";
 import { flushTelegramOutageNotices } from "../../telegram-outage-notices.js";
-import { getThinkingStreamId } from "../session-runtime-state.js";
+import { getThinkingStreamId, type SessionRuntimeState } from "../session-runtime-state.js";
+import type { StreamingMessagePayload } from "../../streaming/response-streamer.js";
 import {
   getReplyKeyboard,
   isCompactProgressMode,
@@ -88,6 +90,10 @@ export function keepAssistantDraftsBeforePrompt(
       return;
     }
 
+    if (isCompactProgressMode()) {
+      await runtime.compactProgressStreamer.flushPending(sessionId);
+    }
+
     for (const { messageId, text } of runtime.getUndeliveredAssistantDrafts(sessionId)) {
       const undeliveredText = runtime.stripDeliveredAssistantText(sessionId, messageId, text);
       // Marked before the send: a partial landing meanwhile must not start a
@@ -123,6 +129,12 @@ export function keepAssistantDraftsBeforePrompt(
         logger.debug(
           `[Bot] Kept assistant draft before a prompt: session=${sessionId}, message=${messageId}`,
         );
+        if (isCompactProgressMode()) {
+          await runtime.compactProgressStreamer.finalize(
+            sessionId,
+            getDeleteCompactProgressOnFinish(),
+          );
+        }
       } catch (error) {
         runtime.markAssistantTextDelivered(sessionId, messageId, previousDeliveredText);
         logger.error(
@@ -132,6 +144,50 @@ export function keepAssistantDraftsBeforePrompt(
       }
     }
   });
+}
+
+function enqueueAssistantReply(
+  runtime: SessionRuntimeState,
+  sessionId: string,
+  messageId: string,
+  payload: StreamingMessagePayload,
+): void {
+  const enqueue = (): void => {
+    runtime.enqueueAssistantResponse(sessionId, messageId, payload);
+  };
+
+  if (!isCompactProgressMode()) {
+    enqueue();
+    return;
+  }
+
+  if (runtime.isAssistantCompletionStarted(sessionId, messageId)) {
+    return;
+  }
+
+  const streamer = runtime.compactProgressStreamer;
+  if (streamer.isHolding(sessionId)) {
+    void runtime.enqueueCompletionTask(sessionId, async () => {
+      if (runtime.isAssistantCompletionStarted(sessionId, messageId)) {
+        return;
+      }
+      await streamer.flushPending(sessionId);
+      enqueue();
+    });
+    return;
+  }
+
+  if (streamer.hasPendingSend(sessionId)) {
+    void streamer.flushPending(sessionId).then(() => {
+      if (runtime.isAssistantCompletionStarted(sessionId, messageId)) {
+        return;
+      }
+      enqueue();
+    });
+    return;
+  }
+
+  enqueue();
 }
 
 /** Streamed replies, their completion, thinking and external user input. */
@@ -158,10 +214,21 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
     preparedStreamPayload.sendOptions = { disable_notification: true };
     preparedStreamPayload.editOptions = undefined;
 
-    runtime.enqueueAssistantResponse(sessionId, messageId, preparedStreamPayload);
+    enqueueAssistantReply(runtime, sessionId, messageId, preparedStreamPayload);
   });
 
   summaryAggregator.setOnComplete((sessionId, messageId, messageText, completionInfo) => {
+    if (
+      isCompactProgressMode() &&
+      policy.getDestination(sessionId) &&
+      policy.isForegroundSession(sessionId)
+    ) {
+      runtime.markAssistantCompletionStarted(sessionId, messageId);
+      if (runtime.stripDeliveredAssistantText(sessionId, messageId, messageText).trim()) {
+        runtime.compactProgressStreamer.holdForClose(sessionId);
+      }
+    }
+
     void runtime.enqueueCompletionTask(sessionId, async () => {
       const dropSessionOutput = (reason: string): void => {
         clearPromptResponseMode(sessionId);
@@ -198,11 +265,16 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
 
         const assistantResponseMode = runtime.getAssistantStreamMode(sessionId, messageId);
 
+        const remainingText = runtime.stripDeliveredAssistantText(sessionId, messageId, messageText);
+        if (isCompactProgressMode() && remainingText.trim()) {
+          await runtime.compactProgressStreamer.flushPending(sessionId);
+        }
+
         await finalizeAssistantResponse({
           sessionId,
           messageId,
           // Text sent early, above a question or permission prompt, is not sent again.
-          messageText: runtime.stripDeliveredAssistantText(sessionId, messageId, messageText),
+          messageText: remainingText,
           responseStreamer: {
             complete: (completeSessionId, completeMessageId, payload, options) =>
               runtime.completeAssistantResponse(
@@ -232,6 +304,15 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
             );
           },
         });
+
+        if (isCompactProgressMode() && remainingText.trim()) {
+          await runtime.compactProgressStreamer.finalize(
+            sessionId,
+            getDeleteCompactProgressOnFinish(),
+          );
+        } else if (runtime.compactProgressStreamer.isHolding(sessionId)) {
+          runtime.compactProgressStreamer.releaseHold(sessionId);
+        }
 
         await sendTtsResponseForSession({
           api: destination.api,

@@ -14,6 +14,12 @@ interface CompactProgressState {
   timer: ReturnType<typeof setTimeout> | null;
   task: Promise<boolean>;
   cancelled: boolean;
+  sendFailed: boolean;
+}
+
+interface HeldStretch {
+  activity: string | null;
+  toolCallIds: string[];
 }
 
 export interface CompactProgressStreamerOptions {
@@ -37,11 +43,13 @@ function createInitialState(sessionId: string): CompactProgressState {
     timer: null,
     task: Promise.resolve(true),
     cancelled: false,
+    sendFailed: false,
   };
 }
 
 export class CompactProgressStreamer {
   private readonly states = new Map<string, CompactProgressState>();
+  private readonly heldBySession = new Map<string, HeldStretch>();
   private readonly finalizing = new Set<CompactProgressState>();
   private readonly throttleMs: StreamThrottleMs;
   private readonly sendText: CompactProgressStreamerOptions["sendText"];
@@ -60,7 +68,56 @@ export class CompactProgressStreamer {
   }
 
   updateActivity(sessionId: string, activity: string): void {
-    this.updateActivityState(sessionId, activity, true);
+    const normalizedActivity = activity.trim();
+    if (!sessionId || !normalizedActivity) {
+      return;
+    }
+
+    const held = this.heldBySession.get(sessionId);
+    if (held) {
+      held.activity = normalizedActivity;
+      return;
+    }
+
+    this.updateActivityState(sessionId, normalizedActivity, true);
+  }
+
+  holdForClose(sessionId: string): void {
+    if (!sessionId || this.heldBySession.has(sessionId)) {
+      return;
+    }
+
+    this.heldBySession.set(sessionId, { activity: null, toolCallIds: [] });
+  }
+
+  isHolding(sessionId: string): boolean {
+    return this.heldBySession.has(sessionId);
+  }
+
+  hasPendingSend(sessionId: string): boolean {
+    const state = this.states.get(sessionId);
+    return Boolean(state && state.messageId === null && !state.cancelled && state.latestText.trim());
+  }
+
+  async flushPending(sessionId: string): Promise<void> {
+    const state = this.states.get(sessionId);
+    if (!state || state.messageId !== null || state.cancelled) {
+      return;
+    }
+
+    if (!state.timer) {
+      await state.task;
+      return;
+    }
+
+    this.clearTimer(state);
+    await this.enqueueTask(state, () => this.syncState(state, "flush"));
+  }
+
+  releaseHold(sessionId: string): void {
+    const held = this.heldBySession.get(sessionId);
+    this.heldBySession.delete(sessionId);
+    this.replayHeld(sessionId, held);
   }
 
   updateThinking(sessionId: string): void {
@@ -71,16 +128,16 @@ export class CompactProgressStreamer {
     this.updateActivity(sessionId, t("progress.compact.responding"));
   }
 
-  updateWaitingForQuestion(sessionId: string): void {
-    this.updateActivity(sessionId, t("progress.compact.waiting_question"));
-  }
-
-  updateWaitingForPermission(sessionId: string): void {
-    this.updateActivity(sessionId, t("progress.compact.waiting_permission"));
-  }
-
   addToolCall(sessionId: string, callId: string): void {
     if (!sessionId || !callId) {
+      return;
+    }
+
+    const held = this.heldBySession.get(sessionId);
+    if (held) {
+      if (!held.toolCallIds.includes(callId)) {
+        held.toolCallIds.push(callId);
+      }
       return;
     }
 
@@ -98,18 +155,24 @@ export class CompactProgressStreamer {
 
   async finalize(sessionId: string, deleteOnFinish = false): Promise<void> {
     const state = this.states.get(sessionId);
+    if (state) {
+      this.clearTimer(state);
+      this.states.delete(sessionId);
+      this.finalizing.add(state);
+    }
+
+    const held = this.heldBySession.get(sessionId);
+    this.heldBySession.delete(sessionId);
+    this.replayHeld(sessionId, held);
+
     if (!state) {
       return;
     }
 
-    this.clearTimer(state);
-    this.states.delete(sessionId);
-    this.finalizing.add(state);
-
     try {
       await state.task.catch(() => false);
 
-      if (state.cancelled) {
+      if (state.cancelled || (state.messageId === null && state.sendFailed)) {
         return;
       }
 
@@ -147,6 +210,7 @@ export class CompactProgressStreamer {
   }
 
   clearSession(sessionId: string, reason: string): void {
+    this.heldBySession.delete(sessionId);
     const state = this.states.get(sessionId);
     if (state) {
       this.clearTimer(state);
@@ -163,6 +227,7 @@ export class CompactProgressStreamer {
   }
 
   clearAll(reason: string): void {
+    this.heldBySession.clear();
     for (const state of this.states.values()) {
       this.clearTimer(state);
       this.cancelState(state);
@@ -170,6 +235,20 @@ export class CompactProgressStreamer {
     this.states.clear();
     this.cancelFinalizing();
     logger.debug(`[CompactProgress] Cleared all sessions: reason=${reason}`);
+  }
+
+  private replayHeld(sessionId: string, held: HeldStretch | undefined): void {
+    if (!held) {
+      return;
+    }
+
+    if (held.activity) {
+      this.updateActivity(sessionId, held.activity);
+    }
+
+    for (const callId of held.toolCallIds) {
+      this.addToolCall(sessionId, callId);
+    }
   }
 
   private getOrCreateState(sessionId: string): CompactProgressState {
@@ -256,6 +335,9 @@ export class CompactProgressStreamer {
         `[CompactProgress] Failed to sync progress message: session=${state.sessionId}, reason=${reason}, error=${getErrorMessage(error)}`,
         error,
       );
+      if (state.messageId === null) {
+        state.sendFailed = true;
+      }
       return false;
     }
   }

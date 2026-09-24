@@ -1,3 +1,4 @@
+import { getDeleteCompactProgressOnFinish } from "../../../app/stores/settings-store.js";
 import { logger } from "../../../utils/logger.js";
 import type { PermissionRequest } from "../../../app/types/permission.js";
 import type { Question } from "../../../app/types/question.js";
@@ -63,7 +64,8 @@ async function presentQuestion(
   }
 
   if (isCompactProgressMode()) {
-    runtime.compactProgressStreamer.updateWaitingForQuestion(sessionId);
+    await runtime.compactProgressStreamer.flushPending(sessionId);
+    runtime.compactProgressStreamer.holdForClose(sessionId);
   }
 
   if (previousMessageIds.length > 0) {
@@ -74,7 +76,18 @@ async function presentQuestion(
   }
 
   logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
-  await showCurrentQuestion(destination.api, destination.chatId, deps);
+  try {
+    await showCurrentQuestion(destination.api, destination.chatId, deps);
+  } catch {
+    runtime.compactProgressStreamer.releaseHold(sessionId);
+    return;
+  }
+
+  if (isCompactProgressMode()) {
+    await runtime.compactProgressStreamer.finalize(sessionId, getDeleteCompactProgressOnFinish());
+  } else {
+    runtime.compactProgressStreamer.releaseHold(sessionId);
+  }
 }
 
 /**
@@ -118,13 +131,32 @@ async function presentPermission(
   }
 
   if (isCompactProgressMode()) {
-    runtime.compactProgressStreamer.updateWaitingForPermission(followedSessionId);
+    await runtime.compactProgressStreamer.flushPending(followedSessionId);
+    runtime.compactProgressStreamer.holdForClose(followedSessionId);
   }
 
   logger.info(
     `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}, subagent=${isSubagent}`,
   );
-  await showPermissionRequest(destination.api, destination.chatId, request, deps, generation);
+  const messageIdsBefore = new Set(permissionManager.getMessageIds());
+  try {
+    await showPermissionRequest(destination.api, destination.chatId, request, deps, generation);
+  } catch {
+    runtime.compactProgressStreamer.releaseHold(followedSessionId);
+    return;
+  }
+
+  const promptLanded = permissionManager
+    .getMessageIds()
+    .some((messageId) => !messageIdsBefore.has(messageId));
+  if (isCompactProgressMode() && promptLanded) {
+    await runtime.compactProgressStreamer.finalize(
+      followedSessionId,
+      getDeleteCompactProgressOnFinish(),
+    );
+  } else {
+    runtime.compactProgressStreamer.releaseHold(followedSessionId);
+  }
 }
 
 /** Polls and permission prompts, including the queue of waiting requests. */

@@ -113,14 +113,15 @@ function emitThinkingPart(
 function emitAssistantTextPart(
   summaryAggregator: { processEvent(event: Event): void },
   text: string,
+  messageId = "message-1",
 ): void {
   summaryAggregator.processEvent({
     type: "message.part.updated",
     properties: {
       part: {
-        id: "text-1",
+        id: `text-${messageId}`,
         sessionID: "session-1",
-        messageID: "message-1",
+        messageID: messageId,
         type: "text",
         text,
       },
@@ -128,12 +129,15 @@ function emitAssistantTextPart(
   } as unknown as Event);
 }
 
-function emitAssistantCompleted(summaryAggregator: { processEvent(event: Event): void }): void {
+function emitAssistantCompleted(
+  summaryAggregator: { processEvent(event: Event): void },
+  messageId = "message-1",
+): void {
   summaryAggregator.processEvent({
     type: "message.updated",
     properties: {
       info: {
-        id: "message-1",
+        id: messageId,
         sessionID: "session-1",
         role: "assistant",
         agent: "test-agent",
@@ -1050,6 +1054,163 @@ describe("bot/services/event-subscription-service", () => {
       releaseFirstEdit?.();
     });
 
+    it("closes the card when a reply is delivered and opens a new one for the next stretch", async () => {
+      const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      settingsStore.setCompactOutputMode(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      useTrackerFakeTimers();
+      emitThinkingPart(summaryAggregator, "planning");
+      await flushPendingDispatch();
+      emitBashTool(summaryAggregator, "completed", { callId: "call-1" });
+      await flushPendingDispatch();
+      emitAssistantTextPart(summaryAggregator, "First reply");
+      emitAssistantCompleted(summaryAggregator, "message-1");
+      await flushPendingDispatch();
+
+      const finishedEdits = api.editMessageText.mock.calls.filter((call) =>
+        String(call[2]).includes("✅ Finished Work"),
+      );
+      expect(finishedEdits).toHaveLength(1);
+      expect(String(finishedEdits[0]?.[2])).toContain("tool calls: 1");
+
+      emitThinkingPart(summaryAggregator, "again", "message-2");
+      await flushPendingDispatch();
+      emitBashTool(summaryAggregator, "completed", { callId: "call-2" });
+      await flushPendingDispatch();
+      emitAssistantMessage(summaryAggregator, "message-2");
+      emitAssistantTextPart(summaryAggregator, "Second reply", "message-2");
+      emitAssistantCompleted(summaryAggregator, "message-2");
+      await flushPendingDispatch();
+
+      const workingSends = api.sendMessage.mock.calls.filter((call) =>
+        String(call[1]).includes("⏳ Working"),
+      );
+      expect(workingSends.length).toBeGreaterThanOrEqual(2);
+      const laterFinished = api.editMessageText.mock.calls.filter((call) =>
+        String(call[2]).includes("✅ Finished Work"),
+      );
+      expect(laterFinished).toHaveLength(2);
+      expect(String(laterFinished[1]?.[2])).toContain("tool calls: 1");
+      expect(String(laterFinished[1]?.[2])).not.toContain("tool calls: 2");
+
+      emitSessionIdle(summaryAggregator);
+      await flushPendingDispatch();
+
+      const footerSends = api.sendMessage.mock.calls.filter((call) =>
+        String(call[1]).includes("test-provider/test-model"),
+      );
+      expect(footerSends).toHaveLength(1);
+      expect(laterFinished).toHaveLength(2);
+    });
+
+    it("does not edit the open card with activity that arrives before the reply close runs", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      settingsStore.setCompactOutputMode(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      useTrackerFakeTimers();
+      emitThinkingPart(summaryAggregator, "planning");
+      await flushPendingDispatch();
+      const progressMessageId = api.sendMessage.mock.calls.find((call) =>
+        String(call[1]).includes("⏳ Working"),
+      )?.[0];
+
+      emitAssistantTextPart(summaryAggregator, "First reply");
+      emitAssistantCompleted(summaryAggregator);
+      emitBashTool(summaryAggregator, "running", {
+        callId: "call-next",
+        command: "echo next-stretch",
+      });
+      await flushPendingDispatch();
+
+      expect(
+        api.editMessageText.mock.calls.some((call) => String(call[2]).includes("echo next-stretch")),
+      ).toBe(false);
+      expect(
+        api.sendMessage.mock.calls.some((call) => String(call[1]).includes("echo next-stretch")),
+      ).toBe(true);
+      expect(
+        api.editMessageText.mock.calls.some((call) => String(call[2]).includes("✅ Finished Work")),
+      ).toBe(true);
+      expect(progressMessageId).toBeDefined();
+    });
+
+    it("does not send a second copy of a reply after compact delivery", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      settingsStore.setCompactOutputMode(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      useTrackerFakeTimers();
+      emitThinkingPart(summaryAggregator, "planning");
+      await flushPendingDispatch();
+      emitAssistantTextPart(summaryAggregator, "A long answer about tea");
+      emitAssistantCompleted(summaryAggregator);
+      emitAssistantTextPart(summaryAggregator, "A long answer about tea with a late tail");
+      await flushPendingDispatch();
+
+      const replySends = api.sendMessage.mock.calls.filter((call) =>
+        String(call[1]).includes("long answer about tea"),
+      );
+      expect(replySends).toHaveLength(1);
+    });
+
+    it("removes the mid-run card when delete on finish is on", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      settingsStore.setCompactOutputMode(true);
+      settingsStore.setDeleteCompactProgressOnFinish(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      useTrackerFakeTimers();
+      emitThinkingPart(summaryAggregator, "planning");
+      await flushPendingDispatch();
+      emitAssistantTextPart(summaryAggregator, "Done");
+      emitAssistantCompleted(summaryAggregator);
+      await flushPendingDispatch();
+
+      expect(api.deleteMessage).toHaveBeenCalled();
+      expect(
+        api.editMessageText.mock.calls.some((call) => String(call[2]).includes("✅ Finished Work")),
+      ).toBe(false);
+
+      emitThinkingPart(summaryAggregator, "again", "message-2");
+      await flushPendingDispatch();
+      const workingSends = api.sendMessage.mock.calls.filter((call) =>
+        String(call[1]).includes("⏳ Working"),
+      );
+      expect(workingSends.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("leaves the card live when the question prompt fails to send", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      settingsStore.setCompactOutputMode(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      useTrackerFakeTimers();
+      emitThinkingPart(summaryAggregator, "planning");
+      await flushPendingDispatch();
+
+      api.sendMessage.mockImplementation(async (chatId: number, text: string) => {
+        if (String(text).includes("Which option")) {
+          throw new Error("send failed");
+        }
+        return { message_id: 700 + chatId };
+      });
+
+      emitQuestionAsked(summaryAggregator, "q-fail");
+      await flushPendingDispatch();
+
+      expect(
+        api.editMessageText.mock.calls.some((call) => String(call[2]).includes("✅ Finished Work")),
+      ).toBe(false);
+      expect(api.deleteMessage).not.toHaveBeenCalled();
+    });
+
     it("edits the progress message to the finished summary on idle when delete on finish is off", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
@@ -1650,7 +1811,7 @@ describe("bot/services/event-subscription-service", () => {
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 
-  it("keeps the compact line on the poll while a permission waits behind it", async () => {
+  it("does not close the compact card while a permission waits, and closes it when the prompt appears", async () => {
     const { api, summaryAggregator } = await setupService(true);
     const [settingsStore, { t }] = await Promise.all([
       import("../../../src/app/stores/settings-store.js"),
@@ -1659,18 +1820,30 @@ describe("bot/services/event-subscription-service", () => {
     settingsStore.setCompactOutputMode(true);
     const { questionManager } = getInteractionManagers();
     const waitingPermissionText = t("progress.compact.waiting_permission");
-    const hasWaitingPermissionLine = (): boolean =>
-      collectSentTexts(api).some((text) => text.includes(waitingPermissionText));
+    const hasText = (fragment: string): boolean =>
+      collectSentTexts(api).some((text) => text.includes(fragment));
 
     await showPollWithWaitingPermission(summaryAggregator);
+    emitThinkingPart(summaryAggregator, "still working");
+    await vi.waitFor(
+      () => {
+        expect(hasText("⏳ Working")).toBe(true);
+      },
+      { timeout: 3000 },
+    );
     await settle();
 
-    expect(hasWaitingPermissionLine()).toBe(false);
+    expect(hasText(waitingPermissionText)).toBe(false);
+    expect(hasText("✅ Finished Work")).toBe(false);
 
     questionManager.cancel();
 
-    await vi.waitFor(() => {
-      expect(hasWaitingPermissionLine()).toBe(true);
-    });
+    await vi.waitFor(
+      () => {
+        expect(hasText("✅ Finished Work")).toBe(true);
+      },
+      { timeout: 3000 },
+    );
+    expect(hasText(waitingPermissionText)).toBe(false);
   });
 });
