@@ -291,6 +291,167 @@ describe("bot/streaming/tool-call-streamer", () => {
     expect(deleteText).not.toHaveBeenCalled();
   });
 
+  it("keeps a finished tool in its original slot while another runs", async () => {
+    vi.useFakeTimers();
+    const sendText = vi.fn().mockResolvedValue(1);
+    const editText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText: vi.fn().mockResolvedValue(undefined),
+    });
+
+    streamer.replaceByPrefix("s1", "⏳one", "⏳ first");
+    await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(1));
+    streamer.replaceByPrefix("s1", "⏳two", "⏳ second");
+    await vi.waitFor(() => expect(editText).toHaveBeenCalled());
+
+    streamer.replaceByPrefix("s1", "⏳two", "second finished");
+    await vi.waitFor(() => expect(editText).toHaveBeenLastCalledWith("s1", 1, "⏳ first\n\nsecond finished"));
+    streamer.replaceByPrefix("s1", "⏳one", "first finished");
+    await vi.waitFor(() => expect(editText).toHaveBeenLastCalledWith("s1", 1, "first finished\n\nsecond finished"));
+    expect(sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it("only sends a final line if the call finishes before the first flush", async () => {
+    vi.useFakeTimers();
+    const sendText = vi.fn().mockResolvedValue(1);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 200,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
+    });
+    streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+    streamer.replaceByPrefix("s1", "⏳one", "finished");
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(sendText).toHaveBeenCalledExactlyOnceWith("s1", "finished");
+  });
+
+  it("deletes an attachment-only line and holds new calls below the document", async () => {
+    vi.useFakeTimers();
+    let id = 1;
+    const sendText = vi.fn(async () => id++);
+    const deleteText = vi.fn().mockResolvedValue(undefined);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 0,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText,
+    });
+    streamer.replaceByPrefix("s1", "⏳file", "⏳ writing");
+    await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(1));
+
+    streamer.removeByPrefix("s1", "⏳file", "default", true);
+    streamer.beginDocumentBoundary("s1");
+    streamer.replaceByPrefix("s1", "⏳next", "⏳ next call");
+    const flush = streamer.flushSession("s1", "document");
+    await flush;
+    expect(deleteText).toHaveBeenCalledWith("s1", 1);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    streamer.endDocumentBoundary("s1");
+    await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(2));
+    expect(sendText).toHaveBeenNthCalledWith(2, "s1", "⏳ next call");
+  });
+
+  it("keeps new calls held until both overlapping documents are delivered", async () => {
+    vi.useFakeTimers();
+    const sendText = vi.fn().mockResolvedValue(1);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 0,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
+    });
+
+    streamer.beginDocumentBoundary("s1");
+    streamer.beginDocumentBoundary("s1");
+    streamer.replaceByPrefix("s1", "⏳later", "⏳ later call");
+    streamer.endDocumentBoundary("s1");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(sendText).not.toHaveBeenCalled();
+
+    streamer.endDocumentBoundary("s1");
+    await vi.waitFor(() => expect(sendText).toHaveBeenCalledExactlyOnceWith("s1", "⏳ later call"));
+  });
+
+  it("does not flush a held line through a thinking stream break before the document arrives", async () => {
+    vi.useFakeTimers();
+    const sendText = vi.fn().mockResolvedValue(1);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 0,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
+    });
+
+    streamer.beginDocumentBoundary("s1");
+    streamer.replaceByPrefix("s1", "⏳later", "⏳ later call");
+    const breaking = streamer.breakSession("s1", "thinking_started");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(sendText).not.toHaveBeenCalled();
+
+    streamer.endDocumentBoundary("s1");
+    await breaking;
+    expect(sendText).toHaveBeenCalledExactlyOnceWith("s1", "⏳ later call");
+  });
+
+  it("leaves a frozen aborted call alone when its completion arrives after the error boundary", async () => {
+    vi.useFakeTimers();
+    let id = 1;
+    const sendText = vi.fn(async () => id++);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 0,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
+    });
+
+    streamer.replaceByPrefix("s1", "⏳aborted", "⏳ 💻 bash sleep 90");
+    await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(1));
+    await streamer.breakSession("s1", "session_error");
+    streamer.replaceByPrefix("s1", "⏳aborted", "💻 bash sleep 90");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    streamer.replaceByPrefix("s1", "⏳next", "💻 bash next");
+    await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(2));
+    expect(sendText).toHaveBeenNthCalledWith(2, "s1", "💻 bash next");
+  });
+
+  it("freezes every tool stream before waiting on the first stream's pending edit", async () => {
+    vi.useFakeTimers();
+    let resolveEdit: (() => void) | undefined;
+    let id = 1;
+    const sendText = vi.fn(async () => id++);
+    const editText = vi.fn((_sessionId: string, _messageId: number, _text: string) =>
+      new Promise<void>((resolve) => { resolveEdit = resolve; }),
+    );
+    const streamer = new ToolCallStreamer({
+      throttleMs: 0,
+      sendText,
+      editText,
+      deleteText: vi.fn().mockResolvedValue(undefined),
+    });
+
+    streamer.replaceByPrefix("s1", "⏳first", "⏳ first");
+    await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(1));
+    streamer.replaceByPrefix("s1", "⏳todo", "⏳ todo", "todo");
+    await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(2));
+    streamer.replaceByPrefix("s1", "⏳first", "⏳ first updated");
+    await vi.waitFor(() => expect(editText).toHaveBeenCalledTimes(1));
+
+    const breaking = streamer.breakSession("s1", "session_error");
+    streamer.replaceByPrefix("s1", "⏳todo", "todo finished", "todo");
+    resolveEdit?.();
+    await breaking;
+    expect(editText.mock.calls.some((call) => String(call[2]).includes("todo finished"))).toBe(false);
+    expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores removal of a prefix that is not in the stream", async () => {
     vi.useFakeTimers();
 

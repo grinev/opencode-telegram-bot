@@ -35,6 +35,8 @@ interface StreamState {
   isBreaking: boolean;
   fatalErrorMessage: string | null;
   fatalErrorLogged: boolean;
+  deleteWhenEmpty: boolean;
+  held: boolean;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -123,6 +125,9 @@ export class ToolCallStreamer {
   private readonly telegramOperationTasks = new Map<string, Promise<void>>();
   private readonly lastTelegramOperationAt = new Map<string, number>();
   private readonly telegramOperationTokens = new Map<string, object>();
+  private readonly heldSessions = new Set<string>();
+  private readonly documentBoundaries = new Map<string, { count: number; done: Promise<void>; release: () => void }>();
+  private readonly frozenToolEntries = new Set<string>();
 
   constructor(options: ToolCallStreamerOptions) {
     this.throttleMs = options.throttleMs;
@@ -158,8 +163,12 @@ export class ToolCallStreamer {
     if (!sessionId || !normalizedPrefix || !normalizedText) {
       return;
     }
+    if (this.frozenToolEntries.has(`${sessionId}:${streamKey}:${normalizedPrefix}`)) {
+      return;
+    }
 
-    const state = this.getOrCreateState(sessionId, streamKey);
+    const state = this.findPrefixedState(sessionId, streamKey, normalizedPrefix) ??
+      this.getOrCreateState(sessionId, streamKey);
     const existingEntry = state.entries.find((entry) => entry.prefix === normalizedPrefix);
     if (existingEntry) {
       existingEntry.text = normalizedText;
@@ -175,13 +184,14 @@ export class ToolCallStreamer {
     sessionId: string,
     prefix: string,
     streamKey: ToolStreamKey = DEFAULT_STREAM_KEY,
+    deleteWhenEmpty = false,
   ): void {
     const normalizedPrefix = prefix.trim();
     if (!sessionId || !normalizedPrefix) {
       return;
     }
 
-    const state = this.states.get(this.getStateId(sessionId, streamKey));
+    const state = this.findPrefixedState(sessionId, streamKey, normalizedPrefix);
     if (!state) {
       return;
     }
@@ -192,14 +202,51 @@ export class ToolCallStreamer {
     }
 
     state.entries.splice(entryIndex, 1);
+    if (deleteWhenEmpty && state.entries.length === 0) {
+      state.deleteWhenEmpty = true;
+    }
     state.latestParts = buildParts(state.entries);
     this.ensureTimer(state);
+  }
+
+  /** A document divides new tool messages from older, still-editable calls. */
+  beginDocumentBoundary(sessionId: string): void {
+    const boundary = this.documentBoundaries.get(sessionId);
+    if (boundary) {
+      boundary.count++;
+    } else {
+      let release = () => {};
+      const done = new Promise<void>((resolve) => { release = resolve; });
+      this.documentBoundaries.set(sessionId, { count: 1, done, release });
+    }
+    this.heldSessions.add(sessionId);
+    for (const [id, state] of this.states) {
+      if (state.sessionId === sessionId) {
+        this.states.delete(id);
+      }
+    }
+  }
+
+  endDocumentBoundary(sessionId: string): void {
+    const boundary = this.documentBoundaries.get(sessionId);
+    if (!boundary || --boundary.count > 0) {
+      return;
+    }
+    this.documentBoundaries.delete(sessionId);
+    this.heldSessions.delete(sessionId);
+    for (const state of this.getStatesForSession(sessionId)) {
+      if (state.held) {
+        state.held = false;
+        this.ensureTimer(state);
+      }
+    }
+    boundary.release();
   }
 
   async flushSession(sessionId: string, reason: string): Promise<void> {
     const states = this.getStatesForSession(sessionId);
     await Promise.all(
-      states.map(async (state) => {
+      states.filter((state) => !state.held).map(async (state) => {
         this.clearTimer(state);
         await this.enqueueTask(state, () => this.syncState(state, reason));
       }),
@@ -208,9 +255,21 @@ export class ToolCallStreamer {
 
   async breakSession(sessionId: string, reason: string): Promise<void> {
     const states = this.getStatesForSession(sessionId);
+    if (reason === "session_error" || reason === "session_idle") {
+      for (const state of states) {
+        for (const entry of state.entries) {
+          if (entry.prefix?.startsWith("⏳") && entry.text.startsWith("⏳")) {
+            this.frozenToolEntries.add(`${sessionId}:${state.key}:${entry.prefix}`);
+          }
+        }
+      }
+    }
     for (const state of states) {
       state.isBreaking = true;
       this.clearTimer(state);
+      if (state.held) {
+        await this.documentBoundaries.get(sessionId)?.done;
+      }
       await this.enqueueTask(state, () => this.syncState(state, reason));
       this.cancelState(state);
       this.removeState(state);
@@ -219,6 +278,14 @@ export class ToolCallStreamer {
   }
 
   clearSession(sessionId: string, reason: string): void {
+    for (const key of this.frozenToolEntries) {
+      if (key.startsWith(`${sessionId}:`)) {
+        this.frozenToolEntries.delete(key);
+      }
+    }
+    this.documentBoundaries.get(sessionId)?.release();
+    this.documentBoundaries.delete(sessionId);
+    this.heldSessions.delete(sessionId);
     this.cancelTelegramOperations(sessionId);
     let clearedAny = false;
     for (const state of Array.from(this.allStates)) {
@@ -239,6 +306,12 @@ export class ToolCallStreamer {
   }
 
   clearAll(reason: string): void {
+    this.frozenToolEntries.clear();
+    for (const boundary of this.documentBoundaries.values()) {
+      boundary.release();
+    }
+    this.documentBoundaries.clear();
+    this.heldSessions.clear();
     const sessionIds = new Set(Array.from(this.allStates, (state) => state.sessionId));
     for (const sessionId of sessionIds) {
       this.cancelTelegramOperations(sessionId);
@@ -262,6 +335,17 @@ export class ToolCallStreamer {
 
   private getStatesForSession(sessionId: string): StreamState[] {
     return Array.from(this.allStates).filter((state) => state.sessionId === sessionId);
+  }
+
+  private findPrefixedState(sessionId: string, key: ToolStreamKey, prefix: string): StreamState | undefined {
+    if (!prefix.startsWith("⏳") && !key.startsWith("subagent:")) {
+      return this.states.get(this.getStateId(sessionId, key))?.entries.some((entry) => entry.prefix === prefix)
+        ? this.states.get(this.getStateId(sessionId, key))
+        : undefined;
+    }
+    return this.getStatesForSession(sessionId).reverse().find((state) =>
+      state.key === key && state.entries.some((entry) => entry.prefix === prefix),
+    );
   }
 
   private getOrCreateState(
@@ -293,6 +377,8 @@ export class ToolCallStreamer {
       isBreaking: false,
       fatalErrorMessage: null,
       fatalErrorLogged: false,
+      deleteWhenEmpty: false,
+      held: this.heldSessions.has(sessionId),
     };
 
     this.states.set(stateId, state);
@@ -310,7 +396,7 @@ export class ToolCallStreamer {
   }
 
   private ensureTimer(state: StreamState): void {
-    if (state.timer || state.isBroken || state.cancelled) {
+    if (state.timer || state.isBroken || state.cancelled || state.isBreaking || state.held) {
       return;
     }
 
@@ -374,12 +460,13 @@ export class ToolCallStreamer {
         return state.telegramMessageIds.length > 0;
       }
 
-      if (parts.length === 0) {
+      if (parts.length === 0 && !state.deleteWhenEmpty) {
         return state.telegramMessageIds.length > 0;
       }
 
       try {
         await this.syncMessages(state, parts);
+        state.deleteWhenEmpty = false;
         if (state.cancelled) {
           return false;
         }

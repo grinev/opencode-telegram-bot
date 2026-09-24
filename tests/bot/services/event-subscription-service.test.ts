@@ -67,19 +67,23 @@ function emitAssistantMessage(
   } as unknown as Event);
 }
 
-function emitWriteTool(summaryAggregator: { processEvent(event: Event): void }): void {
+function emitWriteTool(
+  summaryAggregator: { processEvent(event: Event): void },
+  status: "running" | "completed" = "completed",
+  callId = "call-write",
+): void {
   summaryAggregator.processEvent({
     type: "message.part.updated",
     properties: {
       part: {
-        id: "part-1",
+        id: `part-${callId}`,
         sessionID: "session-1",
         messageID: "message-1",
         type: "tool",
-        callID: "call-write",
+        callID: callId,
         tool: "write",
         state: {
-          status: "completed",
+          status,
           input: {
             filePath: "src/file.ts",
             content: "const value = 1;\n",
@@ -284,6 +288,23 @@ function emitTaskTool(
           ...(status === "completed" ? { output: "ok" } : {}),
           ...(status === "error" ? { error: "task failed" } : {}),
         },
+      },
+    },
+  } as unknown as Event);
+}
+
+function emitTodoTool(summaryAggregator: { processEvent(event: Event): void }): void {
+  summaryAggregator.processEvent({
+    type: "message.part.updated",
+    properties: {
+      part: {
+        id: "part-call-todo",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "tool",
+        callID: "call-todo",
+        tool: "todowrite",
+        state: { status: "running", input: {}, metadata: {} },
       },
     },
   } as unknown as Event);
@@ -543,6 +564,159 @@ describe("bot/services/event-subscription-service", () => {
   });
 
   describe("elapsed time for long tool calls", () => {
+    it("shows a full-mode running line before the timer starts", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitBashTool(summaryAggregator, "running", { command: "sleep 60" });
+      await vi.advanceTimersByTimeAsync(1500);
+
+      expect(collectSentTexts(api)).toEqual(expect.arrayContaining([expect.stringContaining("⏳ 💻 bash sleep 60")]));
+      expect(collectSentTexts(api).some((text) => text.includes("🕒"))).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(collectSentTexts(api).some((text) => text.includes("⏳") && text.includes("🕒 20s"))).toBe(true);
+    });
+
+    it("replaces parallel lines in start order even when they finish in reverse order", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitBashTool(summaryAggregator, "running", { command: "sleep 60" });
+      emitReadTool(summaryAggregator, "running", { callId: "call-read", filePath: "README.md" });
+      await vi.advanceTimersByTimeAsync(3000);
+      emitReadTool(summaryAggregator, "completed", { callId: "call-read", filePath: "README.md" });
+      await flushPendingDispatch();
+
+      const intermediate = collectSentTexts(api).pop() ?? "";
+      expect(intermediate.indexOf("sleep 60")).toBeLessThan(intermediate.indexOf("README.md"));
+      expect(intermediate).toContain("⏳ 💻 bash");
+      expect(intermediate).toContain("📖 read");
+
+      emitBashTool(summaryAggregator, "completed", { command: "sleep 60" });
+      await flushPendingDispatch();
+      const final = collectSentTexts(api).pop() ?? "";
+      expect(final.indexOf("sleep 60")).toBeLessThan(final.indexOf("README.md"));
+      expect(final).not.toContain("⏳");
+      expect(api.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("starts a todo stream after an earlier ordinary tool stream", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitBashTool(summaryAggregator, "running", { command: "sleep 60" });
+      emitTodoTool(summaryAggregator);
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(String(api.sendMessage.mock.calls[0]?.[1])).toContain("sleep 60");
+      expect(String(api.sendMessage.mock.calls[1]?.[1])).toContain("todowrite");
+    });
+
+    it("flushes a running tool line above its permission prompt", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitBashTool(summaryAggregator, "running", { command: "sleep 60" });
+      emitPermissionAsked(summaryAggregator, "perm-1");
+      await vi.advanceTimersByTimeAsync(5000);
+      await vi.waitFor(() => expect(api.sendMessage).toHaveBeenCalledTimes(2));
+
+      expect(String(api.sendMessage.mock.calls[0]?.[1])).toContain("⏳ 💻 bash sleep 60");
+      expect(String(api.sendMessage.mock.calls[1]?.[1])).toContain("D:/shared/*");
+    });
+
+    it("removes an attached tool line without losing a parallel running sibling", async () => {
+      const { api, summaryAggregator } = await setupService(true);
+      useTrackerFakeTimers();
+
+      emitWriteTool(summaryAggregator, "running");
+      emitBashTool(summaryAggregator, "running", { command: "sleep 60" });
+      await vi.advanceTimersByTimeAsync(3000);
+      emitWriteTool(summaryAggregator, "completed");
+      await flushPendingDispatch();
+
+      await vi.waitFor(() => expect(api.sendDocument).toHaveBeenCalledTimes(1));
+      const afterDocument = collectSentTexts(api).pop() ?? "";
+      expect(afterDocument).toContain("sleep 60");
+      expect(afterDocument).not.toContain("write");
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(collectSentTexts(api).pop()).toMatch(/sleep 60 · 🕒 \d+s/);
+    });
+
+    it("deletes an attachment-only running message when the document arrives", async () => {
+      const { api, summaryAggregator } = await setupService(true);
+      useTrackerFakeTimers();
+
+      emitWriteTool(summaryAggregator, "running");
+      await vi.advanceTimersByTimeAsync(3000);
+      emitWriteTool(summaryAggregator, "completed");
+      await flushPendingDispatch();
+
+      expect(api.deleteMessage).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(api.sendDocument).toHaveBeenCalledTimes(1));
+    });
+
+    it("holds calls started during document delivery below the document while editing older siblings", async () => {
+      const { api, summaryAggregator } = await setupService(true);
+      useTrackerFakeTimers();
+      let deliverDocument: (() => void) | undefined;
+      api.sendDocument.mockImplementation(
+        () => new Promise((resolve) => {
+          deliverDocument = () => resolve({ message_id: 101 });
+        }),
+      );
+
+      emitBashTool(summaryAggregator, "running", { command: "sleep 60" });
+      emitWriteTool(summaryAggregator, "running");
+      await vi.advanceTimersByTimeAsync(4000);
+      emitWriteTool(summaryAggregator, "completed");
+      await vi.waitFor(() => expect(api.sendDocument).toHaveBeenCalledTimes(1));
+
+      emitReadTool(summaryAggregator, "running", { callId: "call-later", filePath: "LATER.md" });
+      await vi.advanceTimersByTimeAsync(22_000);
+      expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      expect(collectSentTexts(api).pop()).toContain("sleep 60 · 🕒");
+
+      expect(deliverDocument).toBeTypeOf("function");
+      deliverDocument?.();
+      const runtime = activeService as unknown as { runtime: { toolMessageBatcher: { flushSession(sessionId: string, reason: string): Promise<void> } } };
+      await runtime.runtime.toolMessageBatcher.flushSession("session-1", "test_document_complete");
+      await new Promise((resolve) => setImmediate(resolve));
+      await vi.advanceTimersByTimeAsync(12_000);
+      await vi.waitFor(() => expect(api.sendMessage).toHaveBeenCalledTimes(2));
+      expect(String(api.sendMessage.mock.calls[1]?.[1])).toContain("LATER.md");
+    });
+
+    it("holds later tool lines until both parallel attachment uploads finish", async () => {
+      const { api, summaryAggregator } = await setupService(true);
+      useTrackerFakeTimers();
+      const releases: Array<() => void> = [];
+      api.sendDocument.mockImplementation(() => new Promise((resolve) => {
+        releases.push(() => resolve({ message_id: 101 }));
+      }));
+
+      emitWriteTool(summaryAggregator, "running", "write-one");
+      emitWriteTool(summaryAggregator, "running", "write-two");
+      await vi.advanceTimersByTimeAsync(3000);
+      emitWriteTool(summaryAggregator, "completed", "write-one");
+      emitWriteTool(summaryAggregator, "completed", "write-two");
+      await vi.waitFor(() => expect(api.sendDocument).toHaveBeenCalledTimes(1));
+      emitReadTool(summaryAggregator, "running", { callId: "call-later", filePath: "LATER.md" });
+
+      releases[0]?.();
+      await vi.waitFor(() => expect(api.sendDocument).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(collectSentTexts(api).some((text) => text.includes("LATER.md"))).toBe(false);
+
+      releases[1]?.();
+      const runtime = activeService as unknown as { runtime: { toolMessageBatcher: { flushSession(sessionId: string, reason: string): Promise<void> } } };
+      await runtime.runtime.toolMessageBatcher.flushSession("session-1", "test_documents_complete");
+      await new Promise((resolve) => setImmediate(resolve));
+      await vi.advanceTimersByTimeAsync(12_000);
+      await vi.waitFor(() => expect(collectSentTexts(api).some((text) => text.includes("LATER.md"))).toBe(true));
+    });
+
     it("shows a live line once the call passes the threshold", async () => {
       const { api, summaryAggregator } = await setupService(false);
 
@@ -575,7 +749,7 @@ describe("bot/services/event-subscription-service", () => {
 
       useTrackerFakeTimers();
       emitBashTool(summaryAggregator, "running");
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(200);
       emitBashTool(summaryAggregator, "completed");
       await flushPendingDispatch();
 

@@ -106,31 +106,22 @@ function syncCompactToolActivity(
   runtime.compactProgressStreamer.updateActivity(sessionId, text);
 }
 
-/**
- * A completed call gets its final line from the tool callback, so the live line
- * just goes away. A failed one never reaches it, and a stream left without
- * entries keeps its last text on screen (syncState skips empty parts) - so its
- * line is rewritten without the running marker instead of being dropped.
- */
 function finalizeLiveToolLine(
   runtime: SessionRuntimeState,
   toolInfo: ToolInfo,
-  failed: boolean,
   durationMs?: number,
 ): void {
   const livePrefix = getLiveToolPrefix(toolInfo.callId);
   const streamKey = getToolStreamKey(toolInfo.tool);
-  const message = failed && durationMs !== undefined ? formatToolInfo(toolInfo) : "";
-
-  if (!message || durationMs === undefined) {
-    runtime.toolCallStreamer.removeByPrefix(toolInfo.sessionId, livePrefix, streamKey);
+  const message = formatToolInfo(toolInfo);
+  if (!message) {
     return;
   }
 
   runtime.toolCallStreamer.replaceByPrefix(
     toolInfo.sessionId,
     livePrefix,
-    appendDuration(message, formatDuration(durationMs)),
+    durationMs === undefined ? message : appendDuration(message, formatDuration(durationMs)),
     streamKey,
   );
 }
@@ -256,8 +247,8 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
         // early in compact mode, which would leave the entry tracked forever.
         const durationMs = runtime.runningToolTracker.release(callId);
 
-        if (!compactMode) {
-          finalizeLiveToolLine(runtime, toolInfo, status === "error", durationMs);
+        if (!compactMode && status === "error") {
+          finalizeLiveToolLine(runtime, toolInfo, durationMs);
         }
 
         // Only a completed call reaches the tool callback, so only it has a
@@ -271,6 +262,18 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
     } else if (tracksElapsed) {
       runtime.runningToolTracker.track(sessionId, callId);
       runtime.setRunningToolInfo(toolInfo);
+      if (!compactMode) {
+        const message = formatToolInfo(toolInfo);
+        if (message) {
+          const tick = runtime.runningToolTracker.displayTick(callId);
+          runtime.toolCallStreamer.replaceByPrefix(
+            sessionId,
+            getLiveToolPrefix(callId),
+            `${RUNNING_ICON} ${tick ? appendDuration(message, formatElapsed(tick)) : message}`,
+            getToolStreamKey(toolInfo.tool),
+          );
+        }
+      }
     }
 
     if (!compactMode) {
@@ -327,8 +330,9 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       const message = formatToolInfo(toolInfo);
       if (message) {
         const durationMs = runtime.takeCompletedToolDuration(toolInfo.sessionId, toolInfo.callId);
-        runtime.toolCallStreamer.append(
+        runtime.toolCallStreamer.replaceByPrefix(
           toolInfo.sessionId,
+          getLiveToolPrefix(toolInfo.callId),
           durationMs === undefined ? message : appendDuration(message, formatDuration(durationMs)),
           getToolStreamKey(toolInfo.tool),
         );
@@ -383,10 +387,15 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
     }
 
     try {
-      // Breaking the stream drops the live-timer entries with it, so stop
-      // ticking rather than re-creating them in a fresh message.
-      runtime.clearToolTracking(fileInfo.sessionId, "tool_file_boundary");
-      await runtime.toolCallStreamer.breakSession(fileInfo.sessionId, "tool_file_boundary");
+      runtime.takeCompletedToolDuration(fileInfo.sessionId, fileInfo.callId);
+      runtime.toolCallStreamer.removeByPrefix(
+        fileInfo.sessionId,
+        getLiveToolPrefix(fileInfo.callId),
+        getToolStreamKey(fileInfo.tool),
+        true,
+      );
+      runtime.toolCallStreamer.beginDocumentBoundary(fileInfo.sessionId);
+      await runtime.toolCallStreamer.flushSession(fileInfo.sessionId, "tool_file_boundary");
 
       const toolMessage = formatToolInfo(fileInfo);
       const caption = prepareDocumentCaption(toolMessage || fileInfo.fileData.caption);
@@ -395,8 +404,11 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
         ...fileInfo.fileData,
         caption,
       });
+      await runtime.toolMessageBatcher.flushSession(fileInfo.sessionId, "tool_file_boundary");
     } catch (err) {
       logger.error("Failed to send file to Telegram:", err);
+    } finally {
+      runtime.toolCallStreamer.endDocumentBoundary(fileInfo.sessionId);
     }
   });
 }
