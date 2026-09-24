@@ -12,7 +12,7 @@ function normalizeExternalUserInputText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
 }
 
-function truncateExternalUserInputText(text: string): string {
+export function truncateExternalUserInputText(text: string): string {
   if (text.length <= EXTERNAL_USER_INPUT_MAX_DISPLAY_LENGTH) {
     return text;
   }

@@ -17,7 +17,14 @@ import { t } from "../../i18n/index.js";
 import { alert, failure } from "./feedback.js";
 import { attachToSession } from "../../app/services/attach-service.js";
 import { renderAssistantFinalPartsSafe } from "../messages/assistant-rendering.js";
-import { sendRenderedBotPart } from "../messages/telegram-text.js";
+import { sendBotText, sendRenderedBotPart } from "../messages/telegram-text.js";
+import {
+  buildSessionPickQuote,
+  findEligibleReply,
+  findLatestUserPrompt,
+  findMessageById,
+  type SessionPickMessage,
+} from "../../app/services/session-pick-reply.js";
 import {
   buildSessionSelectionMenuView,
   parseBackgroundSessionCallback,
@@ -49,16 +56,9 @@ interface SelectSessionByIdOptions {
   postSelectAction: "preview" | "latest_assistant_response" | "none";
 }
 
-type SessionPreviewItem = {
-  role: "user" | "assistant";
-  text: string;
-  created: number;
-};
-
-const PREVIEW_MESSAGES_LIMIT = 6;
 const LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT = 20;
-const PREVIEW_ITEM_MAX_LENGTH = 420;
-const TELEGRAM_MESSAGE_LIMIT = 4096;
+const SESSION_PICK_PAGE_SIZE = 20;
+const SESSION_PICK_SEND_GAP_MS = 1000;
 
 type SessionMessageLike = {
   info: {
@@ -129,75 +129,86 @@ async function selectSessionById(
     }
   }
 
-  try {
-    await attachToSession({
-      ...deps,
-      chatId: ctx.chat!.id,
-      session: sessionInfo,
-    });
-  } catch (err) {
-    if (loadingMessageId) {
-      try {
-        await ctx.api.deleteMessage(ctx.chat!.id, loadingMessageId);
-      } catch (deleteError) {
-        logger.debug("[Sessions] Failed to delete loading message after follow error:", deleteError);
-      }
-    }
-    logger.error("[Sessions] Error following selected session:", err);
-    throw err;
+  const deliverPick = options.postSelectAction === "preview" && Boolean(ctx.chat);
+  let pickMessages: SessionPickMessage[] | null = null;
+  let pickBusy = false;
+  if (deliverPick) {
+    pickBusy = await readSessionBusy(session.id, currentProject.worktree);
+    pickMessages = await loadSessionPickMessages(session.id, currentProject.worktree, pickBusy);
+    deps.summaryAggregator.holdOutbound();
   }
 
-  if (ctx.chat) {
-    const chatId = ctx.chat.id;
-    const currentAgent = await resolveProjectAgent();
-
-    deps.keyboardManager.updateAgent(currentAgent);
-    deps.keyboardManager.updateModel(getStoredModel());
-
-    const contextInfo = deps.keyboardManager.getContextInfo();
-    if (contextInfo) {
-      deps.keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+  try {
+    try {
+      await attachToSession({
+        ...deps,
+        chatId: ctx.chat!.id,
+        session: sessionInfo,
+      });
+    } catch (err) {
+      if (loadingMessageId && ctx.chat) {
+        try {
+          await ctx.api.deleteMessage(ctx.chat.id, loadingMessageId);
+        } catch (deleteError) {
+          logger.debug("[Sessions] Failed to delete loading message after follow error:", deleteError);
+        }
+      }
+      logger.error("[Sessions] Error following selected session:", err);
+      throw err;
     }
 
-    if (loadingMessageId) {
+    if (ctx.chat) {
+      const chatId = ctx.chat.id;
+      const currentAgent = await resolveProjectAgent();
+
+      deps.keyboardManager.updateAgent(currentAgent);
+      deps.keyboardManager.updateModel(getStoredModel());
+
+      const contextInfo = deps.keyboardManager.getContextInfo();
+      if (contextInfo) {
+        deps.keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+      }
+
+      if (loadingMessageId) {
+        try {
+          await ctx.api.deleteMessage(chatId, loadingMessageId);
+        } catch (err) {
+          logger.debug("[Sessions] Failed to delete loading message:", err);
+        }
+      }
+
+      const keyboard = deps.keyboardManager.getKeyboard();
       try {
-        await ctx.api.deleteMessage(chatId, loadingMessageId);
+        await ctx.api.sendMessage(
+          chatId,
+          t("sessions.selected", { title: session.title }),
+          keyboard ? { reply_markup: keyboard } : {},
+        );
       } catch (err) {
-        logger.debug("[Sessions] Failed to delete loading message:", err);
+        logger.error("[Sessions] Failed to send selection message:", err);
+      }
+
+      if (deliverPick) {
+        await sendSessionPickTranscript(
+          ctx.api,
+          chatId,
+          session.id,
+          currentProject.worktree,
+          pickMessages,
+          pickBusy,
+        );
+      }
+
+      if (options.postSelectAction === "latest_assistant_response") {
+        safeBackgroundTask({
+          taskName: "sessions.sendLatestAssistantResponse",
+          task: () => sendLatestAssistantResponse(ctx.api, chatId, session.id, currentProject.worktree),
+        });
       }
     }
-
-    const keyboard = deps.keyboardManager.getKeyboard();
-    try {
-      await ctx.api.sendMessage(
-        chatId,
-        t("sessions.selected", { title: session.title }),
-        keyboard ? { reply_markup: keyboard } : {},
-      );
-    } catch (err) {
-      logger.error("[Sessions] Failed to send selection message:", err);
-    }
-
-    if (options.postSelectAction === "preview") {
-      safeBackgroundTask({
-        taskName: "sessions.sendPreview",
-        task: () =>
-          sendSessionPreview(
-            ctx.api,
-            chatId,
-            null,
-            session.title,
-            session.id,
-            currentProject.worktree,
-          ),
-      });
-    }
-
-    if (options.postSelectAction === "latest_assistant_response") {
-      safeBackgroundTask({
-        taskName: "sessions.sendLatestAssistantResponse",
-        task: () => sendLatestAssistantResponse(ctx.api, chatId, session.id, currentProject.worktree),
-      });
+  } finally {
+    if (deliverPick) {
+      await releaseSessionPickHold(deps.summaryAggregator);
     }
   }
 
@@ -344,109 +355,174 @@ function extractTextParts(
   return normalizedText.trim().length > 0 ? normalizedText : null;
 }
 
-function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-
-  const clipped = text.slice(0, Math.max(0, maxLength - 3)).trimEnd();
-  return `${clipped}...`;
+function sessionPickSendGapMs(): number {
+  return process.env.VITEST ? 0 : SESSION_PICK_SEND_GAP_MS;
 }
 
-async function loadSessionPreview(
+function waitForSessionPickSend(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, sessionPickSendGapMs()));
+}
+
+async function releaseSessionPickHold(
+  aggregator: SessionSelectDeps["summaryAggregator"],
+): Promise<void> {
+  if (aggregator.hasDeferredOutbound()) {
+    await waitForSessionPickSend();
+  }
+  await aggregator.drainOutbound(sessionPickSendGapMs());
+}
+
+async function readSessionBusy(sessionId: string, directory: string): Promise<boolean> {
+  try {
+    const { data, error } = await opencodeClient.session.status({ directory });
+    if (error || !data) {
+      logger.warn("[Sessions] Failed to read session status for pick:", error);
+      return true;
+    }
+    return data[sessionId]?.type === "busy";
+  } catch (err) {
+    logger.warn("[Sessions] Failed to read session status for pick:", err);
+    return true;
+  }
+}
+
+async function loadSessionPickMessages(
   sessionId: string,
   directory: string,
-): Promise<SessionPreviewItem[]> {
+  busy: boolean,
+): Promise<SessionPickMessage[] | null> {
+  const loaded: SessionPickMessage[] = [];
+  const seen = new Set<string>();
+  let before: string | undefined;
+
   try {
-    const { data: messages, error } = await opencodeClient.session.messages({
-      sessionID: sessionId,
-      directory,
-      limit: PREVIEW_MESSAGES_LIMIT,
-    });
+    for (;;) {
+      const { data, error } = await opencodeClient.session.messages({
+        sessionID: sessionId,
+        directory,
+        limit: SESSION_PICK_PAGE_SIZE,
+        ...(before ? { before } : {}),
+      });
 
-    if (error || !messages) {
-      logger.warn("[Sessions] Failed to fetch session messages:", error);
-      return [];
+      if (error || !data) {
+        logger.warn("[Sessions] Failed to fetch session messages for pick:", error);
+        return null;
+      }
+
+      const pageMessages = data as SessionPickMessage[];
+      if (pageMessages.length === 0) {
+        return loaded;
+      }
+
+      let added = 0;
+      for (const message of pageMessages) {
+        const id = message.info.id;
+        if (id && seen.has(id)) {
+          continue;
+        }
+        if (id) {
+          seen.add(id);
+        }
+        loaded.push(message);
+        added += 1;
+      }
+
+      if (added === 0 || findEligibleReply(loaded, busy)) {
+        return loaded;
+      }
+      if (pageMessages.length < SESSION_PICK_PAGE_SIZE) {
+        return loaded;
+      }
+
+      const oldest = pageMessages.reduce((current, message) => {
+        const created = message.info.time?.created ?? 0;
+        const currentCreated = current.info.time?.created ?? 0;
+        return created < currentCreated ? message : current;
+      });
+      if (!oldest.info.id || oldest.info.id === before) {
+        return loaded;
+      }
+      before = oldest.info.id;
     }
-
-    const items = messages
-      .map(({ info, parts }) => {
-        const role = info.role as "user" | "assistant" | undefined;
-        if (role !== "user" && role !== "assistant") {
-          return null;
-        }
-
-        if (role === "assistant" && (info as { summary?: boolean }).summary) {
-          return null;
-        }
-
-        const text = extractTextParts(parts as Array<{ type: string; text?: string }>);
-        if (!text) {
-          return null;
-        }
-
-        const created = info.time?.created ?? 0;
-        return {
-          role,
-          text: truncateText(text, PREVIEW_ITEM_MAX_LENGTH),
-          created,
-        } as SessionPreviewItem;
-      })
-      .filter((item): item is SessionPreviewItem => Boolean(item));
-
-    return items.sort((a, b) => a.created - b.created);
   } catch (err) {
-    logger.error("[Sessions] Error loading session preview:", err);
-    return [];
+    logger.error("[Sessions] Error loading session messages for pick:", err);
+    return null;
   }
 }
 
-function formatSessionPreview(_sessionTitle: string, items: SessionPreviewItem[]): string {
-  const lines: string[] = [];
-
-  if (items.length === 0) {
-    lines.push(t("sessions.preview.empty"));
-    return lines.join("\n");
-  }
-
-  lines.push(t("sessions.preview.title"));
-
-  items.forEach((item, index) => {
-    const label = item.role === "user" ? t("sessions.preview.you") : t("sessions.preview.agent");
-    lines.push(`${label} ${item.text}`);
-    if (index < items.length - 1) {
-      lines.push("");
+async function loadParentMessage(
+  sessionId: string,
+  messageId: string,
+  directory: string,
+): Promise<SessionPickMessage | null> {
+  try {
+    const { data, error } = await opencodeClient.session.message({
+      sessionID: sessionId,
+      messageID: messageId,
+      directory,
+    });
+    if (error || !data) {
+      logger.warn("[Sessions] Failed to load the user message for the shown reply:", error);
+      return null;
     }
-  });
-
-  const rawMessage = lines.join("\n");
-  return truncateText(rawMessage, TELEGRAM_MESSAGE_LIMIT);
+    return data as SessionPickMessage;
+  } catch (err) {
+    logger.warn("[Sessions] Failed to load the user message for the shown reply:", err);
+    return null;
+  }
 }
 
-async function sendSessionPreview(
+async function sendSessionPickTranscript(
   api: Context["api"],
   chatId: number,
-  messageId: number | null,
-  sessionTitle: string,
   sessionId: string,
   directory: string,
+  messages: SessionPickMessage[] | null,
+  busy: boolean,
 ): Promise<void> {
-  const previewItems = await loadSessionPreview(sessionId, directory);
-  const finalText = formatSessionPreview(sessionTitle, previewItems);
+  const reply = messages ? findEligibleReply(messages, busy) : null;
+  let quoteSource: SessionPickMessage | null = null;
 
-  if (messageId) {
+  if (messages && reply?.parentId) {
+    quoteSource = findMessageById(messages, reply.parentId);
+    if (!quoteSource) {
+      quoteSource = await loadParentMessage(sessionId, reply.parentId, directory);
+    }
+  } else if (messages && !reply) {
+    quoteSource = findLatestUserPrompt(messages);
+  }
+
+  const quote = quoteSource ? buildSessionPickQuote(quoteSource) : null;
+  if (quote) {
+    await waitForSessionPickSend();
     try {
-      await api.editMessageText(chatId, messageId, finalText);
-      return;
+      await sendBotText({
+        api,
+        chatId,
+        text: quote.text,
+        rawFallbackText: quote.rawFallbackText,
+        format: "markdown_v2",
+      });
     } catch (err) {
-      logger.warn("[Sessions] Failed to edit preview message, sending new one:", err);
+      logger.error("[Sessions] Failed to send the last user input quote:", err);
+    }
+  } else if (!reply) {
+    await waitForSessionPickSend();
+    try {
+      await api.sendMessage(chatId, t("sessions.preview.empty"));
+    } catch (err) {
+      logger.error("[Sessions] Failed to send the empty session notice:", err);
     }
   }
 
-  try {
-    await api.sendMessage(chatId, finalText);
-  } catch (err) {
-    logger.error("[Sessions] Failed to send session preview message:", err);
+  if (!reply) {
+    return;
+  }
+
+  const parts = renderAssistantFinalPartsSafe(reply.text);
+  for (const part of parts) {
+    await waitForSessionPickSend();
+    await sendRenderedBotPart({ api, chatId, part });
   }
 }
 

@@ -204,9 +204,8 @@ export const id: I18nDictionary = {
   "sessions.selected": "✅ Sesi dipilih: {title}",
   "sessions.select_error": "🔴 Gagal memilih sesi.",
   "sessions.preview.empty": "Tidak ada pesan terbaru.",
-  "sessions.preview.title": "Pesan terbaru:",
-  "sessions.preview.you": "Kamu:",
-  "sessions.preview.agent": "Agent:",
+  "sessions.last_input.title": "Input pengguna terakhir:",
+  "sessions.last_input.attachment": "lampiran",
 
   "messages.project_not_selected": "🏗 Proyek belum dipilih.\n\nPilih dulu proyek dengan /projects.",
   "messages.session_not_selected":

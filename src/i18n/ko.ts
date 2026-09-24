@@ -207,9 +207,8 @@ export const ko: I18nDictionary = {
   "sessions.selected": "✅ 세션 선택됨: {title}",
   "sessions.select_error": "🔴 세션 선택에 실패했습니다.",
   "sessions.preview.empty": "최근 메시지가 없습니다.",
-  "sessions.preview.title": "최근 메시지:",
-  "sessions.preview.you": "나:",
-  "sessions.preview.agent": "에이전트:",
+  "sessions.last_input.title": "마지막 사용자 입력:",
+  "sessions.last_input.attachment": "첨부 파일",
 
   "messages.project_not_selected":
     "🏗 프로젝트가 선택되지 않았습니다.\n\n먼저 /projects로 프로젝트를 선택해 주세요.",

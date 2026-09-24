@@ -184,9 +184,8 @@ export const zh: I18nDictionary = {
   "sessions.selected": "✅ 已选择会话：{title}",
   "sessions.select_error": "🔴 选择会话失败。",
   "sessions.preview.empty": "没有最近消息。",
-  "sessions.preview.title": "最近消息：",
-  "sessions.preview.you": "你：",
-  "sessions.preview.agent": "代理：",
+  "sessions.last_input.title": "上次用户输入：",
+  "sessions.last_input.attachment": "附件",
 
   "messages.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择项目。",
   "messages.session_not_selected":

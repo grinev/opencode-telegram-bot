@@ -200,9 +200,8 @@ export const tr: I18nDictionary = {
   "sessions.selected": "✅ Oturum seçildi: {title}",
   "sessions.select_error": "🔴 Oturum seçilemedi.",
   "sessions.preview.empty": "Son mesaj yok.",
-  "sessions.preview.title": "Son mesajlar:",
-  "sessions.preview.you": "Siz:",
-  "sessions.preview.agent": "Ajan:",
+  "sessions.last_input.title": "Son kullanıcı girdisi:",
+  "sessions.last_input.attachment": "ek",
 
   "messages.project_not_selected": "🏗 Proje seçilmedi.\n\nÖnce /projects ile bir proje seçin.",
   "messages.session_not_selected":

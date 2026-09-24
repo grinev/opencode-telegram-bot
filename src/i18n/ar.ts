@@ -198,9 +198,8 @@ export const ar: I18nDictionary = {
   "sessions.selected": "✅ تم اختيار الجلسة: {title}",
   "sessions.select_error": "🔴 تعذر اختيار الجلسة.",
   "sessions.preview.empty": "لا توجد رسائل حديثة.",
-  "sessions.preview.title": "أحدث الرسائل:",
-  "sessions.preview.you": "أنت:",
-  "sessions.preview.agent": "الوكيل:",
+  "sessions.last_input.title": "آخر إدخال للمستخدم:",
+  "sessions.last_input.attachment": "مرفق",
 
   "messages.project_not_selected":
     "🏗 لم تحدد مشروعًا بعد.\n\nاختر مشروعًا أولًا باستخدام /projects.",

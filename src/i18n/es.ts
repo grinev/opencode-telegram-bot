@@ -207,9 +207,8 @@ export const es: I18nDictionary = {
   "sessions.selected": "✅ Sesión seleccionada: {title}",
   "sessions.select_error": "🔴 No se pudo seleccionar la sesión.",
   "sessions.preview.empty": "No hay mensajes recientes.",
-  "sessions.preview.title": "Mensajes recientes:",
-  "sessions.preview.you": "Tú:",
-  "sessions.preview.agent": "Agente:",
+  "sessions.last_input.title": "Última entrada del usuario:",
+  "sessions.last_input.attachment": "archivo adjunto",
 
   "messages.project_not_selected":
     "🏗 No hay ningún proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",

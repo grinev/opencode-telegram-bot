@@ -21,6 +21,8 @@ const mocked = vi.hoisted(() => ({
   sessionListMock: vi.fn(),
   sessionGetMock: vi.fn(),
   sessionMessagesMock: vi.fn(),
+  sessionStatusMock: vi.fn(),
+  sessionMessageMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
   clearInteractionMock: vi.fn(),
   keyboardInitializeMock: vi.fn(),
@@ -46,6 +48,8 @@ vi.mock("../../../src/opencode/client.js", () => ({
       list: mocked.sessionListMock,
       get: mocked.sessionGetMock,
       messages: mocked.sessionMessagesMock,
+      status: mocked.sessionStatusMock,
+      message: mocked.sessionMessageMock,
     },
   },
 }));
@@ -210,6 +214,10 @@ describe("bot/commands/sessions", () => {
     mocked.sessionListMock.mockReset();
     mocked.sessionGetMock.mockReset();
     mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock.mockResolvedValue({ data: [], error: null });
+    mocked.sessionStatusMock.mockReset();
+    mocked.sessionStatusMock.mockResolvedValue({ data: {}, error: null });
+    mocked.sessionMessageMock.mockReset();
     mocked.setCurrentSessionMock.mockReset();
     mocked.clearInteractionMock.mockReset();
     mocked.keyboardInitializeMock.mockReset();
@@ -415,11 +423,166 @@ describe("bot/commands/sessions", () => {
         reply_markup: { inline_keyboard: [] },
       }),
     ]);
-    expect(safeBackgroundTaskMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskName: "sessions.sendPreview",
-      }),
+    expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
+    expect((ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls[2]?.[1]).toBe(
+      t("sessions.preview.empty"),
     );
+  });
+
+  it("pages past a newer prompt and shows the finished reply it answers", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+    const firstPage = Array.from({ length: 20 }, (_, index) => ({
+      info: {
+        id: `page1-${index}`,
+        role: index === 19 ? ("user" as const) : ("assistant" as const),
+        time: { created: 2000 + index, completed: 2000 + index },
+      },
+      parts:
+        index === 19
+          ? [{ type: "text", text: "unanswered prompt" }]
+          : [{ type: "tool" }],
+    }));
+    mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock
+      .mockResolvedValueOnce({ data: firstPage, error: null })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            info: {
+              id: "user-old",
+              role: "user",
+              time: { created: 100 },
+            },
+            parts: [{ type: "text", text: "answered prompt" }],
+          },
+          {
+            info: {
+              id: "assistant-old",
+              role: "assistant",
+              parentID: "user-old",
+              time: { created: 150, completed: 180 },
+            },
+            parts: [{ type: "text", text: "finished reply" }],
+          },
+        ],
+        error: null,
+      });
+
+    startInteractionForTest(container.interactionManager, {
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    const ctx = createCallbackContext("session:session-1", 456);
+    await handleSessionSelect(ctx, createDeps());
+
+    expect(mocked.sessionMessagesMock).toHaveBeenNthCalledWith(2, {
+      sessionID: "session-1",
+      directory: "/repo",
+      limit: 20,
+      before: "page1-0",
+    });
+    const sent = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => String(call[1]),
+    );
+    expect(sent.some((text) => text.includes("answered prompt"))).toBe(true);
+    expect(sent.some((text) => text.includes("finished reply"))).toBe(true);
+    expect(sent.some((text) => text.includes("unanswered prompt"))).toBe(false);
+    expect(sent.some((text) => text.includes("Recent messages:"))).toBe(false);
+    expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("does not show an in-flight reply when session status cannot be read", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+    mocked.sessionStatusMock.mockResolvedValueOnce({ error: { message: "down" } });
+    mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: {
+            id: "user-1",
+            role: "user",
+            time: { created: 1 },
+          },
+          parts: [{ type: "text", text: "the prompt" }],
+        },
+        {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            parentID: "user-1",
+            time: { created: 2 },
+          },
+          parts: [{ type: "text", text: "partial reply" }],
+        },
+      ],
+      error: null,
+    });
+
+    startInteractionForTest(container.interactionManager, {
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    const ctx = createCallbackContext("session:session-1", 456);
+    await handleSessionSelect(ctx, createDeps());
+
+    const sent = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+      String(call[1]),
+    );
+    expect(sent.some((text) => text.includes("partial reply"))).toBe(false);
+    expect(sent.some((text) => text.includes("the prompt"))).toBe(true);
+  });
+
+  it("sends the empty notice when a later history page fails", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+    const firstPage = Array.from({ length: 20 }, (_, index) => ({
+      info: {
+        id: `page1-${index}`,
+        role: "user" as const,
+        time: { created: 2000 + index },
+      },
+      parts: [{ type: "text", text: "only a prompt" }],
+    }));
+    mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock
+      .mockResolvedValueOnce({ data: firstPage, error: null })
+      .mockResolvedValueOnce({ error: { message: "page failed" } });
+
+    startInteractionForTest(container.interactionManager, {
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    const ctx = createCallbackContext("session:session-1", 456);
+    await handleSessionSelect(ctx, createDeps());
+
+    const sent = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+      String(call[1]),
+    );
+    expect(sent).toContain(t("sessions.preview.empty"));
+    expect(sent.some((text) => text.includes("only a prompt"))).toBe(false);
   });
 
   it("pulls the settings of the selected session before attaching to it", async () => {

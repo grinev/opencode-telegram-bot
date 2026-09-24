@@ -198,9 +198,8 @@ export const en = {
   "sessions.selected": "✅ Session selected: {title}",
   "sessions.select_error": "🔴 Failed to select session.",
   "sessions.preview.empty": "No recent messages.",
-  "sessions.preview.title": "Recent messages:",
-  "sessions.preview.you": "You:",
-  "sessions.preview.agent": "Agent:",
+  "sessions.last_input.title": "Last user input:",
+  "sessions.last_input.attachment": "attachment",
 
   "messages.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",

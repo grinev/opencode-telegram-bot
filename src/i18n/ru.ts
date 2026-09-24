@@ -199,9 +199,8 @@ export const ru: I18nDictionary = {
   "sessions.selected": "✅ Сессия выбрана: {title}",
   "sessions.select_error": "🔴 Ошибка при выборе сессии.",
   "sessions.preview.empty": "Последних сообщений нет.",
-  "sessions.preview.title": "Последние сообщения:",
-  "sessions.preview.you": "Вы:",
-  "sessions.preview.agent": "Агент:",
+  "sessions.last_input.title": "Последний ввод пользователя:",
+  "sessions.last_input.attachment": "вложение",
 
   "messages.project_not_selected":
     "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
