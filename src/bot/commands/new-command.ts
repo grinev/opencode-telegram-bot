@@ -21,6 +21,7 @@ export type NewCommandDeps = Pick<
   | "attachManager"
   | "ensureEventSubscription"
   | "foregroundSessionState"
+  | "interactionManager"
   | "keyboardManager"
   | "permissionManager"
   | "questionManager"

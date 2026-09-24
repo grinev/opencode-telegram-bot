@@ -1,6 +1,13 @@
 import type { I18nDictionary } from "./en.js";
 
 export const fr: I18nDictionary = {
+  "cmd.description.recent": "Sessions récentes de tous les projets",
+  "recent.heading": "Sessions récentes de tous les projets (actualiser avec /recent) :",
+  "recent.empty": "📭 Aucune session dans les projets.",
+  "recent.running": "en cours",
+  "recent.idle": "inactive",
+  "recent.question": "attend une réponse",
+  "recent.permission": "attend une autorisation",
   "cmd.description.status": "Statut du serveur et de la session",
   "cmd.description.new": "Créer une nouvelle session",
   "cmd.description.stop": "Arrêter l'action en cours",

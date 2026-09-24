@@ -79,7 +79,7 @@ async function removeCallbackReplyMarkup(ctx: Context): Promise<void> {
   }
 }
 
-async function selectSessionById(
+export async function selectSessionById(
   ctx: Context,
   deps: SessionSelectDeps,
   sessionId: string,

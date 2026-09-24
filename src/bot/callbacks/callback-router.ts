@@ -20,6 +20,7 @@ import { handlePermissionCallback } from "./permission-callback-handler.js";
 import { handleProjectSelect } from "./project-callback-handler.js";
 import { handlePromptAttachmentCancel } from "./prompt-attachment-callback-handler.js";
 import { handleQuestionCallback } from "./question-callback-handler.js";
+import { handleRecentSelect } from "./recent-callback-handler.js";
 import { handleRenameCancel } from "./rename-callback-handler.js";
 import { handleSettingsCallback } from "./settings-callback-handler.js";
 import {
@@ -164,6 +165,10 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
         handlers: [(ctx) => handleQuestionCallback(ctx, container)],
         errorScope: "question",
       },
+    ],
+    [
+      "recent",
+      { name: "recent", handlers: [(ctx) => handleRecentSelect(ctx, botDeps)], errorScope: "interaction" },
     ],
     [
       "rename",

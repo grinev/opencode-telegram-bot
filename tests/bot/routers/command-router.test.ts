@@ -44,6 +44,7 @@ describe("bot/routers/command-router", () => {
       "open",
       "ls",
       "sessions",
+      "recent",
       "messages",
       "new",
       "abort",

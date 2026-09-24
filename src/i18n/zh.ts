@@ -1,6 +1,13 @@
 import type { I18nDictionary } from "./en.js";
 
 export const zh: I18nDictionary = {
+  "cmd.description.recent": "查看所有项目的最近会话",
+  "recent.heading": "所有项目的最近会话（用 /recent 刷新）：",
+  "recent.empty": "📭 所有项目中都没有会话。",
+  "recent.running": "运行中",
+  "recent.idle": "空闲",
+  "recent.question": "等待回答",
+  "recent.permission": "等待授权",
   "cmd.description.status": "服务器和会话状态",
   "cmd.description.new": "创建新会话",
   "cmd.description.stop": "停止当前操作",

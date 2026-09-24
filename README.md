@@ -140,6 +140,7 @@ opencode-telegram config
 | `/abort`          | Abort the current task                                  |
 | `/detach`         | Detach from the current session without stopping it     |
 | `/sessions`       | Browse and switch between recent sessions               |
+| `/recent`         | Browse recent sessions across projects and worktrees, see their status and attach directly |
 | `/messages`       | Browse user messages, revert or fork from a previous state     |
 | `/projects`       | Switch between OpenCode projects                        |
 | `/worktree`       | Switch between existing git worktrees                   |
@@ -238,7 +239,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `OPENCODE_MODEL_PROVIDER`                  | Default model provider                                                                                                |   Yes    | `opencode`               |
 | `OPENCODE_MODEL_ID`                        | Default model ID                                                                                                      |   Yes    | `big-pickle`             |
 | `BOT_LOCALE`                               | Bot UI language (supported locale code, e.g. `en`, `ar`, `de`, `es`, `fr`, `id`, `it`, `ko`, `pt`, `ru`, `tr`, `zh`)  |    No    | `en`                     |
-| `SESSIONS_LIST_LIMIT`                      | Sessions per page in `/sessions`                                                                                      |    No    | `10`                     |
+| `SESSIONS_LIST_LIMIT`                      | Sessions per page in `/sessions` and maximum sessions in `/recent`                                                    |    No    | `10`                     |
 | `MESSAGES_LIST_LIMIT`                      | User messages per page in `/messages`                                                                                 |    No    | `10`                     |
 | `PROJECTS_LIST_LIMIT`                      | Projects per page in `/projects`                                                                                      |    No    | `10`                     |
 | `PROJECTS_EXCLUDED_PATHS`                  | Comma-separated absolute paths hidden from `/projects` (exact worktree match)                                        |    No    | *(none)*                 |

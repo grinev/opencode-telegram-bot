@@ -22,10 +22,12 @@ const mocked = vi.hoisted(() => ({
   } as { id: string; title: string; directory: string } | null,
   healthMock: vi.fn(),
   sessionStatusMock: vi.fn(),
+  sessionGetMock: vi.fn(),
   questionListMock: vi.fn(),
   permissionListMock: vi.fn(),
   setSessionSummaryMock: vi.fn(),
   setBotAndChatIdMock: vi.fn(),
+  registerRestoredPermissionChildMock: vi.fn(),
   pinnedIsInitializedMock: vi.fn(() => true),
   pinnedInitializeMock: vi.fn(),
   pinnedGetStateMock: vi.fn(),
@@ -57,6 +59,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
     },
     session: {
       status: mocked.sessionStatusMock,
+      get: mocked.sessionGetMock,
     },
     question: {
       list: mocked.questionListMock,
@@ -85,6 +88,7 @@ function createDeps(): AppContainer {
     summaryAggregator: {
       setSession: mocked.setSessionSummaryMock,
       setBotAndChatId: mocked.setBotAndChatIdMock,
+      registerRestoredPermissionChild: mocked.registerRestoredPermissionChildMock,
       clear: vi.fn(),
     } as unknown as AppContainer["summaryAggregator"],
     pinnedMessageManager: {
@@ -151,6 +155,8 @@ describe("attach/service", () => {
       },
       error: null,
     });
+    mocked.sessionGetMock.mockReset();
+    mocked.registerRestoredPermissionChildMock.mockReset();
     mocked.questionListMock.mockReset();
     mocked.questionListMock.mockResolvedValue({ data: [], error: null });
     mocked.permissionListMock.mockReset();
@@ -263,6 +269,36 @@ describe("attach/service", () => {
 
     expect(result.restoredQuestion).toBe(true);
     expect(mocked.showCurrentQuestionMock).toHaveBeenCalledOnce();
+  });
+
+  it("restores a detached child permission and attributes it to the followed root", async () => {
+    const request = { id: "permission-child", sessionID: "child", permission: "edit", patterns: ["*"], metadata: {}, always: [] };
+    mocked.permissionListMock.mockResolvedValue({ data: [request], error: null });
+    mocked.sessionGetMock.mockResolvedValue({ data: { parentID: "session-1" }, error: null });
+
+    const result = await attachToSession({
+      ...deps, bot: createBot(), chatId: 777, session: mocked.currentSession!,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+
+    expect(result.restoredPermissions).toBe(1);
+    expect(mocked.registerRestoredPermissionChildMock).toHaveBeenCalledWith("child", "session-1");
+    expect(mocked.showPermissionRequestMock).toHaveBeenCalledWith(expect.anything(), 777, request, expect.anything());
+  });
+
+  it("queues a child permission behind a restored question", async () => {
+    mocked.questionListMock.mockResolvedValue({ data: [{ id: "question-1", sessionID: "session-1", questions: [] }], error: null });
+    mocked.permissionListMock.mockResolvedValue({ data: [{ id: "permission-child", sessionID: "child", permission: "edit", patterns: ["*"], metadata: {}, always: [] }], error: null });
+    mocked.sessionGetMock.mockResolvedValue({ data: { parentID: "session-1" }, error: null });
+
+    await attachToSession({
+      ...deps, bot: createBot(), chatId: 777, session: mocked.currentSession!,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+
+    expect(mocked.showCurrentQuestionMock).toHaveBeenCalledOnce();
+    expect(deps.interactionManager.getWaitingKind()).toBe("permission");
+    expect(mocked.showPermissionRequestMock).not.toHaveBeenCalled();
   });
 
   it("restores the saved current session on startup", async () => {

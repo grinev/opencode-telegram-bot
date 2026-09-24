@@ -1,4 +1,11 @@
 export const en = {
+  "cmd.description.recent": "Recent sessions across projects",
+  "recent.heading": "Recent sessions across projects (run /recent to refresh):",
+  "recent.empty": "📭 No sessions found across projects.",
+  "recent.running": "running",
+  "recent.idle": "idle",
+  "recent.question": "awaiting an answer",
+  "recent.permission": "awaiting permission",
   "cmd.description.status": "Server and session status",
   "cmd.description.new": "Create a new session",
   "cmd.description.stop": "Stop current action",

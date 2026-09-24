@@ -6,6 +6,7 @@ import type { PermissionRequest } from "../types/permission.js";
 import type { SessionInfo } from "../types/session.js";
 import { getCurrentSession } from "./session-service.js";
 import { getCurrentProject } from "../stores/settings-store.js";
+import { resolveSessionParentChain } from "./recent-sessions-service.js";
 import { resetStreamThrottle } from "../../bot/streaming/stream-throttle.js";
 import { logger } from "../../utils/logger.js";
 import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";
@@ -40,7 +41,7 @@ export type DetachSessionDeps = Pick<AppContainer, "attachManager" | "resetAggre
 
 type AttachRestoreDeps = Pick<
   AppContainer,
-  "attachManager" | "permissionManager" | "questionManager" | "summaryAggregator"
+  "attachManager" | "permissionManager" | "questionManager" | "summaryAggregator" | "interactionManager"
 >;
 
 export interface AttachSessionDeps extends AttachRestoreDeps {
@@ -112,10 +113,12 @@ async function restorePendingQuestion(
 }
 
 async function restorePendingPermissions(
+  deps: AttachRestoreDeps,
   bot: Bot<Context>,
   chatId: number,
   sessionId: string,
   directory: string,
+  questionActive: boolean,
 ): Promise<number> {
   const { data, error } = await opencodeClient.permission.list({
     directory,
@@ -130,13 +133,25 @@ async function restorePendingPermissions(
     return 0;
   }
 
-  const pendingPermissions = data.filter((request) => request.sessionID === sessionId);
+  const pendingPermissions: typeof data = [];
+  for (const request of data) {
+    const chain = await resolveSessionParentChain(request.sessionID, directory, new Set([sessionId]));
+    if (!chain) continue;
+    for (const link of chain.links.reverse()) {
+      deps.summaryAggregator.registerRestoredPermissionChild(link.child, link.parent);
+    }
+    pendingPermissions.push(request);
+  }
   if (!attachPresentation) {
     return 0;
   }
 
   for (const request of pendingPermissions) {
-    await attachPresentation.showPermissionRequest(bot.api, chatId, request);
+    if (questionActive) {
+      deps.interactionManager.waitPermission(request);
+    } else {
+      await attachPresentation.showPermissionRequest(bot.api, chatId, request);
+    }
   }
 
   return pendingPermissions.length;
@@ -195,14 +210,14 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
   ) {
     restoredQuestion = await restorePendingQuestion(deps, bot, chatId, session.id, session.directory);
 
-    if (!restoredQuestion) {
-      restoredPermissions = await restorePendingPermissions(
-        bot,
-        chatId,
-        session.id,
-        session.directory,
-      );
-    }
+    restoredPermissions = await restorePendingPermissions(
+      deps,
+      bot,
+      chatId,
+      session.id,
+      session.directory,
+      restoredQuestion,
+    );
   }
 
   return {

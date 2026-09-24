@@ -8,6 +8,13 @@ import type { I18nDictionary } from "./en.js";
  * Keep this dictionary complete to avoid falling back to another locale.
  */
 export const ko: I18nDictionary = {
+  "cmd.description.recent": "모든 프로젝트의 최근 세션",
+  "recent.heading": "모든 프로젝트의 최근 세션 (/recent로 새로고침):",
+  "recent.empty": "📭 프로젝트에 세션이 없습니다.",
+  "recent.running": "실행 중",
+  "recent.idle": "대기 중",
+  "recent.question": "답변 대기 중",
+  "recent.permission": "권한 승인 대기 중",
   "cmd.description.status": "서버 및 세션 상태",
   "cmd.description.new": "새 세션 만들기",
   "cmd.description.stop": "현재 작업 중지",

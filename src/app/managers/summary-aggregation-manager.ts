@@ -655,6 +655,12 @@ export class SummaryAggregator {
     return this.isTrackedChildSession(sessionId);
   }
 
+  registerRestoredPermissionChild(child: string, parent: string): void {
+    if (this.trackedSessionParents.has(parent) && child !== this.currentSessionId) {
+      this.trackedSessionParents.set(child, parent);
+    }
+  }
+
   /**
    * The root session a tracked session belongs to, found by walking its parents;
    * an untracked session is its own root.

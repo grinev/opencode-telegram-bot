@@ -44,6 +44,7 @@ No public inbound ports are required for normal usage.
 
 - Fetch last N sessions (name + date)
 - Select an existing session, show the last user input as a quote and the last assistant reply in full, then follow its live updates
+- Browse up to `SESSIONS_LIST_LIMIT` recent root sessions across projects and git worktrees with running, idle, question and permission status; select one to switch project and follow it, including after detach
 - Switching to an existing session adopts the agent, model, and variant it last ran with
 - Create a new session
 - Use OpenCode-generated session title (based on conversation)
@@ -119,6 +120,7 @@ Current command set:
 - `/abort` - stop the current task
 - `/detach` - detach the bot from the current session without stopping it; a later command or prompt HTTP failure for that session is not posted to chat unless the bot has re-attached to it
 - `/sessions` - show and switch recent sessions
+- `/recent` - show recent sessions across projects and worktrees with their status and switch directly to one
 - `/messages` - browse user messages in the current session
 - `/projects` - show and switch projects
 - `/worktree` - show and switch existing git worktrees for the current repository
@@ -168,6 +170,7 @@ Agent picker behavior:
 - [x] Single-user access control by allowed Telegram user ID
 - [x] OpenCode server control from Telegram (`/status`, `/opencode_start`, `/opencode_stop`)
 - [x] Project and session management from Telegram (`/projects`, `/worktree`, `/sessions`, `/new`)
+- [x] Cross-project recent sessions with status and direct attachment (`/recent`)
 - [x] Automatic tracking of the current OpenCode CLI session, including continuing it from Telegram, live updates, and external text input notifications
 - [x] Remote task execution, interruption, and local detachment support (`/abort`, `/detach`)
 - [x] Background notifications for detached/non-current sessions in the currently selected project/worktree

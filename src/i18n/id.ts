@@ -8,6 +8,13 @@ import type { I18nDictionary } from "./en.js";
  * Keep this dictionary complete to avoid falling back to another locale.
  */
 export const id: I18nDictionary = {
+  "cmd.description.recent": "Sesi terbaru di semua proyek",
+  "recent.heading": "Sesi terbaru di semua proyek (segarkan dengan /recent):",
+  "recent.empty": "📭 Tidak ada sesi di semua proyek.",
+  "recent.running": "berjalan",
+  "recent.idle": "diam",
+  "recent.question": "menunggu jawaban",
+  "recent.permission": "menunggu izin",
   "cmd.description.status": "Status server dan sesi",
   "cmd.description.new": "Buat sesi baru",
   "cmd.description.stop": "Hentikan aksi saat ini",

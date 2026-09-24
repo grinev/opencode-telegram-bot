@@ -1,6 +1,13 @@
 import type { I18nDictionary } from "./en.js";
 
 export const tr: I18nDictionary = {
+  "cmd.description.recent": "Projelerdeki son oturumlar",
+  "recent.heading": "Projelerdeki son oturumlar (/recent ile yenile):",
+  "recent.empty": "📭 Projelerde oturum bulunamadı.",
+  "recent.running": "çalışıyor",
+  "recent.idle": "boşta",
+  "recent.question": "yanıt bekliyor",
+  "recent.permission": "izin bekliyor",
   "cmd.description.status": "Sunucu ve oturum durumu",
   "cmd.description.new": "Yeni oturum oluştur",
   "cmd.description.stop": "Geçerli işlemi durdur",
