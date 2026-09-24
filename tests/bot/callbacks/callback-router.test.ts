@@ -7,6 +7,7 @@ const mocked = vi.hoisted(() => ({
   handleAgentSelect: vi.fn(),
   handleCommandsCallback: vi.fn(),
   handleCompactConfirm: vi.fn(),
+  handleCompactDetails: vi.fn(),
   handleLsCallback: vi.fn(),
   handleOpenCallback: vi.fn(),
   handleInlineMenuCancel: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock("../../../src/bot/callbacks/command-catalog-callback-handler.js", () => 
 }));
 vi.mock("../../../src/bot/callbacks/context-control-callback-handler.js", () => ({
   handleCompactConfirm: mocked.handleCompactConfirm,
+  handleCompactDetails: mocked.handleCompactDetails,
 }));
 vi.mock("../../../src/bot/callbacks/file-browser-callback-handler.js", () => ({
   handleLsCallback: mocked.handleLsCallback,
@@ -115,6 +117,7 @@ const tableHandlers = [
   mocked.handleAgentSelect,
   mocked.handleCommandsCallback,
   mocked.handleCompactConfirm,
+  mocked.handleCompactDetails,
   mocked.handleLsCallback,
   mocked.handleOpenCallback,
   mocked.handleMcpsCallback,

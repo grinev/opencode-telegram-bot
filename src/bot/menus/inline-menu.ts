@@ -36,6 +36,7 @@ interface InlineMenuReplyOptions {
   keyboard: InlineKeyboard;
   parseMode?: "Markdown" | "HTML";
   metadata?: InteractionMetadata;
+  cancelButtonText?: string;
 }
 
 export function isInlineMenuKind(value: string): value is InlineMenuKind {
@@ -83,6 +84,7 @@ function getInlineCancelCallbackData(menuKind: InlineMenuKind): string {
 export function appendInlineMenuCancelButton(
   keyboard: InlineKeyboard,
   menuKind: InlineMenuKind,
+  buttonText: string = menuKind === "settings" ? t("inline.button.close") : t("inline.button.cancel"),
 ): InlineKeyboard {
   while (keyboard.inline_keyboard.length > 0) {
     const lastRow = keyboard.inline_keyboard[keyboard.inline_keyboard.length - 1];
@@ -96,7 +98,6 @@ export function appendInlineMenuCancelButton(
     keyboard.row();
   }
 
-  const buttonText = menuKind === "settings" ? t("inline.button.close") : t("inline.button.cancel");
   keyboard.text(buttonText, getInlineCancelCallbackData(menuKind));
   return keyboard;
 }
@@ -106,7 +107,11 @@ export async function replyWithInlineMenu(
   options: InlineMenuReplyOptions,
   deps: InlineMenuDeps,
 ): Promise<number> {
-  const keyboard = appendInlineMenuCancelButton(options.keyboard, options.menuKind);
+  const keyboard = appendInlineMenuCancelButton(
+    options.keyboard,
+    options.menuKind,
+    options.cancelButtonText,
+  );
   const replyOptions: {
     reply_markup: InlineKeyboard;
     parse_mode?: "Markdown" | "HTML";

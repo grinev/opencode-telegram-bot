@@ -6,10 +6,44 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { alert, failure } from "./feedback.js";
 import {
+  appendInlineMenuCancelButton,
   clearActiveInlineMenu,
   ensureActiveInlineMenu,
   type InlineMenuDeps,
 } from "../menus/inline-menu.js";
+import { buildCompactConfirmationMenu } from "../menus/context-control-menu.js";
+
+export async function handleCompactDetails(ctx: Context, deps: InlineMenuDeps): Promise<boolean> {
+  if (ctx.callbackQuery?.data !== "compact:details") {
+    return false;
+  }
+
+  if (!(await ensureActiveInlineMenu(ctx, "context", deps))) {
+    return true;
+  }
+
+  if (deps.interactionManager.getSnapshot()?.metadata.stage !== "details") {
+    await alert(ctx, "inline.inactive_callback");
+    return true;
+  }
+
+  const session = getCurrentSession();
+  if (!session) {
+    clearActiveInlineMenu("context_session_missing", deps);
+    await alert(ctx, "context.no_active_session");
+    await ctx.deleteMessage().catch(() => {});
+    return true;
+  }
+
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText(t("context.confirm_text", { title: session.title }), {
+    reply_markup: appendInlineMenuCancelButton(buildCompactConfirmationMenu(), "context"),
+  });
+  deps.interactionManager.transition({
+    metadata: { ...deps.interactionManager.getSnapshot()?.metadata, stage: "confirm" },
+  });
+  return true;
+}
 
 /**
  * Handle compact confirmation callback
@@ -28,6 +62,11 @@ export async function handleCompactConfirm(
 
   const isActiveMenu = await ensureActiveInlineMenu(ctx, "context", deps);
   if (!isActiveMenu) {
+    return true;
+  }
+
+  if (deps.interactionManager.getSnapshot()?.metadata.stage !== "confirm") {
+    await alert(ctx, "inline.inactive_callback");
     return true;
   }
 

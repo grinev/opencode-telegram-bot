@@ -5,7 +5,7 @@ import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { handleAgentSelect } from "./agent-selection-callback-handler.js";
 import { handleCommandsCallback } from "./command-catalog-callback-handler.js";
-import { handleCompactConfirm } from "./context-control-callback-handler.js";
+import { handleCompactConfirm, handleCompactDetails } from "./context-control-callback-handler.js";
 import { handleLsCallback, handleOpenCallback } from "./file-browser-callback-handler.js";
 import { handleInlineMenuCancel } from "./inline-menu-cancel-callback-handler.js";
 import { handleMcpsCallback } from "./mcp-catalog-callback-handler.js";
@@ -87,7 +87,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
     ],
     [
       "compact",
-      { name: "compact", handlers: [(ctx) => handleCompactConfirm(ctx, container)], errorScope: "interaction" },
+      { name: "compact", handlers: [(ctx) => handleCompactDetails(ctx, container), (ctx) => handleCompactConfirm(ctx, container)], errorScope: "interaction" },
     ],
     [
       "ls",

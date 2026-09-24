@@ -135,7 +135,7 @@ Current command set:
 - `/help` - show command help
 - `/ls` - interactive file browser for the current project directory; a text file can be attached to the next prompt from its detail view
 
-Model, agent, variant, and context actions are available from the persistent bottom keyboard.
+Model, agent, variant, and context actions are available from the persistent bottom keyboard. The context button opens window usage and the latest assistant message's token breakdown and cost when a session is idle; its inline controls close the details or open a separate compaction confirmation.
 
 Text messages (non-commands) are treated as prompts for OpenCode only when no blocking interaction is active. Voice/audio messages are transcribed and then sent as prompts when STT is configured. When TTS mode in `/settings` is set to `all`, completed assistant replies include a generated audio file if TTS is configured. When it is set to `auto`, audio replies are sent only after voice/audio prompts.
 

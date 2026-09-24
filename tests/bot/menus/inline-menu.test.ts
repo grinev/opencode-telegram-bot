@@ -123,6 +123,21 @@ describe("bot/menus/inline-menu", () => {
     });
   });
 
+  it("uses a caller-supplied close label with the existing cancel callback", async () => {
+    const ctx = createReplyContext(43);
+    await replyWithInlineMenu(ctx, {
+      menuKind: "context",
+      text: "Context details",
+      keyboard: new InlineKeyboard().text("Compact", "compact:details"),
+      cancelButtonText: "Close",
+    }, deps);
+
+    const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]);
+    const buttons = (options.reply_markup as InlineKeyboard).inline_keyboard.flat();
+    expect(buttons.map((button) => button.text)).toEqual(["Compact", "Close"]);
+    expect(getCallbackData(buttons[1])).toBe("inline:cancel:context");
+  });
+
   it("accepts callback from active inline menu", async () => {
     deps.interactionManager.start({
       kind: "inline",

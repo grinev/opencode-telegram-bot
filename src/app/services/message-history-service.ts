@@ -9,6 +9,15 @@ export interface UserMessageItem {
   created: number;
 }
 
+export interface AssistantMessageMetrics {
+  input: number;
+  output: number;
+  reasoning: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cost: number;
+}
+
 type SessionMessageLike = {
   info: {
     id?: string;
@@ -123,4 +132,38 @@ export async function loadLatestAssistantResponse(
     logger.error("[Messages] Error loading latest assistant response:", err);
     return null;
   }
+}
+
+export async function loadLatestAssistantMetrics(
+  sessionId: string,
+  directory: string,
+): Promise<AssistantMessageMetrics | null> {
+  const { data, error } = await opencodeClient.session.messages({ sessionID: sessionId, directory });
+  if (error || !data) {
+    throw error || new Error("No message data received");
+  }
+
+  const latest = data.reduce<(typeof data)[number] | null>((current, message) => {
+    if (message.info.role !== "assistant" || message.info.summary) {
+      return current;
+    }
+    if (!current || (message.info.time?.created ?? 0) >= (current.info.time?.created ?? 0)) {
+      return message;
+    }
+    return current;
+  }, null);
+
+  if (!latest || latest.info.role !== "assistant") {
+    return null;
+  }
+
+  const { tokens, cost } = latest.info;
+  return {
+    input: tokens.input,
+    output: tokens.output,
+    reasoning: tokens.reasoning,
+    cacheRead: tokens.cache.read,
+    cacheWrite: tokens.cache.write,
+    cost,
+  };
 }
