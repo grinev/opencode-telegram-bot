@@ -17,7 +17,7 @@ type ResponseStreamerForReconciliation = {
 
 export type BusyReconciliationDeps = Pick<
   AppContainer,
-  "assistantRunState" | "attachManager" | "foregroundSessionState" | "scheduledTaskRuntime"
+  "attachManager" | "foregroundSessionState" | "scheduledTaskRuntime"
 >;
 
 const inFlightDirectories = new Set<string>();
@@ -75,11 +75,9 @@ function isWithinForegroundBusyGracePeriod(
 
 async function clearForegroundBusySession(
   sessionId: string,
-  reason: string,
   deps: BusyReconciliationDeps,
 ): Promise<void> {
   deps.foregroundSessionState.markIdle(sessionId);
-  deps.assistantRunState.clearRun(sessionId, reason);
   clearPromptResponseModeForReconciliation?.(sessionId);
 }
 
@@ -151,7 +149,7 @@ export async function reconcileBusyStateNow(
     if (attachedSessionForDirectory?.sessionId !== session.sessionId) {
       await markAttachedSessionIdle(session.sessionId, deps);
     }
-    await clearForegroundBusySession(session.sessionId, "status_reconcile_idle", deps);
+    await clearForegroundBusySession(session.sessionId, deps);
     clearedForegroundSession = true;
   }
 

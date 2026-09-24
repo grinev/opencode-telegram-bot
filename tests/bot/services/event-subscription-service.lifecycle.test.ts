@@ -439,6 +439,46 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       expect(api.sendMessage.mock.calls.at(-1)?.[1]).toContain("test-provider/test-model");
     }, 30_000);
 
+    it("leaves an incomplete run on idle and sends one footer after it completes", async () => {
+      const { api, summaryAggregator } = await setupService({
+        startAssistantRun: true,
+        showAssistantRunFooter: true,
+      });
+      const { assistantRunState, foregroundSessionState } = activeContainer;
+      foregroundSessionState.markBusy("session-1", "D:/repo");
+
+      emitSessionIdle(summaryAggregator);
+      await vi.waitFor(
+        () => {
+          expect(foregroundSessionState.isBusy()).toBe(false);
+        },
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+
+      expect(findFooterCalls(api)).toHaveLength(0);
+      expect(assistantRunState.isResponseCompleted("session-1")).toBe(false);
+
+      assistantRunState.markResponseCompleted("session-1", {
+        agent: "test-agent",
+        providerID: "test-provider",
+        modelID: "test-model",
+      });
+      expect(assistantRunState.isResponseCompleted("session-1")).toBe(true);
+
+      emitSessionIdle(summaryAggregator);
+      await vi.waitFor(
+        () => {
+          expect(findFooterCalls(api)).toHaveLength(1);
+        },
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+
+      emitSessionIdle(summaryAggregator);
+      await settle();
+
+      expect(findFooterCalls(api)).toHaveLength(1);
+    }, 30_000);
+
     it("skips the footer for a session that went idle after losing focus", async () => {
       const { api, summaryAggregator } = await setupService({
         startAssistantRun: true,

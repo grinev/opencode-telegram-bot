@@ -47,7 +47,9 @@ export function registerSessionLifecycleHandlers(deps: SessionLifecycleDeps): vo
     }
     await runtime.getCompletionTask(sessionId)?.catch(() => undefined);
 
-    const completedRun = deps.assistantRunState.finishRun(sessionId, "session_idle");
+    const completedRun = deps.assistantRunState.isResponseCompleted(sessionId)
+      ? deps.assistantRunState.finishRun(sessionId, "session_idle")
+      : null;
     clearPromptResponseMode(sessionId);
 
     const destination = policy.getDestination(sessionId);

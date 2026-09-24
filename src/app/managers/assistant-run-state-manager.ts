@@ -63,6 +63,10 @@ export class AssistantRunState {
     }
   }
 
+  isResponseCompleted(sessionId: string): boolean {
+    return this.runs.get(sessionId)?.hasCompletedResponse === true;
+  }
+
   finishRun(sessionId: string, reason: string): AssistantRunInfo | null {
     resetStreamThrottle(sessionId);
     const run = this.runs.get(sessionId) ?? null;
