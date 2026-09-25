@@ -5,6 +5,8 @@ const mocked = vi.hoisted(() => ({
   healthMock: vi.fn(),
   resolveLocalOpencodeTargetMock: vi.fn(),
   startLocalOpencodeServerMock: vi.fn(),
+  canStartLocalOpencodeServerMock: vi.fn(),
+  explainFailedHealthCheckMock: vi.fn(),
   notifyReadyMock: vi.fn(),
   notifyUnavailableMock: vi.fn(),
   loggerDebugMock: vi.fn(),
@@ -30,6 +32,16 @@ vi.mock("../../src/opencode/client.js", () => ({
       health: mocked.healthMock,
     },
   },
+  opencodeServerVersion: "v1",
+}));
+
+vi.mock("../../src/opencode/local-start.js", () => ({
+  canStartLocalOpencodeServer: mocked.canStartLocalOpencodeServerMock,
+}));
+
+vi.mock("../../src/opencode/server-health.js", () => ({
+  explainFailedHealthCheck: mocked.explainFailedHealthCheckMock,
+  __resetServerHealthStateForTests: vi.fn(),
 }));
 
 vi.mock("../../src/opencode/process.js", () => ({
@@ -77,6 +89,8 @@ describe("opencode/auto-restart", () => {
     mocked.healthMock.mockReset();
     mocked.resolveLocalOpencodeTargetMock.mockReset();
     mocked.startLocalOpencodeServerMock.mockReset();
+    mocked.canStartLocalOpencodeServerMock.mockReset();
+    mocked.explainFailedHealthCheckMock.mockReset();
     mocked.notifyReadyMock.mockReset();
     mocked.notifyUnavailableMock.mockReset();
     mocked.loggerDebugMock.mockReset();
@@ -89,6 +103,8 @@ describe("opencode/auto-restart", () => {
     mocked.config.opencode.monitorIntervalSec = 300;
     mocked.resolveLocalOpencodeTargetMock.mockReturnValue({ host: "localhost", port: 4096 });
     mocked.startLocalOpencodeServerMock.mockReturnValue(createChildProcess(123));
+    mocked.canStartLocalOpencodeServerMock.mockResolvedValue(true);
+    mocked.explainFailedHealthCheckMock.mockResolvedValue(undefined);
     mocked.notifyReadyMock.mockResolvedValue(true);
   });
 
@@ -181,13 +197,55 @@ describe("opencode/auto-restart", () => {
     await service.start();
 
     expect(mocked.startLocalOpencodeServerMock).toHaveBeenCalledTimes(1);
-    expect(mocked.startLocalOpencodeServerMock).toHaveBeenCalledWith({
-      host: "localhost",
-      port: 4096,
-    });
+    expect(mocked.startLocalOpencodeServerMock).toHaveBeenCalledWith(
+      {
+        host: "localhost",
+        port: 4096,
+      },
+      "v1",
+    );
     expect(childProcess.unref).toHaveBeenCalledTimes(1);
     expect(mocked.notifyUnavailableMock).toHaveBeenCalledWith("auto_restart_startup");
     expect(mocked.notifyReadyMock).toHaveBeenCalledWith("auto_restart_startup");
+
+    service.stop();
+  });
+
+  it("starts nothing while a local start is refused, on every interval", async () => {
+    mocked.config.opencode.autoRestartEnabled = true;
+    mocked.healthMock.mockRejectedValue(new Error("offline"));
+    mocked.canStartLocalOpencodeServerMock.mockResolvedValue(false);
+    const service = new OpencodeAutoRestartService(readyLifecycle);
+
+    await service.start();
+    await vi.advanceTimersByTimeAsync(300_000);
+
+    expect(mocked.canStartLocalOpencodeServerMock).toHaveBeenCalledTimes(2);
+    expect(mocked.canStartLocalOpencodeServerMock).toHaveBeenCalledWith(
+      { host: "localhost", port: 4096 },
+      "once",
+    );
+    expect(mocked.startLocalOpencodeServerMock).not.toHaveBeenCalled();
+    expect(mocked.notifyReadyMock).not.toHaveBeenCalled();
+
+    service.stop();
+  });
+
+  it("explains a started server that never becomes ready, once per problem", async () => {
+    mocked.config.opencode.autoRestartEnabled = true;
+    mocked.healthMock.mockRejectedValue(new Error("offline"));
+    const service = new OpencodeAutoRestartService(readyLifecycle);
+
+    const startPromise = service.start();
+    await vi.advanceTimersByTimeAsync(10_500);
+    await startPromise;
+    await vi.advanceTimersByTimeAsync(300_000);
+    await vi.advanceTimersByTimeAsync(10_500);
+
+    expect(mocked.startLocalOpencodeServerMock).toHaveBeenCalledTimes(2);
+    expect(mocked.explainFailedHealthCheckMock).toHaveBeenCalledTimes(2);
+    expect(mocked.explainFailedHealthCheckMock).toHaveBeenNthCalledWith(1, "once");
+    expect(mocked.explainFailedHealthCheckMock).toHaveBeenNthCalledWith(2, "once");
 
     service.stop();
   });

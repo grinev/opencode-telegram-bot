@@ -483,6 +483,16 @@ export const ru: I18nDictionary = {
     "Введите логин OpenCode сервера (опционально).\nНажмите Enter для значения по умолчанию: {defaultUsername}\n> ",
   "runtime.wizard.ask_server_password":
     "Введите пароль OpenCode сервера (опционально).\nНажмите Enter, чтобы оставить пустым.\n> ",
+  "runtime.wizard.ask_server_version":
+    "Выберите версию сервера OpenCode:\n1 - OpenCode V1 (1.x, npm-пакет opencode-ai)\n2 - OpenCode V2 (2.x, npm-пакет @opencode/cli)\nНажмите Enter, чтобы использовать значение по умолчанию: {defaultVersion}\n> ",
+  "runtime.wizard.server_version_invalid":
+    "Введите 1 или 2 либо нажмите Enter для значения по умолчанию.\n",
+  "runtime.wizard.ask_server_password_required":
+    "Введите пароль сервера OpenCode V2 (обязательно).\nПоказать его: opencode service get password\n> ",
+  "runtime.wizard.server_password_required":
+    "Для OpenCode V2 пароль обязателен. Попробуйте ещё раз.\n",
+  "runtime.wizard.ask_server_password_keep":
+    "Введите пароль сервера OpenCode.\nНажмите Enter, чтобы оставить сохранённый пароль.\n> ",
   "runtime.wizard.api_url_invalid":
     "Введите корректный URL (http/https) или нажмите Enter для значения по умолчанию.\n",
   "runtime.wizard.start": "Настройка OpenCode Telegram Bot.\n",

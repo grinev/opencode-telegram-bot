@@ -1,6 +1,6 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
 import { config, type OpencodeServerVersion } from "../config.js";
-import { createV2OpencodeClient } from "./v2/client.js";
+import { createV2OpencodeClient, findRegisteredV2ServerUrl } from "./v2/client.js";
 
 const PROBE_TIMEOUT_MS = 5000;
 
@@ -89,4 +89,9 @@ export async function probeOpencodeServer(
   } catch {
     return { kind: "none" };
   }
+}
+
+/** URL of the registered OpenCode V2 background server, or null when none answers. */
+export async function findRegisteredOpencodeServerUrl(): Promise<string | null> {
+  return findRegisteredV2ServerUrl();
 }

@@ -1,11 +1,14 @@
-import { exec, spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { exec, execFile, spawn, type ChildProcess } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import { promisify } from "node:util";
+import type { OpencodeServerVersion } from "../config.js";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const DEFAULT_OPENCODE_PORT = 4096;
 const PROCESS_EXIT_POLL_MS = 100;
+const VERSION_READ_TIMEOUT_MS = 10_000;
 
 export interface LocalOpencodeTarget {
   host: string;
@@ -45,6 +48,17 @@ export function resolveLocalOpencodeTarget(apiUrl: string): LocalOpencodeTarget 
   }
 }
 
+/** The exe an npm `.cmd` shim runs, e.g. `"%dp0%\node_modules\@opencode\cli\bin\opencode.exe"`. */
+export function readNpmShimTarget(shimPath: string): string | null {
+  try {
+    const match = /"%~?dp0%?\\([^"]+?\.exe)"/i.exec(readFileSync(shimPath, "utf8"));
+    const relativeTarget = match?.[1];
+    return relativeTarget ? path.join(path.dirname(shimPath), relativeTarget) : null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveWindowsOpencodeExe(): string {
   const pathEnv = process.env.PATH ?? "";
   const pathEntries = pathEnv.split(path.delimiter).filter(Boolean);
@@ -59,11 +73,17 @@ function resolveWindowsOpencodeExe(): string {
   }
 
   // Second pass: look for opencode.cmd (npm global install).
-  // Derive the real exe path from the shim location.
+  // Follow the shim to the exe it runs: V1 (opencode-ai) and V2 (@opencode/cli) both
+  // install an `opencode` shim, so the package cannot be guessed from the name.
   for (const entry of pathEntries) {
     const opencodeCmd = path.join(entry, "opencode.cmd");
     if (!existsSync(opencodeCmd)) {
       continue;
+    }
+
+    const shimTarget = readNpmShimTarget(opencodeCmd);
+    if (shimTarget && existsSync(shimTarget)) {
+      return shimTarget;
     }
 
     const candidateExe = path.join(entry, "node_modules", "opencode-ai", "bin", "opencode.exe");
@@ -78,40 +98,64 @@ function resolveWindowsOpencodeExe(): string {
   return "";
 }
 
-export function createOpencodeServeSpawnCommand(
-  target: LocalOpencodeTarget,
-): OpencodeServeSpawnCommand {
-  const isWindows = process.platform === "win32";
-  const port = target.port.toString();
-
-  if (isWindows) {
+/** The local `opencode` executable with the given arguments, resolved per platform. */
+function createOpencodeCommand(args: string[]): OpencodeServeSpawnCommand {
+  if (process.platform === "win32") {
     const resolvedExe = resolveWindowsOpencodeExe();
 
     if (resolvedExe) {
-      return {
-        command: resolvedExe,
-        args: ["serve", "--port", port],
-        windowsHide: true,
-      };
+      return { command: resolvedExe, args, windowsHide: true };
     }
 
     // Safe fallback: works with default npm installs where only opencode.cmd is on PATH.
-    return {
-      command: "cmd.exe",
-      args: ["/c", "opencode", "serve", "--port", port],
-      windowsHide: true,
-    };
+    return { command: "cmd.exe", args: ["/c", "opencode", ...args], windowsHide: true };
   }
 
-  return {
-    command: "opencode",
-    args: ["serve", "--port", port],
-    windowsHide: false,
-  };
+  return { command: "opencode", args, windowsHide: false };
 }
 
-export function startLocalOpencodeServer(target: LocalOpencodeTarget): ChildProcess {
-  const spawnCommand = createOpencodeServeSpawnCommand(target);
+/**
+ * V1 runs a plain server; V2 runs the registered background server (`--service`) so a
+ * regular V2 CLI connects to it. The port applies to this launch only.
+ */
+export function createOpencodeServeSpawnCommand(
+  target: LocalOpencodeTarget,
+  version: OpencodeServerVersion,
+): OpencodeServeSpawnCommand {
+  const port = target.port.toString();
+  const serveArgs = version === "v2" ? ["serve", "--service"] : ["serve"];
+  return createOpencodeCommand([...serveArgs, "--port", port]);
+}
+
+export function parseOpencodeVersionOutput(stdout: string): string | null {
+  return /(\d+\.\d+\.\d+)/.exec(stdout)?.[1] ?? null;
+}
+
+/** OpenCode 2.x serves the V2 API; earlier releases serve V1. */
+export function getOpencodeApiVersion(version: string): OpencodeServerVersion {
+  const major = Number.parseInt(version, 10);
+  return major >= 2 ? "v2" : "v1";
+}
+
+/** Version of the local `opencode` executable, or null when it cannot be read. */
+export async function readLocalOpencodeVersion(): Promise<string | null> {
+  const versionCommand = createOpencodeCommand(["--version"]);
+  try {
+    const { stdout } = await execFileAsync(versionCommand.command, versionCommand.args, {
+      timeout: VERSION_READ_TIMEOUT_MS,
+      windowsHide: versionCommand.windowsHide,
+    });
+    return parseOpencodeVersionOutput(stdout);
+  } catch {
+    return null;
+  }
+}
+
+export function startLocalOpencodeServer(
+  target: LocalOpencodeTarget,
+  version: OpencodeServerVersion,
+): ChildProcess {
+  const spawnCommand = createOpencodeServeSpawnCommand(target, version);
 
   return spawn(spawnCommand.command, spawnCommand.args, {
     detached: true,

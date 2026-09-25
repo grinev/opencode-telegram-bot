@@ -89,7 +89,22 @@ The bot works with both OpenCode V1 (`opencode-ai`) and OpenCode V2 (`@opencode/
 
 The URL default follows the version; set `OPENCODE_API_URL` (host and port only, no `/api` suffix) when the server runs elsewhere. Changing the version needs a bot restart. Sessions are not shared between V1 and V2, so after switching the bot forgets a current session the new server does not have.
 
-On V2, `/opencode_start`, `/opencode_stop` and auto-restart are not available yet: run the V2 server yourself.
+**Getting the V2 password for a fresh setup.** Start the background service once and print its password, then enter it in the setup wizard:
+
+```bash
+opencode service start
+opencode service get password
+```
+
+The password stays the same across service restarts. The wizard saves it without checking it; a wrong one shows up as an authentication error in the bot log when the bot starts.
+
+**Local start and stop follow the version.** `/opencode_start` and auto-restart (`OPENCODE_AUTO_RESTART_ENABLED`) run `opencode serve --port <port>` on V1, and on V2 the registered background server (`opencode serve --service --port <port>`), so a regular V2 CLI connects to it. The port comes from `OPENCODE_API_URL` and applies to that launch only; OpenCode's saved service port is not changed. `/opencode_stop` stops the server at the configured address on both versions, even if other clients use it. The bot does not start a server, answers with the generic start failure and writes the reason to its log when:
+
+- the server at the configured address rejects the password (authentication warning);
+- the server at the configured address is the other version, or the local `opencode` executable is (an ERROR naming both versions: change `OPENCODE_SERVER_VERSION` or use the matching server);
+- on V2, a registered V2 background server is already running on another port — OpenCode keeps one per user, and a new one would replace it (an ERROR naming its address: point `OPENCODE_API_URL` at it or stop it with `opencode service stop`).
+
+If both versions are installed, the bot starts whichever one the `opencode` command runs.
 
 > After the bot is configured, you can also start and stop the local OpenCode server from Telegram with `/opencode_start` and `/opencode_stop`.
 
@@ -105,7 +120,7 @@ npx @grinev/opencode-telegram-bot@latest
 
 > Quick start is for npm usage. You do not need to clone this repository. If you run this command from the source directory (repository root), it may fail with `opencode-telegram: not found`. To run from sources, use the [Development](#development) section.
 
-If required configuration is not supplied through process environment variables or an `.env` file, an interactive wizard will guide you through setup. It asks for interface language first, then your bot token, user ID, OpenCode API URL, and optional OpenCode server credentials (username/password). After that, you're ready to go. Open your bot in Telegram and start sending tasks.
+If required configuration is not supplied through process environment variables or an `.env` file, an interactive wizard will guide you through setup. It asks for interface language first, then your bot token, user ID, the OpenCode version (V1 or V2; V2 is offered on a first setup, a re-run offers the saved one), the OpenCode API URL (its default follows the version), and the OpenCode server credentials: the username, and a password that is optional for V1 and required for V2 (see [OpenCode V1 and V2](#opencode-v1-and-v2) for where to get it; on a re-run, Enter keeps the saved password). After that, you're ready to go. Open your bot in Telegram and start sending tasks.
 
 #### Alternative: Global Install
 
@@ -246,7 +261,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `TELEGRAM_API_ROOT`                        | Custom Telegram Bot API root URL (e.g. nginx reverse-proxying `api.telegram.org`); applied to API calls and file downloads | No | `https://api.telegram.org` |
 | `TELEGRAM_PROXY_SECRET`                    | Shared secret sent as `X-Proxy-Secret` header on every Bot API request and file download (used with `TELEGRAM_API_ROOT`) | No | —                        |
 | `TELEGRAM_FORCE_IPV4`                      | Force IPv4 for direct Telegram API and file requests; useful when IPv6 DNS works but outbound IPv6 is broken           |    No    | `false`                  |
-| `OPENCODE_SERVER_VERSION`                  | OpenCode server API version: `v1` or `v2`; must match the server you run                                              |    No    | `v1`                     |
+| `OPENCODE_SERVER_VERSION`                  | OpenCode server API version: `v1` or `v2`; must match the server you run; set by the setup wizard                     |    No    | `v1`                     |
 | `OPENCODE_API_URL`                         | OpenCode server URL                                                                                                   |    No    | `http://localhost:4096` (V1), `http://127.0.0.1:49374` (V2) |
 | `OPENCODE_AUTO_RESTART_ENABLED`            | Automatically restart a local OpenCode server when health-checks fail                                                 |    No    | `false`                  |
 | `OPENCODE_MONITOR_INTERVAL_SEC`            | Health monitor interval in seconds when OpenCode auto-restart is enabled                                              |    No    | `300`                    |
