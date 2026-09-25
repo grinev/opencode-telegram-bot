@@ -80,6 +80,17 @@ opencode serve
 
 > The bot connects to the local OpenCode API at `http://localhost:4096` by default.
 
+#### OpenCode V1 and V2
+
+The bot works with both OpenCode V1 (`opencode-ai`) and OpenCode V2 (`@opencode/cli`). The two versions speak different server APIs, so tell the bot which one you run with `OPENCODE_SERVER_VERSION` (`v1` or `v2`, default `v1`). The bot does not detect the version: if the server at `OPENCODE_API_URL` is the other version, requests fail with the usual server errors and the bot log names the configured and actual versions.
+
+- **V1** — `opencode serve`, default URL `http://localhost:4096`; a password is optional.
+- **V2** — the background service (`opencode service start`) or `opencode serve`, default URL `http://127.0.0.1:49374`. Set `OPENCODE_SERVER_VERSION=v2` and `OPENCODE_SERVER_PASSWORD`: the background service keeps its password in the `password` field of `service.json` in the OpenCode config directory (`~/.config/opencode/service.json`), and `opencode serve` prints `server password …` when it starts. A wrong or missing password shows up as an authentication error when the bot starts.
+
+The URL default follows the version; set `OPENCODE_API_URL` (host and port only, no `/api` suffix) when the server runs elsewhere. Changing the version needs a bot restart. Sessions are not shared between V1 and V2, so after switching the bot forgets a current session the new server does not have.
+
+On V2, `/opencode_start`, `/opencode_stop` and auto-restart are not available yet: run the V2 server yourself.
+
 > After the bot is configured, you can also start and stop the local OpenCode server from Telegram with `/opencode_start` and `/opencode_stop`.
 
 ### 3. Install & Run
@@ -193,6 +204,10 @@ For this to work, the console OpenCode instance must be started on the same port
 - In each terminal client, connect with: `opencode attach http://127.0.0.1:4096`
 - In the bot, select or create the same session to start tracking it automatically
 
+With **OpenCode V2** all clients (TUI, desktop, web) connect to one background service, so no port setup is needed: point the bot to the service (default `http://127.0.0.1:49374`, see [OpenCode V1 and V2](#opencode-v1-and-v2)) and select or create the same session in Telegram.
+
+The fixed-port setups above are for V1.
+
 ## Configuration
 
 ### Localization
@@ -231,11 +246,12 @@ Configuration can be provided through process environment variables or an `.env`
 | `TELEGRAM_API_ROOT`                        | Custom Telegram Bot API root URL (e.g. nginx reverse-proxying `api.telegram.org`); applied to API calls and file downloads | No | `https://api.telegram.org` |
 | `TELEGRAM_PROXY_SECRET`                    | Shared secret sent as `X-Proxy-Secret` header on every Bot API request and file download (used with `TELEGRAM_API_ROOT`) | No | —                        |
 | `TELEGRAM_FORCE_IPV4`                      | Force IPv4 for direct Telegram API and file requests; useful when IPv6 DNS works but outbound IPv6 is broken           |    No    | `false`                  |
-| `OPENCODE_API_URL`                         | OpenCode server URL                                                                                                   |    No    | `http://localhost:4096`  |
+| `OPENCODE_SERVER_VERSION`                  | OpenCode server API version: `v1` or `v2`; must match the server you run                                              |    No    | `v1`                     |
+| `OPENCODE_API_URL`                         | OpenCode server URL                                                                                                   |    No    | `http://localhost:4096` (V1), `http://127.0.0.1:49374` (V2) |
 | `OPENCODE_AUTO_RESTART_ENABLED`            | Automatically restart a local OpenCode server when health-checks fail                                                 |    No    | `false`                  |
 | `OPENCODE_MONITOR_INTERVAL_SEC`            | Health monitor interval in seconds when OpenCode auto-restart is enabled                                              |    No    | `300`                    |
 | `OPENCODE_SERVER_USERNAME`                 | Server auth username                                                                                                  |    No    | `opencode`               |
-| `OPENCODE_SERVER_PASSWORD`                 | Server auth password                                                                                                  |    No    | —                        |
+| `OPENCODE_SERVER_PASSWORD`                 | Server auth password (needed for V2, see [OpenCode V1 and V2](#opencode-v1-and-v2))                                   |    No    | —                        |
 | `OPENCODE_MODEL_PROVIDER`                  | Default model provider                                                                                                |   Yes    | `opencode`               |
 | `OPENCODE_MODEL_ID`                        | Default model ID                                                                                                      |   Yes    | `big-pickle`             |
 | `BOT_LOCALE`                               | Bot UI language (supported locale code, e.g. `en`, `ar`, `de`, `es`, `fr`, `id`, `it`, `ko`, `pt`, `ru`, `tr`, `zh`)  |    No    | `en`                     |
@@ -500,6 +516,7 @@ Runtime state (settings, logs, SQLite databases) is stored in a Docker named vol
 All configuration is provided through environment variables in the `.env` file. Compose also sets `OPENCODE_TELEGRAM_CONTAINER=1` so the bot can warn about commands that need the host filesystem or a local OpenCode process.
 
 - `OPENCODE_API_URL` — URL of the OpenCode server. On Linux with the default compose file this is `http://127.0.0.1:4096` via `network_mode: host`. The Desktop override sets `http://host.docker.internal:4096`.
+- **OpenCode V2 in Docker** — both compose files point to a V1 server on port 4096. For V2, set `OPENCODE_SERVER_VERSION=v2`, `OPENCODE_SERVER_PASSWORD` and `OPENCODE_API_URL` together: in `.env` on Linux (for example `http://127.0.0.1:49374`), and by changing the URL in `docker-compose.desktop.yml` on Docker Desktop to the host address the V2 server listens on.
 
 #### Commands that are not available in Docker
 

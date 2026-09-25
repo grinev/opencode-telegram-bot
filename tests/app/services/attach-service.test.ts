@@ -5,6 +5,7 @@ import {
   configureAttachPresentation,
   detachAttachedSession,
   restoreAttachedCurrentSession,
+  restorePendingInteractionsAfterReconnect,
 } from "../../../src/app/services/attach-service.js";
 import { createAttachPresentation } from "../../../src/bot/services/attach-presentation.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
@@ -36,6 +37,8 @@ const mocked = vi.hoisted(() => ({
   pinnedLoadContextFromHistoryMock: vi.fn(),
   pinnedGetContextInfoMock: vi.fn(() => null),
   pinnedSetAttachStateMock: vi.fn(),
+  pinnedClearMock: vi.fn(),
+  clearSessionMock: vi.fn(),
   keyboardInitializeMock: vi.fn(),
   keyboardUpdateContextMock: vi.fn(),
   showCurrentQuestionMock: vi.fn(),
@@ -50,6 +53,7 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
 
 vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
+  clearSession: mocked.clearSessionMock,
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -100,6 +104,7 @@ function createDeps(): AppContainer {
       loadContextFromHistory: mocked.pinnedLoadContextFromHistoryMock,
       getContextInfo: mocked.pinnedGetContextInfoMock,
       setAttachState: mocked.pinnedSetAttachStateMock,
+      clear: mocked.pinnedClearMock,
     } as unknown as AppContainer["pinnedMessageManager"],
     keyboardManager: {
       initialize: mocked.keyboardInitializeMock,
@@ -156,6 +161,10 @@ describe("attach/service", () => {
       error: null,
     });
     mocked.sessionGetMock.mockReset();
+    mocked.sessionGetMock.mockResolvedValue({ data: { id: "session-1" }, error: undefined });
+    mocked.pinnedClearMock.mockReset();
+    mocked.pinnedClearMock.mockResolvedValue(undefined);
+    mocked.clearSessionMock.mockReset();
     mocked.registerRestoredPermissionChildMock.mockReset();
     mocked.questionListMock.mockReset();
     mocked.questionListMock.mockResolvedValue({ data: [], error: null });
@@ -337,6 +346,78 @@ describe("attach/service", () => {
       "session-1",
       "D:\\Projects\\Repo",
     );
+  });
+
+  it("drops a saved session the server no longer has instead of following it", async () => {
+    mocked.sessionGetMock.mockResolvedValue({
+      data: undefined,
+      error: { name: "NotFoundError", data: { message: "Session not found: session-1" } },
+    });
+
+    const restored = await restoreAttachedCurrentSession({
+      ...deps,
+      bot: createBot(),
+      chatId: 777,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+
+    expect(restored).toBe(false);
+    expect(mocked.clearSessionMock).toHaveBeenCalledOnce();
+    expect(mocked.pinnedClearMock).toHaveBeenCalledOnce();
+    expect(mocked.ensureEventSubscriptionMock).not.toHaveBeenCalled();
+    expect(container.attachManager.getSnapshot()).toBeNull();
+  });
+
+  it("keeps the saved session when its lookup fails for another reason", async () => {
+    mocked.sessionGetMock.mockResolvedValue({ data: undefined, error: new Error("boom") });
+
+    const restored = await restoreAttachedCurrentSession({
+      ...deps,
+      bot: createBot(),
+      chatId: 777,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+
+    expect(restored).toBe(true);
+    expect(mocked.clearSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("restores requests that arrived while the event stream was down", async () => {
+    container.attachManager.attach("session-1", "D:\Projects\Repo");
+    mocked.questionListMock.mockResolvedValue({
+      data: [{ id: "question-1", sessionID: "session-1", questions: [] }],
+      error: null,
+    });
+
+    await restorePendingInteractionsAfterReconnect({ ...deps, bot: createBot(), chatId: 777 });
+
+    expect(mocked.questionListMock).toHaveBeenCalledWith({ directory: "D:\Projects\Repo" });
+    expect(mocked.showCurrentQuestionMock).toHaveBeenCalledOnce();
+  });
+
+  it("does not show again a request that is already on screen after a reconnect", async () => {
+    container.attachManager.attach("session-1", "D:\Projects\Repo");
+    const request = {
+      id: "permission-1",
+      sessionID: "session-1",
+      permission: "edit",
+      patterns: ["*"],
+      metadata: {},
+      always: [],
+    };
+    container.permissionManager.startPermission(request, 501);
+    mocked.permissionListMock.mockResolvedValue({ data: [request], error: null });
+
+    await restorePendingInteractionsAfterReconnect({ ...deps, bot: createBot(), chatId: 777 });
+
+    expect(mocked.showPermissionRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("skips the reconnect restore when no session is followed", async () => {
+    await restorePendingInteractionsAfterReconnect({ ...deps, bot: createBot(), chatId: 777 });
+
+    expect(mocked.questionListMock).not.toHaveBeenCalled();
+    expect(mocked.permissionListMock).not.toHaveBeenCalled();
   });
 
   it("skips startup restore when stored project and session do not match", async () => {

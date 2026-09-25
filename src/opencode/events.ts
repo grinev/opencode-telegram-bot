@@ -11,6 +11,8 @@ export interface EventEnvelope {
 }
 
 export type EventCallback = (envelope: EventEnvelope) => void;
+/** Runs once the stream delivers again after it dropped, since missed events are not replayed. */
+export type ReconnectCallback = () => void;
 type EventStreamSource = "global" | "legacy";
 type EventStreamSubscription = {
   source: EventStreamSource;
@@ -34,6 +36,7 @@ const SSE_IDLE_TIMEOUT_ERROR = "SSE stream idle timeout";
 
 let eventStream: AsyncGenerator<unknown, unknown, unknown> | null = null;
 let eventCallback: EventCallback | null = null;
+let reconnectCallback: ReconnectCallback | null = null;
 let isListening = false;
 let activeDirectory: string | null = null;
 let streamAbortController: AbortController | null = null;
@@ -211,9 +214,14 @@ async function subscribeToLegacyEventStream(
   return { source: "legacy", stream: result.stream };
 }
 
-export async function subscribeToEvents(directory: string, callback: EventCallback): Promise<void> {
+export async function subscribeToEvents(
+  directory: string,
+  callback: EventCallback,
+  onReconnect?: ReconnectCallback,
+): Promise<void> {
   if (isListening && activeDirectory === directory) {
     eventCallback = callback;
+    reconnectCallback = onReconnect ?? null;
     logger.debug(`Event listener already running for ${directory}`);
     return;
   }
@@ -231,12 +239,14 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
 
   activeDirectory = directory;
   eventCallback = callback;
+  reconnectCallback = onReconnect ?? null;
   isListening = true;
   streamAbortController = controller;
 
   try {
     let reconnectAttempt = 0;
     let useLegacyEventsOnce = false;
+    let streamDropped = false;
 
     while (isListening && activeDirectory === directory && !controller.signal.aborted) {
       let attemptAbort: ReturnType<typeof createAttemptAbortController> | null = null;
@@ -314,6 +324,24 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
               usefulEventCount++;
             }
 
+            if (streamDropped) {
+              streamDropped = false;
+              const reconnectSnapshot = reconnectCallback;
+              if (reconnectSnapshot) {
+                setImmediate(() => {
+                  if (streamAbortController !== controller || listenerGeneration !== generation) {
+                    return;
+                  }
+
+                  try {
+                    reconnectSnapshot();
+                  } catch (error) {
+                    logger.error("[Events] Reconnect callback failed:", error);
+                  }
+                });
+              }
+            }
+
             if (eventCallback) {
               // Use setImmediate to avoid blocking the event loop
               // and let grammY process incoming Telegram updates
@@ -357,6 +385,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
 
         reconnectAttempt++;
         consecutiveTimeouts = 0;
+        streamDropped = true;
         const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
         logger.warn(
           `Event stream ended for ${directory}, reconnecting in ${reconnectDelay}ms (attempt=${reconnectAttempt})`,
@@ -382,6 +411,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
 
         reconnectAttempt++;
         consecutiveTimeouts++;
+        streamDropped = true;
         const reconnectDelay = getReconnectDelayMs(reconnectAttempt);
         if (isEventStreamIdleTimeoutError(error)) {
           const timeoutWarning =
@@ -432,6 +462,7 @@ export async function subscribeToEvents(directory: string, callback: EventCallba
       streamAbortController = null;
       eventStream = null;
       eventCallback = null;
+      reconnectCallback = null;
       isListening = false;
       activeDirectory = null;
     }
@@ -444,6 +475,7 @@ export function stopEventListening(): void {
   streamAbortController = null;
   isListening = false;
   eventCallback = null;
+  reconnectCallback = null;
   eventStream = null;
   activeDirectory = null;
   logger.info("Event listener stopped");

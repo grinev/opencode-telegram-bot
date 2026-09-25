@@ -1,6 +1,6 @@
 import { CommandContext, Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
-import { opencodeClient } from "../../opencode/client.js";
+import { checkOpencodeHealth } from "../../opencode/server-health.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
@@ -17,17 +17,17 @@ export type StatusCommandDeps = Pick<AppContainer, "keyboardManager" | "pinnedMe
 
 export async function statusCommand(ctx: CommandContext<Context>, deps: StatusCommandDeps) {
   try {
-    const { data, error } = await opencodeClient.global.health();
+    const health = await checkOpencodeHealth();
 
-    if (error || !data) {
-      throw error || new Error("No data received from server");
+    if (!health.healthy) {
+      throw health.error || new Error("No data received from server");
     }
 
     const botVersion = await getBotVersion();
     let message = `${t("status.header_running")}\n\n`;
     message += `${t("status.line.bot_version", { version: botVersion })}\n`;
-    if (data.version) {
-      message += `${t("status.line.version", { version: data.version })}\n`;
+    if (health.version) {
+      message += `${t("status.line.version", { version: health.version })}\n`;
     }
 
     // Add agent information

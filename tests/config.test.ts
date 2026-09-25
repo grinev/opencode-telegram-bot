@@ -436,3 +436,47 @@ describe("config telegram reverse-proxy", () => {
     expect(() => buildTelegramConfig()).toThrow(/TELEGRAM_PROXY_SECRET requires TELEGRAM_API_ROOT/);
   });
 });
+
+describe("config OpenCode server version", () => {
+  beforeEach(() => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-telegram-token");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
+    vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
+    vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
+    vi.stubEnv("OPENCODE_API_URL", "");
+    vi.stubEnv("OPENCODE_SERVER_VERSION", "");
+  });
+
+  it("uses V1 and the V1 default URL when the version is not set", async () => {
+    const config = await loadConfig();
+
+    expect(config.opencode.serverVersion).toBe("v1");
+    expect(config.opencode.apiUrl).toBe("http://localhost:4096");
+  });
+
+  it("uses the V2 default URL when V2 is selected", async () => {
+    vi.stubEnv("OPENCODE_SERVER_VERSION", " V2 ");
+
+    const config = await loadConfig();
+
+    expect(config.opencode.serverVersion).toBe("v2");
+    expect(config.opencode.apiUrl).toBe("http://127.0.0.1:49374");
+  });
+
+  it("keeps an explicit API URL whatever the version", async () => {
+    vi.stubEnv("OPENCODE_SERVER_VERSION", "v2");
+    vi.stubEnv("OPENCODE_API_URL", "http://127.0.0.1:4096");
+
+    const config = await loadConfig();
+
+    expect(config.opencode.apiUrl).toBe("http://127.0.0.1:4096");
+  });
+
+  it("falls back to V1 on an unrecognised version", async () => {
+    vi.stubEnv("OPENCODE_SERVER_VERSION", "2");
+
+    const config = await loadConfig();
+
+    expect(config.opencode.serverVersion).toBe("v1");
+  });
+});

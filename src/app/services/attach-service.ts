@@ -4,12 +4,15 @@ import { isOpencodeServerHealthy } from "../../opencode/ready-refresh.js";
 import type { AppContainer } from "../bootstrap/app-container.js";
 import type { PermissionRequest } from "../types/permission.js";
 import type { SessionInfo } from "../types/session.js";
-import { getCurrentSession } from "./session-service.js";
+import { clearSession, getCurrentSession } from "./session-service.js";
 import { getCurrentProject } from "../stores/settings-store.js";
 import { resolveSessionParentChain } from "./recent-sessions-service.js";
 import { resetStreamThrottle } from "../../bot/streaming/stream-throttle.js";
 import { logger } from "../../utils/logger.js";
-import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";
+import {
+  isExpectedOpencodeUnavailableError,
+  isOpencodeNotFoundError,
+} from "../../utils/opencode-error.js";
 
 interface EnsureAttachPinnedSessionParams {
   api: Bot<Context>["api"];
@@ -59,11 +62,17 @@ export interface AttachSessionResult {
   restoredPermissions: number;
 }
 
-export interface RestoreAttachedCurrentSessionDeps extends AttachRestoreDeps {
+export interface RestoreAttachedCurrentSessionDeps
+  extends AttachRestoreDeps, Pick<AppContainer, "pinnedMessageManager"> {
   bot: Bot<Context>;
   chatId: number;
   ensureEventSubscription: (directory: string) => Promise<void>;
   forceFullRestore?: boolean;
+}
+
+export interface RestoreAfterReconnectDeps extends AttachRestoreDeps {
+  bot: Bot<Context>;
+  chatId: number;
 }
 
 function getAttachBusyStatus(
@@ -119,6 +128,7 @@ async function restorePendingPermissions(
   sessionId: string,
   directory: string,
   questionActive: boolean,
+  isAlreadyTracked: (request: PermissionRequest) => boolean = () => false,
 ): Promise<number> {
   const { data, error } = await opencodeClient.permission.list({
     directory,
@@ -135,6 +145,7 @@ async function restorePendingPermissions(
 
   const pendingPermissions: typeof data = [];
   for (const request of data) {
+    if (isAlreadyTracked(request)) continue;
     const chain = await resolveSessionParentChain(request.sessionID, directory, new Set([sessionId]));
     if (!chain) continue;
     for (const link of chain.links.reverse()) {
@@ -253,6 +264,10 @@ export async function restoreAttachedCurrentSession(
       return false;
     }
 
+    if (await dropSavedSessionIfMissing(currentSession, deps)) {
+      return false;
+    }
+
     await attachToSession({ ...deps, session: currentSession });
     logger.info(
       `[Attach] Restored followed session on startup: session=${currentSession.id}, directory=${currentSession.directory}`,
@@ -262,6 +277,71 @@ export async function restoreAttachedCurrentSession(
     logger.error("[Attach] Failed to restore followed session on startup:", error);
     return false;
   }
+}
+
+/**
+ * A saved session the server does not have (for example after switching the API version)
+ * stops being the current session; prompts and commands then follow the no-session path.
+ */
+async function dropSavedSessionIfMissing(
+  session: SessionInfo,
+  deps: Pick<AppContainer, "pinnedMessageManager">,
+): Promise<boolean> {
+  const { error } = await opencodeClient.session.get({
+    sessionID: session.id,
+    directory: session.directory,
+  });
+  if (!isOpencodeNotFoundError(error)) {
+    return false;
+  }
+
+  logger.info(
+    `[Attach] Saved session no longer exists on the OpenCode server; clearing it: session=${session.id}, directory=${session.directory}`,
+  );
+  clearSession();
+  if (deps.pinnedMessageManager.isInitialized()) {
+    try {
+      await deps.pinnedMessageManager.clear();
+    } catch (clearError) {
+      logger.warn("[Attach] Failed to clear pinned message for a missing session:", clearError);
+    }
+  }
+  return true;
+}
+
+/**
+ * The event stream does not replay what was missed while it was down, so after a reconnect
+ * the attached session's pending question and permissions are loaded again. Anything
+ * already on screen or waiting is left alone.
+ */
+export async function restorePendingInteractionsAfterReconnect(
+  deps: RestoreAfterReconnectDeps,
+): Promise<void> {
+  const attached = deps.attachManager.getSnapshot();
+  if (!attached) {
+    return;
+  }
+
+  const questionShown =
+    deps.questionManager.isActive() || deps.interactionManager.getWaitingKind() === "question";
+  const restoredQuestion = questionShown
+    ? false
+    : await restorePendingQuestion(deps, deps.bot, deps.chatId, attached.sessionId, attached.directory);
+
+  const restoredPermissions = await restorePendingPermissions(
+    deps,
+    deps.bot,
+    deps.chatId,
+    attached.sessionId,
+    attached.directory,
+    questionShown || restoredQuestion,
+    (request) =>
+      deps.permissionManager.hasRequest(request.id) || deps.permissionManager.isResolved(request.id),
+  );
+
+  logger.info(
+    `[Attach] Restored pending requests after event stream reconnect: session=${attached.sessionId}, question=${restoredQuestion}, permissions=${restoredPermissions}`,
+  );
 }
 
 export function detachAttachedSession(reason: string, deps: DetachSessionDeps): void {
