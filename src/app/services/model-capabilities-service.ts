@@ -29,11 +29,17 @@ export async function getModelCapabilities(
 
     if (response.error || !response.data) {
       logger.error("[ModelCapabilities] API returned error:", response.error);
-      capabilitiesCache[cacheKey] = null;
       return null;
     }
 
     const providers = response.data.providers;
+
+    if (providers.every((p) => Object.keys(p.models).length === 0)) {
+      // A freshly started server lists no models for a moment; do not remember that as an answer.
+      logger.warn(`[ModelCapabilities] Providers list has no models; not caching ${cacheKey}`);
+      return null;
+    }
+
     const provider = providers.find((p) => p.id === providerID);
 
     if (!provider) {
@@ -55,8 +61,13 @@ export async function getModelCapabilities(
     return model.capabilities;
   } catch (error) {
     logger.error("[ModelCapabilities] Failed to fetch providers:", error);
-    capabilitiesCache[cacheKey] = null;
     return null;
+  }
+}
+
+export function __resetModelCapabilitiesCacheForTests(): void {
+  for (const key of Object.keys(capabilitiesCache)) {
+    delete capabilitiesCache[key];
   }
 }
 

@@ -6,7 +6,28 @@ import { checkOpencodeHealth } from "./server-health.js";
 
 export type ReadyRefreshDeps = Pick<AppContainer, "opencodeReadyLifecycle">;
 
+const MODEL_CATALOG_WAIT_TIMEOUT_MS = 3000;
+const MODEL_CATALOG_POLL_INTERVAL_MS = 500;
+
 let readyRefreshRegistered = false;
+
+// A freshly started server answers health before it lists any model, so wait (bounded)
+// for a non-empty catalog before the rest of the ready sequence reads it.
+async function refreshModelCatalogUntilAvailable(reason: string): Promise<void> {
+  const startedAt = Date.now();
+
+  while (!(await reconcileStoredModelSelection({ forceCatalogRefresh: true }))) {
+    if (Date.now() - startedAt >= MODEL_CATALOG_WAIT_TIMEOUT_MS) {
+      logger.warn(
+        `[OpenCodeReady] Model catalog still unavailable after ${MODEL_CATALOG_WAIT_TIMEOUT_MS}ms: reason=${reason}`,
+      );
+      return;
+    }
+
+    logger.debug(`[OpenCodeReady] Model catalog not available yet, retrying: reason=${reason}`);
+    await new Promise((resolve) => setTimeout(resolve, MODEL_CATALOG_POLL_INTERVAL_MS));
+  }
+}
 
 export async function isOpencodeServerHealthy(): Promise<boolean> {
   return (await checkOpencodeHealth()).healthy;
@@ -21,7 +42,7 @@ export async function refreshSessionCacheAfterOpencodeReady(reason: string): Pro
   }
 
   try {
-    await reconcileStoredModelSelection({ forceCatalogRefresh: true });
+    await refreshModelCatalogUntilAvailable(reason);
     logger.debug(`[OpenCodeReady] Model catalog refreshed: reason=${reason}`);
   } catch (error) {
     logger.warn(`[OpenCodeReady] Failed to refresh model catalog: reason=${reason}`, error);
