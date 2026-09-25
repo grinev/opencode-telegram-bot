@@ -358,8 +358,8 @@ export const ko: I18nDictionary = {
   "variant.menu.error": "🔴 변형 목록을 가져오지 못했습니다",
 
   "context.button.confirm": "✅ 예, 컨텍스트를 압축합니다",
-  "context.button.details_compact": "Compact context",
-  "context.button.close": "Close",
+  "context.button.details_compact": "📦 Compact context",
+  "context.button.close": "❌ Close",
   "context.details.title": "📊 Context details",
   "context.details.window": "Window: {used} / {limit} ({percent}%)",
   "context.details.token_breakdown": "Token breakdown of the latest assistant message:",

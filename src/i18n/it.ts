@@ -363,8 +363,8 @@ export const it: I18nDictionary = {
   "variant.menu.error": "🔴 Recupero dell'elenco delle varianti non riuscito",
 
   "context.button.confirm": "✅ Sì, compatta il contesto",
-  "context.button.details_compact": "Compact context",
-  "context.button.close": "Close",
+  "context.button.details_compact": "📦 Compact context",
+  "context.button.close": "❌ Close",
   "context.details.title": "📊 Context details",
   "context.details.window": "Window: {used} / {limit} ({percent}%)",
   "context.details.token_breakdown": "Token breakdown of the latest assistant message:",

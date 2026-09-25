@@ -353,8 +353,8 @@ export const ru: I18nDictionary = {
   "variant.menu.error": "🔴 Не удалось получить список вариантов",
 
   "context.button.confirm": "✅ Да, сжать контекст",
-  "context.button.details_compact": "Сжать контекст",
-  "context.button.close": "Закрыть",
+  "context.button.details_compact": "📦 Сжать контекст",
+  "context.button.close": "❌ Закрыть",
   "context.details.title": "📊 Детали контекста",
   "context.details.window": "Окно: {used} / {limit} ({percent}%)",
   "context.details.token_breakdown": "Токены последнего сообщения ассистента:",

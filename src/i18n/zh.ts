@@ -319,8 +319,8 @@ export const zh: I18nDictionary = {
   "variant.menu.error": "🔴 获取变体列表失败",
 
   "context.button.confirm": "✅ 是的，压缩上下文",
-  "context.button.details_compact": "Compact context",
-  "context.button.close": "Close",
+  "context.button.details_compact": "📦 Compact context",
+  "context.button.close": "❌ Close",
   "context.details.title": "📊 Context details",
   "context.details.window": "Window: {used} / {limit} ({percent}%)",
   "context.details.token_breakdown": "Token breakdown of the latest assistant message:",
