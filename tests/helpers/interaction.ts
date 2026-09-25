@@ -27,6 +27,7 @@ export function startInteractionForTest(
           currentIndex: 0,
           selectedOptions: new Map(),
           customAnswers: new Map(),
+          selectedCustomAnswers: new Set(),
           customInputQuestionIndex: null,
           activeMessageId: null,
           messageIds: [],

@@ -13,6 +13,7 @@ const MAX_BUTTON_LENGTH = 60;
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 const TRUNCATION_SUFFIX = "…";
 const QUESTION_EMOJI = "❓";
+const CUSTOM_ANSWER_EMOJI = "✏️";
 
 export type QuestionInteractionDeps = Pick<AppContainer, "interactionManager">;
 
@@ -244,21 +245,7 @@ async function sendAllAnswersToAgent(
   const allAnswers: string[][] = [];
 
   for (let i = 0; i < totalQuestions; i++) {
-    const customAnswer = questionManager.getCustomAnswer(i);
-    const selectedAnswer = questionManager.getSelectedAnswer(i);
-
-    // Priority: custom answer > selected options
-    const answer = customAnswer || selectedAnswer || "";
-
-    if (answer) {
-      // Split by newlines if multiple options were selected (in multiple choice mode)
-      // Each option is formatted as "* Label: Description"
-      const answerParts = answer.split("\n").filter((part) => part.trim());
-      allAnswers.push(answerParts);
-    } else {
-      // Empty answer for unanswered questions
-      allAnswers.push([]);
-    }
+    allAnswers.push(questionManager.getAnswerItems(i));
   }
 
   logger.info(
@@ -443,6 +430,14 @@ function buildQuestionKeyboard(
 
     keyboard.text(buttonText, callbackData).row();
   });
+
+  const customAnswer = deps.questionManager.getCustomAnswer(questionIndex);
+  if (question.multiple && customAnswer) {
+    const icon = deps.questionManager.isCustomAnswerSelected(questionIndex) ? "✅ " : "";
+    const label = `${CUSTOM_ANSWER_EMOJI} ${customAnswer.replace(/\s*\n\s*/g, " ")}`;
+    keyboard.text(formatButtonText(label, icon), `question:toggle_custom:${questionIndex}`).row();
+    logger.debug(`[QuestionHandler] Added custom answer row`);
+  }
 
   if (question.multiple) {
     keyboard.text(t("question.button.submit"), `question:submit:${questionIndex}`).row();

@@ -20,6 +20,7 @@ export interface QuestionState {
   currentIndex: number;
   selectedOptions: Map<number, Set<number>>;
   customAnswers: Map<number, string>;
+  selectedCustomAnswers: Set<number>;
   customInputQuestionIndex: number | null;
   activeMessageId: number | null;
   messageIds: number[];

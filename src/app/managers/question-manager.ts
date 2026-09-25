@@ -41,6 +41,7 @@ export class QuestionManager {
         currentIndex: 0,
         selectedOptions: new Map(),
         customAnswers: new Map(),
+        selectedCustomAnswers: new Set(),
         customInputQuestionIndex: null,
         activeMessageId: null,
         messageIds: [],
@@ -114,7 +115,15 @@ export class QuestionManager {
     logger.debug(
       `[QuestionManager] Custom answer received for question ${questionIndex}: ${answer}`,
     );
-    this.state?.customAnswers.set(questionIndex, answer);
+    const state = this.state;
+    if (!state) {
+      return;
+    }
+
+    state.customAnswers.set(questionIndex, answer);
+    if (state.questions[questionIndex]?.multiple) {
+      state.selectedCustomAnswers.add(questionIndex);
+    }
   }
 
   getCustomAnswer(questionIndex: number): string | undefined {
@@ -123,6 +132,55 @@ export class QuestionManager {
 
   hasCustomAnswer(questionIndex: number): boolean {
     return this.state?.customAnswers.has(questionIndex) ?? false;
+  }
+
+  /** Ticks or unticks the custom answer of a multi-select question, like an option. */
+  toggleCustomAnswer(questionIndex: number): void {
+    const state = this.state;
+    if (!state || !state.customAnswers.has(questionIndex)) {
+      return;
+    }
+
+    if (state.selectedCustomAnswers.has(questionIndex)) {
+      state.selectedCustomAnswers.delete(questionIndex);
+    } else {
+      state.selectedCustomAnswers.add(questionIndex);
+    }
+  }
+
+  isCustomAnswerSelected(questionIndex: number): boolean {
+    return this.state?.selectedCustomAnswers.has(questionIndex) ?? false;
+  }
+
+  hasAnswer(questionIndex: number): boolean {
+    return this.getAnswerItems(questionIndex).length > 0;
+  }
+
+  /**
+   * The answer items sent to the agent for one question. A multi-select question
+   * sends its ticked options, then the ticked custom answer as one more item.
+   */
+  getAnswerItems(questionIndex: number): string[] {
+    const question = this.state?.questions[questionIndex];
+    if (!question) {
+      return [];
+    }
+
+    const selectedAnswer = this.getSelectedAnswer(questionIndex);
+    const customAnswer = this.getCustomAnswer(questionIndex);
+
+    if (!question.multiple) {
+      // Each option is formatted as "* Label: Description"
+      const answer = customAnswer || selectedAnswer;
+      return answer.split("\n").filter((part) => part.trim());
+    }
+
+    const items = selectedAnswer.split("\n").filter((part) => part.trim());
+    if (customAnswer && this.isCustomAnswerSelected(questionIndex)) {
+      items.push(customAnswer);
+    }
+
+    return items;
   }
 
   nextQuestion(): void {
@@ -224,10 +282,9 @@ export class QuestionManager {
       if (!question) {
         continue;
       }
-      const selectedAnswer = this.getSelectedAnswer(i);
-      const customAnswer = this.getCustomAnswer(i);
-
-      const finalAnswer = customAnswer || selectedAnswer;
+      const finalAnswer = question.multiple
+        ? this.getAnswerItems(i).join("\n")
+        : this.getCustomAnswer(i) || this.getSelectedAnswer(i);
 
       if (finalAnswer) {
         answers.push({
