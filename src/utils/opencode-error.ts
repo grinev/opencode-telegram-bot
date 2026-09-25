@@ -25,6 +25,11 @@ export function isExpectedOpencodeUnavailableError(error: unknown): boolean {
   );
 }
 
+/** A "not found" answer from OpenCode (V1 body, or the V2 adapter's equivalent). */
+export function isOpencodeNotFoundError(error: unknown): boolean {
+  return isRecord(error) && error.name === "NotFoundError";
+}
+
 function hasServerUnavailableMarker(value: string): boolean {
   const lower = value.toLowerCase();
   return SERVER_UNAVAILABLE_ERROR_MARKERS.some((marker) => lower.includes(marker));

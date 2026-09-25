@@ -12,20 +12,36 @@ import {
   warmupSessionDirectoryCache,
 } from "../../../src/app/services/session-cache-service.js";
 
-const { sessionListMock, loggerWarnMock, loggerDebugMock, loggerInfoMock, loggerErrorMock } =
-  vi.hoisted(() => ({
-    sessionListMock: vi.fn(),
-    loggerWarnMock: vi.fn(),
-    loggerDebugMock: vi.fn(),
-    loggerInfoMock: vi.fn(),
-    loggerErrorMock: vi.fn(),
-  }));
+const {
+  sessionListMock,
+  pathAccessMock,
+  serverVersion,
+  loggerWarnMock,
+  loggerDebugMock,
+  loggerInfoMock,
+  loggerErrorMock,
+} = vi.hoisted(() => ({
+  sessionListMock: vi.fn(),
+  pathAccessMock: vi.fn(),
+  serverVersion: { value: "v1" as "v1" | "v2" },
+  loggerWarnMock: vi.fn(),
+  loggerDebugMock: vi.fn(),
+  loggerInfoMock: vi.fn(),
+  loggerErrorMock: vi.fn(),
+}));
 
 vi.mock("../../../src/opencode/client.js", () => ({
   opencodeClient: {
     session: {
       list: sessionListMock,
     },
+    get path() {
+      pathAccessMock();
+      return undefined;
+    },
+  },
+  get opencodeServerVersion() {
+    return serverVersion.value;
   },
 }));
 
@@ -62,6 +78,8 @@ describe("session-cache-service", () => {
     setRuntimeMode("installed");
     await loadSettings();
     sessionListMock.mockReset();
+    pathAccessMock.mockReset();
+    serverVersion.value = "v1";
     loggerWarnMock.mockReset();
     __resetSessionDirectoryCacheForTests();
   });
@@ -106,6 +124,21 @@ describe("session-cache-service", () => {
     expect(cacheFile.directories.map((entry) => entry.worktree)).toEqual([
       "D:/repo-b",
       "D:/repo-a",
+    ]);
+  });
+
+  it("builds the cache from the API alone on a V2 server", async () => {
+    serverVersion.value = "v2";
+    sessionListMock.mockResolvedValueOnce({
+      data: [createSession("D:/repo-v2", 1_700_000_000_300)],
+      error: null,
+    });
+
+    await warmupSessionDirectoryCache();
+
+    expect(pathAccessMock).not.toHaveBeenCalled();
+    expect(await getCachedSessionDirectories()).toEqual([
+      { worktree: "D:/repo-v2", lastUpdated: 1_700_000_000_300 },
     ]);
   });
 

@@ -1,7 +1,7 @@
 import type { Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import type { PermissionReply } from "../../app/types/permission.js";
-import { opencodeClient } from "../../opencode/client.js";
+import { opencodeClient, opencodeServerVersion } from "../../opencode/client.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { clearPermissionInteraction, syncPermissionInteractionState } from "../menus/permission-menu.js";
@@ -197,7 +197,14 @@ async function handlePermissionReply(
     },
   });
 
-  deps.permissionManager.removeByMessageId(callbackMessageId);
+  const repliedRequest = deps.permissionManager.removeByMessageId(callbackMessageId);
+
+  // On V2 a reject settles every pending request of the session, so their prompts go too.
+  if (reply === "reject" && opencodeServerVersion === "v2" && repliedRequest) {
+    for (const messageId of deps.permissionManager.resolveSessionRequests(repliedRequest.sessionID)) {
+      await ctx.api.deleteMessage(chatId, messageId).catch(() => {});
+    }
+  }
 
   if (!deps.permissionManager.isActive()) {
     clearPermissionInteraction("permission_replied", deps);

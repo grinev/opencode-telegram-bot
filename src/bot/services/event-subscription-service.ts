@@ -1,6 +1,7 @@
 import { Bot, Context } from "grammy";
 import { config } from "../../config.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
+import { restorePendingInteractionsAfterReconnect } from "../../app/services/attach-service.js";
 import { logger } from "../../utils/logger.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
 import { setPromptResponseModeClearerForReconciliation } from "../../app/services/busy-reconciliation-service.js";
@@ -126,10 +127,23 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         deps,
         isForegroundSession: policy.isForegroundSession,
       }),
+      () => this.restoreAfterReconnect(),
     ).catch((err) => {
       logger.error("Failed to subscribe to events:", err);
     });
   };
+
+  private restoreAfterReconnect(): void {
+    const bot = this.botInstance;
+    const chatId = this.chatIdInstance;
+    if (!bot || !chatId) {
+      return;
+    }
+
+    restorePendingInteractionsAfterReconnect({ ...this.deps, bot, chatId }).catch((error) => {
+      logger.warn("[Bot] Failed to restore pending requests after event stream reconnect:", error);
+    });
+  }
 
   private getChatDestination(): TelegramDestination | null {
     if (!this.botInstance || !this.chatIdInstance) {

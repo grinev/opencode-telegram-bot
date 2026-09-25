@@ -44,6 +44,8 @@ vi.mock("../../../src/opencode/client.js", () => ({
       health: mocked.healthMock,
     },
   },
+  opencodeServerVersion: "v1",
+  probeOpencodeServer: async () => ({ kind: "none" }),
 }));
 
 vi.mock("../../../src/app/services/session-service.js", () => ({

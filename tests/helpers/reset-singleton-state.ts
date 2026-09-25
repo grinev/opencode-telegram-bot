@@ -8,6 +8,7 @@ export async function resetSingletonState(): Promise<void> {
     { promptAttachment },
     { __resetStreamThrottleForTests },
     { telegramOutageNoticeService },
+    { __resetServerHealthStateForTests },
     loggerModule,
   ] = await Promise.all([
     import("../../src/opencode/events.js"),
@@ -18,6 +19,7 @@ export async function resetSingletonState(): Promise<void> {
     import("../../src/app/managers/prompt-attachment-manager.js"),
     import("../../src/bot/streaming/stream-throttle.js"),
     import("../../src/app/services/telegram-outage-notice-service.js"),
+    import("../../src/opencode/server-health.js"),
     import("../../src/utils/logger.js"),
   ]);
 
@@ -29,6 +31,7 @@ export async function resetSingletonState(): Promise<void> {
   promptAttachment.__resetForTests();
   telegramOutageNoticeService.__resetForTests();
   __resetSessionDirectoryCacheForTests();
+  __resetServerHealthStateForTests();
 
   if (
     "__resetLoggerForTests" in loggerModule &&

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { opencodeClient } from "../../opencode/client.js";
+import { opencodeClient, opencodeServerVersion } from "../../opencode/client.js";
 import { getSessionDirectoryCache, setSessionDirectoryCache } from "../stores/settings-store.js";
 import { isServerUnavailableError } from "../../utils/opencode-error.js";
 import { isRecord } from "../../utils/type-guards.js";
@@ -469,6 +469,12 @@ async function ingestFromGlobalSessionStorage(): Promise<void> {
 
 export async function warmupSessionDirectoryCache(): Promise<void> {
   await syncSessionDirectoryCache({ force: true });
+
+  // The on-disk fallbacks read V1's own session tables; a V2 server keeps its sessions
+  // elsewhere, so there the cache comes from the API alone.
+  if (opencodeServerVersion === "v2") {
+    return;
+  }
 
   try {
     await ingestFromSqliteSessionDatabase();

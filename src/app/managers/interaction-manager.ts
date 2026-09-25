@@ -323,6 +323,20 @@ export class InteractionManager {
     logger.info(`[InteractionManager] Dropped waiting permission: requestID=${requestID}`);
   }
 
+  dropWaitingPermissionsForSession(sessionID: string): void {
+    if (this.waiting?.kind !== "permission") {
+      return;
+    }
+
+    const requests = this.waiting.requests.filter((request) => request.sessionID !== sessionID);
+    if (requests.length === this.waiting.requests.length) {
+      return;
+    }
+
+    this.waiting = requests.length > 0 ? { kind: "permission", requests } : null;
+    logger.info(`[InteractionManager] Dropped waiting permissions of session: session=${sessionID}`);
+  }
+
   dropWaitingQuestion(): boolean {
     if (this.waiting?.kind !== "question") {
       return false;

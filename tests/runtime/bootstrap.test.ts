@@ -140,6 +140,24 @@ describe("runtime/bootstrap", () => {
     expect(updated).not.toContain("# OPEN_BROWSER_ROOTS=");
   });
 
+  it("keeps a hand-set OpenCode server version when the wizard rewrites the env file", () => {
+    const updated = buildEnvFileContent(
+      ["OPENCODE_SERVER_VERSION=v2", ""].join("\n"),
+      {
+        BOT_LOCALE: "en",
+        TELEGRAM_BOT_TOKEN: "token:value",
+        TELEGRAM_ALLOWED_USER_ID: "42",
+        OPENCODE_SERVER_USERNAME: "opencode",
+        OPENCODE_MODEL_PROVIDER: "opencode",
+        OPENCODE_MODEL_ID: "big-pickle",
+      },
+      ENV_EXAMPLE_CONTENT,
+    );
+
+    expect(updated).toContain("OPENCODE_SERVER_VERSION=v2");
+    expect(updated).not.toContain("# OPENCODE_SERVER_VERSION=v1");
+  });
+
   it("keeps optional template placeholders when wizard clears previous optional values", () => {
     const existingContent = [
       "OPENCODE_API_URL=https://example.com",

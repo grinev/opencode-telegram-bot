@@ -293,6 +293,38 @@ export class PermissionManager {
     return removedMessageIds;
   }
 
+  /**
+   * Check whether an OpenCode request ID is already shown or grouped behind a message
+   */
+  hasRequest(requestID: string): boolean {
+    for (const requestIds of this.state?.requestIdsByMessageId.values() ?? []) {
+      if (requestIds.includes(requestID)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Resolve every request of a session, shown or waiting behind a poll, and return the
+   * Telegram message IDs that showed them
+   */
+  resolveSessionRequests(sessionID: string): number[] {
+    const requestIDs = new Set<string>();
+    const state = this.state;
+    for (const [messageId, request] of state?.requestsByMessageId ?? []) {
+      if (request.sessionID !== sessionID) {
+        continue;
+      }
+      for (const requestID of state?.requestIdsByMessageId.get(messageId) ?? [request.id]) {
+        requestIDs.add(requestID);
+      }
+    }
+
+    this.interactionManager.dropWaitingPermissionsForSession(sessionID);
+    return [...requestIDs].flatMap((requestID) => this.resolveRequest(requestID));
+  }
+
   isResolved(requestID: string): boolean {
     return this.getResolvedRequestIDs().has(requestID);
   }
