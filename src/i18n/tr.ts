@@ -176,6 +176,8 @@ export const tr: I18nDictionary = {
   "settings.prompt_queue.label": "Mesaj kuyruğu",
   "settings.value.on": "Açık",
   "settings.value.off": "Kapalı",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ Ayar kaydedildi.",
 
   "projects.empty":
@@ -430,6 +432,7 @@ export const tr: I18nDictionary = {
     "⚠️ Kuyruktaki medya {maxSizeMb} MiB ile sınırlıdır. Bir öğenin gönderilmesini bekleyip tekrar deneyin.",
   "queue.removed": "🗑 Mesaj kuyruktan kaldırıldı.",
   "queue.not_found": "Bu mesaj artık kuyrukta değil.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "Mesaj kuyruğu /settings içinden açılabilir.",
   "keyboard.updated": "⌨️ Klavye güncellendi",
 

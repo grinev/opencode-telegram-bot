@@ -4,7 +4,12 @@ import {
   getShowAssistantRunFooter,
   getShowThinkingContent,
 } from "../../../app/stores/settings-store.js";
-import { clearPromptResponseMode } from "../../handlers/prompt.js";
+import { clearPromptResponseMode, startInboxPromptRun } from "../../handlers/prompt.js";
+import { promptQueue, type QueuedPrompt } from "../../../app/managers/prompt-queue-manager.js";
+import { buildExternalUserInputNotification } from "../../../app/services/external-user-input-service.js";
+import { getCurrentSession } from "../../../app/services/session-service.js";
+import { sendBotText } from "../../messages/telegram-text.js";
+import { closeForegroundRun } from "./run-close.js";
 import { finalizeAssistantResponse } from "../../streaming/finalize-assistant-response.js";
 import { sendTtsResponseForSession } from "../../handlers/tts-response-handler.js";
 import { deliverThinkingMessage } from "../../messages/thinking-message.js";
@@ -30,6 +35,7 @@ type KeepAssistantDraftsDeps = EventHandlerDeps<"keyboardManager">;
 
 type AssistantResponseDeps = EventHandlerDeps<
   | "assistantRunState"
+  | "attachManager"
   | "externalUserInputSuppressionManager"
   | "foregroundSessionState"
   | "keyboardManager"
@@ -37,6 +43,64 @@ type AssistantResponseDeps = EventHandlerDeps<
   | "scheduledTaskRuntime"
   | "summaryAggregator"
 >;
+
+/**
+ * OpenCode picked up a prompt the bot sent into the session inbox: its button is already
+ * gone, the quote is sent with the refreshed keyboard. A queued prompt is picked up only
+ * once the turn has answered, inside the same execution, so it closes that run and opens
+ * its own - as a prompt queued in the bot does.
+ */
+async function pickUpInboxPrompt(
+  deps: AssistantResponseDeps,
+  sessionId: string,
+  item: QueuedPrompt,
+): Promise<void> {
+  const { policy } = deps;
+  const destination = policy.getDestination(sessionId);
+  if (!destination || !policy.isForegroundSession(sessionId)) {
+    return;
+  }
+
+  logger.info(
+    `[PromptQueue] Inbox prompt picked up: inboxId=${item.inbox?.inboxId}, delivery=${item.inbox?.delivery}`,
+  );
+
+  try {
+    if (item.inbox?.delivery === "queue" && deps.assistantRunState.hasRun(sessionId)) {
+      const completedRun = deps.assistantRunState.finishRun(sessionId, "inbox_queue_pickup");
+      clearPromptResponseMode(sessionId);
+      await closeForegroundRun(deps, sessionId, destination, completedRun, "inbox_queue_pickup");
+    }
+
+    if (!deps.assistantRunState.hasRun(sessionId)) {
+      const session = getCurrentSession();
+      if (session?.id === sessionId) {
+        await startInboxPromptRun(session, deps, item.responseMode);
+      }
+    }
+  } catch (err) {
+    logger.error("[PromptQueue] Failed to switch runs on inbox pickup:", err);
+  }
+
+  const notification = buildExternalUserInputNotification(item.displayText);
+  if (!notification) {
+    return;
+  }
+
+  try {
+    const keyboard = getReplyKeyboard(deps);
+    await sendBotText({
+      api: destination.api,
+      chatId: destination.chatId,
+      text: notification.text,
+      rawFallbackText: notification.rawFallbackText,
+      format: "markdown_v2",
+      options: keyboard ? { reply_markup: keyboard } : {},
+    });
+  } catch (err) {
+    logger.error("[PromptQueue] Failed to echo picked up inbox prompt:", err);
+  }
+}
 
 async function completeThinkingStream(
   { runtime, policy }: EventHandlerBase,
@@ -335,8 +399,18 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
     });
   });
 
-  summaryAggregator.setOnExternalUserInput(async (sessionId, _messageId, messageText) => {
+  summaryAggregator.setOnExternalUserInput(async (sessionId, messageId, messageText) => {
     void runtime.enqueueCompletionTask(sessionId, async () => {
+      // A V2 user message carries the inbox id it waited under.
+      const mirrored = promptQueue.findByInboxId(messageId);
+      if (mirrored) {
+        promptQueue.removeById(mirrored.id);
+        await pickUpInboxPrompt(deps, sessionId, mirrored);
+        return;
+      }
+      // The admission of this prompt may still be on its way back from OpenCode.
+      promptQueue.rememberDeliveredInboxId(messageId);
+
       const destination = policy.getDestination(sessionId);
       if (!destination) {
         return;

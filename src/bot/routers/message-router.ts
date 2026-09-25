@@ -22,6 +22,7 @@ import {
 } from "../message-patterns.js";
 import { promptQueue } from "../../app/managers/prompt-queue-manager.js";
 import { findQueuedPromptByButtonLabel } from "../keyboards/queued-prompt-button.js";
+import { withdrawInboxPrompt } from "../../app/services/prompt-inbox-service.js";
 import { handleDocumentMessage } from "../handlers/document-handler.js";
 import { createMediaGroupAttachmentMiddleware } from "../handlers/media-group-handler.js";
 import { handlePhotoMessage } from "../handlers/photo-handler.js";
@@ -65,6 +66,19 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
 
     const label = ctx.message?.text;
     const queuedPrompt = label ? findQueuedPromptByButtonLabel(label) : null;
+
+    if (queuedPrompt?.inbox) {
+      const result = await withdrawInboxPrompt(queuedPrompt);
+      const keyboard = container.keyboardManager.getKeyboard();
+      const replyKey =
+        result === "removed"
+          ? "queue.removed"
+          : result === "gone"
+            ? "queue.not_found"
+            : "bot.prompt_send_error";
+      await ctx.reply(t(replyKey), keyboard ? { reply_markup: keyboard } : {});
+      return;
+    }
 
     if (queuedPrompt) {
       promptQueue.removeById(queuedPrompt.id);

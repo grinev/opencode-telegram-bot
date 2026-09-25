@@ -182,6 +182,8 @@ export const de: I18nDictionary = {
   "settings.prompt_queue.label": "Nachrichtenwarteschlange",
   "settings.value.on": "Ein",
   "settings.value.off": "Aus",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ Einstellung gespeichert.",
 
   "projects.empty":
@@ -449,6 +451,7 @@ export const de: I18nDictionary = {
     "⚠️ Die Warteschlange ist voll ({max}). Entferne eine Nachricht oder warte, bis die aktuelle Aufgabe abgeschlossen ist.",
   "queue.removed": "🗑 Nachricht aus der Warteschlange entfernt.",
   "queue.not_found": "Diese Nachricht ist nicht mehr in der Warteschlange.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "Die Nachrichtenwarteschlange lässt sich in /settings aktivieren.",
   "keyboard.updated": "⌨️ Tastatur aktualisiert",
 

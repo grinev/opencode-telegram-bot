@@ -4,6 +4,7 @@ import type { ProjectInfo } from "../types/project.js";
 import type { SessionDirectoryCacheInfo, SessionInfo } from "../types/session.js";
 import { cloneScheduledTask, type ScheduledTask } from "../types/scheduled-task.js";
 import type {
+  PromptQueueMode,
   ResponseStreamingMode,
   ScheduledTaskSessionIgnoreInfo,
   Settings,
@@ -228,7 +229,7 @@ export function setPinnedDashboardEnabled(enabled: boolean): void {
   void writeSettingsFile(currentSettings);
 }
 
-export type { ResponseStreamingMode };
+export type { PromptQueueMode, ResponseStreamingMode };
 
 export function getResponseStreamingMode(): ResponseStreamingMode {
   return currentSettings.responseStreamingMode === "draft" ? "draft" : "edit";
@@ -248,12 +249,19 @@ export function setSendDiffFileAttachments(enabled: boolean): void {
   void writeSettingsFile(currentSettings);
 }
 
-export function getPromptQueueEnabled(): boolean {
-  return currentSettings.promptQueueEnabled ?? false;
+/**
+ * The message queue mode in effect for the configured OpenCode server. Never touched:
+ * steer on V2, off on V1. Steer exists only on V2, so a stored steer on V1 is the
+ * bot's own queue.
+ */
+export function getPromptQueueMode(): PromptQueueMode {
+  const isV2 = config.opencode.serverVersion === "v2";
+  const mode = currentSettings.promptQueueMode ?? (isV2 ? "steer" : "off");
+  return mode === "steer" && !isV2 ? "queue" : mode;
 }
 
-export function setPromptQueueEnabled(enabled: boolean): void {
-  currentSettings.promptQueueEnabled = enabled;
+export function setPromptQueueMode(mode: PromptQueueMode): void {
+  currentSettings.promptQueueMode = mode;
   void writeSettingsFile(currentSettings);
 }
 
@@ -415,8 +423,8 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
             currentSettings.sendDiffFileAttachments = value;
           break;
         case "promptQueueEnabled":
-          if (currentSettings.promptQueueEnabled === undefined)
-            currentSettings.promptQueueEnabled = value;
+          if (currentSettings.promptQueueMode === undefined)
+            currentSettings.promptQueueMode = value ? "queue" : "off";
           break;
       }
     }
@@ -446,6 +454,14 @@ export async function loadSettings(): Promise<void> {
     const oldEnabled = (loadedSettings as Record<string, unknown>).ttsEnabled;
     loadedSettings.ttsMode = oldEnabled === true ? "all" : "off";
     delete (loadedSettings as Record<string, unknown>).ttsEnabled;
+    requiresRewrite = true;
+  }
+
+  // Migrate old promptQueueEnabled boolean to promptQueueMode
+  if ("promptQueueEnabled" in loadedSettings) {
+    const oldEnabled = (loadedSettings as Record<string, unknown>).promptQueueEnabled;
+    loadedSettings.promptQueueMode = oldEnabled === true ? "queue" : "off";
+    delete (loadedSettings as Record<string, unknown>).promptQueueEnabled;
     requiresRewrite = true;
   }
 

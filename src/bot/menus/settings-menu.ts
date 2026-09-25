@@ -2,17 +2,19 @@ import { InlineKeyboard } from "grammy";
 import {
   getCompactOutputMode,
   getDeleteCompactProgressOnFinish,
-  getPromptQueueEnabled,
+  getPromptQueueMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
   getPinnedDashboardEnabled,
   getShowAssistantRunFooter,
   getShowThinkingContent,
   getTtsMode,
+  type PromptQueueMode,
   type ResponseStreamingMode,
   type TtsMode,
 } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
+import { opencodeServerVersion } from "../../opencode/client.js";
 
 export const SETTINGS_CALLBACK_PREFIX = "settings:";
 export const SETTINGS_COMPACT_OUTPUT_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}compact_output`;
@@ -41,6 +43,23 @@ export function formatTtsModeValue(mode: TtsMode): string {
   return t("status.tts.off");
 }
 
+/** V2 names the three modes; V1 has only the bot's own queue, so it stays On/Off. */
+export function formatPromptQueueModeValue(mode: PromptQueueMode): string {
+  if (opencodeServerVersion !== "v2") {
+    return formatBooleanSettingValue(mode !== "off");
+  }
+
+  if (mode === "queue") {
+    return t("settings.prompt_queue.queue");
+  }
+
+  if (mode === "steer") {
+    return t("settings.prompt_queue.steer");
+  }
+
+  return t("settings.value.off");
+}
+
 export function formatResponseStreamingModeValue(mode: ResponseStreamingMode): string {
   return mode === "draft"
     ? t("settings.response_streaming.draft")
@@ -56,7 +75,7 @@ export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboar
   const showAssistantRunFooter = getShowAssistantRunFooter();
   const pinnedDashboardEnabled = getPinnedDashboardEnabled();
   const ttsMode = getTtsMode();
-  const promptQueueEnabled = getPromptQueueEnabled();
+  const promptQueueMode = getPromptQueueMode();
   const keyboard = new InlineKeyboard()
     .text(
       `${t("settings.compact_output.label")}: ${formatBooleanSettingValue(compactOutputMode)}`,
@@ -100,7 +119,7 @@ export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboar
     .text(`${t("settings.tts.label")}: ${formatTtsModeValue(ttsMode)}`, SETTINGS_TTS_CALLBACK)
     .row()
     .text(
-      `${t("settings.prompt_queue.label")}: ${formatBooleanSettingValue(promptQueueEnabled)}`,
+      `${t("settings.prompt_queue.label")}: ${formatPromptQueueModeValue(promptQueueMode)}`,
       SETTINGS_PROMPT_QUEUE_CALLBACK,
     );
 

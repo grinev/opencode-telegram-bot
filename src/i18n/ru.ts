@@ -173,6 +173,8 @@ export const ru: I18nDictionary = {
   "settings.prompt_queue.label": "Очередь сообщений",
   "settings.value.on": "Вкл",
   "settings.value.off": "Выкл",
+  "settings.prompt_queue.queue": "Очередь",
+  "settings.prompt_queue.steer": "Стир",
   "settings.saved": "✅ Настройка сохранена.",
 
   "projects.empty":
@@ -431,6 +433,7 @@ export const ru: I18nDictionary = {
   "queue.media_limit": "⚠️ Медиа в очереди ограничены {maxSizeMb} MiB. Дождитесь отправки элемента и повторите попытку.",
   "queue.removed": "🗑 Сообщение удалено из очереди.",
   "queue.not_found": "Этого сообщения больше нет в очереди.",
+  "queue.steer_added": "📥 Добавлено в текущую задачу ({count}/{max}).",
   "queue.disabled_hint": "Очередь сообщений включается в /settings.",
   "keyboard.updated": "⌨️ Клавиатура обновлена",
 

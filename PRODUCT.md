@@ -55,7 +55,7 @@ No public inbound ports are required for normal usage.
 - Send text prompts to OpenCode
 - Accept voice/audio messages, transcribe via Whisper-compatible STT API, and forward recognized text as prompts
 - Interrupt current task (ESC equivalent)
-- Optionally queue text, transcribed voice, photos, rich formatted messages with photos, supported documents, and media groups sent while a task is running; hold at most `MAX_QUEUED_PROMPTS` (5) items and 20 MiB of raw Telegram media bytes, checked from reliable `file_size` before downloads
+- Optionally accept text, transcribed voice, photos, rich formatted messages with photos, supported documents, and media groups sent while a task is running, at most `MAX_QUEUED_PROMPTS` (5) waiting at a time: on OpenCode V2 they wait in the session inbox and are steered into the running turn (Steer, the V2 default) or start their own run after it (Queue); on V1 the bot holds them, with at most 20 MiB of raw Telegram media bytes checked from reliable `file_size` before downloads
 - Handle OpenCode questions with inline options and custom text answers
 - In a multi-select question the custom text becomes one more tickable row next to the options, and Done sends it together with the ticked options
 - Send selected/custom answers back to OpenCode (`question.reply`)
@@ -207,6 +207,7 @@ Agent picker behavior:
 - [x] Attaching a project file from `/ls` to the next prompt as a native OpenCode file part
 - [x] `/messages` command: browse session messages with revert and fork functionality
 - [x] Optional message queue for text, voice, photos, rich formatted messages with photos, documents, and media groups sent while the agent is busy, managed from the bottom keyboard
+- [x] OpenCode V2: messages sent mid-run are steered into the running turn or queued in the session inbox (Off / Queue / Steer in `/settings`), withdrawable until picked up
 - [x] Native Telegram rich message formatting for assistant replies (Bot API 10.1)
 - [x] Incoming Telegram rich formatted messages (Bot API 10.1): converted to Markdown, accepted anywhere text is accepted, with photos attached and unsupported message types answered explicitly
 - [x] Startup either reaches Telegram polling or the process exits: transient Telegram failures are retried in-process; a bad token or other fatal startup error exits with code 1

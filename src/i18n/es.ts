@@ -182,6 +182,8 @@ export const es: I18nDictionary = {
   "settings.prompt_queue.label": "Cola de mensajes",
   "settings.value.on": "Activado",
   "settings.value.off": "Desactivado",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ Ajuste guardado.",
 
   "projects.empty":
@@ -446,6 +448,7 @@ export const es: I18nDictionary = {
     "⚠️ La cola está llena ({max}). Elimina un mensaje o espera a que termine la tarea actual.",
   "queue.removed": "🗑 Mensaje eliminado de la cola.",
   "queue.not_found": "Este mensaje ya no está en la cola.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "La cola de mensajes se activa en /settings.",
   "keyboard.updated": "⌨️ Teclado actualizado",
 

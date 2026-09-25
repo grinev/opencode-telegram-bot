@@ -8,13 +8,13 @@ import { createTestAppContainer } from "../../helpers/app-container.js";
 
 const mocked = vi.hoisted(() => ({
   getTtsModeMock: vi.fn(),
-  getPromptQueueEnabledMock: vi.fn(),
+  getPromptQueueModeMock: vi.fn(),
   flushPendingPromptMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getTtsMode: mocked.getTtsModeMock,
-  getPromptQueueEnabled: mocked.getPromptQueueEnabledMock,
+  getPromptQueueMode: mocked.getPromptQueueModeMock,
 }));
 
 vi.mock("../../../src/utils/logger.js", () => ({
@@ -141,7 +141,7 @@ describe("bot/handlers/voice-handler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocked.getTtsModeMock.mockReturnValue("off");
-    mocked.getPromptQueueEnabledMock.mockReturnValue(false);
+    mocked.getPromptQueueModeMock.mockReturnValue("off");
     vi.doUnmock("node:https");
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-telegram-token");
     vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
@@ -173,7 +173,7 @@ describe("bot/handlers/voice-handler", () => {
   });
 
   it("transcribes and queues a voice message while the agent is busy", async () => {
-    mocked.getPromptQueueEnabledMock.mockReturnValue(true);
+    mocked.getPromptQueueModeMock.mockReturnValue("queue");
     const { handleVoiceMessage } = await loadVoiceModule();
     const { promptQueue } = await import("../../../src/app/managers/prompt-queue-manager.js");
     const { initializePromptQueueDispatch } = await import(

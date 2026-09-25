@@ -186,6 +186,8 @@ export const it: I18nDictionary = {
   "settings.prompt_queue.label": "Coda messaggi",
   "settings.value.on": "On",
   "settings.value.off": "Off",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ Impostazione salvata.",
 
   "projects.empty":
@@ -443,6 +445,7 @@ export const it: I18nDictionary = {
   "queue.media_limit": "⚠️ I media in coda sono limitati a {maxSizeMb} MiB. Attendi l'invio di un elemento e riprova.",
   "queue.removed": "🗑 Messaggio rimosso dalla coda.",
   "queue.not_found": "Questo messaggio non è più in coda.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "La coda dei messaggi può essere attivata in /settings.",
   "keyboard.updated": "⌨️ Tastiera aggiornata",
 

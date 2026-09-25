@@ -20,7 +20,7 @@ let deps: AppContainer;
 
 const mocked = vi.hoisted(() => ({
   reconcileForegroundBusyStateMock: vi.fn(),
-  getPromptQueueEnabled: vi.fn(),
+  getPromptQueueMode: vi.fn(),
 }));
 
 vi.mock("../../../src/app/services/run-control-service.js", async (importOriginal) => {
@@ -35,7 +35,7 @@ vi.mock("../../../src/app/stores/settings-store.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../src/app/stores/settings-store.js")>();
   return {
     ...actual,
-    getPromptQueueEnabled: mocked.getPromptQueueEnabled,
+    getPromptQueueMode: mocked.getPromptQueueMode,
   };
 });
 
@@ -75,7 +75,7 @@ describe("interactionGuardMiddleware", () => {
     deps.interactionManager.clear("test_setup");
     mocked.reconcileForegroundBusyStateMock.mockReset();
     mocked.reconcileForegroundBusyStateMock.mockResolvedValue(undefined);
-    mocked.getPromptQueueEnabled.mockReset().mockReturnValue(false);
+    mocked.getPromptQueueMode.mockReset().mockReturnValue("off");
     promptQueue.__resetForTests();
     initializePromptQueueDispatch({ ...deps, bot: {} as Bot<Context> });
   });
@@ -322,7 +322,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("passes queued media to its handler while busy", async () => {
-    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
     deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     const ctx = {
       chat: { id: 1 },
@@ -338,7 +338,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("does not pass media through a blocking interaction to the queue", async () => {
-    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
     deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     startInteractionForTest(deps.interactionManager, { kind: "permission", expectedInput: "callback" });
     const ctx = createVoiceContext();
@@ -453,7 +453,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("queues a photo-only rich prompt while busy without downloading", async () => {
-    mocked.getPromptQueueEnabled.mockReturnValue(true);
+    mocked.getPromptQueueMode.mockReturnValue("queue");
     deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     const ctx = createTextContext("");
     setIncomingPrompt(
@@ -481,7 +481,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("rejects a rich photo prompt with an unknown media size while busy", async () => {
-    mocked.getPromptQueueEnabled.mockReturnValue(true);
+    mocked.getPromptQueueMode.mockReturnValue("queue");
     deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     const ctx = createTextContext("");
     setIncomingPrompt(
@@ -503,7 +503,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("rejects a rich photo aggregate above the media limit while busy", async () => {
-    mocked.getPromptQueueEnabled.mockReturnValue(true);
+    mocked.getPromptQueueMode.mockReturnValue("queue");
     deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     const ctx = createTextContext("");
     setIncomingPrompt(
@@ -533,7 +533,7 @@ describe("interactionGuardMiddleware", () => {
   });
 
   it("rejects a rich prompt when the queue is full", async () => {
-    mocked.getPromptQueueEnabled.mockReturnValue(true);
+    mocked.getPromptQueueMode.mockReturnValue("queue");
     deps.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     for (let index = 0; index < MAX_QUEUED_PROMPTS; index++) {
       promptQueue.add(createIncomingPrompt(`queued ${index}`));

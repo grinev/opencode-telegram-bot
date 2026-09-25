@@ -4,7 +4,7 @@ import { defined } from "../../helpers/defined.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 
 const processUserPromptMock = vi.hoisted(() => vi.fn());
-const getPromptQueueEnabledMock = vi.hoisted(() => vi.fn());
+const getPromptQueueModeMock = vi.hoisted(() => vi.fn());
 const isForegroundBusyMock = vi.hoisted(() => vi.fn());
 const getKeyboardMock = vi.hoisted(() => vi.fn());
 const sendBotTextMock = vi.hoisted(() => vi.fn());
@@ -15,7 +15,7 @@ vi.mock("../../../src/bot/handlers/prompt.js", async (importOriginal) => ({
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
-  getPromptQueueEnabled: getPromptQueueEnabledMock,
+  getPromptQueueMode: getPromptQueueModeMock,
 }));
 
 vi.mock("../../../src/app/services/run-control-service.js", () => ({
@@ -69,7 +69,7 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
     __resetPromptQueueDispatchForTests();
     replyMock = vi.fn().mockResolvedValue(undefined);
     processUserPromptMock.mockReset().mockResolvedValue(true);
-    getPromptQueueEnabledMock.mockReset().mockReturnValue(true);
+    getPromptQueueModeMock.mockReset().mockReturnValue("queue");
     isForegroundBusyMock.mockReset().mockReturnValue(false);
     getKeyboardMock.mockReset().mockReturnValue(KEYBOARD);
     sendBotTextMock.mockReset().mockResolvedValue(undefined);
@@ -78,7 +78,7 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
 
   describe("tryEnqueuePrompt", () => {
     it("does nothing when the setting is disabled", async () => {
-      getPromptQueueEnabledMock.mockReturnValue(false);
+      getPromptQueueModeMock.mockReturnValue("off");
 
       await expect(tryEnqueuePrompt(makeContext(), "do the thing")).resolves.toBe(false);
       expect(promptQueue.size()).toBe(0);
@@ -131,7 +131,7 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
 
   describe("shouldSuggestPromptQueue", () => {
     it("suggests the queue for a plain prompt while the setting is disabled", () => {
-      getPromptQueueEnabledMock.mockReturnValue(false);
+      getPromptQueueModeMock.mockReturnValue("off");
 
       expect(shouldSuggestPromptQueue("do the thing")).toBe(true);
     });
@@ -141,7 +141,7 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
     });
 
     it("stays quiet for commands, blank text, and button presses", () => {
-      getPromptQueueEnabledMock.mockReturnValue(false);
+      getPromptQueueModeMock.mockReturnValue("off");
 
       expect(shouldSuggestPromptQueue("/status")).toBe(false);
       expect(shouldSuggestPromptQueue("   ")).toBe(false);

@@ -182,6 +182,8 @@ export const pt: I18nDictionary = {
   "settings.prompt_queue.label": "Fila de mensagens",
   "settings.value.on": "Ligado",
   "settings.value.off": "Desligado",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ Configuração salva.",
 
   "projects.empty":
@@ -447,6 +449,7 @@ export const pt: I18nDictionary = {
     "⚠️ A fila está cheia ({max}). Remova uma mensagem ou aguarde o término da tarefa atual.",
   "queue.removed": "🗑 Mensagem removida da fila.",
   "queue.not_found": "Esta mensagem não está mais na fila.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "A fila de mensagens pode ser ativada em /settings.",
   "keyboard.updated": "⌨️ Teclado atualizado",
 

@@ -141,4 +141,70 @@ describe("app/managers/prompt-queue-manager", () => {
 
     expect(promptQueue.list()[0]?.text).toBe("first");
   });
+
+  describe("OpenCode inbox mirror", () => {
+    const inbox = (inboxId: string) => ({ sessionId: "ses-1", inboxId, delivery: "steer" as const });
+
+    it("counts a reservation towards the cap without showing it", () => {
+      for (let index = 0; index < MAX_QUEUED_PROMPTS - 1; index++) {
+        promptQueue.add(prompt(`prompt ${index}`));
+      }
+
+      expect(promptQueue.reserve()).not.toBeNull();
+      expect(promptQueue.isFull()).toBe(true);
+      expect(promptQueue.reserve()).toBeNull();
+      expect(promptQueue.size()).toBe(MAX_QUEUED_PROMPTS - 1);
+    });
+
+    it("turns a reservation into a mirror item found by its inbox id", () => {
+      const reservationId = promptQueue.reserve();
+
+      const item = promptQueue.confirmReservation(reservationId!, {
+        displayText: "Also check the tests",
+        inbox: inbox("msg-1"),
+      });
+
+      expect(item).toMatchObject({ displayText: "Also check the tests", mediaBytes: 0 });
+      expect(promptQueue.findByInboxId("msg-1")?.id).toBe(item?.id);
+      expect(promptQueue.size()).toBe(1);
+      expect(promptQueue.isFull()).toBe(false);
+    });
+
+    it("shows a mirror item without text as an attachment", () => {
+      const item = promptQueue.confirmReservation(promptQueue.reserve()!, {
+        displayText: "  ",
+        inbox: inbox("msg-1"),
+      });
+
+      expect(item?.displayText).toBe("[Attachment]");
+    });
+
+    it("drops reservations on clear so a late confirmation finds nothing", () => {
+      const reservationId = promptQueue.reserve()!;
+      const mirrored = promptQueue.confirmReservation(promptQueue.reserve()!, {
+        displayText: "waiting",
+        inbox: inbox("msg-1"),
+      });
+
+      const removed = promptQueue.clear("test");
+
+      expect(removed.map((item) => item.id)).toEqual([mirrored?.id]);
+      expect(
+        promptQueue.confirmReservation(reservationId, { displayText: "late", inbox: inbox("msg-2") }),
+      ).toBeNull();
+      expect(promptQueue.releaseReservation(reservationId)).toBe(false);
+      expect(promptQueue.size()).toBe(0);
+    });
+
+    it("remembers delivered inbox ids until the queue is cleared", () => {
+      promptQueue.rememberDeliveredInboxId("msg-1");
+
+      expect(promptQueue.wasInboxIdDelivered("msg-1")).toBe(true);
+      expect(promptQueue.wasInboxIdDelivered("msg-2")).toBe(false);
+
+      promptQueue.clear("session_switched");
+
+      expect(promptQueue.wasInboxIdDelivered("msg-1")).toBe(false);
+    });
+  });
 });

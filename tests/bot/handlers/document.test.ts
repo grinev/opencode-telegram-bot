@@ -108,7 +108,7 @@ describe("bot/handlers/document", () => {
   });
 
   it("rejects oversized queued image documents before downloading", async () => {
-    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
     container.foregroundSessionState.markBusy("session-1", "/repo");
     const { ctx } = createDocumentContext({
       document: {
@@ -129,7 +129,7 @@ describe("bot/handlers/document", () => {
   });
 
   it("rejects oversized queued PDFs before downloading", async () => {
-    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
     container.foregroundSessionState.markBusy("session-1", "/repo");
     const { ctx } = createDocumentContext({
       document: {
@@ -150,7 +150,7 @@ describe("bot/handlers/document", () => {
   });
 
   it("rejects queued documents with an unknown media size", async () => {
-    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
     container.foregroundSessionState.markBusy("session-1", "/repo");
     const { ctx } = createDocumentContext({
       document: {
@@ -170,7 +170,7 @@ describe("bot/handlers/document", () => {
 
   describe("text files", () => {
     it("reserves raw source bytes when a text file is queued", async () => {
-      vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+      vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
       container.foregroundSessionState.markBusy("session-1", "/repo");
       const { ctx } = createDocumentContext();
       const { deps, downloadMock, processPromptMock } = createDocumentDeps();

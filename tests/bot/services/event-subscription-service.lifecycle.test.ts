@@ -909,4 +909,78 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       expect(api.sendMessage).not.toHaveBeenCalled();
     });
   });
+
+  describe("prompt picked up from the OpenCode V2 inbox", () => {
+    async function mirrorInboxPrompt(delivery: "steer" | "queue"): Promise<void> {
+      const { promptQueue } = await import("../../../src/app/managers/prompt-queue-manager.js");
+      promptQueue.confirmReservation(promptQueue.reserve()!, {
+        displayText: "photo caption",
+        inbox: { sessionId: "session-1", inboxId: "user-message-1", delivery },
+      });
+    }
+
+    it("drops the button and quotes a steered prompt inside the running run", async () => {
+      const { api, summaryAggregator } = await setupService({
+        startAssistantRun: true,
+        showAssistantRunFooter: true,
+      });
+      await mirrorInboxPrompt("steer");
+      const { promptQueue } = await import("../../../src/app/managers/prompt-queue-manager.js");
+
+      emitExternalUserMessage(summaryAggregator, "See attached file");
+      await vi.waitFor(
+        () => {
+          expect(collectSentTexts(api).some((text) => text.includes("photo caption"))).toBe(true);
+        },
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+
+      expect(promptQueue.size()).toBe(0);
+      expect(collectSentTexts(api).some((text) => text.includes("See attached file"))).toBe(false);
+      expect(findFooterCalls(api)).toHaveLength(0);
+      expect(activeContainer.assistantRunState.hasRun("session-1")).toBe(true);
+    }, 30_000);
+
+    it("closes the answered run with its footer and opens a new one for a queued prompt", async () => {
+      const { api, summaryAggregator } = await setupService({
+        startAssistantRun: true,
+        showAssistantRunFooter: true,
+      });
+      await mirrorInboxPrompt("queue");
+      const { assistantRunState } = activeContainer;
+      assistantRunState.markResponseCompleted("session-1", {
+        agent: "test-agent",
+        providerID: "test-provider",
+        modelID: "test-model",
+      });
+
+      emitExternalUserMessage(summaryAggregator, "Next task");
+      await vi.waitFor(
+        () => {
+          expect(collectSentTexts(api).some((text) => text.includes("photo caption"))).toBe(true);
+        },
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+
+      expect(findFooterCalls(api)).toHaveLength(1);
+      expect(assistantRunState.hasRun("session-1")).toBe(true);
+      expect(assistantRunState.isResponseCompleted("session-1")).toBe(false);
+      expect(activeContainer.foregroundSessionState.isBusy()).toBe(true);
+    }, 30_000);
+
+    it("remembers a user message that matches no waiting prompt", async () => {
+      const { api, summaryAggregator } = await setupService();
+      const { promptQueue } = await import("../../../src/app/managers/prompt-queue-manager.js");
+
+      emitExternalUserMessage(summaryAggregator, "From the CLI");
+      await vi.waitFor(
+        () => {
+          expect(collectSentTexts(api).some((text) => text.includes("From the CLI"))).toBe(true);
+        },
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+
+      expect(promptQueue.wasInboxIdDelivered("user-message-1")).toBe(true);
+    }, 30_000);
+  });
 });

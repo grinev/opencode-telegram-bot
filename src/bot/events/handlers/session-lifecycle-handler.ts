@@ -1,21 +1,16 @@
 import { t } from "../../../i18n/index.js";
 import { logger } from "../../../utils/logger.js";
-import {
-  getDeleteCompactProgressOnFinish,
-  getShowAssistantRunFooter,
-} from "../../../app/stores/settings-store.js";
 import { markAttachedSessionIdle } from "../../../app/services/attach-service.js";
 import { shouldSuppressUserAbortSessionError } from "../../../app/managers/abort-suppression-manager.js";
-import { formatAssistantRunFooter } from "../../../app/formatters/assistant-run-footer-formatter.js";
 import { clearPromptResponseMode } from "../../handlers/prompt.js";
 import { dispatchNextQueuedPrompt } from "../../handlers/prompt-queue-dispatch.js";
 import { resetStreamThrottle } from "../../streaming/stream-throttle.js";
 import {
   formatSessionMessage,
-  getReplyKeyboard,
   isCompactProgressMode,
   type EventHandlerDeps,
 } from "./handler-context.js";
+import { closeForegroundRun } from "./run-close.js";
 
 const SESSION_RETRY_PREFIX = "🔁";
 
@@ -67,34 +62,7 @@ export function registerSessionLifecycleHandlers(deps: SessionLifecycleDeps): vo
     }
 
     try {
-      await Promise.all([
-        runtime.toolMessageBatcher.flushSession(sessionId, "session_idle"),
-        runtime.toolCallStreamer.breakSession(sessionId, "session_idle"),
-      ]);
-
-      await runtime.compactProgressStreamer.finalize(sessionId, getDeleteCompactProgressOnFinish());
-
-      if (getShowAssistantRunFooter() && completedRun?.hasCompletedResponse) {
-        const agent = completedRun.actualAgent || completedRun.configuredAgent;
-        const providerID = completedRun.actualProviderID || completedRun.configuredProviderID;
-        const modelID = completedRun.actualModelID || completedRun.configuredModelID;
-
-        if (agent && providerID && modelID) {
-          const keyboard = getReplyKeyboard(deps);
-          await runtime.delivery.sendText(
-            destination,
-            formatAssistantRunFooter({
-              agent,
-              providerID,
-              modelID,
-              elapsedMs: Date.now() - completedRun.startedAt,
-            }),
-            {
-              ...(keyboard ? { reply_markup: keyboard } : {}),
-            },
-          );
-        }
-      }
+      await closeForegroundRun(deps, sessionId, destination, completedRun, "session_idle");
     } catch (err) {
       logger.error("[Bot] Failed to send session idle footer:", err);
     } finally {
