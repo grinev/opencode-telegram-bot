@@ -482,6 +482,88 @@ describe("app/services/model-selection-service", () => {
       });
       expect(setCurrentModelMock).not.toHaveBeenCalled();
     });
+
+    it("reports a non-empty catalog as available", async () => {
+      setCurrentModelState({ providerID: "openai", modelID: "gpt-4o", variant: "high" });
+
+      await expect(reconcileStoredModelSelection({ forceCatalogRefresh: true })).resolves.toBe(
+        true,
+      );
+    });
+
+    it("reports the catalog even when no model is stored", async () => {
+      await expect(reconcileStoredModelSelection({ forceCatalogRefresh: true })).resolves.toBe(
+        true,
+      );
+      expect(providersMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the stored model and reports unavailable when the catalog is empty", async () => {
+      setCurrentModelState({ providerID: "openai", modelID: "gpt-4o", variant: "high" });
+      providersMock.mockResolvedValueOnce(createProvidersResponse({}));
+
+      const available = await reconcileStoredModelSelection({ forceCatalogRefresh: true });
+
+      expect(available).toBe(false);
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+      expect(getCurrentModelState()).toEqual({
+        providerID: "openai",
+        modelID: "gpt-4o",
+        variant: "high",
+      });
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        "[ModelManager] Skipping stored model validation: model catalog unavailable",
+      );
+    });
+
+    it("reports unavailable when a failed refresh falls back to the stale catalog", async () => {
+      setCurrentModelState({ providerID: "openai", modelID: "gpt-4o", variant: "high" });
+      await reconcileStoredModelSelection();
+      providersMock.mockResolvedValueOnce({ data: null, error: new Error("upstream unavailable") });
+
+      const available = await reconcileStoredModelSelection({ forceCatalogRefresh: true });
+
+      expect(available).toBe(false);
+      expect(setCurrentModelMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("empty model catalog", () => {
+    it("is not cached: the next read asks the server again", async () => {
+      providersMock.mockResolvedValueOnce(createProvidersResponse({}));
+
+      await expect(getProviders()).resolves.toEqual([]);
+      const providers = await getProviders();
+
+      expect(providersMock).toHaveBeenCalledTimes(2);
+      expect(providers.map((provider) => provider.id)).toEqual([
+        "anthropic",
+        "google",
+        "openai",
+        "opencode",
+      ]);
+    });
+
+    it("treats providers without models as an empty catalog", async () => {
+      providersMock.mockResolvedValueOnce(createProvidersResponse({ openai: [] }));
+
+      await expect(searchModels("gpt")).resolves.toEqual([]);
+      await expect(searchModels("gpt")).resolves.not.toHaveLength(0);
+      expect(providersMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("drops a previously cached catalog", async () => {
+      await getProviders();
+      providersMock.mockResolvedValueOnce(createProvidersResponse({}));
+
+      await reconcileStoredModelSelection({ forceCatalogRefresh: true });
+
+      providersMock
+        .mockResolvedValueOnce(createProvidersResponse({}))
+        .mockResolvedValueOnce(createProvidersResponse({}));
+      await expect(getProviders()).resolves.toEqual([]);
+      await expect(getProviderModels("openai")).resolves.toEqual([]);
+    });
   });
 
   describe("searchModels", () => {

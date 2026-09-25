@@ -38,6 +38,12 @@ async function refreshContextLimitCache(): Promise<void> {
         return;
       }
 
+      if (data.providers.every((provider) => Object.keys(provider.models).length === 0)) {
+        // A freshly started server lists no models for a moment; do not keep that as its state.
+        logger.warn("[ModelContextLimit] Providers list has no models; not caching it");
+        return;
+      }
+
       contextLimitCache.clear();
       for (const provider of data.providers) {
         for (const [modelID, model] of Object.entries(provider.models)) {
@@ -81,4 +87,10 @@ export async function getModelContextLimit(
 
   await refreshContextLimitCache();
   return contextLimitCache.get(cacheKey) ?? DEFAULT_CONTEXT_LIMIT;
+}
+
+export function __resetModelContextLimitCacheForTests(): void {
+  contextLimitCache.clear();
+  providersCacheExpiresAt = 0;
+  providersFetchInFlight = null;
 }
