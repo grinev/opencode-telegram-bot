@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildEnvFileContent,
   ensureRuntimeConfigForStart,
+  getWizardServerVersionDefault,
+  pickServerPassword,
   validateRuntimeEnvValues,
 } from "../../src/runtime/bootstrap.js";
 import { t } from "../../src/i18n/index.js";
@@ -65,6 +67,7 @@ describe("runtime/bootstrap", () => {
       BOT_LOCALE: "ru",
       TELEGRAM_BOT_TOKEN: "new-token:value",
       TELEGRAM_ALLOWED_USER_ID: "777",
+      OPENCODE_SERVER_VERSION: "v1",
       OPENCODE_SERVER_USERNAME: "new-user",
       OPENCODE_MODEL_PROVIDER: "old-provider",
       OPENCODE_MODEL_ID: "old-model",
@@ -76,6 +79,7 @@ describe("runtime/bootstrap", () => {
     expect(updated).toContain("BOT_LOCALE=ru");
     expect(updated).toContain("TELEGRAM_BOT_TOKEN=new-token:value");
     expect(updated).toContain("TELEGRAM_ALLOWED_USER_ID=777");
+    expect(updated).toContain("OPENCODE_SERVER_VERSION=v1");
     expect(updated).not.toContain("OPENCODE_API_URL=");
     expect(updated).toContain("OPENCODE_MODEL_PROVIDER=old-provider");
     expect(updated).toContain("OPENCODE_MODEL_ID=old-model");
@@ -88,6 +92,7 @@ describe("runtime/bootstrap", () => {
         BOT_LOCALE: "ru",
         TELEGRAM_BOT_TOKEN: "token:value",
         TELEGRAM_ALLOWED_USER_ID: "42",
+        OPENCODE_SERVER_VERSION: "v1",
         OPENCODE_SERVER_USERNAME: "opencode",
         OPENCODE_MODEL_PROVIDER: "opencode",
         OPENCODE_MODEL_ID: "big-pickle",
@@ -126,6 +131,7 @@ describe("runtime/bootstrap", () => {
         BOT_LOCALE: "en",
         TELEGRAM_BOT_TOKEN: "token:value",
         TELEGRAM_ALLOWED_USER_ID: "42",
+        OPENCODE_SERVER_VERSION: "v1",
         OPENCODE_SERVER_USERNAME: "opencode",
         OPENCODE_MODEL_PROVIDER: "opencode",
         OPENCODE_MODEL_ID: "big-pickle",
@@ -140,14 +146,16 @@ describe("runtime/bootstrap", () => {
     expect(updated).not.toContain("# OPEN_BROWSER_ROOTS=");
   });
 
-  it("keeps a hand-set OpenCode server version when the wizard rewrites the env file", () => {
+  it("writes the OpenCode server version chosen in the wizard", () => {
     const updated = buildEnvFileContent(
-      ["OPENCODE_SERVER_VERSION=v2", ""].join("\n"),
+      ["OPENCODE_SERVER_VERSION=v1", ""].join("\n"),
       {
         BOT_LOCALE: "en",
         TELEGRAM_BOT_TOKEN: "token:value",
         TELEGRAM_ALLOWED_USER_ID: "42",
+        OPENCODE_SERVER_VERSION: "v2",
         OPENCODE_SERVER_USERNAME: "opencode",
+        OPENCODE_SERVER_PASSWORD: "service-password",
         OPENCODE_MODEL_PROVIDER: "opencode",
         OPENCODE_MODEL_ID: "big-pickle",
       },
@@ -155,7 +163,21 @@ describe("runtime/bootstrap", () => {
     );
 
     expect(updated).toContain("OPENCODE_SERVER_VERSION=v2");
-    expect(updated).not.toContain("# OPENCODE_SERVER_VERSION=v1");
+    expect(updated).not.toContain("OPENCODE_SERVER_VERSION=v1");
+    expect(updated).toContain("OPENCODE_SERVER_PASSWORD=service-password");
+  });
+
+  it("offers V2 on a first setup and the saved version on a re-run", () => {
+    expect(getWizardServerVersionDefault(null)).toBe("v2");
+    expect(getWizardServerVersionDefault("OPENCODE_SERVER_VERSION=v2\n")).toBe("v2");
+    expect(getWizardServerVersionDefault("OPENCODE_SERVER_VERSION=v1\n")).toBe("v1");
+    expect(getWizardServerVersionDefault("TELEGRAM_BOT_TOKEN=token:value\n")).toBe("v1");
+  });
+
+  it("keeps the saved server password when the answer is empty", () => {
+    expect(pickServerPassword("", "saved-password")).toBe("saved-password");
+    expect(pickServerPassword("new-password", "saved-password")).toBe("new-password");
+    expect(pickServerPassword("", undefined)).toBeUndefined();
   });
 
   it("keeps optional template placeholders when wizard clears previous optional values", () => {
@@ -171,6 +193,7 @@ describe("runtime/bootstrap", () => {
         BOT_LOCALE: "en",
         TELEGRAM_BOT_TOKEN: "token:value",
         TELEGRAM_ALLOWED_USER_ID: "42",
+        OPENCODE_SERVER_VERSION: "v1",
         OPENCODE_SERVER_USERNAME: "opencode",
         OPENCODE_MODEL_PROVIDER: "opencode",
         OPENCODE_MODEL_ID: "big-pickle",
@@ -195,6 +218,7 @@ describe("runtime/bootstrap", () => {
         BOT_LOCALE: "en",
         TELEGRAM_BOT_TOKEN: "token:value",
         TELEGRAM_ALLOWED_USER_ID: "42",
+        OPENCODE_SERVER_VERSION: "v1",
         OPENCODE_SERVER_USERNAME: "opencode",
         OPENCODE_MODEL_PROVIDER: "opencode",
         OPENCODE_MODEL_ID: "big-pickle",

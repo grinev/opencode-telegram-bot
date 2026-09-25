@@ -1,8 +1,10 @@
 import { CommandContext, Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
-import { opencodeClient } from "../../opencode/client.js";
+import { opencodeClient, opencodeServerVersion } from "../../opencode/client.js";
+import { canStartLocalOpencodeServer } from "../../opencode/local-start.js";
 import { resolveLocalOpencodeTarget, startLocalOpencodeServer } from "../../opencode/process.js";
+import { explainFailedHealthCheck } from "../../opencode/server-health.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { isContainerRuntime } from "../../runtime/container.js";
@@ -110,9 +112,14 @@ export async function opencodeStartCommand(
       // Server not accessible, continue with start.
     }
 
+    if (!(await canStartLocalOpencodeServer(localTarget, "always"))) {
+      await ctx.reply(t("opencode_start.error"));
+      return;
+    }
+
     const statusMessage = await ctx.reply(t("opencode_start.starting"));
 
-    const childProcess = startLocalOpencodeServer(localTarget);
+    const childProcess = startLocalOpencodeServer(localTarget, opencodeServerVersion);
 
     childProcess.once("error", (error) => {
       logger.error("[Bot] OpenCode server process failed to start", error);
@@ -135,6 +142,7 @@ export async function opencodeStartCommand(
     const ready = await waitForServerReady(SERVER_READY_TIMEOUT_MS);
 
     if (!ready) {
+      await explainFailedHealthCheck("always");
       await editBotText({
         api: ctx.api,
         chatId: ctx.chat.id,

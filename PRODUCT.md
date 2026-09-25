@@ -31,9 +31,9 @@ No public inbound ports are required for normal usage.
 
 - Works with OpenCode V1 and OpenCode V2 servers; the API version is set in configuration (`OPENCODE_SERVER_VERSION`, default V1) and a server of the other version is reported in the log
 - Check OpenCode server status (running / not running)
-- Start OpenCode server from the app (`opencode serve`)
+- Start OpenCode server from the app: `opencode serve` on V1, the registered background server (`opencode serve --service`) on V2; no start while the configured address answers with the wrong password or as the other version, while the local `opencode` executable is the other version, or on V2 while a registered V2 server runs on another port — the reason goes to the log
 - Stop OpenCode server from the app
-- Optionally monitor and auto-restart a local OpenCode server
+- Optionally monitor and auto-restart a local OpenCode server, with the same start rules
 
 ### Project management
 
@@ -97,7 +97,7 @@ No public inbound ports are required for normal usage.
 - Telegram bot token
 - Allowed Telegram user ID
 - Default model provider and model ID
-- OpenCode server API version (`OPENCODE_SERVER_VERSION`: `v1` or `v2`) with a version-dependent default URL
+- OpenCode server API version (`OPENCODE_SERVER_VERSION`: `v1` or `v2`) with a version-dependent default URL; the installed-mode setup wizard asks for it (V2 on a first setup, the saved choice on a re-run) and requires the server password for V2
 - Selected project persisted in `settings.json`
 - Configurable sessions list size (default: 10)
 - Configurable commands list size (default: 10)
@@ -172,6 +172,7 @@ Agent picker behavior:
 - [x] Single-user access control by allowed Telegram user ID
 - [x] OpenCode server control from Telegram (`/status`, `/opencode_start`, `/opencode_stop`)
 - [x] OpenCode V1 and V2 servers, selected by `OPENCODE_SERVER_VERSION`; pending questions and permissions come back after the event stream reconnects
+- [x] OpenCode V2 set up and started out of the box: the setup wizard asks for the version and the V2 password, and `/opencode_start`, `/opencode_stop` and auto-restart manage the V2 background server
 - [x] Project and session management from Telegram (`/projects`, `/worktree`, `/sessions`, `/new`)
 - [x] Cross-project recent sessions with status and direct attachment (`/recent`)
 - [x] Automatic tracking of the current OpenCode CLI session, including continuing it from Telegram, live updates, and external text input notifications

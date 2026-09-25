@@ -38,6 +38,8 @@ vi.mock("../../src/utils/logger.js", () => ({
 import {
   __resetServerHealthStateForTests,
   checkOpencodeHealth,
+  classifyFailedHealthCheck,
+  explainFailedHealthCheck,
 } from "../../src/opencode/server-health.js";
 
 describe("opencode/server-health", () => {
@@ -152,5 +154,35 @@ describe("opencode/server-health", () => {
     expect(mocked.probeMock).toHaveBeenCalledWith("v1");
     expect(mocked.probeMock).toHaveBeenCalledWith("v2");
     expect(mocked.loggerErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("classifies a failed health check without logging", async () => {
+    mocked.probeMock.mockImplementation(async (version: string) =>
+      version === "v2"
+        ? { kind: "found", version: "v2", serverVersion: "2.0.16" }
+        : { kind: "none" },
+    );
+
+    await expect(classifyFailedHealthCheck()).resolves.toEqual({
+      kind: "mismatch",
+      actual: "OpenCode 2.0.16",
+      otherVersion: "v2",
+    });
+    expect(mocked.loggerErrorMock).not.toHaveBeenCalled();
+
+    mocked.probeMock.mockResolvedValue({ kind: "unauthorized" });
+    await expect(classifyFailedHealthCheck()).resolves.toEqual({ kind: "unauthorized" });
+  });
+
+  it("explains a failure every time in always mode and once in once mode", async () => {
+    mocked.probeMock.mockResolvedValue({ kind: "unauthorized" });
+
+    await explainFailedHealthCheck("once");
+    await explainFailedHealthCheck("once");
+    expect(mocked.loggerWarnMock).toHaveBeenCalledTimes(1);
+
+    await explainFailedHealthCheck("always");
+    await explainFailedHealthCheck("always");
+    expect(mocked.loggerWarnMock).toHaveBeenCalledTimes(3);
   });
 });

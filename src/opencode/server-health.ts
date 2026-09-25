@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { config, type OpencodeServerVersion } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { isExpectedOpencodeUnavailableError } from "../utils/opencode-error.js";
 import { opencodeClient, opencodeServerVersion, probeOpencodeServer } from "./client.js";
@@ -6,9 +6,18 @@ import { opencodeClient, opencodeServerVersion, probeOpencodeServer } from "./cl
 export type OpencodeHealth =
   { healthy: true; version: string | undefined } | { healthy: false; error: unknown };
 
+/** "always" logs every time (a user asked); "once" logs a problem once until it changes. */
+export type ProblemReportMode = "always" | "once";
+
+/** Why the configured URL did not answer as a healthy server of the configured version. */
+export type FailedHealthCause =
+  | { kind: "unauthorized" }
+  | { kind: "mismatch"; actual: string; otherVersion: OpencodeServerVersion }
+  | { kind: "unknown" };
+
 let lastReportedProblem: string | null = null;
 
-function describeServerUrl(): string {
+export function describeServerUrl(): string {
   try {
     const url = new URL(config.opencode.apiUrl);
     return `${url.protocol}//${url.host}${url.pathname === "/" ? "" : url.pathname}`;
@@ -17,24 +26,24 @@ function describeServerUrl(): string {
   }
 }
 
-function reportOnce(key: string, report: () => void): void {
-  if (lastReportedProblem === key) {
+/** Logs an OpenCode problem; in "once" mode the same problem is not logged again in a row. */
+export function reportOpencodeProblem(
+  key: string,
+  mode: ProblemReportMode,
+  report: () => void,
+): void {
+  if (mode === "once" && lastReportedProblem === key) {
     return;
   }
   lastReportedProblem = key;
   report();
 }
 
-/** Explains a failed health check in the log: wrong credentials or a server of the other version. */
-async function explainFailedHealthCheck(): Promise<void> {
+/** Tells wrong credentials and a server of the other version apart from anything else. */
+export async function classifyFailedHealthCheck(): Promise<FailedHealthCause> {
   const configured = await probeOpencodeServer(opencodeServerVersion);
   if (configured.kind === "unauthorized") {
-    reportOnce("unauthorized", () =>
-      logger.warn(
-        `[OpenCode] Authentication failed at ${describeServerUrl()}: check OPENCODE_SERVER_USERNAME and OPENCODE_SERVER_PASSWORD`,
-      ),
-    );
-    return;
+    return { kind: "unauthorized" };
   }
 
   const otherVersion = opencodeServerVersion === "v1" ? "v2" : "v1";
@@ -48,15 +57,32 @@ async function explainFailedHealthCheck(): Promise<void> {
       : other.kind === "unauthorized"
         ? "an OpenCode server"
         : null;
-  if (!actual) {
+  return actual ? { kind: "mismatch", actual, otherVersion } : { kind: "unknown" };
+}
+
+/** Writes the log line for a failed health check cause; an unknown cause logs nothing. */
+export function reportFailedHealthCause(cause: FailedHealthCause, mode: ProblemReportMode): void {
+  if (cause.kind === "unauthorized") {
+    reportOpencodeProblem("unauthorized", mode, () =>
+      logger.warn(
+        `[OpenCode] Authentication failed at ${describeServerUrl()}: check OPENCODE_SERVER_USERNAME and OPENCODE_SERVER_PASSWORD`,
+      ),
+    );
     return;
   }
 
-  reportOnce(`mismatch:${actual}`, () =>
-    logger.error(
-      `[OpenCode] Server version mismatch: OPENCODE_SERVER_VERSION=${opencodeServerVersion}, but the server at ${describeServerUrl()} is ${actual} (API ${otherVersion}). Set OPENCODE_SERVER_VERSION=${otherVersion} and restart the bot, or run an OpenCode ${opencodeServerVersion} server at this address.`,
-    ),
-  );
+  if (cause.kind === "mismatch") {
+    reportOpencodeProblem(`mismatch:${cause.actual}`, mode, () =>
+      logger.error(
+        `[OpenCode] Server version mismatch: OPENCODE_SERVER_VERSION=${opencodeServerVersion}, but the server at ${describeServerUrl()} is ${cause.actual} (API ${cause.otherVersion}). Set OPENCODE_SERVER_VERSION=${cause.otherVersion} and restart the bot, or run an OpenCode ${opencodeServerVersion} server at this address.`,
+      ),
+    );
+  }
+}
+
+/** Explains a failed health check in the log: wrong credentials or a server of the other version. */
+export async function explainFailedHealthCheck(mode: ProblemReportMode): Promise<void> {
+  reportFailedHealthCause(await classifyFailedHealthCheck(), mode);
 }
 
 /**
@@ -77,7 +103,7 @@ export async function checkOpencodeHealth(): Promise<OpencodeHealth> {
   }
 
   if (!isExpectedOpencodeUnavailableError(error)) {
-    await explainFailedHealthCheck();
+    await explainFailedHealthCheck("once");
   }
   return { healthy: false, error };
 }

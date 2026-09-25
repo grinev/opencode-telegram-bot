@@ -1,5 +1,6 @@
 import type { Event, FilePartInput, OpencodeClient, TextPartInput } from "@opencode-ai/sdk/v2";
 import { OpenCode, type FormInfo, type OpenCodeClient } from "@opencode/client";
+import { Service } from "@opencode/client/service";
 import { createV2EventTranslator, type V1GlobalEvent } from "./events.js";
 import {
   toFormAnswer,
@@ -573,4 +574,16 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
 
   // The adapter implements exactly the part of the V1 client surface the bot calls.
   return adapter as unknown as OpencodeClient;
+}
+
+/**
+ * URL of the V2 background server registered for this user, or null when no registered
+ * server answers. There is one per user: a new registered server replaces it.
+ */
+export async function findRegisteredV2ServerUrl(): Promise<string | null> {
+  try {
+    return (await Service.discover())?.url ?? null;
+  } catch {
+    return null;
+  }
 }
