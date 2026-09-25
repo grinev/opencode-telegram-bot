@@ -2,6 +2,7 @@ import type { Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import {
   clearQuestionInteraction,
+  showCurrentQuestion,
   showNextQuestion,
   syncQuestionInteractionState,
   updateQuestionMessage,
@@ -80,6 +81,9 @@ export async function handleQuestionCallback(
         break;
       case "custom":
         await handleCustomAnswer(ctx, deps, questionIndex);
+        break;
+      case "toggle_custom":
+        await handleToggleCustomAnswer(ctx, deps, questionIndex);
         break;
       case "cancel":
         await handleCancelPoll(ctx, deps);
@@ -162,9 +166,7 @@ async function handleSubmitAnswer(
     );
   }
 
-  const answer = deps.questionManager.getSelectedAnswer(questionIndex);
-
-  if (!answer) {
+  if (!deps.questionManager.hasAnswer(questionIndex)) {
     await ctx.answerCallbackQuery({
       text: t("question.select_one_required_callback"),
       show_alert: true,
@@ -172,7 +174,9 @@ async function handleSubmitAnswer(
     return;
   }
 
-  logger.debug(`[QuestionHandler] Submit answer for question ${questionIndex}: ${answer}`);
+  logger.debug(
+    `[QuestionHandler] Submit answer for question ${questionIndex}: ${deps.questionManager.getAnswerItems(questionIndex).join(" | ")}`,
+  );
 
   await ctx.answerCallbackQuery();
   await ctx.deleteMessage().catch(() => {});
@@ -198,6 +202,27 @@ async function handleCustomAnswer(
   });
 }
 
+async function handleToggleCustomAnswer(
+  ctx: Context,
+  deps: QuestionCallbackDeps,
+  questionIndex: number,
+): Promise<void> {
+  if (deps.questionManager.isWaitingForCustomInput(questionIndex)) {
+    deps.questionManager.clearCustomInput();
+    syncQuestionInteractionState(
+      "callback",
+      questionIndex,
+      deps.questionManager.getActiveMessageId(),
+      deps,
+    );
+  }
+
+  deps.questionManager.toggleCustomAnswer(questionIndex);
+
+  await updateQuestionMessage(ctx, deps);
+  await ctx.answerCallbackQuery();
+}
+
 async function handleCancelPoll(ctx: Context, deps: QuestionCallbackDeps): Promise<void> {
   deps.questionManager.cancel();
 
@@ -218,7 +243,9 @@ export async function handleQuestionTextAnswer(
     return;
   }
 
-  if (deps.questionManager.hasCustomAnswer(currentIndex)) {
+  const multiple = deps.questionManager.getCurrentQuestion()?.multiple ?? false;
+
+  if (!multiple && deps.questionManager.hasCustomAnswer(currentIndex)) {
     await ctx.reply(t("question.answer_already_received"));
     return;
   }
@@ -231,6 +258,14 @@ export async function handleQuestionTextAnswer(
   const activeMessageId = deps.questionManager.getActiveMessageId();
   if (activeMessageId !== null && ctx.chat) {
     await ctx.api.deleteMessage(ctx.chat.id, activeMessageId).catch(() => {});
+  }
+
+  if (multiple) {
+    // A multi-select question stays open: re-send it below the user's text with the custom row.
+    if (ctx.chat) {
+      await showCurrentQuestion(ctx.api, ctx.chat.id, deps);
+    }
+    return;
   }
 
   await showNextQuestion(ctx, deps);

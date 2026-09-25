@@ -75,7 +75,7 @@ describe("questionManager", () => {
     expect(questionManager.getSelectedAnswer(1)).toBe("* Beta: second");
   });
 
-  it("stores custom answers per question and prioritizes them in final answers", () => {
+  it("stores custom answers per question and adds them after the ticked options", () => {
     questionManager.startQuestions([SINGLE_QUESTION, MULTIPLE_QUESTION], "req-3");
 
     questionManager.selectOption(0, 1);
@@ -84,12 +84,66 @@ describe("questionManager", () => {
 
     expect(questionManager.hasCustomAnswer(1)).toBe(true);
     expect(questionManager.getCustomAnswer(1)).toBe("Custom response for question #2");
+    expect(questionManager.isCustomAnswerSelected(1)).toBe(true);
 
     const answers = questionManager.getAllAnswers();
     expect(answers).toEqual([
       { question: SINGLE_QUESTION.question, answer: "* No: decline" },
-      { question: MULTIPLE_QUESTION.question, answer: "Custom response for question #2" },
+      {
+        question: MULTIPLE_QUESTION.question,
+        answer: "* Alpha: first\nCustom response for question #2",
+      },
     ]);
+  });
+
+  it("builds multi-select answer items from ticked options and the ticked custom text", () => {
+    questionManager.startQuestions([MULTIPLE_QUESTION], "req-3c");
+
+    questionManager.setCustomAnswer(0, "Line one\nline two");
+    questionManager.selectOption(0, 2);
+    questionManager.selectOption(0, 0);
+
+    expect(questionManager.getAnswerItems(0)).toEqual([
+      "* Gamma: third",
+      "* Alpha: first",
+      "Line one\nline two",
+    ]);
+
+    questionManager.toggleCustomAnswer(0);
+    expect(questionManager.isCustomAnswerSelected(0)).toBe(false);
+    expect(questionManager.getAnswerItems(0)).toEqual(["* Gamma: third", "* Alpha: first"]);
+    expect(questionManager.getAllAnswers()).toEqual([
+      { question: MULTIPLE_QUESTION.question, answer: "* Gamma: third\n* Alpha: first" },
+    ]);
+
+    questionManager.selectOption(0, 2);
+    questionManager.selectOption(0, 0);
+    expect(questionManager.hasAnswer(0)).toBe(false);
+
+    questionManager.toggleCustomAnswer(0);
+    expect(questionManager.hasAnswer(0)).toBe(true);
+    expect(questionManager.getAnswerItems(0)).toEqual(["Line one\nline two"]);
+  });
+
+  it("keeps single-select custom answers first and split by line breaks", () => {
+    questionManager.startQuestions([SINGLE_QUESTION], "req-3d");
+
+    questionManager.setCustomAnswer(0, "First line\nSecond line");
+
+    expect(questionManager.isCustomAnswerSelected(0)).toBe(false);
+    expect(questionManager.getAnswerItems(0)).toEqual(["First line", "Second line"]);
+    expect(questionManager.getAllAnswers()).toEqual([
+      { question: SINGLE_QUESTION.question, answer: "First line\nSecond line" },
+    ]);
+  });
+
+  it("does not toggle a custom answer that was never entered", () => {
+    questionManager.startQuestions([MULTIPLE_QUESTION], "req-3e");
+
+    questionManager.toggleCustomAnswer(0);
+
+    expect(questionManager.isCustomAnswerSelected(0)).toBe(false);
+    expect(questionManager.hasAnswer(0)).toBe(false);
   });
 
   it("tracks custom input mode and active message id", () => {

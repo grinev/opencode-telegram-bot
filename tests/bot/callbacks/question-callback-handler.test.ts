@@ -11,6 +11,26 @@ import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
+const mocked = vi.hoisted(() => ({
+  questionReplyMock: vi.fn(),
+}));
+
+vi.mock("../../../src/opencode/client.js", () => ({
+  opencodeClient: {
+    question: {
+      reply: mocked.questionReplyMock,
+    },
+  },
+}));
+
+vi.mock("../../../src/app/stores/settings-store.js", () => ({
+  getCurrentProject: vi.fn(() => ({ id: "project-1", worktree: "D:/repo" })),
+}));
+
+vi.mock("../../../src/app/services/session-service.js", () => ({
+  getCurrentSession: vi.fn(() => null),
+}));
+
 const QUESTION_ONE: Question = {
   header: "Q1",
   question: "Pick one",
@@ -84,6 +104,10 @@ function createTextContext(text: string, api: Context["api"]): Context {
   } as unknown as Context;
 }
 
+async function pressButton(data: string, messageId: number, api: Context["api"]): Promise<void> {
+  await handleQuestionCallback(createCallbackContext(data, messageId, api), createDeps());
+}
+
 function createDeps() {
   return container;
 }
@@ -98,6 +122,8 @@ describe("bot question menu/callbacks", () => {
   beforeEach(() => {
     container.questionManager.clear();
     container.interactionManager.clear("test_setup");
+    mocked.questionReplyMock.mockReset();
+    mocked.questionReplyMock.mockResolvedValue({ data: true, error: undefined });
   });
 
   it("shows question details and keyboard in one message", async () => {
@@ -371,5 +397,121 @@ describe("bot question menu/callbacks", () => {
 
     expect(textCtx.reply).toHaveBeenCalledWith(t("question.use_custom_button_first"));
     expect(container.questionManager.getCurrentIndex()).toBe(0);
+  });
+
+  it("keeps a multi-select question open after custom text and re-sends it with the custom row", async () => {
+    const api = createApi([800, 801]);
+
+    container.questionManager.startQuestions([MULTIPLE_QUESTION], "req-multi-custom");
+    await showCurrentQuestion(api, 123, createDeps());
+
+    await pressButton("question:select:0:1", 800, api);
+    await pressButton("question:custom:0", 800, api);
+    await handleQuestionTextAnswer(createTextContext("My\nown answer", api), createDeps());
+
+    expect(api.deleteMessage).toHaveBeenCalledWith(123, 800);
+    expect(container.questionManager.getCurrentIndex()).toBe(0);
+    expect(container.questionManager.getActiveMessageId()).toBe(801);
+    expect(container.interactionManager.getSnapshot()?.expectedInput).toBe("callback");
+    expect(api.sendRichMessage).toHaveBeenLastCalledWith(123, expect.anything(), {
+      reply_markup: expect.objectContaining({
+        inline_keyboard: [
+          [{ text: "One", callback_data: "question:select:0:0" }],
+          [{ text: "✅ Two", callback_data: "question:select:0:1" }],
+          [{ text: "✅ ✏️ My own answer", callback_data: "question:toggle_custom:0" }],
+          [{ text: t("question.button.submit"), callback_data: "question:submit:0" }],
+          [{ text: t("question.button.custom"), callback_data: "question:custom:0" }],
+          [{ text: t("question.button.cancel"), callback_data: "question:cancel:0" }],
+        ],
+      }),
+    });
+  });
+
+  it("replaces the custom text when a new one is sent to a multi-select question", async () => {
+    const api = createApi([810, 811, 812]);
+
+    container.questionManager.startQuestions([MULTIPLE_QUESTION], "req-multi-replace");
+    await showCurrentQuestion(api, 123, createDeps());
+
+    await pressButton("question:custom:0", 810, api);
+    await handleQuestionTextAnswer(createTextContext("First", api), createDeps());
+    await pressButton("question:toggle_custom:0", 811, api);
+    await pressButton("question:custom:0", 811, api);
+    const textCtx = createTextContext("Second", api);
+    await handleQuestionTextAnswer(textCtx, createDeps());
+
+    expect(textCtx.reply).not.toHaveBeenCalled();
+    expect(container.questionManager.getCustomAnswer(0)).toBe("Second");
+    expect(container.questionManager.isCustomAnswerSelected(0)).toBe(true);
+    expect(container.questionManager.getActiveMessageId()).toBe(812);
+  });
+
+  it("toggles the custom row in place", async () => {
+    const api = createApi([820, 821]);
+
+    container.questionManager.startQuestions([MULTIPLE_QUESTION], "req-multi-toggle");
+    await showCurrentQuestion(api, 123, createDeps());
+    await pressButton("question:custom:0", 820, api);
+    await handleQuestionTextAnswer(createTextContext("Mine", api), createDeps());
+
+    const toggleCtx = createCallbackContext("question:toggle_custom:0", 821, api);
+    await handleQuestionCallback(toggleCtx, createDeps());
+
+    expect(container.questionManager.isCustomAnswerSelected(0)).toBe(false);
+    expect(toggleCtx.answerCallbackQuery).toHaveBeenCalledWith();
+    expect(api.editMessageText).toHaveBeenLastCalledWith(123, 821, expect.anything(), {
+      reply_markup: expect.objectContaining({
+        inline_keyboard: expect.arrayContaining([
+          [{ text: "✏️ Mine", callback_data: "question:toggle_custom:0" }],
+        ]),
+      }),
+    });
+
+    const submitCtx = createCallbackContext("question:submit:0", 821, api);
+    await handleQuestionCallback(submitCtx, createDeps());
+
+    expect(submitCtx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("question.select_one_required_callback"),
+      show_alert: true,
+    });
+    expect(container.questionManager.isActive()).toBe(true);
+  });
+
+  it("sends the ticked options and the ticked custom text on submit", async () => {
+    const api = createApi([830, 831, 832]);
+
+    container.questionManager.startQuestions([MULTIPLE_QUESTION], "req-multi-submit");
+    await showCurrentQuestion(api, 123, createDeps());
+    await pressButton("question:custom:0", 830, api);
+    await handleQuestionTextAnswer(createTextContext("Line one\nline two", api), createDeps());
+    await pressButton("question:select:0:0", 831, api);
+    await pressButton("question:submit:0", 831, api);
+
+    expect(mocked.questionReplyMock).toHaveBeenCalledWith({
+      requestID: "req-multi-submit",
+      directory: "D:/repo",
+      answers: [["* One: 1", "Line one\nline two"]],
+    });
+    expect(api.sendMessage).toHaveBeenLastCalledWith(
+      123,
+      expect.stringContaining(
+        t("question.summary.answer", { answer: "* One: 1\nLine one\nline two" }),
+      ),
+    );
+    expect(container.questionManager.isActive()).toBe(false);
+  });
+
+  it("submits a multi-select question whose only ticked item is the custom text", async () => {
+    const api = createApi([840, 841]);
+
+    container.questionManager.startQuestions([MULTIPLE_QUESTION], "req-multi-only-custom");
+    await showCurrentQuestion(api, 123, createDeps());
+    await pressButton("question:custom:0", 840, api);
+    await handleQuestionTextAnswer(createTextContext("Only mine", api), createDeps());
+    await pressButton("question:submit:0", 841, api);
+
+    expect(mocked.questionReplyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ answers: [["Only mine"]] }),
+    );
   });
 });

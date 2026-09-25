@@ -57,6 +57,7 @@ No public inbound ports are required for normal usage.
 - Interrupt current task (ESC equivalent)
 - Optionally queue text, transcribed voice, photos, rich formatted messages with photos, supported documents, and media groups sent while a task is running; hold at most `MAX_QUEUED_PROMPTS` (5) items and 20 MiB of raw Telegram media bytes, checked from reliable `file_size` before downloads
 - Handle OpenCode questions with inline options and custom text answers
+- In a multi-select question the custom text becomes one more tickable row next to the options, and Done sends it together with the ticked options
 - Send selected/custom answers back to OpenCode (`question.reply`)
 - Handle permission requests interactively (`allow once` / `always` / `reject`)
 
