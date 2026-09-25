@@ -6,12 +6,14 @@
 #   .\e2e\run-test-bot.ps1 -SkipBuild
 #   .\e2e\run-test-bot.ps1 -FaultProxy            # route Bot API calls through e2e/fault-proxy.mjs
 #   .\e2e\run-test-bot.ps1 -ForwardProxy socks5h  # reach Telegram through e2e/forward-proxy.mjs
+#   .\e2e\run-test-bot.ps1 -OpencodeVersion v1    # this launch only: OpenCode V1 instead of e2e/.env's version
 
 [CmdletBinding()]
 param(
     [switch]$SkipBuild,
     [switch]$FaultProxy,
-    [string]$ForwardProxy
+    [string]$ForwardProxy,
+    [string]$OpencodeVersion
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +32,7 @@ $forwardDir = Join-Path $projectRoot ".tmp\e2e\forward-proxy"
 $forwardPidFile = Join-Path $forwardDir "proxy.pid"
 $forwardPort = 8766
 $forwardProxyUrl = "${ForwardProxy}://127.0.0.1:$forwardPort"
+$opencodeStateHome = Join-Path $projectRoot ".tmp\e2e\opencode-state"
 
 function Get-TestEnvValue([string]$name) {
     $line = Get-Content $sourceEnv | Where-Object { $_ -match "^\s*$name\s*=" } | Select-Object -Last 1
@@ -59,6 +62,11 @@ function Restore-EnvValue([string]$name, $previousValue) {
 # Case-sensitive on purpose: the proxy and the bot's agents only know lowercase schemes.
 if ($useForwardProxy -and ($forwardSchemes -cnotcontains $ForwardProxy)) {
     Write-Error "Unknown -ForwardProxy scheme '$ForwardProxy'. Supported: $($forwardSchemes -join ', ')."
+    exit 1
+}
+
+if ($OpencodeVersion -and (@("v1", "v2") -cnotcontains $OpencodeVersion)) {
+    Write-Error "Unknown -OpencodeVersion '$OpencodeVersion'. Supported: v1, v2."
     exit 1
 }
 
@@ -110,6 +118,36 @@ if ($useForwardProxy) {
             exit 1
         }
     }
+}
+
+# e2e/.env names the stand's OpenCode version; -OpencodeVersion overrides it for this
+# launch. The bot's own default is v1.
+$effectiveOpencodeVersion = $OpencodeVersion
+if (-not $effectiveOpencodeVersion) { $effectiveOpencodeVersion = Get-TestEnvValue "OPENCODE_SERVER_VERSION" }
+if (-not $effectiveOpencodeVersion) { $effectiveOpencodeVersion = "v1" }
+
+# The V2 background server takes its password from the user's OpenCode config
+# (service.json), and the bot must send the same one.
+$opencodePassword = ""
+if ($effectiveOpencodeVersion -eq "v2") {
+    $configHome = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { Join-Path $HOME ".config" }
+    $serviceConfig = Join-Path $configHome "opencode\service.json"
+    if (Test-Path $serviceConfig) {
+        $opencodePassword = [string](Get-Content $serviceConfig -Raw | ConvertFrom-Json).password
+    }
+    if (-not $opencodePassword) {
+        Write-Error "OpenCode V2 needs a server password, and $serviceConfig has none. Set one with 'opencode service set password <value>'."
+        exit 1
+    }
+}
+
+# The bot starts `opencode` from PATH, so the chosen version's bin goes first: both
+# versions install an `opencode` command.
+$opencodePackage = if ($effectiveOpencodeVersion -eq "v2") { "@opencode\cli" } else { "opencode-ai" }
+$opencodeBin = Join-Path (npm root -g) "$opencodePackage\bin"
+if (-not (Test-Path (Join-Path $opencodeBin "opencode.exe"))) {
+    Write-Warning "No global npm install of $opencodePackage found; the bot starts whichever opencode is on PATH."
+    $opencodeBin = ""
 }
 
 if (-not $SkipBuild) {
@@ -185,6 +223,14 @@ Write-Host ""
 Write-Host "Test home : $testHome"
 Write-Host "Logs      : $(Join-Path $testHome 'logs')"
 Write-Host "Settings  : $(Join-Path $testHome 'settings.json')"
+if ($opencodeBin) {
+    Write-Host "OpenCode  : $effectiveOpencodeVersion ($opencodeBin)"
+} else {
+    Write-Host "OpenCode  : $effectiveOpencodeVersion (opencode on PATH)"
+}
+if ($effectiveOpencodeVersion -eq "v2") {
+    Write-Host "OC state  : $opencodeStateHome"
+}
 if ($FaultProxy) {
     Write-Host "Proxy     : $proxyRoot -> $upstream (control: $proxyRoot/__fault/state)"
     Write-Host "Call log  : $proxyDir"
@@ -204,6 +250,22 @@ Write-Host ""
 $previousApiRoot = $env:TELEGRAM_API_ROOT
 $previousProxyUrl = $env:TELEGRAM_PROXY_URL
 $previousExtraCaCerts = $env:NODE_EXTRA_CA_CERTS
+$previousPath = $env:PATH
+$previousServerVersion = $env:OPENCODE_SERVER_VERSION
+$previousServerPassword = $env:OPENCODE_SERVER_PASSWORD
+$previousStateHome = $env:XDG_STATE_HOME
+$previousConfigDir = $env:OPENCODE_CONFIG_DIR
+if ($opencodeBin) { $env:PATH = "$opencodeBin;$env:PATH" }
+if ($OpencodeVersion) { $env:OPENCODE_SERVER_VERSION = $OpencodeVersion }
+if ($effectiveOpencodeVersion -eq "v2") {
+    $env:OPENCODE_SERVER_PASSWORD = $opencodePassword
+    # V2 keeps one registered background server per user, recorded under XDG_STATE_HOME.
+    # A state home of the stand's own keeps its server from replacing the user's one.
+    $env:XDG_STATE_HOME = $opencodeStateHome
+    # V2 reads OPENCODE_CONFIG_DIR instead of ~/.config/opencode, not on top of it: a
+    # directory inherited from the caller would hide the user's config and its password.
+    Remove-Item env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue
+}
 if ($FaultProxy) { $env:TELEGRAM_API_ROOT = $proxyRoot }
 if ($useForwardProxy) {
     $env:TELEGRAM_PROXY_URL = $forwardProxyUrl
@@ -215,6 +277,11 @@ if ($useForwardProxy) {
 try {
     node (Join-Path $projectRoot "dist\index.js")
 } finally {
+    Restore-EnvValue "PATH" $previousPath
+    Restore-EnvValue "OPENCODE_SERVER_VERSION" $previousServerVersion
+    Restore-EnvValue "OPENCODE_SERVER_PASSWORD" $previousServerPassword
+    Restore-EnvValue "XDG_STATE_HOME" $previousStateHome
+    Restore-EnvValue "OPENCODE_CONFIG_DIR" $previousConfigDir
     if ($FaultProxy) {
         Restore-EnvValue "TELEGRAM_API_ROOT" $previousApiRoot
     }

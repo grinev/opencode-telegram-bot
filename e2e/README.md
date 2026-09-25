@@ -22,6 +22,7 @@ a human does first.
 | `probes.js` | DOM probes and confirmed Telegram Web selectors |
 | `scenarios/` | Regression scenarios the subagent runs before any feature check |
 | `.tmp/e2e/home/` | Runtime state: `settings.json`, `logs/` |
+| `.tmp/e2e/opencode-state/` | The stand's OpenCode V2 state: its background server registration |
 | `.tmp/e2e/fault-proxy/` | Fault proxy call logs and pid file |
 | `.tmp/e2e/forward-proxy/` | Forward proxy connection logs and pid file |
 | `.tmp/e2e/browser-profile/` | Persistent Telegram Web login |
@@ -70,7 +71,40 @@ and `logs/` are untouched. Logs land in `.tmp/e2e/home/logs/`, one file per
 launch.
 
 OpenCode runs on the port from `OPENCODE_API_URL` in `e2e/.env` (4097 by
-default) so test runs never collide with your own OpenCode on 4096.
+default) so test runs never collide with your own OpenCode (V1 on 4096, the V2
+background server on 49374).
+
+### OpenCode V1 and V2
+
+The stand runs OpenCode V2 by default (`OPENCODE_SERVER_VERSION=v2` in
+`e2e/.env`). One launch runs V1 instead with:
+
+```powershell
+.\e2e\run-test-bot.ps1 -OpencodeVersion v1       # Windows
+```
+
+```bash
+./e2e/run-test-bot.sh --opencode-version v1      # macOS / Linux
+```
+
+Both versions use the same test port and are started from the chat with
+`/opencode_start`. For the bot process only, the launcher:
+
+- puts the chosen version's global npm `bin` first on PATH (`@opencode/cli` for
+  V2, `opencode-ai` for V1), since both install an `opencode` command and the bot
+  starts whichever comes first. Without that install it warns and leaves PATH as is;
+- on V2, sets `XDG_STATE_HOME=.tmp/e2e/opencode-state`. V2 keeps one registered
+  background server per user, recorded there; a registration of the stand's own
+  keeps `/opencode_start` on 4097 from replacing your server on 49374. The
+  sessions database stays the shared one in `~/.local/share/opencode`, as on V1;
+- on V2, gives the bot `OPENCODE_SERVER_PASSWORD` from
+  `~/.config/opencode/service.json`, the file the V2 background server takes its
+  password from, and clears `OPENCODE_CONFIG_DIR`, which V2 reads instead of
+  `~/.config/opencode` rather than on top of it. The launch is refused when that
+  file has no password: set one with `opencode service set password <value>`.
+
+`/status` names the running version. Sessions are not shared between the
+versions, so after a switch the bot may drop its saved session.
 
 When done:
 
