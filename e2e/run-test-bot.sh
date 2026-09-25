@@ -9,15 +9,17 @@
 #   ./e2e/run-test-bot.sh --skip-build
 #   ./e2e/run-test-bot.sh --fault-proxy     # route Bot API calls through e2e/fault-proxy.mjs
 #   ./e2e/run-test-bot.sh --forward-proxy socks5h   # reach Telegram through e2e/forward-proxy.mjs
+#   ./e2e/run-test-bot.sh --opencode-version v1     # this launch only: OpenCode V1 instead of e2e/.env's version
 
 set -euo pipefail
 
-usage="Usage: $0 [--skip-build] [--fault-proxy] [--forward-proxy <scheme>]"
+usage="Usage: $0 [--skip-build] [--fault-proxy] [--forward-proxy <scheme>] [--opencode-version <v1|v2>]"
 supported_schemes="socks, socks4, socks4a, socks5, socks5h, http, https"
 skip_build=0
 fault_proxy=0
 use_forward_proxy=0
 forward_proxy=""
+opencode_version=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --skip-build) skip_build=1 ;;
@@ -29,6 +31,14 @@ while [ "$#" -gt 0 ]; do
       fi
       use_forward_proxy=1
       forward_proxy="$2"
+      shift
+      ;;
+    --opencode-version)
+      if [ "$#" -lt 2 ]; then
+        echo "--opencode-version needs a version. Supported: v1, v2." >&2
+        exit 2
+      fi
+      opencode_version="$2"
       shift
       ;;
     *)
@@ -51,6 +61,14 @@ if [ "$use_forward_proxy" -eq 1 ]; then
   esac
 fi
 
+case "$opencode_version" in
+  "" | v1 | v2) ;;
+  *)
+    echo "Unknown --opencode-version '$opencode_version'. Supported: v1, v2." >&2
+    exit 2
+    ;;
+esac
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(dirname "$script_dir")"
 test_home="$project_root/.tmp/e2e/home"
@@ -64,6 +82,7 @@ forward_dir="$project_root/.tmp/e2e/forward-proxy"
 forward_pid_file="$forward_dir/proxy.pid"
 forward_port=8766
 forward_proxy_url="$forward_proxy://127.0.0.1:$forward_port"
+opencode_state_home="$project_root/.tmp/e2e/opencode-state"
 
 test_env_value() {
   grep -E "^[[:space:]]*$1[[:space:]]*=" "$source_env" | tail -n 1 |
@@ -136,12 +155,54 @@ if [ "$use_forward_proxy" -eq 1 ]; then
   done
 fi
 
+# e2e/.env names the stand's OpenCode version; --opencode-version overrides it for this
+# launch. The bot's own default is v1.
+effective_opencode_version="$opencode_version"
+[ -n "$effective_opencode_version" ] || effective_opencode_version="$(test_env_value OPENCODE_SERVER_VERSION)"
+[ -n "$effective_opencode_version" ] || effective_opencode_version="v1"
+
+# The V2 background server takes its password from the user's OpenCode config
+# (service.json), and the bot must send the same one.
+opencode_password=""
+if [ "$effective_opencode_version" = "v2" ]; then
+  service_config="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/service.json"
+  if [ -f "$service_config" ]; then
+    opencode_password="$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).password ?? ""))' "$service_config")"
+  fi
+  if [ -z "$opencode_password" ]; then
+    echo "OpenCode V2 needs a server password, and $service_config has none. Set one with 'opencode service set password <value>'." >&2
+    exit 1
+  fi
+fi
+
+# The bot starts `opencode` from PATH, so the chosen version's bin goes first: both
+# versions install an `opencode` command.
+if [ "$effective_opencode_version" = "v2" ]; then opencode_package="@opencode/cli"; else opencode_package="opencode-ai"; fi
+opencode_bin="$(npm root -g)/$opencode_package/bin"
+if [ ! -e "$opencode_bin/opencode" ]; then
+  echo "No global npm install of $opencode_package found; the bot starts whichever opencode is on PATH." >&2
+  opencode_bin=""
+fi
+
 if [ "$skip_build" -eq 0 ]; then
   echo "Building..."
   (cd "$project_root" && npm run build)
 fi
 
 export OPENCODE_TELEGRAM_HOME="$test_home"
+
+# exec below replaces this shell, so these reach the bot process only.
+[ -z "$opencode_bin" ] || export PATH="$opencode_bin:$PATH"
+[ -z "$opencode_version" ] || export OPENCODE_SERVER_VERSION="$opencode_version"
+if [ "$effective_opencode_version" = "v2" ]; then
+  export OPENCODE_SERVER_PASSWORD="$opencode_password"
+  # V2 keeps one registered background server per user, recorded under XDG_STATE_HOME.
+  # A state home of the stand's own keeps its server from replacing the user's one.
+  export XDG_STATE_HOME="$opencode_state_home"
+  # V2 reads OPENCODE_CONFIG_DIR instead of ~/.config/opencode, not on top of it: a
+  # directory inherited from the caller would hide the user's config and its password.
+  unset OPENCODE_CONFIG_DIR
+fi
 
 if [ "$fault_proxy" -eq 1 ]; then
   stop_leftover_proxy "$proxy_pid_file" fault-proxy.mjs "fault proxy"
@@ -211,6 +272,10 @@ echo
 echo "Test home : $test_home"
 echo "Logs      : $test_home/logs"
 echo "Settings  : $test_home/settings.json"
+echo "OpenCode  : $effective_opencode_version (${opencode_bin:-opencode on PATH})"
+if [ "$effective_opencode_version" = "v2" ]; then
+  echo "OC state  : $opencode_state_home"
+fi
 if [ "$fault_proxy" -eq 1 ]; then
   echo "Proxy     : $proxy_root -> $upstream (control: $proxy_root/__fault/state)"
   echo "Call log  : $proxy_dir"
