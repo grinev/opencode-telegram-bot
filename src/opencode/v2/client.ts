@@ -19,12 +19,14 @@ import {
   type V1MessageWithParts,
 } from "./mappers.js";
 
-type Result<T> = { data: T; error: undefined } | { data: undefined; error: unknown };
+export type Result<T> = { data: T; error: undefined } | { data: undefined; error: unknown };
 
 interface V2ClientOptions {
   baseUrl: string;
   headers?: Record<string, string>;
 }
+
+export type V2InboxDelivery = "steer" | "queue";
 
 interface PromptParams {
   sessionID: string;
@@ -33,6 +35,26 @@ interface PromptParams {
   variant?: string;
   system?: string;
   parts: Array<TextPartInput | FilePartInput>;
+  /** Where the prompt waits while the session is busy; the default is `queue`. */
+  delivery?: V2InboxDelivery;
+}
+
+/**
+ * The V2-only operations of the adapter, on top of the V1 client surface. Feature code
+ * reaches them only after checking that the configured server is V2.
+ */
+export interface V2ClientExtension {
+  session: {
+    /** Sends a prompt into the session inbox and returns the id it waits under. */
+    promptAsync: (
+      params: PromptParams & { directory?: string; delivery: V2InboxDelivery },
+    ) => Promise<Result<{ inboxID: string }>>;
+    inbox: {
+      /** Ids of the messages still waiting in the session inbox. */
+      list: (params: { sessionID: string }) => Promise<Result<string[]>>;
+      cancel: (params: { sessionID: string; inboxID: string }) => Promise<Result<true>>;
+    };
+  };
 }
 
 interface CommandParams {
@@ -100,7 +122,8 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 /**
  * The OpenCode V2 server behind the client surface the bot already speaks: the methods the
  * bot calls, with V1 request and result shapes, and the V2 event stream translated into V1
- * events. Only that surface is implemented; everything else is absent.
+ * events. Only that surface is implemented, plus the typed V2-only operations in
+ * `V2ClientExtension`; everything else is absent.
  */
 export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient {
   const client: OpenCodeClient = OpenCode.make({
@@ -155,7 +178,7 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
       sessionID: params.sessionID,
       text: params.system ? `${params.system}\n\n${text}` : text,
       ...(files.length > 0 ? { files } : {}),
-      delivery: "queue",
+      delivery: params.delivery ?? "queue",
     });
   }
 
@@ -422,9 +445,25 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
         }),
       promptAsync: (params: PromptParams) =>
         run(async () => {
-          await admitPrompt(params);
-          return undefined;
+          const admitted = await admitPrompt(params);
+          return params.delivery ? { inboxID: admitted.id } : undefined;
         }),
+      inbox: {
+        list: (params: { sessionID: string }) =>
+          run(async () =>
+            (await client.session.inbox.list({ sessionID: params.sessionID })).map(
+              (item) => item.id,
+            ),
+          ),
+        cancel: (params: { sessionID: string; inboxID: string }) =>
+          run(async () => {
+            await client.session.inbox.cancel({
+              sessionID: params.sessionID,
+              inboxID: params.inboxID,
+            });
+            return true as const;
+          }),
+      },
       prompt: (params: PromptParams) =>
         run(async () => {
           await admitPrompt(params);

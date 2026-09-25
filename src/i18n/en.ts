@@ -173,6 +173,8 @@ export const en = {
   "settings.prompt_queue.label": "Message queue",
   "settings.value.on": "On",
   "settings.value.off": "Off",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ Setting saved.",
 
   "projects.empty":
@@ -428,6 +430,7 @@ export const en = {
   "queue.media_limit": "⚠️ Queued media is limited to {maxSizeMb} MiB. Wait for an item to send, then try again.",
   "queue.removed": "🗑 Message removed from the queue.",
   "queue.not_found": "This message is no longer in the queue.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "The message queue can be enabled in /settings.",
   "keyboard.updated": "⌨️ Keyboard updated",
 

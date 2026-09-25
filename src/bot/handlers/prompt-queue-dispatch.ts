@@ -7,13 +7,24 @@ import {
 } from "../../app/managers/prompt-queue-manager.js";
 import type { IncomingPrompt } from "../../app/types/prompt.js";
 import { buildExternalUserInputNotification } from "../../app/services/external-user-input-service.js";
+import {
+  cancelInboxPrompt,
+  reconcileInboxPrompts,
+} from "../../app/services/prompt-inbox-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
-import { getPromptQueueEnabled } from "../../app/stores/settings-store.js";
+import { getCurrentSession } from "../../app/services/session-service.js";
+import { getPromptQueueMode } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
+import { opencodeServerVersion } from "../../opencode/client.js";
 import { logger } from "../../utils/logger.js";
 import { sendBotText } from "../messages/telegram-text.js";
 import { isReplyKeyboardButtonText } from "../message-patterns.js";
-import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
+import {
+  admitPromptToInbox,
+  processUserPrompt,
+  startInboxPromptRun,
+  type ProcessPromptDeps,
+} from "./prompt.js";
 
 // The queue helpers are called from the guard and the media handlers without
 // deps, so the dispatcher receives them once at startup instead. Until then the
@@ -38,6 +49,15 @@ function isBusy(): boolean {
   return promptDeps !== null && isForegroundBusy(promptDeps);
 }
 
+function isPromptQueueEnabled(): boolean {
+  return getPromptQueueMode() !== "off";
+}
+
+/** On OpenCode V2 busy-time prompts wait in the session inbox, not in the bot. */
+function usesOpencodeInbox(): boolean {
+  return opencodeServerVersion === "v2";
+}
+
 /** Whether the text is user prompt content rather than a command or a button press. */
 function isQueueablePrompt(input: IncomingPrompt): boolean {
   const normalizedText = input.text.trim();
@@ -55,13 +75,13 @@ function isQueueablePrompt(input: IncomingPrompt): boolean {
  * True only when the setting is off and the text would otherwise have been queued.
  */
 export function shouldSuggestPromptQueue(input: IncomingPrompt): boolean {
-  return !getPromptQueueEnabled() && isQueueablePrompt(input);
+  return !isPromptQueueEnabled() && isQueueablePrompt(input);
 }
 
 export function canQueueMediaPrompt(ctx: Context): boolean {
   const message = ctx.message;
   return Boolean(
-    getPromptQueueEnabled() &&
+    isPromptQueueEnabled() &&
       message &&
       (message.voice || message.audio || message.photo?.length || message.document),
   );
@@ -72,8 +92,13 @@ export function canQueueMediaPrompt(ctx: Context): boolean {
  * Returns false when queueing does not apply, so the caller keeps its old behaviour.
  */
 export async function tryEnqueuePrompt(ctx: Context, input: QueuedPromptInput): Promise<boolean> {
-  if (!promptDeps || !getPromptQueueEnabled() || !ctx.chat || !isQueueablePrompt(input)) {
+  if (!promptDeps || !isPromptQueueEnabled() || !ctx.chat || !isQueueablePrompt(input)) {
     return false;
+  }
+
+  if (usesOpencodeInbox()) {
+    await sendPromptToInbox(ctx, input, promptDeps);
+    return true;
   }
 
   queuedPromptContext = ctx;
@@ -104,6 +129,73 @@ export async function tryEnqueuePrompt(ctx: Context, input: QueuedPromptInput): 
   return true;
 }
 
+/**
+ * Sends a busy-time prompt into the OpenCode V2 session inbox and mirrors it as a queue
+ * item. The reservation keeps the cap honest while the prompt is on its way and tells
+ * whether the queue was cleared in the meantime.
+ */
+async function sendPromptToInbox(
+  ctx: Context,
+  input: QueuedPromptInput,
+  deps: ProcessPromptDeps,
+): Promise<void> {
+  const delivery = getPromptQueueMode() === "steer" ? "steer" : "queue";
+  const reservationId = promptQueue.reserve();
+  if (!reservationId) {
+    logger.info(`[PromptQueue] Rejected inbox prompt: queue is full (max=${MAX_QUEUED_PROMPTS})`);
+    await replyWithKeyboard(ctx, t("queue.full", { max: String(MAX_QUEUED_PROMPTS) }));
+    return;
+  }
+
+  const admitted = await admitPromptToInbox(ctx, input, deps, delivery);
+  if (!admitted) {
+    promptQueue.releaseReservation(reservationId);
+    return;
+  }
+
+  const inbox = { sessionId: admitted.sessionId, inboxId: admitted.inboxId, delivery } as const;
+
+  // OpenCode may deliver the prompt before the send returns (the turn had just ended):
+  // the pickup has already been shown, so there is no button, only the run to open.
+  if (promptQueue.wasInboxIdDelivered(admitted.inboxId)) {
+    if (!promptQueue.releaseReservation(reservationId)) {
+      return;
+    }
+    if (!deps.assistantRunState.hasRun(admitted.sessionId)) {
+      const session = getCurrentSession();
+      if (session?.id === admitted.sessionId) {
+        await startInboxPromptRun(session, deps, input.responseMode);
+      }
+    }
+    await replyInboxAdmission(ctx, delivery);
+    return;
+  }
+
+  const item = promptQueue.confirmReservation(reservationId, {
+    displayText: input.displayText ?? input.text,
+    inbox,
+    ...(input.responseMode ? { responseMode: input.responseMode } : {}),
+  });
+  if (!item) {
+    // Cleared by /abort or a session change while the prompt was on its way.
+    await cancelInboxPrompt(inbox, "withdrawn_during_admission");
+    return;
+  }
+
+  logger.info(
+    `[PromptQueue] Prompt sent to the session inbox: delivery=${delivery}, size=${promptQueue.size()}/${MAX_QUEUED_PROMPTS}`,
+  );
+  await replyInboxAdmission(ctx, delivery);
+}
+
+async function replyInboxAdmission(ctx: Context, delivery: "steer" | "queue"): Promise<void> {
+  const params = { count: String(promptQueue.size()), max: String(MAX_QUEUED_PROMPTS) };
+  await replyWithKeyboard(
+    ctx,
+    delivery === "steer" ? t("queue.steer_added", params) : t("queue.added", params),
+  );
+}
+
 export async function tryEnqueuePromptIfBusy(
   ctx: Context,
   input: QueuedPromptInput,
@@ -119,12 +211,16 @@ export async function rejectQueuedMediaBeforePreparation(
   ctx: Context,
   mediaBytes: number | undefined,
 ): Promise<boolean> {
-  if (!isBusy() || !getPromptQueueEnabled() || !ctx.chat) {
+  if (!isBusy() || !isPromptQueueEnabled() || !ctx.chat) {
     return false;
   }
   if (promptQueue.isFull()) {
     await replyWithKeyboard(ctx, t("queue.full", { max: String(MAX_QUEUED_PROMPTS) }));
     return true;
+  }
+  // Nothing is held by the bot on V2, so the queued media cap does not apply there.
+  if (usesOpencodeInbox()) {
+    return false;
   }
   if (
     typeof mediaBytes !== "number" ||
@@ -147,6 +243,16 @@ function formatQueuedMediaLimit(): string {
  * same "external user input" format used for prompts sent from another device.
  */
 export async function dispatchNextQueuedPrompt(): Promise<void> {
+  // On V2 OpenCode delivers waiting prompts itself; the idle point only drops mirror
+  // items whose pickup or cancel the bot missed.
+  if (usesOpencodeInbox()) {
+    const session = getCurrentSession();
+    if (session) {
+      await reconcileInboxPrompts(session.id);
+    }
+    return;
+  }
+
   if (
     dispatchInFlight ||
     promptQueue.size() === 0 ||

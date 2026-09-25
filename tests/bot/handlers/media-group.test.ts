@@ -205,7 +205,7 @@ describe("bot/handlers/media-group", () => {
   });
 
   it("queues an album as one item while the agent is busy", async () => {
-    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
     container.foregroundSessionState.markBusy("session-1", "/repo");
     const first = createPhotoContext({
       messageId: 20,
@@ -239,7 +239,7 @@ describe("bot/handlers/media-group", () => {
   });
 
   it("rejects an oversized busy album before downloading any item", async () => {
-    vi.spyOn(settingsStore, "getPromptQueueEnabled").mockReturnValue(true);
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
     container.foregroundSessionState.markBusy("session-1", "/repo");
     const first = createPhotoContext({
       messageId: 20,

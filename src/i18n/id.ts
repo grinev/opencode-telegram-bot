@@ -182,6 +182,8 @@ export const id: I18nDictionary = {
   "settings.prompt_queue.label": "Antrean pesan",
   "settings.value.on": "Aktif",
   "settings.value.off": "Nonaktif",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ Pengaturan disimpan.",
 
   "projects.empty":
@@ -429,6 +431,7 @@ export const id: I18nDictionary = {
     "⚠️ Media dalam antrean dibatasi {maxSizeMb} MiB. Tunggu hingga satu item terkirim, lalu coba lagi.",
   "queue.removed": "🗑 Pesan dihapus dari antrean.",
   "queue.not_found": "Pesan ini sudah tidak ada di antrean.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "Aktifkan antrean pesan di /settings.",
   "keyboard.updated": "⌨️ Keyboard diperbarui",
 

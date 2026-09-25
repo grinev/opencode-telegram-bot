@@ -16,6 +16,7 @@ const fake = vi.hoisted(() => ({
       wait: vi.fn(),
       active: vi.fn(),
       form: { reply: vi.fn(), cancel: vi.fn(), get: vi.fn() },
+      inbox: { list: vi.fn(), cancel: vi.fn() },
     },
     message: { list: vi.fn() },
     skill: { list: vi.fn() },
@@ -34,7 +35,10 @@ vi.mock("@opencode/client", () => ({
   },
 }));
 
-import { createV2OpencodeClient } from "../../../src/opencode/v2/client.js";
+import {
+  createV2OpencodeClient,
+  type V2ClientExtension,
+} from "../../../src/opencode/v2/client.js";
 
 const SESSION = {
   id: "ses-1",
@@ -171,6 +175,50 @@ describe("opencode/v2/client", () => {
       text: "Look",
       files: [{ uri: "data:image/png;base64,AAA", name: "a.png" }],
       delivery: "queue",
+    });
+  });
+
+  it("sends a prompt with the requested delivery and returns the inbox id it waits under", async () => {
+    fake.client.session.prompt.mockResolvedValue({ id: "msg-inbox-1" });
+    const client = createClient() as unknown as V2ClientExtension;
+
+    const result = await client.session.promptAsync({
+      sessionID: "ses-1",
+      parts: [{ type: "text", text: "Also check the tests" }],
+      delivery: "steer",
+    });
+
+    expect(result).toEqual({ data: { inboxID: "msg-inbox-1" }, error: undefined });
+    expect(fake.client.session.prompt).toHaveBeenCalledWith({
+      sessionID: "ses-1",
+      text: "Also check the tests",
+      delivery: "steer",
+    });
+  });
+
+  it("lists the ids still waiting in the session inbox", async () => {
+    fake.client.session.inbox.list.mockResolvedValue([
+      { id: "msg-a", type: "user", delivery: "steer" },
+      { id: "msg-b", type: "user", delivery: "queue" },
+    ]);
+    const client = createClient() as unknown as V2ClientExtension;
+
+    const result = await client.session.inbox.list({ sessionID: "ses-1" });
+
+    expect(result.data).toEqual(["msg-a", "msg-b"]);
+    expect(fake.client.session.inbox.list).toHaveBeenCalledWith({ sessionID: "ses-1" });
+  });
+
+  it("cancels a waiting inbox message", async () => {
+    fake.client.session.inbox.cancel.mockResolvedValue(undefined);
+    const client = createClient() as unknown as V2ClientExtension;
+
+    const result = await client.session.inbox.cancel({ sessionID: "ses-1", inboxID: "msg-a" });
+
+    expect(result).toEqual({ data: true, error: undefined });
+    expect(fake.client.session.inbox.cancel).toHaveBeenCalledWith({
+      sessionID: "ses-1",
+      inboxID: "msg-a",
     });
   });
 

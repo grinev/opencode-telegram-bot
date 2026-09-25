@@ -5,6 +5,8 @@ import type { ScheduledTask } from "./scheduled-task.js";
 
 export type ResponseStreamingMode = "edit" | "draft";
 
+export type PromptQueueMode = "off" | "queue" | "steer";
+
 export interface ScheduledTaskSessionIgnoreInfo {
   sessionId: string;
   createdAt: string;
@@ -24,7 +26,7 @@ export interface Settings {
   pinnedDashboardEnabled?: boolean | undefined;
   responseStreamingMode?: ResponseStreamingMode | undefined;
   sendDiffFileAttachments?: boolean | undefined;
-  promptQueueEnabled?: boolean | undefined;
+  promptQueueMode?: PromptQueueMode | undefined;
   sessionDirectoryCache?: SessionDirectoryCacheInfo | undefined;
   scheduledTasks?: ScheduledTask[] | undefined;
   scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[] | undefined;

@@ -1,4 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const withdrawInboxPromptMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../../src/app/services/prompt-inbox-service.js", () => ({
+  withdrawInboxPrompt: withdrawInboxPromptMock,
+}));
+
 import { registerMessageRouter } from "../../../src/bot/routers/message-router.js";
 import { QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../../../src/bot/message-patterns.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
@@ -82,6 +89,28 @@ describe("bot/routers/message-router", () => {
       expect(next).not.toHaveBeenCalled();
       expect(ctx.reply).toHaveBeenCalledWith(t("queue.not_found"), expect.anything());
     });
+
+    it.each([
+      { result: "removed", replyKey: "queue.removed" },
+      { result: "gone", replyKey: "queue.not_found" },
+      { result: "failed", replyKey: "bot.prompt_send_error" },
+    ] as const)(
+      "withdraws a prompt waiting in OpenCode and answers $replyKey when it is $result",
+      async ({ result, replyKey }) => {
+        const item = promptQueue.confirmReservation(promptQueue.reserve()!, {
+          displayText: "steered",
+          inbox: { sessionId: "ses-1", inboxId: "msg-1", delivery: "steer" },
+        });
+        withdrawInboxPromptMock.mockReset().mockResolvedValue(result);
+        const handler = registerAndGetQueuedPromptHandler();
+        const ctx = makeButtonContext("❌ 1. steered");
+
+        await handler(ctx, vi.fn());
+
+        expect(withdrawInboxPromptMock).toHaveBeenCalledWith(item);
+        expect(ctx.reply).toHaveBeenCalledWith(t(replyKey), expect.anything());
+      },
+    );
 
     it("answers not_found when the label no longer matches the queue", async () => {
       promptQueue.add(createIncomingPrompt("still queued"));

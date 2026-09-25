@@ -182,6 +182,8 @@ export const ko: I18nDictionary = {
   "settings.prompt_queue.label": "메시지 대기열",
   "settings.value.on": "켜기",
   "settings.value.off": "끄기",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ 설정이 저장되었습니다.",
 
   "projects.empty":
@@ -437,6 +439,7 @@ export const ko: I18nDictionary = {
   "queue.media_limit": "⚠️ 대기열 미디어는 총 {maxSizeMb} MiB로 제한됩니다. 항목이 전송된 후 다시 시도하세요.",
   "queue.removed": "🗑 대기열에서 메시지를 삭제했습니다.",
   "queue.not_found": "이 메시지는 더 이상 대기열에 없습니다.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "메시지 대기열은 /settings에서 활성화할 수 있습니다.",
   "keyboard.updated": "⌨️ 키보드가 업데이트되었습니다",
 

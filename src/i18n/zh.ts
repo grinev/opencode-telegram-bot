@@ -162,6 +162,8 @@ export const zh: I18nDictionary = {
   "settings.prompt_queue.label": "消息队列",
   "settings.value.on": "开启",
   "settings.value.off": "关闭",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ 设置已保存。",
 
   "projects.empty":
@@ -395,6 +397,7 @@ export const zh: I18nDictionary = {
   "queue.media_limit": "⚠️ 队列媒体总大小限制为 {maxSizeMb} MiB。请等待一个项目发送后重试。",
   "queue.removed": "🗑 消息已从队列中移除。",
   "queue.not_found": "该消息已不在队列中。",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "可在 /settings 中开启消息队列。",
   "keyboard.updated": "⌨️ 键盘已更新",
 

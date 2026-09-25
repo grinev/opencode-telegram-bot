@@ -1,6 +1,10 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
 import { config, type OpencodeServerVersion } from "../config.js";
-import { createV2OpencodeClient, findRegisteredV2ServerUrl } from "./v2/client.js";
+import {
+  createV2OpencodeClient,
+  findRegisteredV2ServerUrl,
+  type V2ClientExtension,
+} from "./v2/client.js";
 
 const PROBE_TIMEOUT_MS = 5000;
 
@@ -36,6 +40,9 @@ function createClient() {
 }
 
 export const opencodeClient = createClient();
+
+/** The V2-only operations of the same client; use only when `opencodeServerVersion` is "v2". */
+export const opencodeV2Client = opencodeClient as unknown as V2ClientExtension;
 
 export type OpencodeServerProbe =
   | { kind: "found"; version: OpencodeServerVersion; serverVersion: string }

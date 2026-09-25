@@ -175,6 +175,8 @@ export const ar: I18nDictionary = {
   "settings.prompt_queue.label": "قائمة انتظار الرسائل",
   "settings.value.on": "مفعّل",
   "settings.value.off": "معطّل",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ تم حفظ الإعداد.",
 
   "projects.empty":
@@ -418,6 +420,7 @@ export const ar: I18nDictionary = {
   "queue.media_limit": "⚠️ الوسائط في قائمة الانتظار محدودة بـ {maxSizeMb} MiB. انتظر إرسال عنصر ثم أعد المحاولة.",
   "queue.removed": "🗑 تمت إزالة الرسالة من قائمة الانتظار.",
   "queue.not_found": "لم تعد هذه الرسالة في قائمة الانتظار.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "يمكن تفعيل قائمة انتظار الرسائل من /settings.",
   "keyboard.updated": "⌨️ تم تحديث لوحة التحكم",
 

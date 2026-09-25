@@ -54,6 +54,12 @@ vi.mock("../../../src/bot/handlers/prompt.js", () => ({
   clearPromptResponseMode: mocked.clearPromptResponseModeMock,
 }));
 
+const withdrawPromptQueueMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../../src/app/services/prompt-inbox-service.js", () => ({
+  withdrawPromptQueue: withdrawPromptQueueMock,
+}));
+
 import { opencodeStopCommand } from "../../../src/bot/commands/opencode-stop-command.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
@@ -170,6 +176,24 @@ describe("bot/commands/opencode-stop-command", () => {
     expect(mocked.editBotTextMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ text: t("opencode_stop.success") }),
     );
+  });
+
+  it("withdraws prompts waiting in the OpenCode inbox before stopping the server", async () => {
+    const ctx = createContext();
+    const order: string[] = [];
+    withdrawPromptQueueMock.mockReset().mockImplementation(async () => {
+      order.push("withdraw");
+    });
+    mocked.findServerPidMock.mockResolvedValue(456);
+    mocked.killServerProcessMock.mockImplementation(async () => {
+      order.push("kill");
+      return true;
+    });
+
+    await opencodeStopCommand(ctx as never, createDeps());
+
+    expect(withdrawPromptQueueMock).toHaveBeenCalledWith("opencode_stop");
+    expect(order).toEqual(["withdraw", "kill"]);
   });
 
   it("clears busy sessions and attached state after a successful stop", async () => {

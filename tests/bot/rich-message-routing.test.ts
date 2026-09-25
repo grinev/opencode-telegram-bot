@@ -14,7 +14,7 @@ const mocked = vi.hoisted(() => ({
   handleRenameTextAnswer: vi.fn(),
   handleCatalogTextArguments: vi.fn(),
   statusCommand: vi.fn(),
-  getPromptQueueEnabled: vi.fn(),
+  getPromptQueueMode: vi.fn(),
 }));
 
 vi.mock("../../src/bot/handlers/message-merger.js", () => ({
@@ -52,7 +52,7 @@ vi.mock("../../src/app/stores/settings-store.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/app/stores/settings-store.js")>();
   return {
     ...actual,
-    getPromptQueueEnabled: mocked.getPromptQueueEnabled,
+    getPromptQueueMode: mocked.getPromptQueueMode,
   };
 });
 
@@ -142,7 +142,7 @@ describe("bot/rich-message-routing", () => {
     mocked.handleRenameTextAnswer.mockReset().mockResolvedValue(false);
     mocked.handleCatalogTextArguments.mockReset().mockResolvedValue(false);
     mocked.statusCommand.mockReset().mockResolvedValue(undefined);
-    mocked.getPromptQueueEnabled.mockReset().mockReturnValue(false);
+    mocked.getPromptQueueMode.mockReset().mockReturnValue("off");
     promptQueue.__resetForTests();
   });
 
@@ -256,7 +256,7 @@ describe("bot/rich-message-routing", () => {
   });
 
   it("queues a photo-only rich prompt while busy without downloading", async () => {
-    mocked.getPromptQueueEnabled.mockReturnValue(true);
+    mocked.getPromptQueueMode.mockReturnValue("queue");
     container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
     const { bot } = createRoutingBot();
 

@@ -21,6 +21,7 @@ const mocked = vi.hoisted(() => ({
   clearRunMock: vi.fn(),
   markAttachedSessionIdleMock: vi.fn(),
   clearPromptResponseModeMock: vi.fn(),
+  inboxCancelMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/services/session-service.js", () => ({
@@ -33,6 +34,9 @@ vi.mock("../../../src/opencode/client.js", () => ({
       abort: mocked.abortMock,
       status: mocked.statusMock,
     },
+  },
+  opencodeV2Client: {
+    session: { inbox: { cancel: mocked.inboxCancelMock } },
   },
 }));
 
@@ -187,6 +191,43 @@ describe("bot/commands/abort", () => {
 
     await abortCommand(ctx as never, createDeps());
 
+    expect(promptQueue.size()).toBe(0);
+  });
+
+  it("withdraws prompts waiting in the OpenCode inbox before interrupting the turn", async () => {
+    mocked.currentSession = {
+      id: "session-1",
+      title: "Session",
+      directory: "D:/repo",
+    };
+    const order: string[] = [];
+    mocked.inboxCancelMock.mockReset().mockImplementation(async () => {
+      order.push("cancel");
+      return { data: true, error: undefined };
+    });
+    mocked.abortMock.mockImplementation(async () => {
+      order.push("abort");
+      return { data: true, error: null };
+    });
+    mocked.statusMock.mockResolvedValue({
+      data: { "session-1": { type: "idle" } },
+      error: null,
+    });
+    promptQueue.confirmReservation(promptQueue.reserve()!, {
+      displayText: "steered",
+      inbox: { sessionId: "session-1", inboxId: "msg-1", delivery: "steer" },
+    });
+
+    const ctx = {
+      chat: { id: 777 },
+      reply: vi.fn().mockResolvedValue({ message_id: 88 }),
+      api: { editMessageText: vi.fn().mockResolvedValue(undefined) },
+    } as unknown as Context;
+
+    await abortCommand(ctx as never, createDeps());
+
+    expect(mocked.inboxCancelMock).toHaveBeenCalledWith({ sessionID: "session-1", inboxID: "msg-1" });
+    expect(order).toEqual(["cancel", "abort"]);
     expect(promptQueue.size()).toBe(0);
   });
 

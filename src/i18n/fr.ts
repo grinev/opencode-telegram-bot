@@ -184,6 +184,8 @@ export const fr: I18nDictionary = {
   "settings.prompt_queue.label": "File d'attente des messages",
   "settings.value.on": "Activé",
   "settings.value.off": "Désactivé",
+  "settings.prompt_queue.queue": "Queue",
+  "settings.prompt_queue.steer": "Steer",
   "settings.saved": "✅ Paramètre enregistré.",
 
   "projects.empty":
@@ -450,6 +452,7 @@ export const fr: I18nDictionary = {
     "⚠️ La file d'attente est pleine ({max}). Supprimez un message ou attendez la fin de la tâche en cours.",
   "queue.removed": "🗑 Message retiré de la file d'attente.",
   "queue.not_found": "Ce message n'est plus dans la file d'attente.",
+  "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "La file d'attente des messages s'active dans /settings.",
   "keyboard.updated": "⌨️ Clavier mis à jour",
 

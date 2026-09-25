@@ -42,7 +42,7 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
 - **Voice prompts** — send voice/audio messages, transcribe them via a Whisper-compatible API, and optionally enable spoken replies in `/settings`
 - **File attachments** — send images, PDF documents, and text-based files to OpenCode, including multiple files in one Telegram album
 - **Scheduled tasks** — schedule prompts to run later or on a recurring interval; see [Scheduled Tasks](#scheduled-tasks)
-- **Message queue** — enable in `/settings` to hold messages sent while the agent is busy, send them one by one afterwards, and manage them from the bottom keyboard
+- **Message queue** — messages sent while the agent is busy are held and sent one by one afterwards (Queue) or, on OpenCode V2, steered into the running task (Steer); each waiting message is a bottom-keyboard button you can tap to withdraw it
 - **Context control** — tap the bottom 📊 button to see context usage and the latest assistant message's tokens and cost; compact from the details with an inline confirmation
 - **Input flow control** — when an interactive flow is active, the bot accepts only relevant input to keep context consistent and avoid accidental actions
 - **Git worktree switching** — browse and switch between existing git worktrees for the current repository with `/worktree`
@@ -319,9 +319,13 @@ Runtime preferences are changed from `/settings` and stored in `settings.json`:
 - Diff file attachments
 - Response streaming mode: `edit` or `draft (experimental)`; applies only to final assistant replies, not thinking messages
 - Audio replies: `off`, `all`, or `auto` when TTS is configured
-- Message queue: hold text, voice, photos, rich formatted messages with photos, documents, and media groups sent while the agent is busy instead of rejecting them
+- Message queue: `Off`, or what happens to text, voice, photos, rich formatted messages with photos, documents, and media groups sent while the agent is busy — on OpenCode V2 `Queue` or `Steer` (the default), on V1 `On` (the bot's own queue, off by default)
 
-With the message queue enabled, text, transcribed voice, photos, rich formatted messages with photos, supported documents, and media groups sent while the agent is busy are held instead of being turned down. The queue holds at most `MAX_QUEUED_PROMPTS` (5) items and 20 MiB of raw Telegram media bytes in total; the limit is checked from reliable Telegram `file_size` metadata before media is downloaded or prepared, while base64 data-URI expansion is not counted. Queued media without a reliable source size is refused while the task is busy. Queued messages appear as buttons above the usual bottom-keyboard grid — tap one to drop it. They are sent one at a time as each run finishes, and the queue is cleared by `/abort` or a session/project switch.
+With the message queue on, text, transcribed voice, photos, rich formatted messages with photos, supported documents, and media groups sent while the agent is busy are accepted instead of being turned down. At most `MAX_QUEUED_PROMPTS` (5) messages wait at a time. Waiting messages appear as buttons above the usual bottom-keyboard grid — tap one to withdraw it — and `/abort`, `/opencode_stop` or a session/project switch withdraws them all. When a waiting message is picked up, its button disappears and its text is quoted as external user input.
+
+On OpenCode V2 a waiting message is sent to OpenCode at once and waits in the session's inbox, not in the bot: with `Steer` the running task picks it up at its next step and keeps going in the same progress message with one footer at the end; with `Queue` it starts its own run once the task finishes. Nothing is held by the bot, so there is no queued-media size limit, and after a bot restart the buttons are gone while OpenCode still delivers the messages.
+
+On OpenCode V1 the bot holds the messages itself and sends them one at a time as each run finishes. Its queue also holds at most 20 MiB of raw Telegram media bytes in total; the limit is checked from reliable Telegram `file_size` metadata before media is downloaded or prepared, while base64 data-URI expansion is not counted. Queued media without a reliable source size is refused while the task is busy.
 
 You can seed the initial defaults for any of these settings without hard-coding them in your Docker image by setting `INITIAL_SETTINGS_PRESET` to a JSON object. Only keys not yet persisted in `settings.json` are affected — settings the user has already changed via `/settings` are left untouched:
 

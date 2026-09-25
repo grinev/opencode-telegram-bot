@@ -63,6 +63,10 @@ export class AssistantRunState {
     }
   }
 
+  hasRun(sessionId: string): boolean {
+    return this.runs.has(sessionId);
+  }
+
   isResponseCompleted(sessionId: string): boolean {
     return this.runs.get(sessionId)?.hasCompletedResponse === true;
   }
