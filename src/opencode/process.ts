@@ -53,7 +53,7 @@ export function readNpmShimTarget(shimPath: string): string | null {
   try {
     const match = /"%~?dp0%?\\([^"]+?\.exe)"/i.exec(readFileSync(shimPath, "utf8"));
     const relativeTarget = match?.[1];
-    return relativeTarget ? path.join(path.dirname(shimPath), relativeTarget) : null;
+    return relativeTarget ? path.join(path.dirname(shimPath), ...relativeTarget.split("\\")) : null;
   } catch {
     return null;
   }

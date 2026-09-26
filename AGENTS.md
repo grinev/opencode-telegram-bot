@@ -134,9 +134,10 @@ For multi-step tasks, state a brief plan:
 
 - **Commits:** Never create commits automatically. Commit only when the user explicitly asks.
 
-### Windows / PowerShell
+### Working on Windows
 
-- Keep in mind the runtime environment is Windows.
+If your shell runs on Windows:
+
 - Avoid fragile one-liners that can break in PowerShell.
 - Use absolute paths when working with file tools (`read`, `write`, `edit`).
 
@@ -162,6 +163,13 @@ For multi-step tasks, state a brief plan:
 - Log errors with context (session ID, operation type, etc.).
 - Send understandable error messages to users.
 - Never expose stack traces to users.
+
+### Cross-platform
+
+- The bot runs on Linux, macOS, and Windows; CI runs tests on Linux.
+- Code must work on all three regardless of the OS you develop on: passing checks locally does not prove it works elsewhere.
+- Code that touches paths, processes, shells, or the filesystem must work on all three: no hardcoded `\` or `/` separators, no assumptions about line endings or path case.
+- Windows-only logic runs behind a `process.platform` check. A test for it either passes on every OS or is skipped outside Windows.
 
 ### Bot commands
 
