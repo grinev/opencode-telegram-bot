@@ -240,6 +240,8 @@ Important:
 
 ## OpenCode SDK quick reference
 
+The example below is the V1 client. OpenCode V2 goes through `@opencode/client`, wrapped in `src/opencode/v2/`.
+
 ```typescript
 import { createOpencodeClient } from "@opencode-ai/sdk";
 

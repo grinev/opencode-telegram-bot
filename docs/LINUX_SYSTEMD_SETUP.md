@@ -63,7 +63,7 @@ OPENCODE_AUTO_RESTART_ENABLED=true
 OPENCODE_MONITOR_INTERVAL_SEC=300
 ```
 
-This only works when `OPENCODE_API_URL` points to a local address, for example `http://localhost:4096`. The bot starts `opencode serve` with the configured port and checks the server every 300 seconds by default.
+This only works when `OPENCODE_API_URL` points to a local address, for example `http://localhost:4096`. The bot starts `opencode serve` with the configured port and checks the server every 300 seconds by default. On OpenCode V2 it starts the V2 background server instead; see [Old and New OpenCode Versions](../README.md#old-and-new-opencode-versions).
 
 ## 6. View logs
 
