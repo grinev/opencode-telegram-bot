@@ -27,6 +27,7 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
 
 ## Features
 
+- **OpenCode V2 support** — works with the new OpenCode V2 as well as the classic V1; for setup details, see [Old and New OpenCode Versions](#old-and-new-opencode-versions)
 - **Remote coding** — send prompts to OpenCode from anywhere, receive complete results with code sent as files
 - **Session management** — create new sessions or continue existing ones, just like in the TUI
 - **Track live session** — follow a live OpenCode CLI session; see [Track Existing Session](#track-existing-session)
@@ -78,33 +79,7 @@ Run the OpenCode server on the same machine where the bot runs:
 opencode serve
 ```
 
-> The bot connects to the local OpenCode API at `http://localhost:4096` by default.
-
-#### OpenCode V1 and V2
-
-The bot works with both OpenCode V1 (`opencode-ai`) and OpenCode V2 (`@opencode/cli`). The two versions speak different server APIs, so tell the bot which one you run with `OPENCODE_SERVER_VERSION` (`v1` or `v2`, default `v1`). The bot does not detect the version: if the server at `OPENCODE_API_URL` is the other version, requests fail with the usual server errors and the bot log names the configured and actual versions.
-
-- **V1** — `opencode serve`, default URL `http://localhost:4096`; a password is optional.
-- **V2** — the background service (`opencode service start`) or `opencode serve`, default URL `http://127.0.0.1:49374`. Set `OPENCODE_SERVER_VERSION=v2` and `OPENCODE_SERVER_PASSWORD`: the background service keeps its password in the `password` field of `service.json` in the OpenCode config directory (`~/.config/opencode/service.json`), and `opencode serve` prints `server password …` when it starts. A wrong or missing password shows up as an authentication error when the bot starts.
-
-The URL default follows the version; set `OPENCODE_API_URL` (host and port only, no `/api` suffix) when the server runs elsewhere. Changing the version needs a bot restart. Sessions are not shared between V1 and V2, so after switching the bot forgets a current session the new server does not have.
-
-**Getting the V2 password for a fresh setup.** Start the background service once and print its password, then enter it in the setup wizard:
-
-```bash
-opencode service start
-opencode service get password
-```
-
-The password stays the same across service restarts. The wizard saves it without checking it; a wrong one shows up as an authentication error in the bot log when the bot starts.
-
-**Local start and stop follow the version.** `/opencode_start` and auto-restart (`OPENCODE_AUTO_RESTART_ENABLED`) run `opencode serve --port <port>` on V1, and on V2 the registered background server (`opencode serve --service --port <port>`), so a regular V2 CLI connects to it. The port comes from `OPENCODE_API_URL` and applies to that launch only; OpenCode's saved service port is not changed. `/opencode_stop` stops the server at the configured address on both versions, even if other clients use it. The bot does not start a server, answers with the generic start failure and writes the reason to its log when:
-
-- the server at the configured address rejects the password (authentication warning);
-- the server at the configured address is the other version, or the local `opencode` executable is (an ERROR naming both versions: change `OPENCODE_SERVER_VERSION` or use the matching server);
-- on V2, a registered V2 background server is already running on another port — OpenCode keeps one per user, and a new one would replace it (an ERROR naming its address: point `OPENCODE_API_URL` at it or stop it with `opencode service stop`).
-
-If both versions are installed, the bot starts whichever one the `opencode` command runs.
+> The bot connects to the local OpenCode API at `http://localhost:4096` by default. For OpenCode V2, see [Old and New OpenCode Versions](#old-and-new-opencode-versions).
 
 > After the bot is configured, you can also start and stop the local OpenCode server from Telegram with `/opencode_start` and `/opencode_stop`.
 
@@ -120,7 +95,7 @@ npx @grinev/opencode-telegram-bot@latest
 
 > Quick start is for npm usage. You do not need to clone this repository. If you run this command from the source directory (repository root), it may fail with `opencode-telegram: not found`. To run from sources, use the [Development](#development) section.
 
-If required configuration is not supplied through process environment variables or an `.env` file, an interactive wizard will guide you through setup. It asks for interface language first, then your bot token, user ID, the OpenCode version (V1 or V2; V2 is offered on a first setup, a re-run offers the saved one), the OpenCode API URL (its default follows the version), and the OpenCode server credentials: the username, and a password that is optional for V1 and required for V2 (see [OpenCode V1 and V2](#opencode-v1-and-v2) for where to get it; on a re-run, Enter keeps the saved password). After that, you're ready to go. Open your bot in Telegram and start sending tasks.
+If required configuration is not supplied through process environment variables or an `.env` file, an interactive wizard will guide you through setup. It asks for interface language first, then your bot token, user ID, the OpenCode version (V1 or V2; V2 is offered on a first setup, a re-run offers the saved one), the OpenCode API URL (its default follows the version), and the OpenCode server credentials: the username, and a password that is optional for V1 and required for V2 (see [Old and New OpenCode Versions](#old-and-new-opencode-versions) for where to get it; on a re-run, Enter keeps the saved password). After that, you're ready to go. Open your bot in Telegram and start sending tasks.
 
 #### Alternative: Global Install
 
@@ -209,9 +184,11 @@ Scheduled tasks let you prepare prompts in advance and run them automatically la
 
 ## Track Existing Session
 
-After you create a new session, select an existing one, or let the bot auto-create one from your first prompt, the bot automatically starts tracking that session. It follows live events from the same OpenCode CLI session, shows external text input sent from another TUI client, and lets you continue the same session from Telegram.
+After you create a new session, select an existing one, or let the bot auto-create one from your first prompt, the bot automatically starts tracking that session. It follows live events from the same OpenCode session, shows external text input sent from another client, and lets you continue the same session from Telegram.
 
-For this to work, the console OpenCode instance must be started on the same port the bot connects to. By default, OpenCode starts on a random port, so use one of the setups below.
+With **OpenCode V2** this works out of the box: all clients (TUI, desktop, web) connect to one background service, so just point the bot to it (see [Old and New OpenCode Versions](#old-and-new-opencode-versions)) and select or create the same session in Telegram.
+
+With **OpenCode V1** the console OpenCode instance must be started on the same port the bot connects to. By default, OpenCode starts on a random port, so use one of the setups below.
 
 - **Single TUI, simplest setup** — start OpenCode on a fixed port: `opencode --port 4096`
 - Point the bot to `http://127.0.0.1:4096`, then select or create the same session in Telegram
@@ -219,9 +196,19 @@ For this to work, the console OpenCode instance must be started on the same port
 - In each terminal client, connect with: `opencode attach http://127.0.0.1:4096`
 - In the bot, select or create the same session to start tracking it automatically
 
-With **OpenCode V2** all clients (TUI, desktop, web) connect to one background service, so no port setup is needed: point the bot to the service (default `http://127.0.0.1:49374`, see [OpenCode V1 and V2](#opencode-v1-and-v2)) and select or create the same session in Telegram.
+## Old and New OpenCode Versions
 
-The fixed-port setups above are for V1.
+The bot works with both the classic OpenCode V1 (`opencode-ai`) and the new OpenCode V2 (`@opencode/cli`). Their server APIs differ and the bot does not detect the version, so set `OPENCODE_SERVER_VERSION` (`v1` by default, or `v2`); changing it needs a bot restart.
+
+|             | V1                      | V2                                                                   |
+| ----------- | ----------------------- | -------------------------------------------------------------------- |
+| Server      | `opencode serve`        | background service (`opencode service start`) or `opencode serve`    |
+| Default URL | `http://localhost:4096` | `http://127.0.0.1:49374`                                             |
+| Password    | optional                | required: `opencode service get password`, or printed by `opencode serve` |
+
+Set `OPENCODE_API_URL` (host and port, no `/api` suffix) if the server runs elsewhere. Sessions are not shared between the versions. A wrong password or a server of the other version shows up as an error in the bot log.
+
+`/opencode_start` and auto-restart run `opencode serve --port <port>` on V1 and the V2 background server (`opencode serve --service --port <port>`) on V2, with the port taken from `OPENCODE_API_URL`. The bot refuses to start a server and logs the reason if the password is rejected, if the server or the local `opencode` is the other version, or if another V2 background server already runs on a different port. With both versions installed, the bot starts whichever one the `opencode` command runs.
 
 ## Configuration
 
@@ -266,7 +253,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `OPENCODE_AUTO_RESTART_ENABLED`            | Automatically restart a local OpenCode server when health-checks fail                                                 |    No    | `false`                  |
 | `OPENCODE_MONITOR_INTERVAL_SEC`            | Health monitor interval in seconds when OpenCode auto-restart is enabled                                              |    No    | `300`                    |
 | `OPENCODE_SERVER_USERNAME`                 | Server auth username                                                                                                  |    No    | `opencode`               |
-| `OPENCODE_SERVER_PASSWORD`                 | Server auth password (needed for V2, see [OpenCode V1 and V2](#opencode-v1-and-v2))                                   |    No    | —                        |
+| `OPENCODE_SERVER_PASSWORD`                 | Server auth password (needed for V2, see [Old and New OpenCode Versions](#old-and-new-opencode-versions))                                   |    No    | —                        |
 | `OPENCODE_MODEL_PROVIDER`                  | Default model provider                                                                                                |   Yes    | `opencode`               |
 | `OPENCODE_MODEL_ID`                        | Default model ID                                                                                                      |   Yes    | `big-pickle`             |
 | `BOT_LOCALE`                               | Bot UI language (supported locale code, e.g. `en`, `ar`, `de`, `es`, `fr`, `id`, `it`, `ko`, `pt`, `ru`, `tr`, `zh`)  |    No    | `en`                     |
@@ -491,7 +478,7 @@ npm run dev
 
 ### Docker Deployment
 
-The bot can also be run as a container using Docker and Docker Compose. The image contains **only the Telegram bot**. OpenCode stays on the host and must already be running before you start the container (`opencode serve --port 4096`). `/opencode_start` and `/opencode_stop` do not work from inside the container.
+The bot can also be run as a container using Docker and Docker Compose. The image contains **only the Telegram bot**. OpenCode stays on the host and must already be running before you start the container (`opencode serve --port 4096` on V1; for V2 see below). `/opencode_start` and `/opencode_stop` do not work from inside the container.
 
 ```bash
 git clone https://github.com/grinev/opencode-telegram-bot.git
@@ -576,7 +563,8 @@ Port 4096 is **not** exposed by the bot image; it belongs to the OpenCode server
 
 **"OpenCode server is not available"**
 
-- Ensure an OpenCode server is running at the configured `OPENCODE_API_URL` (default: `http://localhost:4096`)
+- Ensure an OpenCode server is running at the configured `OPENCODE_API_URL` (default: `http://localhost:4096` on V1, `http://127.0.0.1:49374` on V2)
+- Check that `OPENCODE_SERVER_VERSION` matches the server you run, and on V2 that `OPENCODE_SERVER_PASSWORD` is correct (an authentication error in the bot log means a wrong password)
 - For a local setup, you can start it with `opencode serve` or use `/opencode_start` in Telegram
 - For VPS/systemd setups with scheduled tasks, enable `OPENCODE_AUTO_RESTART_ENABLED=true` to let the bot restart a local OpenCode server when health-checks fail
 - If `OPENCODE_API_URL` points to a remote server, verify that the address is reachable from the bot machine and that the remote server is healthy
