@@ -13,8 +13,6 @@ Run AI coding tasks, monitor progress, switch models, and manage sessions from y
 
 No open ports, no exposed APIs. The bot communicates with your local OpenCode server and the Telegram Bot API only.
 
-Scheduled tasks support. Turns the bot into a lightweight OpenClaw alternative for OpenCode users.
-
 Platforms: macOS, Windows, Linux
 
 Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`), Français (`fr`), Bahasa Indonesia (`id`), Italiano (`it`), 한국어 (`ko`), Português (Brasil) (`pt`), Русский (`ru`), Türkçe (`tr`), 简体中文 (`zh`)
