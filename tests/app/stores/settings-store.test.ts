@@ -125,11 +125,11 @@ describe("app/stores/settings-store", () => {
       expect(getPromptQueueMode()).toBe("steer");
     });
 
-    it("treats a stored steer as the bot queue on a V1 server", async () => {
+    it("reads the released promptQueueEnabled=true as the bot queue on a V1 server", async () => {
       config.opencode.serverVersion = "v1";
       await writeFile(
         path.join(tempHome, "settings.json"),
-        JSON.stringify({ promptQueueMode: "steer" }),
+        JSON.stringify({ promptQueueEnabled: true }),
       );
 
       await loadSettings();
@@ -137,30 +137,55 @@ describe("app/stores/settings-store", () => {
       expect(getPromptQueueMode()).toBe("queue");
     });
 
-    it.each([
-      { oldValue: true, expectedMode: "queue" },
-      { oldValue: false, expectedMode: "off" },
-    ] as const)(
-      "migrates promptQueueEnabled=$oldValue to $expectedMode and rewrites settings.json",
-      async ({ oldValue, expectedMode }) => {
+    it.each([true, false])(
+      "starts in steer on a V2 server with promptQueueEnabled=%s and leaves settings.json as is",
+      async (oldValue) => {
         config.opencode.serverVersion = "v2";
-        await writeFile(
-          path.join(tempHome, "settings.json"),
-          JSON.stringify({ promptQueueEnabled: oldValue }),
-        );
+        const settingsPath = path.join(tempHome, "settings.json");
+        const original = JSON.stringify({ promptQueueEnabled: oldValue });
+        await writeFile(settingsPath, original);
 
         await loadSettings();
+        await flushSettings();
 
-        expect(getPromptQueueMode()).toBe(expectedMode);
-        await vi.waitFor(async () => {
-          const settings = JSON.parse(
-            await readFile(path.join(tempHome, "settings.json"), "utf-8"),
-          );
-          expect(settings.promptQueueMode).toBe(expectedMode);
-          expect(settings).not.toHaveProperty("promptQueueEnabled");
-        });
+        expect(getPromptQueueMode()).toBe("steer");
+        expect(await readFile(settingsPath, "utf-8")).toBe(original);
       },
     );
+
+    it("keeps the V1 and V2 choices apart across version switches", async () => {
+      const readSettings = async () =>
+        JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
+
+      config.opencode.serverVersion = "v1";
+      await loadSettings();
+      setPromptQueueMode("queue");
+      await flushSettings();
+
+      config.opencode.serverVersion = "v2";
+      await loadSettings();
+      expect(getPromptQueueMode()).toBe("steer");
+      setPromptQueueMode("off");
+      await flushSettings();
+      expect(await readSettings()).toMatchObject({
+        promptQueueEnabled: true,
+        promptQueueMode: "off",
+      });
+
+      config.opencode.serverVersion = "v1";
+      await loadSettings();
+      expect(getPromptQueueMode()).toBe("queue");
+      setPromptQueueMode("off");
+      await flushSettings();
+
+      config.opencode.serverVersion = "v2";
+      await loadSettings();
+      expect(getPromptQueueMode()).toBe("off");
+      expect(await readSettings()).toMatchObject({
+        promptQueueEnabled: false,
+        promptQueueMode: "off",
+      });
+    });
   });
 
   it("applies INITIAL_SETTINGS_PRESET for settings not yet persisted", async () => {
@@ -325,30 +350,32 @@ describe("app/stores/settings-store", () => {
     });
   });
 
-  it("persists the prompt queue mode to settings.json", async () => {
-    await loadSettings();
-
-    setPromptQueueMode("queue");
-
-    expect(getPromptQueueMode()).toBe("queue");
-    await vi.waitFor(async () => {
-      const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
-      expect(settings.promptQueueMode).toBe("queue");
-    });
-  });
-
-  it("does not let INITIAL_SETTINGS_PRESET override a stored prompt queue mode", async () => {
+  it("does not let INITIAL_SETTINGS_PRESET override a stored promptQueueEnabled", async () => {
     vi.resetModules();
     vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"promptQueueEnabled":false}');
     await writeFile(
       path.join(tempHome, "settings.json"),
-      JSON.stringify({ promptQueueMode: "queue" }),
+      JSON.stringify({ promptQueueEnabled: true }),
     );
 
     const store = await import("../../../src/app/stores/settings-store.js");
     await store.loadSettings();
 
     expect(store.getPromptQueueMode()).toBe("queue");
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("seeds only the V1 queue from INITIAL_SETTINGS_PRESET promptQueueEnabled", async () => {
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"promptQueueEnabled":true}');
+    vi.stubEnv("OPENCODE_SERVER_VERSION", "v2");
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getPromptQueueMode()).toBe("steer");
 
     vi.unstubAllEnvs();
     vi.resetModules();

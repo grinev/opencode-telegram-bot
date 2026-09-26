@@ -55,7 +55,7 @@ No public inbound ports are required for normal usage.
 - Send text prompts to OpenCode
 - Accept voice/audio messages, transcribe via Whisper-compatible STT API, and forward recognized text as prompts
 - Interrupt current task (ESC equivalent)
-- Optionally accept text, transcribed voice, photos, rich formatted messages with photos, supported documents, and media groups sent while a task is running, at most `MAX_QUEUED_PROMPTS` (5) waiting at a time: on OpenCode V2 they wait in the session inbox and are steered into the running turn (Steer, the V2 default) or start their own run after it (Queue); on V1 the bot holds them, with at most 20 MiB of raw Telegram media bytes checked from reliable `file_size` before downloads
+- Optionally accept text, transcribed voice, photos, rich formatted messages with photos, supported documents, and media groups sent while a task is running, at most `MAX_QUEUED_PROMPTS` (5) waiting at a time: on OpenCode V2 they wait in the session inbox and are steered into the running turn (Steer, the V2 default) or start their own run after it (Queue); on V1 the bot holds them, with at most 20 MiB of raw Telegram media bytes checked from reliable `file_size` before downloads; the V1 On/Off choice and the V2 mode are kept separately, so switching versions changes neither
 - Handle OpenCode questions with inline options and custom text answers
 - In a multi-select question the custom text becomes one more tickable row next to the options, and Done sends it together with the ticked options
 - Send selected/custom answers back to OpenCode (`question.reply`)
