@@ -26,6 +26,7 @@ export interface Settings {
   pinnedDashboardEnabled?: boolean | undefined;
   responseStreamingMode?: ResponseStreamingMode | undefined;
   sendDiffFileAttachments?: boolean | undefined;
+  promptQueueEnabled?: boolean | undefined;
   promptQueueMode?: PromptQueueMode | undefined;
   sessionDirectoryCache?: SessionDirectoryCacheInfo | undefined;
   scheduledTasks?: ScheduledTask[] | undefined;
