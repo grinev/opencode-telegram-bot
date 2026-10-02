@@ -74,7 +74,7 @@ function prepareDocumentCaption(caption: string): string {
 
 /** Launched in the background: the operation outlives the turn that started it. */
 function isBackgroundTool(toolInfo: ToolInfo): boolean {
-  return toolInfo.input?.background === true;
+  return toolInfo.input?.background === true || toolInfo.metadata?.background === true;
 }
 
 function getCompactToolActivity(toolInfo: ToolInfo): string {

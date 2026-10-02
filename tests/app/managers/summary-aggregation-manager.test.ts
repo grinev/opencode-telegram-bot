@@ -650,6 +650,103 @@ describe("summary/aggregator", () => {
       expect(onSubagent.mock.calls).toHaveLength(callsAfterStop);
     });
 
+    function emitTaskPart(state: Record<string, unknown>): void {
+      summaryAggregator.processEvent({
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "root-task",
+            sessionID: "root-session",
+            messageID: "root-message",
+            type: "tool",
+            callID: "call-task",
+            tool: "task",
+            state,
+          },
+        },
+      } as unknown as Event);
+    }
+
+    it("honors a background task part that arrives before the child session is created", () => {
+      const onSubagent = vi.fn();
+      summaryAggregator.setOnSubagent(onSubagent);
+      summaryAggregator.setSession("root-session");
+
+      emitTaskPart({
+        status: "running",
+        input: { description: "task description", background: true },
+        metadata: { sessionId: "child-session-1" },
+        time: { start: Date.now() },
+      });
+
+      summaryAggregator.processEvent({
+        type: "session.created",
+        properties: {
+          info: {
+            id: "child-session-1",
+            parentID: "root-session",
+            title: "task description (@explore subagent)",
+            slug: "child",
+            directory: "D:/repo",
+            projectID: "p1",
+            version: "1",
+            time: { created: Date.now(), updated: Date.now() },
+          },
+        },
+      } as unknown as Event);
+
+      expect(onSubagent.mock.lastCall?.[1][0]).toMatchObject({ background: true });
+
+      emitIdle("root-session");
+      emitChildTool("call-1");
+      expect(onSubagent.mock.lastCall?.[1][0]).toMatchObject({
+        background: true,
+        status: "running",
+        currentToolCallId: "call-1",
+      });
+    });
+
+    it("marks a promoted task as background when only its metadata carries the flag", () => {
+      const onSubagent = vi.fn();
+      summaryAggregator.setOnSubagent(onSubagent);
+      startSubagent();
+
+      emitTaskPart({
+        status: "running",
+        input: { description: "task description" },
+        metadata: { sessionId: "child-session-1", background: true },
+        time: { start: Date.now() },
+      });
+
+      expect(onSubagent.mock.lastCall?.[1][0]).toMatchObject({ background: true });
+
+      emitIdle("root-session");
+      emitChildTool("call-1");
+      expect(onSubagent.mock.lastCall?.[1][0]).toMatchObject({
+        background: true,
+        currentToolCallId: "call-1",
+      });
+    });
+
+    it("still retires a plain foreground task at the turn boundary", () => {
+      const onSubagent = vi.fn();
+      summaryAggregator.setOnSubagent(onSubagent);
+      startSubagent();
+
+      emitTaskPart({
+        status: "running",
+        input: { description: "task description" },
+        metadata: { sessionId: "child-session-1" },
+        time: { start: Date.now() },
+      });
+
+      emitIdle("root-session");
+      const callsAfterIdle = onSubagent.mock.calls.length;
+
+      emitChildTool("call-1");
+      expect(onSubagent.mock.calls).toHaveLength(callsAfterIdle);
+    });
+
     it("re-emits and restarts timing for an identical tool with a new call id", async () => {
       const onSubagent = vi.fn();
       summaryAggregator.setOnSubagent(onSubagent);
