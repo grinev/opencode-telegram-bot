@@ -368,6 +368,9 @@ export class SummaryAggregator {
   private subagentStates: Map<string, SubagentState> = new Map();
   private subagentOrder: string[] = [];
   private subagentCardIdBySessionId: Map<string, string> = new Map();
+  // Child session ids whose task part announced a background launch, kept until
+  // the card attaches so a task part that arrives before session.created is honored.
+  private backgroundChildSessionIds = new Set<string>();
   private pendingSubagentCardIdsByParent: Map<string, string[]> = new Map();
   private pendingChildSessionIdsByParent: Map<string, string[]> = new Map();
   private fallbackSubagentCardIdsByParent: Map<string, string[]> = new Map();
@@ -700,6 +703,7 @@ export class SummaryAggregator {
     this.subagentStates.clear();
     this.subagentOrder = [];
     this.subagentCardIdBySessionId.clear();
+    this.backgroundChildSessionIds.clear();
     this.pendingSubagentCardIdsByParent.clear();
     this.pendingChildSessionIdsByParent.clear();
     this.fallbackSubagentCardIdsByParent.clear();
@@ -815,6 +819,7 @@ export class SummaryAggregator {
 
     if (state.sessionId) {
       this.subagentCardIdBySessionId.delete(state.sessionId);
+      this.backgroundChildSessionIds.delete(state.sessionId);
       this.trackedSessionParents.delete(state.sessionId);
       this.removeFromQueue(
         this.pendingChildSessionIdsByParent,
@@ -856,6 +861,16 @@ export class SummaryAggregator {
     const cardId = this.subagentCardIdBySessionId.get(childSessionId);
     const state = cardId ? this.subagentStates.get(cardId) : undefined;
     if (!state || state.background) {
+      return;
+    }
+
+    state.background = true;
+    this.emitSubagentState();
+  }
+
+  /** Applies a background intent recorded before the child's card attached. */
+  private applyPendingBackgroundIntent(sessionId: string, state: SubagentState): void {
+    if (!this.backgroundChildSessionIds.has(sessionId) || state.background) {
       return;
     }
 
@@ -970,6 +985,7 @@ export class SummaryAggregator {
     this.subagentOrder.push(cardId);
     if (sessionId) {
       this.subagentCardIdBySessionId.set(sessionId, cardId);
+      this.applyPendingBackgroundIntent(sessionId, state);
     }
     return state;
   }
@@ -1049,6 +1065,7 @@ export class SummaryAggregator {
     state.updatedAt = Date.now();
     this.subagentCardIdBySessionId.set(sessionId, cardId);
     this.removeFromQueue(this.pendingSubagentCardIdsByParent, state.parentSessionId, cardId);
+    this.applyPendingBackgroundIntent(sessionId, state);
   }
 
   private findNextSubagentForTaskTool(parentSessionId: string): SubagentState | null {
@@ -1646,12 +1663,19 @@ export class SummaryAggregator {
 
         const childSessionId =
           "metadata" in state && state.metadata ? state.metadata.sessionId : undefined;
+        // The running state is transient and the task part can land before the
+        // child card exists, so accept a completed state and a background flag
+        // carried on the metadata (a promoted foreground task) as well.
+        const wantsBackground =
+          input?.background === true ||
+          ("metadata" in state && state.metadata?.background === true);
         if (
           "status" in state &&
-          state.status === "running" &&
-          input?.background === true &&
+          (state.status === "running" || state.status === "completed") &&
+          wantsBackground &&
           typeof childSessionId === "string"
         ) {
+          this.backgroundChildSessionIds.add(childSessionId);
           this.markBackgroundSubagent(childSessionId);
         }
       }
