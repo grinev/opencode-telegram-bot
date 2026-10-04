@@ -17,8 +17,13 @@ concurrency:
 jobs:
   publish:
     name: Publish from main version bump
+    if: github.event.repository.fork != true
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      should_release: ${{ steps.determine.outputs.should_release }}
+      tag_name: ${{ steps.determine.outputs.tag_name }}
+      is_prerelease: ${{ steps.determine.outputs.is_prerelease }}
 
     steps:
       - name: Checkout
@@ -164,3 +169,15 @@ jobs:
           name: ${{ steps.determine.outputs.tag_name }}
           body_path: ${{ steps.notes.outputs.body_file }}
           prerelease: ${{ steps.determine.outputs.is_prerelease == 'true' }}
+
+  publish_container:
+    name: Publish container image
+    needs: publish
+    if: needs.publish.outputs.should_release == 'true'
+    uses: ./.github/workflows/container-image.yml
+    with:
+      tag: ${{ needs.publish.outputs.tag_name }}
+      publish_latest: ${{ needs.publish.outputs.is_prerelease == 'false' }}
+    permissions:
+      contents: read
+      packages: write

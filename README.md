@@ -490,6 +490,12 @@ cp .env.example .env
 
 `.env` stays on the host. It is injected at runtime and is not copied into the image.
 
+#### Published container images
+
+After this workflow is enabled, stable releases are published to `ghcr.io/grinev/opencode-telegram-bot:<version>` and `ghcr.io/grinev/opencode-telegram-bot:latest` for `linux/amd64` and `linux/arm64`. Release candidates receive only their exact version tag (for example, `0.27.0-rc.1`). Forks publish under their own lower-case GitHub owner/image name instead. Existing Docker Compose commands below continue to build locally and remain available as a fallback.
+
+The first image can be seeded from a release tag with `gh workflow run container-image.yml --ref main -f tag=v0.26.3`; `latest` is deliberately not updated by default for this manual run. After the first package is created, set its GHCR visibility to public in the repository's Packages settings. Subsequent stable releases publish `latest` automatically; release candidates do not.
+
 **Linux** (OpenCode on the host at `127.0.0.1:4096`):
 
 ```bash
