@@ -182,7 +182,7 @@ function emitPermissionAsked(
 
 function emitBashTool(
   summaryAggregator: { processEvent(event: Event): void },
-  status: "running" | "completed" | "error",
+  status: "pending" | "running" | "completed" | "error",
   options: { callId?: string; command?: string } = {},
 ): void {
   const callId = options.callId ?? "call-bash";
@@ -196,13 +196,17 @@ function emitBashTool(
         type: "tool",
         callID: callId,
         tool: "bash",
-        state: {
-          status,
-          input: { command: options.command ?? "npm test" },
-          metadata: {},
-          ...(status === "completed" ? { output: "ok" } : {}),
-          ...(status === "error" ? { error: "command failed" } : {}),
-        },
+        // A pending call is still being composed: OpenCode has no arguments for it yet.
+        state:
+          status === "pending"
+            ? { status, input: {}, raw: "" }
+            : {
+                status,
+                input: { command: options.command ?? "npm test" },
+                metadata: {},
+                ...(status === "completed" ? { output: "ok" } : {}),
+                ...(status === "error" ? { error: "command failed" } : {}),
+              },
       },
     },
   } as unknown as Event);
@@ -1154,6 +1158,160 @@ describe("bot/services/event-subscription-service", () => {
       expect(cardMessages.every((text) => !(text.includes("inspect task 1") && text.includes("inspect task 2")))).toBe(
         true,
       );
+    });
+  });
+
+  describe("a tool line waits for its arguments", () => {
+    /** A bash line or card naming the tool without its command. */
+    function hasBareBashLine(api: FakeBotApi): boolean {
+      return collectSentTexts(api).some((text) => /💻 bash\s*(?:$|\n|·)/.test(text));
+    }
+
+    async function setupCompact(): Promise<Awaited<ReturnType<typeof setupService>>> {
+      const setup = await setupService(false);
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      settingsStore.setCompactOutputMode(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      useTrackerFakeTimers();
+      return setup;
+    }
+
+    it("shows nothing while a call is composed and its full line once it runs", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitBashTool(summaryAggregator, "pending");
+      await flushPendingDispatch();
+      expect(collectSentTexts(api)).toEqual([]);
+
+      emitBashTool(summaryAggregator, "running", { command: "sleep 60" });
+      await flushPendingDispatch();
+      expect(String(api.sendMessage.mock.calls[0]?.[1])).toContain("⏳ 💻 bash sleep 60");
+
+      emitBashTool(summaryAggregator, "completed", { command: "sleep 60" });
+      await flushPendingDispatch();
+      expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      expect(collectSentTexts(api).pop()).toContain("💻 bash sleep 60");
+      expect(hasBareBashLine(api)).toBe(false);
+    });
+
+    it("does not tick a call still being composed and times it from its first event", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitBashTool(summaryAggregator, "pending");
+      await vi.advanceTimersByTimeAsync(ELAPSED_SETTLE_MS);
+      expect(collectSentTexts(api)).toEqual([]);
+
+      emitBashTool(summaryAggregator, "running", { command: "sleep 60" });
+      await flushPendingDispatch();
+
+      const firstLine = String(api.sendMessage.mock.calls[0]?.[1]);
+      expect(firstLine).toContain("⏳ 💻 bash sleep 60");
+      expect(firstLine).toMatch(/· 🕒 \d+s/);
+      expect(hasBareBashLine(api)).toBe(false);
+    });
+
+    it("shows a call that fails while composed as one finished line", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitBashTool(summaryAggregator, "pending");
+      await flushPendingDispatch();
+      emitBashTool(summaryAggregator, "error");
+      await flushPendingDispatch();
+
+      expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      expect(collectSentTexts(api).some((text) => text.includes("⏳"))).toBe(false);
+    });
+
+    it("still shows a running tool that has no arguments at all", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitBareTool(summaryAggregator, "running", "call-bare");
+      await flushPendingDispatch();
+
+      expect(collectSentTexts(api).some((text) => text.includes("⏳ 🛠️ unknown_tool"))).toBe(true);
+    });
+
+    it("keeps the compact card on the running call while the next one is composed", async () => {
+      const { api, summaryAggregator } = await setupCompact();
+
+      emitBashTool(summaryAggregator, "running", { callId: "call-1", command: "sleep 90" });
+      await flushPendingDispatch();
+      emitBashTool(summaryAggregator, "pending", { callId: "call-2" });
+      await flushPendingDispatch();
+      expect(collectSentTexts(api).pop()).toContain("sleep 90");
+
+      emitBashTool(summaryAggregator, "running", { callId: "call-2", command: "npm test" });
+      await flushPendingDispatch();
+      expect(collectSentTexts(api).pop()).toContain("npm test");
+      expect(hasBareBashLine(api)).toBe(false);
+    });
+
+    it("does not hand the compact card to a composed call when a sibling finishes", async () => {
+      const { api, summaryAggregator } = await setupCompact();
+
+      emitReadTool(summaryAggregator, "running", { callId: "call-read", filePath: "README.md" });
+      await flushPendingDispatch();
+      emitBashTool(summaryAggregator, "pending", { callId: "call-2" });
+      emitReadTool(summaryAggregator, "completed", { callId: "call-read", filePath: "README.md" });
+      await flushPendingDispatch();
+      expect(hasBareBashLine(api)).toBe(false);
+
+      emitBashTool(summaryAggregator, "running", { callId: "call-2", command: "npm test" });
+      await flushPendingDispatch();
+      expect(collectSentTexts(api).pop()).toContain("npm test");
+      expect(hasBareBashLine(api)).toBe(false);
+    });
+
+    it("closes the card above a reply on a composed call and opens the next one once it runs", async () => {
+      const { api, summaryAggregator } = await setupCompact();
+
+      emitBashTool(summaryAggregator, "running", { callId: "call-1", command: "Get-ChildItem" });
+      emitBashTool(summaryAggregator, "completed", { callId: "call-1", command: "Get-ChildItem" });
+      await flushPendingDispatch();
+      emitAssistantTextPart(summaryAggregator, "First reply");
+      await flushPendingDispatch();
+      emitBashTool(summaryAggregator, "pending", { callId: "call-2" });
+      await flushPendingDispatch();
+
+      const workingCards = (): string[] =>
+        api.sendMessage.mock.calls
+          .map((call) => String(call[1]))
+          .filter((text) => text.includes("⏳ Working"));
+      expect(collectSentTexts(api).some((text) => text.includes("✅ Finished Work"))).toBe(true);
+      expect(workingCards()).toHaveLength(1);
+
+      emitBashTool(summaryAggregator, "running", { callId: "call-2", command: "Get-Content" });
+      await flushPendingDispatch();
+      expect(workingCards()).toHaveLength(2);
+      expect(workingCards()[1]).toContain("Get-Content");
+      expect(hasBareBashLine(api)).toBe(false);
+    });
+
+    it("leaves the compact card as it was when a composed call fails", async () => {
+      const { api, summaryAggregator } = await setupCompact();
+
+      emitBashTool(summaryAggregator, "running", { callId: "call-1", command: "sleep 90" });
+      await flushPendingDispatch();
+      emitBashTool(summaryAggregator, "pending", { callId: "call-2" });
+      emitBashTool(summaryAggregator, "error", { callId: "call-2" });
+      await flushPendingDispatch();
+
+      expect(collectSentTexts(api).pop()).toContain("sleep 90");
+      expect(hasBareBashLine(api)).toBe(false);
+    });
+
+    it("opens no compact card for a call that fails while composed", async () => {
+      const { api, summaryAggregator } = await setupCompact();
+
+      emitBashTool(summaryAggregator, "pending");
+      emitBashTool(summaryAggregator, "error");
+      await flushPendingDispatch();
+
+      expect(collectSentTexts(api).some((text) => text.includes("⏳ Working"))).toBe(false);
     });
   });
 

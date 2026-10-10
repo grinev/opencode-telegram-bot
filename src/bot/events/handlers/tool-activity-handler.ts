@@ -77,6 +77,11 @@ function isBackgroundTool(toolInfo: ToolInfo): boolean {
   return toolInfo.input?.background === true || toolInfo.metadata?.background === true;
 }
 
+/** Still being composed: OpenCode has not sent the call's arguments yet, so it is not shown. */
+function isComposing(toolInfo: ToolInfo): boolean {
+  return "status" in toolInfo.state && toolInfo.state.status === "pending";
+}
+
 function getCompactToolActivity(toolInfo: ToolInfo): string {
   if (toolInfo.tool === "task") {
     return t("progress.compact.task");
@@ -93,7 +98,7 @@ function pickCompactFallback(
 ): CompactActivity | null {
   for (const callId of runtime.runningToolTracker.trackedCallIds(sessionId)) {
     const info = runtime.getRunningToolInfo(sessionId, callId);
-    const activity = info ? getCompactToolActivity(info) : null;
+    const activity = info && !isComposing(info) ? getCompactToolActivity(info) : null;
     if (activity) {
       return { callId, activity };
     }
@@ -217,7 +222,7 @@ function handleRunningToolTick({ runtime, policy }: EventHandlerBase, tick: Runn
   }
 
   const toolInfo = runtime.getRunningToolInfo(tick.sessionId, tick.callId);
-  if (!toolInfo) {
+  if (!toolInfo || isComposing(toolInfo)) {
     return;
   }
 
@@ -290,8 +295,13 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
     // tracked was stopped: its line or card stays as it was.
     const backgroundTracked = background && runtime.runningToolTracker.isBackground(callId);
     const backgroundDetached = background && runtime.runningToolTracker.isDetached(callId);
+    // Its line is shown once its arguments are known; until then it is tracked
+    // (the clock runs from here) but drawn nowhere.
+    const composing = isComposing(toolInfo);
+    const storedInfo = runtime.getRunningToolInfo(sessionId, callId);
+    const failedWhileComposing = status === "error" && !!storedInfo && isComposing(storedInfo);
 
-    if (compactMode && !isTerminal && !runtime.getRunningToolInfo(sessionId, callId)) {
+    if (compactMode && !isTerminal && !storedInfo) {
       closeCompactCardBeforeNextActivity(runtime, sessionId);
     }
 
@@ -317,7 +327,9 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
     } else if (tracksElapsed) {
       runtime.runningToolTracker.track(sessionId, callId, background);
       runtime.setRunningToolInfo(toolInfo);
-      if (!compactMode) {
+      if (composing) {
+        // Nothing to draw yet: the bare tool name would flash before its command.
+      } else if (!compactMode) {
         const message = formatToolInfo(toolInfo);
         if (message) {
           const tick = runtime.runningToolTracker.displayTick(callId);
@@ -365,14 +377,14 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       const fallback = pickCompactFallback(runtime, sessionId);
       if (fallback) {
         syncCompactToolActivity(runtime, sessionId, fallback.callId, fallback.activity);
-      } else if (!runtime.runningToolTracker.newestCallId(sessionId)) {
+      } else if (!runtime.runningToolTracker.newestCallId(sessionId) && !failedWhileComposing) {
         const activity = getCompactToolActivity(toolInfo);
         if (activity) {
           runtime.setCompactActivity(sessionId, { callId, activity });
           runtime.compactProgressStreamer.updateActivity(sessionId, activity);
         }
       }
-    } else if (runtime.runningToolTracker.newestCallId(sessionId) === callId) {
+    } else if (!composing && runtime.runningToolTracker.newestCallId(sessionId) === callId) {
       const activity = getCompactToolActivity(toolInfo);
       if (activity) {
         syncCompactToolActivity(runtime, sessionId, callId, activity);
