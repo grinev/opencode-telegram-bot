@@ -1,0 +1,177 @@
+name: Container image
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build (vX.Y.Z or vX.Y.Z-rc.N)
+        required: true
+        type: string
+      publish_latest:
+        description: Also update latest for a stable release
+        required: false
+        default: false
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build (vX.Y.Z or vX.Y.Z-rc.N)
+        required: true
+        type: string
+      publish_latest:
+        description: Also update latest for a stable release
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .dockerignore
+      - Dockerfile
+      - package.json
+      - package-lock.json
+      - src/**
+      - tsconfig.json
+      - .github/workflows/container-image.yml
+      - .github/workflows/publish.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.event.inputs.tag || inputs.tag || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Docker build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pull request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Build both architectures
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=container
+          cache-to: type=gha,mode=max,scope=container
+
+  publish:
+    name: Publish GHCR image
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Validate requested release tag
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.event.inputs.tag }}
+          PUBLISH_LATEST: ${{ inputs.publish_latest || github.event.inputs.publish_latest || 'false' }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-rc\.[0-9]+)?$ ]]; then
+            VERSION="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+          else
+            echo "Invalid release tag: $RELEASE_TAG (expected vX.Y.Z or vX.Y.Z-rc.N)" >&2
+            exit 1
+          fi
+
+          IS_PRERELEASE=false
+          if [[ "$VERSION" == *-rc.* ]]; then
+            IS_PRERELEASE=true
+          fi
+
+          if [[ "$PUBLISH_LATEST" == "true" && "$IS_PRERELEASE" == "true" ]]; then
+            echo "The latest tag cannot be published for a prerelease" >&2
+            exit 1
+          fi
+
+          {
+            echo "tag=$RELEASE_TAG"
+            echo "version=$VERSION"
+            echo "is_prerelease=$IS_PRERELEASE"
+            echo "publish_latest=$PUBLISH_LATEST"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout release tag
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: refs/tags/${{ steps.release.outputs.tag }}
+
+      - name: Verify package version matches tag
+        env:
+          EXPECTED_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if [[ "$PACKAGE_VERSION" != "$EXPECTED_VERSION" ]]; then
+            echo "Tag version $EXPECTED_VERSION does not match package.json version $PACKAGE_VERSION" >&2
+            exit 1
+          fi
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        id: source
+
+      - name: Set image metadata
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ steps.release.outputs.version }}
+          PUBLISH_LATEST: ${{ steps.release.outputs.publish_latest }}
+        run: |
+          set -euo pipefail
+          IMAGE_NAME="ghcr.io/${REPOSITORY,,}"
+          TAGS="$IMAGE_NAME:$VERSION"
+          if [[ "$PUBLISH_LATEST" == "true" ]]; then
+            TAGS+=$'\n'"$IMAGE_NAME:latest"
+          fi
+          {
+            echo "name=$IMAGE_NAME"
+            echo "tags<<EOF"
+            printf '%s\n' "$TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.image.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+          cache-from: type=gha,scope=container
+          cache-to: type=gha,mode=max,scope=container
