@@ -56,6 +56,10 @@ COPY --from=builder --chown=node:node /app/package.json ./package.json
 # Run as non-root node user (uid 1000)
 USER node
 
+# Probe the loopback health endpoint (BOT_HEALTH_PORT, 3100 by default in a container)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
+    CMD ["node", "dist/runtime/healthcheck.js"]
+
 # Single dumb-init entrypoint
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "dist/index.js"]

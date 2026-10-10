@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 async function loadConfigModule() {
   vi.resetModules();
@@ -478,5 +478,64 @@ describe("config OpenCode server version", () => {
     const config = await loadConfig();
 
     expect(config.opencode.serverVersion).toBe("v1");
+  });
+});
+
+describe("config health port", () => {
+  const inContainer = vi.fn(() => false);
+
+  beforeEach(() => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-telegram-token");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
+    vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
+    vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
+    vi.stubEnv("BOT_HEALTH_PORT", "");
+    inContainer.mockReturnValue(false);
+    // Pinned so the result does not depend on a /.dockerenv on the test machine.
+    vi.doMock("../src/runtime/container.js", () => ({ isContainerRuntime: inContainer }));
+  });
+
+  afterEach(() => {
+    vi.doUnmock("../src/runtime/container.js");
+  });
+
+  it("is off by default outside a container", async () => {
+    const config = await loadConfig();
+
+    expect(config.health.port).toBe(0);
+  });
+
+  it("defaults to 3100 in a container", async () => {
+    inContainer.mockReturnValue(true);
+
+    const config = await loadConfig();
+
+    expect(config.health.port).toBe(3100);
+  });
+
+  it("keeps 0 as disabled in a container", async () => {
+    inContainer.mockReturnValue(true);
+    vi.stubEnv("BOT_HEALTH_PORT", "0");
+
+    const config = await loadConfig();
+
+    expect(config.health.port).toBe(0);
+  });
+
+  it("treats a port above 65535 as unset", async () => {
+    vi.stubEnv("BOT_HEALTH_PORT", "65536");
+
+    expect((await loadConfig()).health.port).toBe(0);
+
+    inContainer.mockReturnValue(true);
+    expect((await loadConfig()).health.port).toBe(3100);
+  });
+
+  it("uses a valid explicit port", async () => {
+    vi.stubEnv("BOT_HEALTH_PORT", "65535");
+
+    const config = await loadConfig();
+
+    expect(config.health.port).toBe(65535);
   });
 });

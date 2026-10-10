@@ -288,6 +288,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `GOOGLE_APPLICATION_CREDENTIALS`           | Path to a Google Cloud service account JSON key file for `TTS_PROVIDER=google`                                        |    No    | —                        |
 | `LOG_LEVEL`                                | Log level (`debug`, `info`, `warn`, `error`)                                                                          |    No    | `info`                   |
 | `LOG_RETENTION`                            | Number of log files to keep: launch files in `sources`, daily files in `installed`                                    |    No    | `10`                     |
+| `BOT_HEALTH_PORT`                          | Port of the internal health endpoint (`/health`, `/health/live`, `/health/ready`) on `127.0.0.1`; `0` disables it      |    No    | off; `3100` in Docker    |
 
 > **Keep your `.env` file private.** It contains your bot token. Never commit it to version control.
 
@@ -457,7 +458,7 @@ To pick a model that is neither a favorite nor recent, tap **🗂 Providers** in
 
 The bot enforces a strict **user ID whitelist**. Only the Telegram user whose numeric ID matches `TELEGRAM_ALLOWED_USER_ID` can interact with the bot. Messages from any other user are silently ignored and logged as unauthorized access attempts.
 
-Since the bot runs locally on your machine and connects to your local OpenCode server, there is no external attack surface beyond the Telegram Bot API itself.
+Since the bot runs locally on your machine and connects to your local OpenCode server, there is no external attack surface beyond the Telegram Bot API itself. The optional health endpoint (`BOT_HEALTH_PORT`) binds to `127.0.0.1` only and serves read-only status.
 
 ## Development
 
@@ -533,6 +534,7 @@ Runtime state (settings, logs, SQLite databases) is stored in a Docker named vol
 All configuration is provided through environment variables in the `.env` file. Compose also sets `OPENCODE_TELEGRAM_CONTAINER=1` so the bot can warn about commands that need the host filesystem or a local OpenCode process.
 
 - `OPENCODE_API_URL` — URL of the OpenCode server. On Linux with the default compose file this is `http://127.0.0.1:4096` via `network_mode: host`. The Desktop override sets `http://host.docker.internal:4096`.
+- `BOT_HEALTH_PORT` — the image serves a health endpoint on `127.0.0.1:3100` by default, and its `HEALTHCHECK` probes `/health/live`: the container is `unhealthy` only when the bot itself does not answer, or when the endpoint could not start (for example, the port is taken on the host under `network_mode: host`; the log says why). OpenCode being down does not make the container unhealthy — `/health` reports it as `degraded` and `/health/ready` answers `503`. Set another port in `.env` if 3100 is taken, or `0` to turn the endpoint off (the healthcheck then always passes). The endpoint is reachable from the host's loopback with the Linux compose file and only from inside the container with the Desktop override.
 - **OpenCode V2 in Docker** — both compose files point to a V1 server on port 4096. For V2, set `OPENCODE_SERVER_VERSION=v2`, `OPENCODE_SERVER_PASSWORD` and `OPENCODE_API_URL` together: in `.env` on Linux (for example `http://127.0.0.1:49374`), and by changing the URL in `docker-compose.desktop.yml` on Docker Desktop to the host address the V2 server listens on.
 
 #### Commands that are not available in Docker
@@ -546,7 +548,7 @@ These need the bot process to see host project paths or to spawn/stop `opencode`
 
 `/projects`, `/sessions`, prompts, and live updates still go through the OpenCode HTTP API and work as usual.
 
-Port 4096 is **not** exposed by the bot image; it belongs to the OpenCode server, which runs separately.
+Port 4096 is **not** exposed by the bot image; it belongs to the OpenCode server, which runs separately. The only port the bot itself listens on is the loopback health port.
 
 ### Available Scripts
 

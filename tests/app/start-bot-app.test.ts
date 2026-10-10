@@ -8,6 +8,8 @@ const mocked = vi.hoisted(() => ({
   cleanupProcessMock: vi.fn(),
   autoRestartStartMock: vi.fn(),
   autoRestartStopMock: vi.fn(),
+  healthServerStartMock: vi.fn(),
+  healthServerStopMock: vi.fn(),
   notifyOpencodeReadyIfHealthyMock: vi.fn(),
   registerOpenCodeReadyRefreshHandlerMock: vi.fn(),
   loadSettingsMock: vi.fn(),
@@ -28,6 +30,9 @@ const mocked = vi.hoisted(() => ({
   flushLoggerMock: vi.fn(),
   restoreFollowedSessionOnPollingStartMock: vi.fn(),
   config: {
+    health: {
+      port: 3100,
+    },
     opencode: {
       apiUrl: "http://localhost:4096",
     },
@@ -39,6 +44,10 @@ const mocked = vi.hoisted(() => ({
 
 const container = vi.hoisted(() => ({
   cleanupProcess: mocked.cleanupProcessMock,
+  healthServer: {
+    start: mocked.healthServerStartMock,
+    stop: mocked.healthServerStopMock,
+  },
   opencodeAutoRestartService: {
     start: mocked.autoRestartStartMock,
     stop: mocked.autoRestartStopMock,
@@ -184,6 +193,8 @@ describe("app/start-bot-app", () => {
     mocked.cleanupProcessMock.mockReset();
     mocked.autoRestartStartMock.mockReset();
     mocked.autoRestartStopMock.mockReset();
+    mocked.healthServerStartMock.mockReset();
+    mocked.healthServerStopMock.mockReset();
     mocked.notifyOpencodeReadyIfHealthyMock.mockReset();
     mocked.registerOpenCodeReadyRefreshHandlerMock.mockReset();
     mocked.loadSettingsMock.mockReset();
@@ -206,6 +217,8 @@ describe("app/start-bot-app", () => {
 
     mocked.createBotMock.mockReturnValue(createBot());
     mocked.autoRestartStartMock.mockResolvedValue(false);
+    mocked.healthServerStartMock.mockResolvedValue(undefined);
+    mocked.healthServerStopMock.mockResolvedValue(undefined);
     mocked.notifyOpencodeReadyIfHealthyMock.mockResolvedValue(false);
     mocked.loadSettingsMock.mockResolvedValue(undefined);
     mocked.flushSettingsMock.mockResolvedValue(undefined);
@@ -274,6 +287,25 @@ describe("app/start-bot-app", () => {
     resolveAutoRestart(false);
     await flushBackgroundTasks();
     expect(mocked.notifyOpencodeReadyIfHealthyMock).toHaveBeenCalledWith("startup", container);
+  });
+
+  it("starts the health server with the configured port before creating the bot", async () => {
+    await startBotApp();
+
+    expect(mocked.healthServerStartMock).toHaveBeenCalledTimes(1);
+    expect(mocked.healthServerStartMock).toHaveBeenCalledWith(3100, expect.any(String));
+    expect(defined(mocked.healthServerStartMock.mock.invocationCallOrder[0])).toBeGreaterThan(
+      defined(mocked.registerOpenCodeReadyRefreshHandlerMock.mock.invocationCallOrder[0]),
+    );
+    expect(defined(mocked.healthServerStartMock.mock.invocationCallOrder[0])).toBeLessThan(
+      defined(mocked.createBotMock.mock.invocationCallOrder[0]),
+    );
+  });
+
+  it("stops the health server on normal exit", async () => {
+    await startBotApp();
+
+    expect(mocked.healthServerStopMock).toHaveBeenCalledTimes(1);
   });
 
   it("logs an unhandled rejection and keeps the process alive", async () => {
@@ -386,6 +418,7 @@ describe("app/start-bot-app", () => {
     expect(mocked.cleanupProcessMock).toHaveBeenCalledWith("app_shutdown_sigint");
     expect(mocked.autoRestartStopMock).toHaveBeenCalledTimes(1);
     expect(mocked.scheduledTaskShutdownMock).toHaveBeenCalledTimes(1);
+    expect(mocked.healthServerStopMock).toHaveBeenCalledTimes(1);
     expect(bot.stop).toHaveBeenCalledTimes(1);
 
     releaseStart();
@@ -672,6 +705,7 @@ describe("app/start-bot-app", () => {
     await appPromise;
 
     expect(bot.start).not.toHaveBeenCalled();
+    expect(mocked.healthServerStopMock).toHaveBeenCalledTimes(1);
 
     vi.useRealTimers();
   });

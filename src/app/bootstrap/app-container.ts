@@ -20,6 +20,7 @@ import { QuestionManager } from "../managers/question-manager.js";
 import { RenameManager } from "../managers/rename-manager.js";
 import { TaskCreationManager } from "../managers/scheduled-task-creation-manager.js";
 import { SummaryAggregator } from "../managers/summary-aggregation-manager.js";
+import { HealthServer } from "../services/health-server-service.js";
 import { ScheduledTaskRuntime } from "../services/scheduled-task-runtime-service.js";
 
 const HEARTBEAT_INTERVAL_MS = 5000;
@@ -38,6 +39,7 @@ export interface AppContainer {
   readonly backgroundSessionTracker: BackgroundSessionTracker;
   readonly externalUserInputSuppressionManager: ExternalUserInputSuppressionManager;
   readonly foregroundSessionState: ForegroundSessionState;
+  readonly healthServer: HealthServer;
   readonly interactionManager: InteractionManager;
   readonly keyboardManager: KeyboardManager;
   readonly opencodeAutoRestartService: OpencodeAutoRestartService;
@@ -106,6 +108,7 @@ export function createAppContainer(): AppContainer {
     backgroundSessionTracker: new BackgroundSessionTracker(),
     externalUserInputSuppressionManager: new ExternalUserInputSuppressionManager(),
     foregroundSessionState,
+    healthServer: new HealthServer(),
     interactionManager,
     keyboardManager: new KeyboardManager(),
     opencodeAutoRestartService: new OpencodeAutoRestartService(opencodeReadyLifecycle),

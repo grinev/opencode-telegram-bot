@@ -126,6 +126,7 @@ No public inbound ports are required for normal usage.
 - Optional STT settings for voice transcription (`STT_API_URL`, `STT_API_KEY`, `STT_MODEL`, `STT_LANGUAGE`)
 - Optional TTS settings for global audio replies (`TTS_PROVIDER`, `TTS_API_URL`, `TTS_API_KEY`, `TTS_MODEL`, `TTS_VOICE`); supported providers: OpenAI-compatible, ElevenLabs, Google Cloud TTS, and Microsoft Edge TTS (no API key required)
 - Optional IPv4-only mode for Telegram connectivity (`TELEGRAM_FORCE_IPV4`)
+- Optional loopback health endpoint for Docker and orchestrators (`BOT_HEALTH_PORT`; off by default, `3100` in the Docker image)
 
 ## Current Product Scope
 
@@ -248,4 +249,5 @@ Open tasks for upcoming iterations:
 
 - [ ] Model search in model switcher
 - [x] Docker runtime support and deployment guide
+- [x] Loopback health endpoint and Docker `HEALTHCHECK`
 - [x] Add a bot settings command with in-chat UI

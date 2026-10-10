@@ -211,7 +211,8 @@ export async function startBotApp(): Promise<void> {
   await reconcileStoredModelSelection();
   const container = createAppContainer();
   registerOpenCodeReadyRefreshHandler(container);
-  const { opencodeAutoRestartService, scheduledTaskRuntime } = container;
+  const { healthServer, opencodeAutoRestartService, scheduledTaskRuntime } = container;
+  await healthServer.start(config.health.port, version);
   const localCommandRegistry = await LocalCommandRegistry.load({
     directoryPath: runtimePaths.localCommandsDirPath,
     builtInCommands: BUILT_IN_COMMAND_NAMES,
@@ -242,6 +243,7 @@ export async function startBotApp(): Promise<void> {
     container.cleanupProcess(`app_shutdown_${signal.toLowerCase()}`);
     opencodeAutoRestartService.stop();
     scheduledTaskRuntime.shutdown();
+    void healthServer.stop();
 
     shutdownTimeout = setTimeout(() => {
       logger.warn(`[App] Shutdown did not finish in ${SHUTDOWN_TIMEOUT_MS}ms, forcing exit.`);
@@ -326,6 +328,7 @@ export async function startBotApp(): Promise<void> {
     container.cleanupProcess("app_shutdown_complete");
     opencodeAutoRestartService.stop();
     scheduledTaskRuntime.shutdown();
+    await healthServer.stop();
     await clearManagedServiceState().catch((error) => {
       logger.warn("[App] Failed to clear managed service state", error);
     });

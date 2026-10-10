@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import { getRuntimePaths } from "./runtime/paths.js";
+import { isContainerRuntime } from "./runtime/container.js";
+import { BOT_HEALTH_PORT_ENV, resolveHealthPort } from "./runtime/health-port.js";
 import { normalizeLocale, type Locale } from "./i18n/index.js";
 
 const runtimePaths = getRuntimePaths();
@@ -232,6 +234,9 @@ export const config = {
   },
   server: {
     logLevel: getEnvVar("LOG_LEVEL", false) || "info",
+  },
+  health: {
+    port: resolveHealthPort(getEnvVar(BOT_HEALTH_PORT_ENV, false), isContainerRuntime()),
   },
   bot: {
     sessionsListLimit: getOptionalPositiveIntEnvVar("SESSIONS_LIST_LIMIT", 10),
