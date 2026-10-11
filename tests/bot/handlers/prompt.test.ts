@@ -3,7 +3,7 @@ import type { Bot, Context } from "grammy";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
 import {
   admitPromptToInbox,
-  consumePromptResponseMode,
+  getPromptResponseMode,
   processUserPrompt as processIncomingPrompt,
   type ProcessPromptDeps,
 } from "../../../src/bot/handlers/prompt.js";
@@ -504,7 +504,7 @@ describe("bot/handlers/prompt", () => {
     const handled = await processUserPrompt(createContext(), "Review README", createDeps());
 
     expect(handled).toBe(true);
-    expect(consumePromptResponseMode("session-1")).toBe("text_only");
+    expect(getPromptResponseMode("session-1")).toBe("text_only");
   });
 
   it("uses plural placeholder text for multiple file-only prompts", async () => {

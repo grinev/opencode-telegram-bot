@@ -17,7 +17,7 @@ type PromptResponseMode = "text_only" | "text_and_tts";
 interface PrepareTtsResponseParams {
   sessionId: string;
   text: string;
-  consumeResponseMode: (sessionId: string) => PromptResponseMode | null;
+  getResponseMode: (sessionId: string) => PromptResponseMode | null;
   isTtsConfigured?: (() => boolean) | undefined;
   synthesizeSpeech?: ((text: string) => Promise<TtsResult>) | undefined;
 }
@@ -274,11 +274,11 @@ export async function synthesizeSpeech(text: string): Promise<TtsResult> {
 export async function prepareTtsResponseForSession({
   sessionId,
   text,
-  consumeResponseMode,
+  getResponseMode,
   isTtsConfigured: isTtsConfiguredImpl = isTtsConfigured,
   synthesizeSpeech: synthesizeSpeechImpl = synthesizeSpeech,
 }: PrepareTtsResponseParams): Promise<PreparedTtsResponse> {
-  const responseMode = consumeResponseMode(sessionId);
+  const responseMode = getResponseMode(sessionId);
   if (responseMode !== "text_and_tts") {
     return { shouldSend: false };
   }

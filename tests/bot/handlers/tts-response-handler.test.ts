@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { InputFile } from "grammy";
 import { sendTtsResponseForSession } from "../../../src/bot/handlers/tts-response-handler.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
+import {
+  clearPromptResponseMode,
+  setPromptResponseMode,
+} from "../../../src/bot/handlers/prompt.js";
 
 vi.mock("../../../src/utils/logger.js", () => ({
   logger: {
@@ -14,6 +18,37 @@ vi.mock("../../../src/utils/logger.js", () => ({
 }));
 
 describe("bot/handlers/tts-response-handler", () => {
+  afterEach(() => clearPromptResponseMode("session-1"));
+
+  it("speaks every assistant reply until the turn response mode is cleared", async () => {
+    const sendAudioMock = vi.fn().mockResolvedValue(undefined);
+    const sendMessageMock = vi.fn().mockResolvedValue(undefined);
+    const synthesizeSpeechMock = vi.fn().mockResolvedValue({
+      buffer: Buffer.from("mp3"),
+      filename: "assistant-reply.mp3",
+      mimeType: "audio/mpeg",
+    });
+    const params = {
+      api: { sendAudio: sendAudioMock, sendMessage: sendMessageMock },
+      sessionId: "session-1",
+      chatId: 123,
+      isTtsConfigured: () => true,
+      synthesizeSpeech: synthesizeSpeechMock,
+    };
+    setPromptResponseMode("session-1", "text_and_tts");
+
+    await sendTtsResponseForSession({ ...params, text: "First message" });
+    await sendTtsResponseForSession({ ...params, text: "Main answer" });
+
+    expect(sendAudioMock).toHaveBeenCalledTimes(2);
+    expect(synthesizeSpeechMock).toHaveBeenNthCalledWith(1, "First message");
+    expect(synthesizeSpeechMock).toHaveBeenNthCalledWith(2, "Main answer");
+
+    clearPromptResponseMode("session-1");
+    expect(await sendTtsResponseForSession({ ...params, text: "Later turn" })).toBe(false);
+    expect(sendAudioMock).toHaveBeenCalledTimes(2);
+  });
+
   it("sends audio when the session response mode requires TTS", async () => {
     const sendAudioMock = vi.fn().mockResolvedValue(undefined);
     const sendMessageMock = vi.fn().mockResolvedValue(undefined);
@@ -28,7 +63,7 @@ describe("bot/handlers/tts-response-handler", () => {
       sessionId: "session-1",
       chatId: 123,
       text: "Hello from audio",
-      consumeResponseMode: () => "text_and_tts",
+      getResponseMode: () => "text_and_tts",
       isTtsConfigured: () => true,
       synthesizeSpeech: synthesizeSpeechMock,
     });
@@ -53,7 +88,7 @@ describe("bot/handlers/tts-response-handler", () => {
       sessionId: "session-1",
       chatId: 123,
       text: "Hello from text",
-      consumeResponseMode: () => "text_only",
+      getResponseMode: () => "text_only",
       isTtsConfigured: () => true,
       synthesizeSpeech: synthesizeSpeechMock,
     });
@@ -74,7 +109,7 @@ describe("bot/handlers/tts-response-handler", () => {
       sessionId: "session-1",
       chatId: 123,
       text: "Hello from audio",
-      consumeResponseMode: () => "text_and_tts",
+      getResponseMode: () => "text_and_tts",
       isTtsConfigured: () => false,
       synthesizeSpeech: synthesizeSpeechMock,
     });
@@ -99,7 +134,7 @@ describe("bot/handlers/tts-response-handler", () => {
       sessionId: "session-1",
       chatId: 123,
       text: "Hello from audio",
-      consumeResponseMode: () => "text_and_tts",
+      getResponseMode: () => "text_and_tts",
       isTtsConfigured: () => true,
       synthesizeSpeech: synthesizeSpeechMock,
     });

@@ -2,7 +2,7 @@ import { InputFile } from "grammy";
 import { prepareTtsResponseForSession, type TtsResult } from "../../app/services/tts-service.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
-import { consumePromptResponseMode } from "./prompt.js";
+import { getPromptResponseMode } from "./prompt.js";
 
 interface TelegramAudioApi {
   sendAudio: (chatId: number, audio: InputFile) => Promise<unknown>;
@@ -14,7 +14,7 @@ interface SendTtsResponseParams {
   sessionId: string;
   chatId: number;
   text: string;
-  consumeResponseMode?: (sessionId: string) => "text_only" | "text_and_tts" | null;
+  getResponseMode?: (sessionId: string) => "text_only" | "text_and_tts" | null;
   isTtsConfigured?: () => boolean;
   synthesizeSpeech?: (text: string) => Promise<TtsResult>;
 }
@@ -24,7 +24,7 @@ export async function sendTtsResponseForSession({
   sessionId,
   chatId,
   text,
-  consumeResponseMode: consumeResponseModeImpl = consumePromptResponseMode,
+  getResponseMode: getResponseModeImpl = getPromptResponseMode,
   isTtsConfigured,
   synthesizeSpeech,
 }: SendTtsResponseParams): Promise<boolean> {
@@ -32,7 +32,7 @@ export async function sendTtsResponseForSession({
     const prepared = await prepareTtsResponseForSession({
       sessionId,
       text,
-      consumeResponseMode: consumeResponseModeImpl,
+      getResponseMode: getResponseModeImpl,
       isTtsConfigured,
       synthesizeSpeech,
     });
