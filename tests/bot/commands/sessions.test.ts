@@ -586,6 +586,35 @@ describe("bot/commands/sessions", () => {
     expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
   });
 
+  it("still sends the empty notice when the first history page fails", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+    mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock.mockResolvedValueOnce({
+      data: null,
+      error: { message: "page failed" },
+    });
+
+    startInteractionForTest(container.interactionManager, {
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    const ctx = createCallbackContext("session:session-1", 456);
+    await handleSessionSelect(ctx, createDeps());
+
+    const sent = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => String(call[1]),
+    );
+    expect(sent).toContain(t("sessions.preview.empty"));
+  });
+
   it("does not show an in-flight reply when session status cannot be read", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
       data: createSession(0),
@@ -635,7 +664,7 @@ describe("bot/commands/sessions", () => {
     expect(sent.some((text) => text.includes("the prompt"))).toBe(true);
   });
 
-  it("sends the empty notice when a later history page fails", async () => {
+  it("keeps the loaded page when a later history page fails", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
       data: createSession(0),
       error: null,
@@ -668,8 +697,8 @@ describe("bot/commands/sessions", () => {
     const sent = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
       String(call[1]),
     );
-    expect(sent).toContain(t("sessions.preview.empty"));
-    expect(sent.some((text) => text.includes("only a prompt"))).toBe(false);
+    expect(sent.some((text) => text.includes("only a prompt"))).toBe(true);
+    expect(sent).not.toContain(t("sessions.preview.empty"));
   });
 
   it("pulls the settings of the selected session before attaching to it", async () => {

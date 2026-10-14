@@ -15,6 +15,7 @@ export async function resetSingletonState(): Promise<void> {
     readyRefreshModule,
     configReloadModule,
     loggerModule,
+    attachServiceModule,
   ] = await Promise.all([
     import("../../src/opencode/events.js"),
     import("../../src/app/services/session-cache-service.js"),
@@ -31,6 +32,7 @@ export async function resetSingletonState(): Promise<void> {
     import("../../src/opencode/ready-refresh.js"),
     import("../../src/app/services/config-reload-service.js"),
     import("../../src/utils/logger.js"),
+    import("../../src/app/services/attach-service.js"),
   ]);
 
   stopEventListening();
@@ -78,5 +80,12 @@ export async function resetSingletonState(): Promise<void> {
     typeof loggerModule.__resetLoggerForTests === "function"
   ) {
     loggerModule.__resetLoggerForTests();
+  }
+
+  if (
+    "__resetAttachRestoreForTests" in attachServiceModule &&
+    typeof attachServiceModule.__resetAttachRestoreForTests === "function"
+  ) {
+    attachServiceModule.__resetAttachRestoreForTests();
   }
 }

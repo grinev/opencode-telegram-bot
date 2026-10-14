@@ -47,6 +47,12 @@ interface PreparedSession {
 
 export type PinnedRenderScheduler = (render: () => Promise<void>) => Promise<void>;
 
+/**
+ * How many recent messages the pinned dashboard reads for its context and changed files.
+ * Fetching the whole history of a long session can be hundreds of MB and stalls every switch.
+ */
+const PINNED_HISTORY_MESSAGES_LIMIT = 100;
+
 export class PinnedMessageManager {
   private api: Api | null = null;
   private chatId: number | null = null;
@@ -149,7 +155,11 @@ export class PinnedMessageManager {
         this.state.changedFiles = values?.changedFiles ?? [];
       }
       this.commitSessionIdentity(sessionId, sessionTitle);
-      this.state.messageId = null;
+      if (this.state.messageId) {
+        // Keep the dashboard being replaced tracked as a leftover: the specific unpin in
+        // showPreparedSession needs its id, and unpinAllChatMessages is heavily rate-limited.
+        this.parkLeftoverDashboard(this.state.messageId);
+      }
 
       await this.refreshProjectMetadata();
       await this.fetchContextLimit();
@@ -345,12 +355,15 @@ export class PinnedMessageManager {
    * Load context token usage from session history
    */
   async loadContextFromHistory(sessionId: string, directory: string): Promise<void> {
-    const history = await this.fetchSessionHistory(sessionId, directory);
+    const [history, sessionCost] = await Promise.all([
+      this.fetchSessionHistory(sessionId, directory),
+      this.fetchSessionCost(sessionId, directory),
+    ]);
     if (!history) {
       return;
     }
 
-    const context = this.readContextFromHistory(history);
+    const context = this.readContextFromHistory(history, sessionCost);
     this.state.tokensUsed = context.tokensUsed;
     this.state.cost = context.cost;
     this.state.sessionId = sessionId;
@@ -372,6 +385,7 @@ export class PinnedMessageManager {
       const { data: messagesData, error } = await opencodeClient.session.messages({
         sessionID: sessionId,
         directory,
+        limit: PINNED_HISTORY_MESSAGES_LIMIT,
       });
 
       if (error || !messagesData) {
@@ -394,11 +408,33 @@ export class PinnedMessageManager {
     }
   }
 
+  private async fetchSessionCost(sessionId: string, directory: string): Promise<number | null> {
+    try {
+      const { data, error } = await opencodeClient.session.get({
+        sessionID: sessionId,
+        directory,
+      });
+      if (error || !data) {
+        return null;
+      }
+
+      // The session's cumulative cost; older servers may not report it.
+      return typeof data.cost === "number" ? data.cost : null;
+    } catch (err) {
+      logger.debug("[PinnedManager] Could not load the session cost:", err);
+      return null;
+    }
+  }
+
   /**
-   * The latest measured context size and the total cost in a session's history.
-   * Context = input + cache.read (cache.read contains previously cached context).
+   * The latest measured context size and the cost to show for a session.
+   * Context = input + cache.read (cache.read contains previously cached context); the cost
+   * prefers the session's cumulative value and falls back to summing the loaded window.
    */
-  private readContextFromHistory(history: SessionHistory): { tokensUsed: number; cost: number } {
+  private readContextFromHistory(
+    history: SessionHistory,
+    sessionCost: number | null,
+  ): { tokensUsed: number; cost: number } {
     let latestContextSize = 0;
     let latestContextCreated = Number.NEGATIVE_INFINITY;
     let totalCost = 0;
@@ -442,7 +478,12 @@ export class PinnedMessageManager {
       }
     });
 
-    return { tokensUsed: latestContextSize, cost: totalCost };
+    return {
+      tokensUsed: latestContextSize,
+      // The session's own cumulative cost when the server reports it; the window sum is only
+      // a fallback, because the history fetch is limited to the newest messages.
+      cost: sessionCost ?? totalCost,
+    };
   }
 
   /**
@@ -645,9 +686,10 @@ export class PinnedMessageManager {
       return { context: null, changedFiles: null };
     }
 
-    const [history, diff] = await Promise.all([
+    const [history, diff, sessionCost] = await Promise.all([
       this.fetchSessionHistory(sessionId, directory),
       this.fetchSessionDiff(sessionId, directory),
+      this.fetchSessionCost(sessionId, directory),
     ]);
 
     let changedFiles: FileChange[] | null = null;
@@ -666,7 +708,7 @@ export class PinnedMessageManager {
     }
 
     return {
-      context: history ? this.readContextFromHistory(history) : null,
+      context: history ? this.readContextFromHistory(history, sessionCost) : null,
       changedFiles,
     };
   }
@@ -1166,6 +1208,11 @@ export class PinnedMessageManager {
   }
 
   private parkLeftoverDashboard(messageId: number): void {
+    if (this.leftoverUnpinMessageId !== null && this.leftoverUnpinMessageId !== messageId) {
+      logger.warn(
+        `[PinnedManager] Replacing parked dashboard ${this.leftoverUnpinMessageId} with ${messageId}; the older message is no longer tracked`,
+      );
+    }
     this.leftoverUnpinMessageId = messageId;
     this.state.messageId = null;
     this.lastRenderedMessageText = null;
@@ -1325,14 +1372,10 @@ export class PinnedMessageManager {
     }
 
     try {
-      // Unpin all messages (ensures clean state)
-      await this.api.unpinAllChatMessages(this.chatId).catch(() => {});
-
-      this.state.messageId = null;
-      this.lastRenderedMessageText = null;
-      this.pendingUpdate = false;
-      this.pendingForceUpdate = false;
-      clearPinnedMessageId();
+      // Unpin only the message this bot owns: Telegram rate-limits unpinAllChatMessages
+      // hard, so it stalls every switch once a couple of them land close together.
+      // No known dashboard means there is nothing to unpin.
+      await this.unpinOwnedDashboard();
 
       logger.debug("[PinnedManager] Unpinned old messages");
     } catch (err) {
@@ -1378,12 +1421,14 @@ export class PinnedMessageManager {
 
     try {
       if (getPinnedDashboardEnabled()) {
-        await this.api.unpinAllChatMessages(this.chatId).catch(() => {});
+        // Specific unpin: unpinAllChatMessages is heavily rate-limited. A failed unpin is
+        // parked for a later retry, and the reset below still runs.
+        await this.dropOwnedDashboardQuietly();
       }
 
       this.resetClearedSessionState();
-      this.leftoverUnpinMessageId = parkedLeftover;
-      if (!parkedLeftover) {
+      this.leftoverUnpinMessageId = this.leftoverUnpinMessageId ?? parkedLeftover;
+      if (!this.leftoverUnpinMessageId) {
         clearPinnedMessageId();
       }
 

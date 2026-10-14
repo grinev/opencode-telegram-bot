@@ -130,6 +130,39 @@ describe("pinned/manager", () => {
   });
 
   describe("loadContextFromHistory", () => {
+    it("reads only the recent history so large sessions do not stall the switch", async () => {
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+
+      expect(mocked.opencodeClient.session.messages).toHaveBeenCalledWith({
+        sessionID: "ses-1",
+        directory: "D:/repo",
+        limit: 100,
+      });
+    });
+
+    it("prefers the session's cumulative cost over the loaded window", async () => {
+      mocked.opencodeClient.session.messages.mockResolvedValue({
+        data: [
+          {
+            info: {
+              role: "assistant",
+              time: { created: 200 },
+              tokens: { input: 300, cache: { read: 100 } },
+              cost: 0.5,
+            },
+            parts: [],
+          },
+        ],
+      });
+      mocked.opencodeClient.session.get.mockResolvedValue({
+        data: { id: "ses-1", cost: 12.5 },
+      });
+
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+
+      expect(pinnedMessageManager.getState().cost).toBeCloseTo(12.5);
+    });
+
     it("restores the latest non-summary non-zero context instead of the historical peak", async () => {
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
       mocked.opencodeClient.session.messages.mockResolvedValue({
@@ -1057,13 +1090,15 @@ describe("pinned/manager", () => {
   describe("clear", () => {
     it("unpins the message and drops the session state", async () => {
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+      fakeApi.unpinChatMessage.mockClear();
       fakeApi.unpinAllChatMessages.mockClear();
       mocked.clearPinnedMessageId.mockClear();
 
       await pinnedMessageManager.clear();
 
-      expect(fakeApi.unpinAllChatMessages).toHaveBeenCalledWith(123);
-      expect(mocked.clearPinnedMessageId).toHaveBeenCalledTimes(1);
+      expect(fakeApi.unpinChatMessage).toHaveBeenCalledWith(123, 999);
+      expect(fakeApi.unpinAllChatMessages).not.toHaveBeenCalled();
+      expect(mocked.clearPinnedMessageId).toHaveBeenCalled();
       expect(pinnedMessageManager.getState()).toMatchObject({
         messageId: null,
         sessionId: null,
@@ -1074,15 +1109,46 @@ describe("pinned/manager", () => {
       });
     });
 
+    it("resets the session state when the clear unpin fails", async () => {
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+      fakeApi.unpinChatMessage.mockRejectedValueOnce(new Error("Bad Request: too many requests"));
+
+      await pinnedMessageManager.clear();
+
+      expect(fakeApi.unpinChatMessage).toHaveBeenCalledWith(123, 999);
+      expect(pinnedMessageManager.getState()).toMatchObject({
+        messageId: null,
+        sessionId: null,
+        sessionTitle: "new session",
+      });
+    });
+
     it("resets state without touching Telegram when not initialized", async () => {
       pinnedMessageManager = new PinnedMessageManager();
+      fakeApi.unpinChatMessage.mockClear();
       fakeApi.unpinAllChatMessages.mockClear();
 
       await pinnedMessageManager.clear();
 
       expect(pinnedMessageManager.isInitialized()).toBe(false);
+      expect(fakeApi.unpinChatMessage).not.toHaveBeenCalled();
       expect(fakeApi.unpinAllChatMessages).not.toHaveBeenCalled();
       expect(mocked.clearPinnedMessageId).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("session switch unpin", () => {
+    it("unpins only the owned dashboard before pinning the next one", async () => {
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+      fakeApi.unpinChatMessage.mockClear();
+      fakeApi.unpinAllChatMessages.mockClear();
+      fakeApi.sendMessage.mockClear();
+
+      await pinnedMessageManager.onSessionChange("ses-2", "Other Session");
+
+      expect(fakeApi.unpinChatMessage).toHaveBeenCalledWith(123, 999);
+      expect(fakeApi.unpinAllChatMessages).not.toHaveBeenCalled();
+      expect(fakeApi.sendMessage).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1094,6 +1160,7 @@ describe("pinned/manager", () => {
 
       expect(fakeApi.sendMessage).not.toHaveBeenCalled();
       expect(fakeApi.pinChatMessage).not.toHaveBeenCalled();
+      expect(fakeApi.unpinChatMessage).not.toHaveBeenCalled();
       expect(fakeApi.unpinAllChatMessages).not.toHaveBeenCalled();
       expect(fakeApi.editMessageText).not.toHaveBeenCalled();
     });
@@ -1150,13 +1217,15 @@ describe("pinned/manager", () => {
       expect(mocked.clearPinnedMessageId).toHaveBeenCalled();
     });
 
-    it("does not unpin-all on clear when off", async () => {
+    it("unpins only the owned dashboard on clear when off", async () => {
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+      fakeApi.unpinChatMessage.mockClear();
       fakeApi.unpinAllChatMessages.mockClear();
       mocked.getPinnedDashboardEnabled.mockReturnValue(false);
 
       await pinnedMessageManager.clear();
 
+      expect(fakeApi.unpinChatMessage).toHaveBeenCalledWith(123, 999);
       expect(fakeApi.unpinAllChatMessages).not.toHaveBeenCalled();
     });
 
