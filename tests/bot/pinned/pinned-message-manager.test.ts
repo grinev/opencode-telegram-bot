@@ -130,6 +130,39 @@ describe("pinned/manager", () => {
   });
 
   describe("loadContextFromHistory", () => {
+    it("reads only the recent history so large sessions do not stall the switch", async () => {
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+
+      expect(mocked.opencodeClient.session.messages).toHaveBeenCalledWith({
+        sessionID: "ses-1",
+        directory: "D:/repo",
+        limit: 100,
+      });
+    });
+
+    it("prefers the session's cumulative cost over the loaded window", async () => {
+      mocked.opencodeClient.session.messages.mockResolvedValue({
+        data: [
+          {
+            info: {
+              role: "assistant",
+              time: { created: 200 },
+              tokens: { input: 300, cache: { read: 100 } },
+              cost: 0.5,
+            },
+            parts: [],
+          },
+        ],
+      });
+      mocked.opencodeClient.session.get.mockResolvedValue({
+        data: { id: "ses-1", cost: 12.5 },
+      });
+
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+
+      expect(pinnedMessageManager.getState().cost).toBeCloseTo(12.5);
+    });
+
     it("restores the latest non-summary non-zero context instead of the historical peak", async () => {
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
       mocked.opencodeClient.session.messages.mockResolvedValue({
