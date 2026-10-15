@@ -163,6 +163,33 @@ describe("pinned/manager", () => {
       expect(pinnedMessageManager.getState().cost).toBeCloseTo(12.5);
     });
 
+    it("keeps the previous cost when the session cost read fails on a same-session refresh", async () => {
+      mocked.opencodeClient.session.get.mockResolvedValue({ data: { id: "ses-1", cost: 12.5 } });
+      await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
+
+      mocked.opencodeClient.session.get.mockResolvedValue({
+        data: null,
+        error: { message: "boom" },
+      });
+      mocked.opencodeClient.session.messages.mockResolvedValue({
+        data: [
+          {
+            info: {
+              role: "assistant",
+              time: { created: 200 },
+              tokens: { input: 300, cache: { read: 100 } },
+              cost: 0.5,
+            },
+            parts: [],
+          },
+        ],
+      });
+
+      await pinnedMessageManager.refreshSessionValues();
+
+      expect(pinnedMessageManager.getState().cost).toBeCloseTo(12.5);
+    });
+
     it("restores the latest non-summary non-zero context instead of the historical peak", async () => {
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
       mocked.opencodeClient.session.messages.mockResolvedValue({

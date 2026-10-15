@@ -363,7 +363,11 @@ export class PinnedMessageManager {
       return;
     }
 
-    const context = this.readContextFromHistory(history, sessionCost);
+    const context = this.readContextFromHistory(
+      history,
+      sessionCost,
+      this.state.sessionId === sessionId ? (this.state.cost ?? null) : null,
+    );
     this.state.tokensUsed = context.tokensUsed;
     this.state.cost = context.cost;
     this.state.sessionId = sessionId;
@@ -434,6 +438,7 @@ export class PinnedMessageManager {
   private readContextFromHistory(
     history: SessionHistory,
     sessionCost: number | null,
+    previousCost: number | null,
   ): { tokensUsed: number; cost: number } {
     let latestContextSize = 0;
     let latestContextCreated = Number.NEGATIVE_INFINITY;
@@ -480,9 +485,10 @@ export class PinnedMessageManager {
 
     return {
       tokensUsed: latestContextSize,
-      // The session's own cumulative cost when the server reports it; the window sum is only
-      // a fallback, because the history fetch is limited to the newest messages.
-      cost: sessionCost ?? totalCost,
+      // The session's own cumulative cost when the server reports it. When it does not, never
+      // drop below the previous value for the same session or the loaded window: a transient
+      // read failure must not shrink the shown total on long sessions.
+      cost: sessionCost ?? Math.max(previousCost ?? 0, totalCost),
     };
   }
 
@@ -708,7 +714,13 @@ export class PinnedMessageManager {
     }
 
     return {
-      context: history ? this.readContextFromHistory(history, sessionCost) : null,
+      context: history
+        ? this.readContextFromHistory(
+            history,
+            sessionCost,
+            this.state.sessionId === sessionId ? (this.state.cost ?? null) : null,
+          )
+        : null,
       changedFiles,
     };
   }
