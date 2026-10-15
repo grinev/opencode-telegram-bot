@@ -149,7 +149,11 @@ export class PinnedMessageManager {
         this.state.changedFiles = values?.changedFiles ?? [];
       }
       this.commitSessionIdentity(sessionId, sessionTitle);
-      this.state.messageId = null;
+      if (this.state.messageId) {
+        // Keep the dashboard being replaced tracked as a leftover: the specific unpin in
+        // showPreparedSession needs its id, and unpinAllChatMessages is heavily rate-limited.
+        this.parkLeftoverDashboard(this.state.messageId);
+      }
 
       await this.refreshProjectMetadata();
       await this.fetchContextLimit();
@@ -1166,6 +1170,11 @@ export class PinnedMessageManager {
   }
 
   private parkLeftoverDashboard(messageId: number): void {
+    if (this.leftoverUnpinMessageId !== null && this.leftoverUnpinMessageId !== messageId) {
+      logger.warn(
+        `[PinnedManager] Replacing parked dashboard ${this.leftoverUnpinMessageId} with ${messageId}; the older message is no longer tracked`,
+      );
+    }
     this.leftoverUnpinMessageId = messageId;
     this.state.messageId = null;
     this.lastRenderedMessageText = null;
@@ -1325,14 +1334,10 @@ export class PinnedMessageManager {
     }
 
     try {
-      // Unpin all messages (ensures clean state)
-      await this.api.unpinAllChatMessages(this.chatId).catch(() => {});
-
-      this.state.messageId = null;
-      this.lastRenderedMessageText = null;
-      this.pendingUpdate = false;
-      this.pendingForceUpdate = false;
-      clearPinnedMessageId();
+      // Unpin only the message this bot owns: Telegram rate-limits unpinAllChatMessages
+      // hard, so it stalls every switch once a couple of them land close together.
+      // No known dashboard means there is nothing to unpin.
+      await this.unpinOwnedDashboard();
 
       logger.debug("[PinnedManager] Unpinned old messages");
     } catch (err) {
@@ -1378,12 +1383,14 @@ export class PinnedMessageManager {
 
     try {
       if (getPinnedDashboardEnabled()) {
-        await this.api.unpinAllChatMessages(this.chatId).catch(() => {});
+        // Specific unpin: unpinAllChatMessages is heavily rate-limited. A failed unpin is
+        // parked for a later retry, and the reset below still runs.
+        await this.dropOwnedDashboardQuietly();
       }
 
       this.resetClearedSessionState();
-      this.leftoverUnpinMessageId = parkedLeftover;
-      if (!parkedLeftover) {
+      this.leftoverUnpinMessageId = this.leftoverUnpinMessageId ?? parkedLeftover;
+      if (!this.leftoverUnpinMessageId) {
         clearPinnedMessageId();
       }
 
