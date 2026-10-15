@@ -152,7 +152,7 @@ export class PinnedMessageManager {
       if (this.state.messageId) {
         // Keep the dashboard being replaced tracked as a leftover: the specific unpin in
         // showPreparedSession needs its id, and unpinAllChatMessages is heavily rate-limited.
-        this.parkLeftoverDashboard(this.state.messageId);
+        await this.parkLeftoverDashboard(this.state.messageId);
       }
 
       await this.refreshProjectMetadata();
@@ -1034,8 +1034,8 @@ export class PinnedMessageManager {
     }
 
     if (this.leftoverUnpinMessageId) {
-      await this.unpinMessageOrThrow(this.leftoverUnpinMessageId);
-      this.forgetOwnedDashboard();
+      // Retires the parked dashboard, and the held one too when a failed unpin left both.
+      await this.unpinOwnedDashboard();
     }
 
     const session = getCurrentSession();
@@ -1095,8 +1095,9 @@ export class PinnedMessageManager {
   }
 
   private async unpinOwnedDashboard(): Promise<void> {
-    const messageId = this.state.messageId ?? this.leftoverUnpinMessageId;
-    if (!messageId) {
+    const messageId = this.state.messageId;
+    const leftoverId = this.leftoverUnpinMessageId;
+    if (!messageId && !leftoverId) {
       return;
     }
 
@@ -1105,7 +1106,12 @@ export class PinnedMessageManager {
       return;
     }
 
-    await this.unpinMessageOrThrow(messageId);
+    if (messageId) {
+      await this.unpinMessageOrThrow(messageId);
+    }
+    if (leftoverId && leftoverId !== messageId) {
+      await this.unpinMessageOrThrow(leftoverId);
+    }
     this.forgetOwnedDashboard();
   }
 
@@ -1152,7 +1158,7 @@ export class PinnedMessageManager {
     }
 
     if (!this.api || !this.chatId) {
-      this.parkLeftoverDashboard(messageId);
+      await this.parkLeftoverDashboard(messageId);
       return;
     }
 
@@ -1161,7 +1167,7 @@ export class PinnedMessageManager {
     } catch (err) {
       if (!this.isMessageMissingError(err)) {
         logger.warn("[PinnedManager] Could not unpin leftover dashboard:", err);
-        this.parkLeftoverDashboard(messageId);
+        await this.parkLeftoverDashboard(messageId);
         return;
       }
     }
@@ -1169,11 +1175,19 @@ export class PinnedMessageManager {
     this.forgetOwnedDashboard();
   }
 
-  private parkLeftoverDashboard(messageId: number): void {
-    if (this.leftoverUnpinMessageId !== null && this.leftoverUnpinMessageId !== messageId) {
-      logger.warn(
-        `[PinnedManager] Replacing parked dashboard ${this.leftoverUnpinMessageId} with ${messageId}; the older message is no longer tracked`,
-      );
+  private async parkLeftoverDashboard(messageId: number): Promise<void> {
+    const previousLeftoverId = this.leftoverUnpinMessageId;
+    if (previousLeftoverId !== null && previousLeftoverId !== messageId) {
+      // Retire the previously parked dashboard before its reference is replaced, so a failed
+      // unpin cannot leave a pinned message the bot no longer tracks.
+      try {
+        await this.unpinMessageOrThrow(previousLeftoverId);
+      } catch (err) {
+        logger.warn(
+          `[PinnedManager] Replacing parked dashboard ${previousLeftoverId} with ${messageId}; the older message is no longer tracked:`,
+          err,
+        );
+      }
     }
     this.leftoverUnpinMessageId = messageId;
     this.state.messageId = null;
@@ -1207,6 +1221,11 @@ export class PinnedMessageManager {
       // Send new message
       const sentMessage = await this.api.sendMessage(this.chatId, text);
 
+      if (this.state.messageId) {
+        // A dashboard from an interrupted flow is still pinned: keep its id tracked so the
+        // next unpin removes it instead of losing the pin.
+        await this.parkLeftoverDashboard(this.state.messageId);
+      }
       this.state.messageId = sentMessage.message_id;
       this.state.chatId = this.chatId;
       this.state.lastUpdated = Date.now();
@@ -1371,6 +1390,7 @@ export class PinnedMessageManager {
     }
 
     const parkedLeftover = this.leftoverUnpinMessageId;
+    const dropTarget = this.state.messageId ?? parkedLeftover;
 
     if (!this.api || !this.chatId) {
       this.resetClearedSessionState();
@@ -1389,7 +1409,10 @@ export class PinnedMessageManager {
       }
 
       this.resetClearedSessionState();
-      this.leftoverUnpinMessageId = this.leftoverUnpinMessageId ?? parkedLeftover;
+      // The drop unpins and forgets the dashboard it targeted; a parked message it did not
+      // touch stays tracked, but one it just unpinned must not come back.
+      this.leftoverUnpinMessageId =
+        this.leftoverUnpinMessageId ?? (parkedLeftover !== dropTarget ? parkedLeftover : null);
       if (!this.leftoverUnpinMessageId) {
         clearPinnedMessageId();
       }
