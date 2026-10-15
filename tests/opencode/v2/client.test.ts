@@ -323,6 +323,25 @@ describe("opencode/v2/client", () => {
     ]);
   });
 
+  it("caps the message request at the server's maximum page size", async () => {
+    fake.client.message.list.mockResolvedValue({ data: [], cursor: {} });
+    const client = createClient();
+
+    await client.session.messages({ sessionID: "ses-1", limit: 100 });
+    expect(fake.client.message.list).toHaveBeenLastCalledWith({
+      sessionID: "ses-1",
+      limit: 200,
+      order: "desc",
+    });
+
+    await client.session.messages({ sessionID: "ses-1", limit: 20 });
+    expect(fake.client.message.list).toHaveBeenLastCalledWith({
+      sessionID: "ses-1",
+      limit: 60,
+      order: "desc",
+    });
+  });
+
   it("runs a skill through a prompt and other commands through the command endpoint", async () => {
     fake.client.skill.list.mockResolvedValue({ data: [{ id: "review", name: "Review" }] });
     const client = createClient();

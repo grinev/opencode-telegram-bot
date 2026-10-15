@@ -237,7 +237,11 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
   async function listMessages(sessionID: string, limit?: number) {
     if (limit !== undefined) {
       // Other entry kinds (idle markers, model switches) share the page, so over-fetch.
-      const page = await client.message.list({ sessionID, limit: limit * 3, order: "desc" });
+      const page = await client.message.list({
+        sessionID,
+        limit: Math.min(limit * 3, MESSAGE_PAGE_SIZE),
+        order: "desc",
+      });
       return [...page.data].reverse();
     }
     const all = [];
