@@ -416,7 +416,9 @@ async function loadSessionPickMessages(
 
       if (error || !data) {
         logger.warn("[Sessions] Failed to fetch session messages for pick:", error);
-        return null;
+        // Keep the pages already loaded: a failing cursor must not turn a readable
+        // transcript into "No recent messages".
+        return loaded.length > 0 ? loaded : null;
       }
 
       const pageMessages = data as SessionPickMessage[];
@@ -456,7 +458,7 @@ async function loadSessionPickMessages(
     }
   } catch (err) {
     logger.error("[Sessions] Error loading session messages for pick:", err);
-    return null;
+    return loaded.length > 0 ? loaded : null;
   }
 }
 
