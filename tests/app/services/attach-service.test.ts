@@ -451,6 +451,36 @@ describe("attach/service", () => {
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledTimes(1);
   });
 
+  it("retries after joining a restore that failed", async () => {
+    let releaseHealth: () => void = () => {};
+    mocked.healthMock.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          releaseHealth = () => reject(new Error("fetch failed"));
+        }),
+    );
+
+    const restoreDeps = {
+      ...deps,
+      bot: createBot(),
+      chatId: 777,
+      ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    };
+
+    const first = restoreAttachedCurrentSession(restoreDeps);
+    await vi.waitFor(() => {
+      expect(mocked.healthMock).toHaveBeenCalledTimes(1);
+    });
+    const second = restoreAttachedCurrentSession(restoreDeps);
+
+    releaseHealth();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult).toBe(false);
+    expect(secondResult).toBe(true);
+    expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledTimes(1);
+  });
+
   it("reuses a saved pinned message after restart instead of recreating it", async () => {
     mocked.pinnedGetStateMock.mockReturnValueOnce({
       sessionId: null,
