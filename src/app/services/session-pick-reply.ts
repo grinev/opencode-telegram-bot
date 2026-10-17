@@ -110,6 +110,23 @@ export function findMessageById(
   return messages.find((message) => message.info.id === messageId) ?? null;
 }
 
+/**
+ * The newest user input the transcript does not already cover: a message created after the
+ * shown reply started, still waiting for its own reply. Compared by time rather than by the
+ * reply's parent, because the V2 adapter carries no parent link.
+ */
+export function findPendingUserPrompt(
+  messages: SessionPickMessage[],
+  shownReplyCreated: number,
+): SessionPickMessage | null {
+  const latest = findLatestUserPrompt(messages);
+  if (!latest) {
+    return null;
+  }
+
+  return (latest.info.time?.created ?? 0) > shownReplyCreated ? latest : null;
+}
+
 export function buildSessionPickQuote(message: SessionPickMessage): QuotedNotification | null {
   const text = extractText(message.parts);
   const body = text ?? fileLines(message.parts).join("\n");

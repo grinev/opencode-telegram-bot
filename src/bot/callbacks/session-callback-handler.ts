@@ -28,8 +28,10 @@ import {
   findEligibleReply,
   findLatestUserPrompt,
   findMessageById,
+  findPendingUserPrompt,
   type SessionPickMessage,
 } from "../../app/services/session-pick-reply.js";
+import type { QuotedNotification } from "../../app/services/quoted-notification.js";
 import {
   buildSessionSelectionMenuView,
   parseBackgroundSessionCallback,
@@ -488,6 +490,25 @@ async function loadParentMessage(
   }
 }
 
+async function sendPickQuote(
+  api: Context["api"],
+  chatId: number,
+  quote: QuotedNotification,
+): Promise<void> {
+  await waitForSessionPickSend();
+  try {
+    await sendBotText({
+      api,
+      chatId,
+      text: quote.text,
+      rawFallbackText: quote.rawFallbackText,
+      format: "markdown_v2",
+    });
+  } catch (err) {
+    logger.error("[Sessions] Failed to send the session pick quote:", err);
+  }
+}
+
 async function sendSessionPickTranscript(
   api: Context["api"],
   chatId: number,
@@ -510,18 +531,7 @@ async function sendSessionPickTranscript(
 
   const quote = quoteSource ? buildSessionPickQuote(quoteSource) : null;
   if (quote) {
-    await waitForSessionPickSend();
-    try {
-      await sendBotText({
-        api,
-        chatId,
-        text: quote.text,
-        rawFallbackText: quote.rawFallbackText,
-        format: "markdown_v2",
-      });
-    } catch (err) {
-      logger.error("[Sessions] Failed to send the last user input quote:", err);
-    }
+    await sendPickQuote(api, chatId, quote);
   } else if (!reply) {
     await waitForSessionPickSend();
     try {
@@ -539,6 +549,14 @@ async function sendSessionPickTranscript(
   for (const part of parts) {
     await waitForSessionPickSend();
     await sendRenderedBotPart({ api, chatId, part, options: AGENT_TEXT_LINK_PREVIEW_OPTIONS });
+  }
+
+  // A message sent after the shown reply started is still waiting for its own reply: show it
+  // too, so the picked session does not look like the message never went through.
+  const pendingPrompt = messages ? findPendingUserPrompt(messages, reply.created) : null;
+  const pendingQuote = pendingPrompt ? buildSessionPickQuote(pendingPrompt) : null;
+  if (pendingQuote) {
+    await sendPickQuote(api, chatId, pendingQuote);
   }
 }
 

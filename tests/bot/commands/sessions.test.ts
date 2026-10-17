@@ -516,7 +516,7 @@ describe("bot/commands/sessions", () => {
     );
   });
 
-  it("pages past a newer prompt and shows the finished reply it answers", async () => {
+  it("pages past a newer prompt and shows the finished reply it answers plus the waiting prompt", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
       data: createSession(0),
       error: null,
@@ -529,7 +529,7 @@ describe("bot/commands/sessions", () => {
       },
       parts:
         index === 19
-          ? [{ type: "text", text: "unanswered prompt" }]
+          ? [{ type: "text", text: "newer prompt" }]
           : [{ type: "tool" }],
     }));
     mocked.sessionMessagesMock.mockReset();
@@ -543,7 +543,7 @@ describe("bot/commands/sessions", () => {
               role: "user",
               time: { created: 100 },
             },
-            parts: [{ type: "text", text: "answered prompt" }],
+            parts: [{ type: "text", text: "older prompt" }],
           },
           {
             info: {
@@ -579,15 +579,17 @@ describe("bot/commands/sessions", () => {
     const sent = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls.map(
       (call) => String(call[1]),
     );
-    expect(sent.some((text) => text.includes("answered prompt"))).toBe(true);
+    expect(sent.some((text) => text.includes("older prompt"))).toBe(true);
     expect(sent.some((text) => text.includes("finished reply"))).toBe(true);
-    expect(sent.some((text) => text.includes("unanswered prompt"))).toBe(false);
     expect(sent.some((text) => text.includes("Recent messages:"))).toBe(false);
+    const replyIndex = sent.findIndex((text) => text.includes("finished reply"));
+    const waitingIndex = sent.findIndex((text) => text.includes("newer prompt"));
+    expect(waitingIndex).toBeGreaterThan(replyIndex);
     expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
 
     const sendCalls = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls;
     const replyCall = sendCalls.find((call) => String(call[1]).includes("finished reply"));
-    const quoteCall = sendCalls.find((call) => String(call[1]).includes("answered prompt"));
+    const quoteCall = sendCalls.find((call) => String(call[1]).includes("older prompt"));
     expect(replyCall?.[2]).toMatchObject({ link_preview_options: { is_disabled: false } });
     expect(quoteCall?.[2]).not.toHaveProperty("link_preview_options");
   });

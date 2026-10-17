@@ -44,7 +44,7 @@ No public inbound ports are required for normal usage.
 ### Session management
 
 - Fetch last N sessions (name + date)
-- Select an existing session, show the last user input as a quote and the last assistant reply in full, then follow its live updates
+- Select an existing session, show the last user input as a quote and the last assistant reply in full (plus the newest input still waiting for its reply), then follow its live updates
 - Browse up to `SESSIONS_LIST_LIMIT` recent root sessions across projects and git worktrees with running, idle, question and permission status (a question or permission request a subagent is waiting on counts for its root session); select one to switch project and follow it, including after detach
 - Switching to an existing session adopts the agent, model, and variant it last ran with
 - Create a new session
