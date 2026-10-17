@@ -10,6 +10,8 @@ const mocked = vi.hoisted(() => ({
   getTtsModeMock: vi.fn(),
   getPromptQueueModeMock: vi.fn(),
   flushPendingPromptMock: vi.fn(),
+  findFileActionsMock: vi.fn(),
+  findRuleActionsMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -30,6 +32,11 @@ vi.mock("../../../src/utils/logger.js", () => ({
 vi.mock("../../../src/bot/handlers/message-merger.js", () => ({
   flushPendingPrompt: mocked.flushPendingPromptMock,
   __resetMessageMergerForTests: vi.fn(),
+}));
+
+vi.mock("../../../src/app/services/file-rules-service.js", () => ({
+  findFileActions: mocked.findFileActionsMock,
+  findRuleActions: mocked.findRuleActionsMock,
 }));
 
 async function loadVoiceModule() {
@@ -222,16 +229,42 @@ describe("bot/handlers/voice-handler", () => {
     });
   });
 
-  it("returns not-configured message and does not process prompt", async () => {
+  it("returns not-configured message and does not process prompt when no file rules exist", async () => {
     const { handleVoiceMessage } = await loadVoiceModule();
     const { ctx, replyMock } = createVoiceContext();
     const { deps, processPromptMock, downloadMock } = createVoiceDeps({
       isSttConfigured: () => false,
     });
+    mocked.findRuleActionsMock.mockReturnValue(null);
 
     await handleVoiceMessage(ctx, deps);
 
     expect(replyMock).toHaveBeenCalledWith(t("stt.not_configured"));
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(processPromptMock).not.toHaveBeenCalled();
+  });
+
+  it("shows file actions menu when STT not configured and rules exist", async () => {
+    const { handleVoiceMessage } = await loadVoiceModule();
+    const { ctx, replyMock } = createVoiceContext();
+    const { deps, processPromptMock, downloadMock } = createVoiceDeps({
+      isSttConfigured: () => false,
+    });
+    mocked.findRuleActionsMock.mockReturnValue([
+      { id: "save_default", label: "💾 Guardar", type: "save", path: "/tmp" },
+      { id: "open", label: "🖥 Abrir", type: "open" },
+    ]);
+
+    await handleVoiceMessage(ctx, deps);
+
+    expect(replyMock).toHaveBeenCalledWith(
+      t("bot.file_unsupported_ask", { filename: "audio.ogg", mimeType: "audio/ogg" }),
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.any(Array),
+        }),
+      }),
+    );
     expect(downloadMock).not.toHaveBeenCalled();
     expect(processPromptMock).not.toHaveBeenCalled();
   });

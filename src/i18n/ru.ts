@@ -120,6 +120,12 @@ export const ru: I18nDictionary = {
   "bot.file_download_error": "🔴 Не удалось скачать файл",
   "bot.file_type_unsupported":
     "⚠️ Этот тип файла не поддерживается. Отправьте изображение, документ (PDF, DOCX, PPTX) или текстовый/кодовый файл.",
+  "bot.file_saved": "✅ Файл сохранён в: {path}",
+  "bot.file_save_error": "❌ Не удалось сохранить файл: {error}",
+  "bot.file_unsupported_ask": "📎 Неизвестный файл: {filename} ({mimeType}). Что вы хотите сделать?",
+  "bot.file_open_error": "❌ Не удалось открыть файл: {error}",
+  "bot.file_exec_error": "❌ Не удалось выполнить: {error}",
+  "bot.file_action_expired": "⌛ Этот файл больше недоступен. Отправьте его снова.",
   "bot.rich_message_media_skipped":
     "⚠️ Пропущено неподдерживаемых медиафрагментов: {count}.",
   "bot.message_type_unsupported": "⚠️ Этот тип сообщения не поддерживается.",

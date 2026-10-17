@@ -1,11 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
 
-const flushPendingPromptMock = vi.hoisted(() => vi.fn());
+const mocked = vi.hoisted(() => ({
+  flushPendingPromptMock: vi.fn(),
+  findFileActionsMock: vi.fn(),
+}));
 
 vi.mock("../../../src/bot/handlers/message-merger.js", () => ({
-  flushPendingPrompt: flushPendingPromptMock,
+  flushPendingPrompt: mocked.flushPendingPromptMock,
   __resetMessageMergerForTests: vi.fn(),
+}));
+
+vi.mock("../../../src/app/services/file-rules-service.js", () => ({
+  findFileActions: mocked.findFileActionsMock,
 }));
 
 import {
@@ -103,7 +110,7 @@ beforeEach(() => {
 describe("bot/handlers/document", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    flushPendingPromptMock.mockClear();
+    mocked.flushPendingPromptMock.mockClear();
     promptQueue.__resetForTests();
   });
 
@@ -193,7 +200,7 @@ describe("bot/handlers/document", () => {
 
       await handleDocumentMessage(ctx, deps);
 
-      expect(flushPendingPromptMock).toHaveBeenCalledWith(777);
+      expect(mocked.flushPendingPromptMock).toHaveBeenCalledWith(777);
       expect(replyMock).toHaveBeenCalledWith(t("bot.file_downloading"));
       expect(downloadMock).toHaveBeenCalled();
       expect(processPromptMock).toHaveBeenCalledWith(
@@ -594,7 +601,7 @@ describe("bot/handlers/document", () => {
   });
 
   describe("unsupported file types", () => {
-    it("shows error for unsupported MIME types", async () => {
+    it("shows error when no file rules exist", async () => {
       const { ctx, replyMock } = createDocumentContext({
         document: {
           file_id: "zip-file-id",
@@ -605,10 +612,41 @@ describe("bot/handlers/document", () => {
         },
       });
       const { deps, processPromptMock, downloadMock } = createDocumentDeps();
+      mocked.findFileActionsMock.mockReturnValue([]);
 
       await handleDocumentMessage(ctx, deps);
 
       expect(replyMock).toHaveBeenCalledWith(t("bot.file_type_unsupported"));
+      expect(downloadMock).not.toHaveBeenCalled();
+      expect(processPromptMock).not.toHaveBeenCalled();
+    });
+
+    it("shows file actions menu when rules exist", async () => {
+      const { ctx, replyMock } = createDocumentContext({
+        document: {
+          file_id: "zip-file-id",
+          file_unique_id: "zip-unique-id",
+          file_name: "archive.zip",
+          mime_type: "application/zip",
+          file_size: 5000,
+        },
+      });
+      const { deps, processPromptMock, downloadMock } = createDocumentDeps();
+      mocked.findFileActionsMock.mockReturnValue([
+        { id: "save_default", label: "💾 Guardar", type: "save", path: "/tmp" },
+        { id: "open", label: "🖥 Abrir", type: "open" },
+      ]);
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(replyMock).toHaveBeenCalledWith(
+        t("bot.file_unsupported_ask", { filename: "archive.zip", mimeType: "application/zip" }),
+        expect.objectContaining({
+          reply_markup: expect.objectContaining({
+            inline_keyboard: expect.any(Array),
+          }),
+        }),
+      );
       expect(downloadMock).not.toHaveBeenCalled();
       expect(processPromptMock).not.toHaveBeenCalled();
     });

@@ -20,6 +20,8 @@ import { buildTelegramFileUrl } from "../../app/services/file-download-service.j
 import { buildQuotedNotification } from "../../app/services/quoted-notification.js";
 import { editBotText } from "../messages/telegram-text.js";
 import { takeArrivalTicket, tryEnqueuePromptIfBusy } from "./prompt-queue-dispatch.js";
+import { findRuleActions } from "../../app/services/file-rules-service.js";
+import { buildCallbackData, rememberFileAction } from "../../app/services/file-action-tokens.js";
 
 const TELEGRAM_DOWNLOAD_TIMEOUT_MS = 30_000;
 const TELEGRAM_DOWNLOAD_MAX_REDIRECTS = 3;
@@ -199,6 +201,34 @@ export async function handleVoiceMessage(ctx: Context, deps: VoiceMessageDeps): 
 
   // Check if STT is configured
   if (!sttConfigured()) {
+    // Only explicit rules apply here: a voice note has no rule of its own, and the
+    // default document actions ("save/open/copy") would hide the "STT not configured"
+    // answer behind a menu that makes no sense for a voice message.
+    const audioMessage = ctx.message?.audio;
+    const mimeType = audioMessage?.mime_type || "audio/ogg";
+    const filename = audioMessage?.file_name || "audio.ogg";
+    const actions = findRuleActions(mimeType, filename);
+
+    if (actions && actions.length > 0) {
+      logger.info(
+        `[Voice] STT not configured, using file rules for ${filename} (${mimeType}): ${actions.map((a) => a.id).join(", ")}`,
+      );
+
+      const token = rememberFileAction({ fileId, filename, mimeType });
+
+      await ctx.reply(t("bot.file_unsupported_ask", { filename, mimeType }), {
+        reply_markup: {
+          inline_keyboard: actions.map((action) => [
+            {
+              text: action.label,
+              callback_data: buildCallbackData(token, action.id),
+            },
+          ]),
+        },
+      });
+      return;
+    }
+
     await ctx.reply(t("stt.not_configured"));
     return;
   }

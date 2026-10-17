@@ -128,6 +128,12 @@ export const es: I18nDictionary = {
   "bot.file_download_error": "🔴 No se pudo descargar el archivo",
   "bot.file_type_unsupported":
     "⚠️ Este tipo de archivo no es compatible. Envía una imagen, documento (PDF, DOCX, PPTX) o archivo de texto/código.",
+  "bot.file_saved": "✅ Archivo guardado en: {path}",
+  "bot.file_save_error": "❌ Error al guardar el archivo: {error}",
+  "bot.file_unsupported_ask": "📎 Archivo no reconocido: {filename} ({mimeType}). ¿Qué quieres hacer?",
+  "bot.file_open_error": "❌ Error al abrir el archivo: {error}",
+  "bot.file_exec_error": "❌ Error al ejecutar: {error}",
+  "bot.file_action_expired": "⌛ Este archivo ya no está disponible. Vuelve a enviarlo.",
   "bot.rich_message_media_skipped":
     "⚠️ Se omitieron {count} elementos multimedia no compatibles.",
   "bot.message_type_unsupported": "⚠️ Este tipo de mensaje no es compatible.",

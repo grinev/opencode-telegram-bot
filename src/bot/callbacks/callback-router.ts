@@ -7,6 +7,7 @@ import { handleAgentSelect } from "./agent-selection-callback-handler.js";
 import { handleCommandsCallback } from "./command-catalog-callback-handler.js";
 import { handleCompactConfirm, handleCompactDetails } from "./context-control-callback-handler.js";
 import { handleLsCallback, handleOpenCallback } from "./file-browser-callback-handler.js";
+import { handleFileActionCallback } from "./file-action-callback-handler.js";
 import { handleInlineMenuCancel } from "./inline-menu-cancel-callback-handler.js";
 import { handleMcpsCallback } from "./mcp-catalog-callback-handler.js";
 import { handleMessagesCallback } from "./message-history-callback-handler.js";
@@ -94,6 +95,14 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
       {
         name: "ls",
         handlers: [(ctx) => handleLsCallback(ctx, container)],
+        errorScope: "interaction",
+      },
+    ],
+    [
+      "file_action",
+      {
+        name: "file_action",
+        handlers: [(ctx) => handleFileActionCallback(ctx)],
         errorScope: "interaction",
       },
     ],

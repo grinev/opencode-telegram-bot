@@ -128,6 +128,12 @@ export const fr: I18nDictionary = {
   "bot.file_download_error": "🔴 Impossible de télécharger le fichier",
   "bot.file_type_unsupported":
     "⚠️ Ce type de fichier n'est pas pris en charge. Envoyez une image, un document (PDF, DOCX, PPTX) ou un fichier texte/code.",
+  "bot.file_saved": "✅ Fichier enregistré dans : {path}",
+  "bot.file_save_error": "❌ Échec de l'enregistrement du fichier : {error}",
+  "bot.file_unsupported_ask": "📎 Fichier non reconnu : {filename} ({mimeType}). Que souhaitez-vous faire ?",
+  "bot.file_open_error": "❌ Échec de l'ouverture du fichier : {error}",
+  "bot.file_exec_error": "❌ Échec de l'exécution : {error}",
+  "bot.file_action_expired": "⌛ Ce fichier n'est plus disponible. Renvoyez-le.",
   "bot.rich_message_media_skipped":
     "⚠️ {count} éléments multimédias non pris en charge ont été ignorés.",
   "bot.message_type_unsupported": "⚠️ Ce type de message n'est pas pris en charge.",

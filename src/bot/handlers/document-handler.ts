@@ -20,6 +20,8 @@ import {
   takeArrivalTicket,
   tryEnqueuePromptIfBusy,
 } from "./prompt-queue-dispatch.js";
+import { findFileActions } from "../../app/services/file-rules-service.js";
+import { buildCallbackData, rememberFileAction } from "../../app/services/file-action-tokens.js";
 
 export interface DocumentHandlerDeps extends ProcessPromptDeps {
   downloadFile?: (
@@ -229,9 +231,41 @@ export async function handleDocumentMessage(
     }
 
     logger.warn(`[Document] Unsupported document MIME type: ${mimeType}, filename=${filename}`);
-    await ctx.reply(t("bot.file_type_unsupported"));
+    await handleUnsupportedDocument(ctx, mimeType, filename, doc.file_id);
   } catch (err) {
     logger.error("[Document] Error handling document message:", err);
     await ctx.reply(t("bot.file_download_error"));
   }
+}
+
+async function handleUnsupportedDocument(
+  ctx: Context,
+  mimeType: string,
+  filename: string,
+  fileId: string,
+): Promise<void> {
+  const actions = findFileActions(mimeType, filename);
+  logger.info(
+    `[Document] File actions for ${filename} (${mimeType}): ${actions.map((a) => a.id).join(", ")}`,
+  );
+
+  if (actions.length === 0) {
+    await ctx.reply(t("bot.file_type_unsupported"));
+    return;
+  }
+
+  // callback_data is capped at 64 bytes by Telegram and a file_id alone is longer than
+  // that, so buttons carry a short token and the payload stays in memory.
+  const token = rememberFileAction({ fileId, filename, mimeType });
+
+  await ctx.reply(t("bot.file_unsupported_ask", { filename, mimeType }), {
+    reply_markup: {
+      inline_keyboard: actions.map((action) => [
+        {
+          text: action.label,
+          callback_data: buildCallbackData(token, action.id),
+        },
+      ]),
+    },
+  });
 }

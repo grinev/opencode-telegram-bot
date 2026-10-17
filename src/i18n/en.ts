@@ -120,6 +120,12 @@ export const en = {
   "bot.file_download_error": "🔴 Failed to download file",
   "bot.file_type_unsupported":
     "⚠️ This file type is not supported. Send an image, document (PDF, DOCX, PPTX), or text/code file.",
+  "bot.file_saved": "✅ File saved to: {path}",
+  "bot.file_save_error": "❌ Failed to save file: {error}",
+  "bot.file_unsupported_ask": "📎 Unrecognized file: {filename} ({mimeType}). What would you like to do?",
+  "bot.file_open_error": "❌ Failed to open file: {error}",
+  "bot.file_exec_error": "❌ Failed to execute: {error}",
+  "bot.file_action_expired": "⌛ This file is no longer available. Send it again.",
   "bot.rich_message_media_skipped": "⚠️ Skipped {count} unsupported media part(s).",
   "bot.message_type_unsupported": "⚠️ This message type is not supported.",
   "bot.media_group_not_processed":

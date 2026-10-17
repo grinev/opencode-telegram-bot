@@ -123,6 +123,12 @@ export const ar: I18nDictionary = {
   "bot.file_download_error": "🔴 تعذر تنزيل الملف",
   "bot.file_type_unsupported":
     "⚠️ نوع الملف غير مدعوم. أرسل صورة أو مستندًا (PDF، DOCX، PPTX) أو ملفًا نصيًا أو برمجيًا.",
+  "bot.file_saved": "✅ تم حفظ الملف في: {path}",
+  "bot.file_save_error": "❌ فشل حفظ الملف: {error}",
+  "bot.file_unsupported_ask": "📎 ملف غير معروف: {filename} ({mimeType}). ماذا تريد أن تفعل؟",
+  "bot.file_open_error": "❌ فشل فتح الملف: {error}",
+  "bot.file_exec_error": "❌ فشل التنفيذ: {error}",
+  "bot.file_action_expired": "⌛ هذا الملف لم يعد متاحًا. أرسله مرة أخرى.",
   "bot.rich_message_media_skipped": "⚠️ تم تخطي {count} من أجزاء الوسائط غير المدعومة.",
   "bot.message_type_unsupported": "⚠️ نوع الرسالة هذا غير مدعوم.",
   "bot.media_group_not_processed":

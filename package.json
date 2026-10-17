@@ -24,6 +24,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "npm run build && npm start",
+    "prepare": "npm run build",
     "release:prepare": "node scripts/release-prepare.mjs",
     "release:rc": "node scripts/release-prepare.mjs rc",
     "release:notes:preview": "node scripts/release-notes-preview.mjs",

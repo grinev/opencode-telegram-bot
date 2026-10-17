@@ -123,6 +123,12 @@ export const tr: I18nDictionary = {
   "bot.file_download_error": "🔴 Dosya indirilemedi",
   "bot.file_type_unsupported":
     "⚠️ Bu dosya türü desteklenmiyor. Bir görsel, belge (PDF, DOCX, PPTX) veya metin/kod dosyası gönderin.",
+  "bot.file_saved": "✅ Dosya kaydedildi: {path}",
+  "bot.file_save_error": "❌ Dosya kaydedilemedi: {error}",
+  "bot.file_unsupported_ask": "📎 Tanınmayan dosya: {filename} ({mimeType}). Ne yapmak istiyorsunuz?",
+  "bot.file_open_error": "❌ Dosya açılamadı: {error}",
+  "bot.file_exec_error": "❌ Çalıştırma hatası: {error}",
+  "bot.file_action_expired": "⌛ Bu dosya artık kullanılamıyor. Tekrar gönderin.",
   "bot.rich_message_media_skipped": "⚠️ Desteklenmeyen {count} medya parçası atlandı.",
   "bot.message_type_unsupported": "⚠️ Bu mesaj türü desteklenmiyor.",
   "bot.media_group_not_processed":

@@ -129,6 +129,12 @@ export const id: I18nDictionary = {
   "bot.file_download_error": "🔴 Gagal mengunduh file",
   "bot.file_type_unsupported":
     "⚠️ Jenis file ini tidak didukung. Kirim gambar, dokumen (PDF, DOCX, PPTX), atau file teks/kode.",
+  "bot.file_saved": "✅ File disimpan di: {path}",
+  "bot.file_save_error": "❌ Gagal menyimpan file: {error}",
+  "bot.file_unsupported_ask": "📎 File tidak dikenali: {filename} ({mimeType}). Apa yang ingin Anda lakukan?",
+  "bot.file_open_error": "❌ Gagal membuka file: {error}",
+  "bot.file_exec_error": "❌ Gagal mengeksekusi: {error}",
+  "bot.file_action_expired": "⌛ File ini tidak lagi tersedia. Kirim ulang.",
   "bot.rich_message_media_skipped": "⚠️ Melewati {count} bagian media yang tidak didukung.",
   "bot.message_type_unsupported": "⚠️ Jenis pesan ini tidak didukung.",
   "bot.media_group_not_processed":

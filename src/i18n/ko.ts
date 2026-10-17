@@ -129,6 +129,12 @@ export const ko: I18nDictionary = {
   "bot.file_download_error": "🔴 파일 다운로드에 실패했습니다",
   "bot.file_type_unsupported":
     "⚠️ 지원되지 않는 파일 형식입니다. 이미지, 문서(PDF, DOCX, PPTX) 또는 텍스트/코드 파일을 보내 주세요.",
+  "bot.file_saved": "✅ 파일이 저장되었습니다: {path}",
+  "bot.file_save_error": "❌ 파일 저장에 실패했습니다: {error}",
+  "bot.file_unsupported_ask": "📎 인식되지 않는 파일: {filename} ({mimeType}). 어떻게 하시겠습니까?",
+  "bot.file_open_error": "❌ 파일 열기에 실패했습니다: {error}",
+  "bot.file_exec_error": "❌ 실행에 실패했습니다: {error}",
+  "bot.file_action_expired": "⌛ 이 파일은 더 이상 사용할 수 없습니다. 다시 보내 주세요.",
   "bot.rich_message_media_skipped": "⚠️ 지원되지 않는 미디어 {count}개를 건너뛰었습니다.",
   "bot.message_type_unsupported": "⚠️ 지원되지 않는 메시지 형식입니다.",
   "bot.media_group_not_processed":
