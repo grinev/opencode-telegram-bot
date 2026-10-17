@@ -516,7 +516,7 @@ describe("bot/commands/sessions", () => {
     );
   });
 
-  it("pages past a newer prompt and shows the finished reply it answers", async () => {
+  it("pages past a newer prompt and shows the finished reply it answers plus the waiting prompt", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
       data: createSession(0),
       error: null,
@@ -581,8 +581,10 @@ describe("bot/commands/sessions", () => {
     );
     expect(sent.some((text) => text.includes("answered prompt"))).toBe(true);
     expect(sent.some((text) => text.includes("finished reply"))).toBe(true);
-    expect(sent.some((text) => text.includes("unanswered prompt"))).toBe(false);
     expect(sent.some((text) => text.includes("Recent messages:"))).toBe(false);
+    const replyIndex = sent.findIndex((text) => text.includes("finished reply"));
+    const waitingIndex = sent.findIndex((text) => text.includes("unanswered prompt"));
+    expect(waitingIndex).toBeGreaterThan(replyIndex);
     expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
   });
 
@@ -876,7 +878,7 @@ describe("bot/commands/sessions", () => {
     expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
   });
 
-  it("sends the full latest assistant response after opening an assistant background notification", async () => {
+  it("sends the last user input and the full assistant response after opening an assistant background notification", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
       data: createSession(0),
       error: null,
@@ -885,9 +887,24 @@ describe("bot/commands/sessions", () => {
     mocked.sessionMessagesMock.mockResolvedValueOnce({
       data: [
         createSessionMessage("assistant", "Old assistant response", 100),
-        createSessionMessage("user", "User prompt should not be forwarded", 200),
+        {
+          info: {
+            id: "user-new",
+            role: "user",
+            time: { created: 200 },
+          },
+          parts: [{ type: "text", text: "the prompt that was answered" }],
+        },
         createSessionMessage("assistant", "Summary should be ignored", 300, true),
-        createSessionMessage("assistant", latestResponse, 400),
+        {
+          info: {
+            id: "assistant-new",
+            role: "assistant",
+            parentID: "user-new",
+            time: { created: 400, completed: 500 },
+          },
+          parts: [{ type: "text", text: latestResponse }],
+        },
       ],
       error: null,
     });
@@ -896,36 +913,24 @@ describe("bot/commands/sessions", () => {
     const handled = await handleBackgroundSessionOpen(ctx, createDeps());
 
     expect(handled).toBe(true);
-    expect(safeBackgroundTaskMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskName: "sessions.sendLatestAssistantResponse",
-      }),
-    );
-
-    const taskOptions = safeBackgroundTaskMock.mock.calls[0]?.[0];
-    if (!taskOptions) {
-      throw new Error("Expected latest assistant response background task");
-    }
-
-    const sendMessageMock = ctx.api.sendMessage as ReturnType<typeof vi.fn>;
-    const previousSendCount = sendMessageMock.mock.calls.length;
-    await taskOptions.task();
-
+    expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
     expect(mocked.sessionMessagesMock).toHaveBeenCalledWith({
       sessionID: "session-1",
       directory: "/repo",
       limit: 20,
     });
 
-    const assistantResponseCalls = sendMessageMock.mock.calls.slice(previousSendCount);
-    expect(assistantResponseCalls.length).toBeGreaterThan(1);
-    expect(assistantResponseCalls.map((call) => call[1]).join("")).toBe(latestResponse);
-    expect(assistantResponseCalls.map((call) => call[1]).join("")).not.toContain(
-      "User prompt should not be forwarded",
+    const sent = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => String(call[1]),
     );
+    const quoteIndex = sent.findIndex((text) => text.includes("the prompt that was answered"));
+    const responseIndex = sent.findIndex((text) => text.includes("Final assistant response."));
+    expect(quoteIndex).toBeGreaterThan(-1);
+    expect(responseIndex).toBeGreaterThan(quoteIndex);
+    expect(sent.slice(responseIndex).join("")).toBe(latestResponse);
   });
 
-  it("does not send preview or latest assistant response for background question notifications", async () => {
+  it("does not send a transcript for background question notifications", async () => {
     mocked.sessionGetMock.mockResolvedValueOnce({
       data: createSession(0),
       error: null,

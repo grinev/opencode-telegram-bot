@@ -11,7 +11,6 @@ import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/i
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { logger } from "../../utils/logger.js";
-import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
 import { formatSessionTitle } from "../../app/formatters/session-title-formatter.js";
@@ -24,8 +23,10 @@ import {
   findEligibleReply,
   findLatestUserPrompt,
   findMessageById,
+  findPendingUserPrompt,
   type SessionPickMessage,
 } from "../../app/services/session-pick-reply.js";
+import type { QuotedNotification } from "../../app/services/quoted-notification.js";
 import {
   buildSessionSelectionMenuView,
   parseBackgroundSessionCallback,
@@ -55,23 +56,11 @@ interface SelectSessionByIdOptions {
   source: "menu" | "background_notification";
   deleteCallbackMessage: boolean;
   removeCallbackReplyMarkup: boolean;
-  postSelectAction: "preview" | "latest_assistant_response" | "none";
+  postSelectAction: "preview" | "none";
 }
 
-const LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT = 20;
 const SESSION_PICK_PAGE_SIZE = 20;
 const SESSION_PICK_SEND_GAP_MS = 1000;
-
-type SessionMessageLike = {
-  info: {
-    role?: string;
-    summary?: boolean;
-    time?: {
-      created?: number;
-    };
-  };
-  parts: Array<{ type: string; text?: string }>;
-};
 
 async function removeCallbackReplyMarkup(ctx: Context): Promise<void> {
   try {
@@ -208,13 +197,6 @@ export async function selectSessionById(
           pickBusy,
         );
       }
-
-      if (options.postSelectAction === "latest_assistant_response") {
-        safeBackgroundTask({
-          taskName: "sessions.sendLatestAssistantResponse",
-          task: () => sendLatestAssistantResponse(ctx.api, chatId, session.id, currentProject.worktree),
-        });
-      }
     }
   } finally {
     if (deliverPick) {
@@ -265,7 +247,7 @@ export async function handleBackgroundSessionOpen(
       source: "background_notification",
       deleteCallbackMessage: false,
       removeCallbackReplyMarkup: true,
-      postSelectAction: payload.kind === "assistant_response" ? "latest_assistant_response" : "none",
+      postSelectAction: payload.kind === "assistant_response" ? "preview" : "none",
     });
   } catch (error) {
     logger.error("[Sessions] Error selecting background session:", error);
@@ -346,23 +328,6 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
   }
 
   return true;
-}
-
-function extractTextParts(
-  parts: Array<{ type: string; text?: string }>,
-  options: { trim?: boolean } = {},
-): string | null {
-  const textParts = parts
-    .filter((part) => part.type === "text" && typeof part.text === "string")
-    .map((part) => part.text as string);
-
-  if (textParts.length === 0) {
-    return null;
-  }
-
-  const text = textParts.join("");
-  const normalizedText = options.trim === false ? text : text.trim();
-  return normalizedText.trim().length > 0 ? normalizedText : null;
 }
 
 function sessionPickSendGapMs(): number {
@@ -484,6 +449,25 @@ async function loadParentMessage(
   }
 }
 
+async function sendPickQuote(
+  api: Context["api"],
+  chatId: number,
+  quote: QuotedNotification,
+): Promise<void> {
+  await waitForSessionPickSend();
+  try {
+    await sendBotText({
+      api,
+      chatId,
+      text: quote.text,
+      rawFallbackText: quote.rawFallbackText,
+      format: "markdown_v2",
+    });
+  } catch (err) {
+    logger.error("[Sessions] Failed to send the session pick quote:", err);
+  }
+}
+
 async function sendSessionPickTranscript(
   api: Context["api"],
   chatId: number,
@@ -506,18 +490,7 @@ async function sendSessionPickTranscript(
 
   const quote = quoteSource ? buildSessionPickQuote(quoteSource) : null;
   if (quote) {
-    await waitForSessionPickSend();
-    try {
-      await sendBotText({
-        api,
-        chatId,
-        text: quote.text,
-        rawFallbackText: quote.rawFallbackText,
-        format: "markdown_v2",
-      });
-    } catch (err) {
-      logger.error("[Sessions] Failed to send the last user input quote:", err);
-    }
+    await sendPickQuote(api, chatId, quote);
   } else if (!reply) {
     await waitForSessionPickSend();
     try {
@@ -536,69 +509,12 @@ async function sendSessionPickTranscript(
     await waitForSessionPickSend();
     await sendRenderedBotPart({ api, chatId, part });
   }
-}
 
-async function loadLatestAssistantResponse(
-  sessionId: string,
-  directory: string,
-): Promise<string | null> {
-  try {
-    const { data: messages, error } = await opencodeClient.session.messages({
-      sessionID: sessionId,
-      directory,
-      limit: LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT,
-    });
-
-    if (error || !messages) {
-      logger.warn("[Sessions] Failed to fetch latest assistant response:", error);
-      return null;
-    }
-
-    const latestResponse = (messages as SessionMessageLike[]).reduce<{
-      text: string;
-      created: number;
-    } | null>((latest, message) => {
-      if (message.info.role !== "assistant" || message.info.summary) {
-        return latest;
-      }
-
-      const text = extractTextParts(message.parts, { trim: false });
-      if (!text) {
-        return latest;
-      }
-
-      const created = message.info.time?.created ?? 0;
-      if (!latest || created >= latest.created) {
-        return { text, created };
-      }
-
-      return latest;
-    }, null);
-
-    return latestResponse?.text ?? null;
-  } catch (err) {
-    logger.error("[Sessions] Error loading latest assistant response:", err);
-    return null;
-  }
-}
-
-async function sendLatestAssistantResponse(
-  api: Context["api"],
-  chatId: number,
-  sessionId: string,
-  directory: string,
-): Promise<void> {
-  const responseText = await loadLatestAssistantResponse(sessionId, directory);
-  if (!responseText) {
-    return;
-  }
-
-  const parts = renderAssistantFinalPartsSafe(responseText);
-  for (const part of parts) {
-    await sendRenderedBotPart({
-      api,
-      chatId,
-      part,
-    });
+  // A message sent after the shown reply started is still waiting for its own reply: show it
+  // too, so the picked session does not look like the message never went through.
+  const pendingPrompt = messages ? findPendingUserPrompt(messages, reply.created) : null;
+  const pendingQuote = pendingPrompt ? buildSessionPickQuote(pendingPrompt) : null;
+  if (pendingQuote) {
+    await sendPickQuote(api, chatId, pendingQuote);
   }
 }

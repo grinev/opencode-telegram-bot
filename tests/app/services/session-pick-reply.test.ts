@@ -3,6 +3,7 @@ import {
   buildSessionPickQuote,
   findEligibleReply,
   findLatestUserPrompt,
+  findPendingUserPrompt,
   type SessionPickMessage,
 } from "../../../src/app/services/session-pick-reply.js";
 
@@ -61,6 +62,38 @@ describe("session pick reply", () => {
 
     expect(findEligibleReply(messages, false)).toBeNull();
     expect(findLatestUserPrompt(messages)?.info.id).toBe("user-1");
+  });
+
+  it("returns the newest prompt when it was created after the shown reply", () => {
+    const messages = [
+      message("user", "answered prompt", 1, { id: "user-old" }),
+      message("assistant", "reply", 2, {
+        id: "assistant-1",
+        parentID: "user-old",
+        time: { created: 2, completed: 3 },
+      }),
+      message("user", "waiting prompt", 4, { id: "user-new" }),
+    ];
+
+    expect(findPendingUserPrompt(messages, 2)?.info.id).toBe("user-new");
+  });
+
+  it("returns nothing when the newest prompt predates the shown reply", () => {
+    const messages = [
+      message("user", "the prompt", 1, { id: "user-1" }),
+      message("assistant", "reply", 2, {
+        id: "assistant-1",
+        parentID: "user-1",
+        time: { created: 2, completed: 3 },
+      }),
+    ];
+
+    expect(findPendingUserPrompt(messages, 2)).toBeNull();
+    expect(findPendingUserPrompt(messages, 3)).toBeNull();
+  });
+
+  it("returns nothing when the session has no user prompt", () => {
+    expect(findPendingUserPrompt([message("assistant", "reply", 1)], 1)).toBeNull();
   });
 
   it("drops an in-flight reply while the session is busy", () => {
