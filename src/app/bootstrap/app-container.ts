@@ -67,13 +67,11 @@ export interface AppContainer {
   resetAggregator(): void;
   /** Clears response streams, tool trackers, background tracking and run state. */
   resetRuntimeStreams(reason: string): void;
-  /** Stops following background operations; their lines and cards stay as they are. */
-  stopBackgroundOperations(reason: string, sessionId?: string): void;
-  /** Stops following background command lines only; subagent cards keep being followed. */
-  stopBackgroundCommands(reason: string, sessionId?: string): void;
+  /** Background commands and subagent cards of the session the bot still follows. */
+  countBackgroundOperations(sessionId: string): number;
   /**
-   * Ends the followed session's running subagent cards as interrupted; a background one
-   * still takes the real end its subagent reports later.
+   * Ends the followed session's running foreground subagent cards as interrupted; a
+   * background one keeps running until its subagent reports its own end.
    */
   interruptSubagents(reason: string): void;
   /**
@@ -151,10 +149,8 @@ export function createAppContainer(): AppContainer {
     resetInteractionError: (scope, reason) => interactionManager.clearErrorScope(scope, reason),
     resetAggregator: () => summaryAggregator.clear(),
     resetRuntimeStreams: (reason) => eventSubscriptionService.clearRuntimeState(reason),
-    stopBackgroundOperations: (reason, sessionId) =>
-      eventSubscriptionService.stopBackgroundOperations(reason, sessionId),
-    stopBackgroundCommands: (reason, sessionId) =>
-      eventSubscriptionService.stopBackgroundCommands(reason, sessionId),
+    countBackgroundOperations: (sessionId) =>
+      eventSubscriptionService.countBackgroundOperations(sessionId),
     interruptSubagents: (reason) => eventSubscriptionService.interruptSubagents(reason),
     endRunLostWithServer: (reason) => eventSubscriptionService.endRunLostWithServer(reason),
 

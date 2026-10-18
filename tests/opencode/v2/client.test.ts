@@ -15,6 +15,7 @@ const fake = vi.hoisted(() => ({
       command: vi.fn(),
       wait: vi.fn(),
       active: vi.fn(),
+      diff: vi.fn(),
       form: { reply: vi.fn(), cancel: vi.fn(), get: vi.fn() },
       inbox: { list: vi.fn(), cancel: vi.fn() },
     },
@@ -150,6 +151,18 @@ describe("opencode/v2/client", () => {
     const result = await createClient().global.health();
 
     expect(isExpectedOpencodeUnavailableError(result.error)).toBe(true);
+  });
+
+  it("returns session diff entries under the file name V1 uses", async () => {
+    fake.client.session.diff.mockResolvedValue([
+      { file: "src/a.ts", patch: "@@", additions: 2, deletions: 1, status: "modified" },
+    ]);
+
+    const result = await createClient().session.diff({ sessionID: "ses-1" });
+
+    expect(result.data).toEqual([
+      { file: "src/a.ts", patch: "@@", additions: 2, deletions: 1, status: "modified" },
+    ]);
   });
 
   it("switches the session model before admitting a prompt with queue delivery", async () => {

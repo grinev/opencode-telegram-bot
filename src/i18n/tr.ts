@@ -278,6 +278,8 @@ export const tr: I18nDictionary = {
     "⚠️ Olay akışı durduruldu, ancak sunucu iptali onaylamadı.\n\n/status ile kontrol edin ve birkaç saniye içinde /abort komutunu tekrar deneyin.",
   "stop.warn_maybe_finished": "⚠️ Olay akışı durduruldu, ancak ajan zaten bitirmiş olabilir.",
   "stop.success": "✅ Ajan işlemi kesildi. Bu çalışmadan başka mesaj gönderilmeyecek.",
+  "stop.success_background_running":
+    "✅ Agent action interrupted.\nBackground operations keep running: {count}\nTheir progress and results will still appear here.",
   "stop.warn_still_busy":
     "⚠️ Sinyal gönderildi, ancak ajan hâlâ meşgul.\n\nOlay akışı zaten kapalı, bu yüzden ara mesaj gönderilmeyecek.",
   "stop.warn_timeout":

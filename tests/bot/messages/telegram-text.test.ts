@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  AGENT_TEXT_LINK_PREVIEW_OPTIONS,
   completeDraftPart,
   editRenderedBotPart,
   editBotText,
@@ -421,6 +422,77 @@ describe("bot/messages/telegram-text", () => {
       ).rejects.toThrow("complete failed");
 
       expect(sendMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("agent text link preview", () => {
+    const options = { disable_notification: true, ...AGENT_TEXT_LINK_PREVIEW_OPTIONS };
+
+    it("drops the preview option from rich sends, edits and draft completions", async () => {
+      const sendMessage = vi.fn();
+      const sendRichMessage = vi.fn().mockResolvedValue({ message_id: 900 });
+      const editMessageText = vi.fn().mockResolvedValue(undefined);
+
+      await sendRenderedBotPart({
+        api: { sendMessage, sendRichMessage },
+        chatId: 100,
+        part: richPart,
+        options,
+      });
+      await editRenderedBotPart({
+        api: { editMessageText },
+        chatId: 100,
+        messageId: 500,
+        part: richPart,
+        options,
+      });
+      await completeDraftPart({
+        api: { sendMessage, sendRichMessage },
+        chatId: 100,
+        part: richPart,
+        options,
+      });
+
+      const richOptions = { disable_notification: true };
+      expect(sendRichMessage).toHaveBeenNthCalledWith(
+        1,
+        100,
+        { blocks: richPart.blocks },
+        richOptions,
+      );
+      expect(editMessageText).toHaveBeenCalledWith(
+        100,
+        500,
+        { blocks: richPart.blocks },
+        richOptions,
+      );
+      expect(sendRichMessage).toHaveBeenNthCalledWith(
+        2,
+        100,
+        { blocks: richPart.blocks },
+        richOptions,
+      );
+    });
+
+    it("keeps the preview option on plain sends and the plain fallback", async () => {
+      const sendMessage = vi.fn().mockResolvedValue({ message_id: 222 });
+      const sendRichMessage = vi.fn().mockRejectedValue(badRequestError("Bad Request: RICH_BLOCK_INVALID"));
+
+      await sendRenderedBotPart({
+        api: { sendMessage, sendRichMessage },
+        chatId: 100,
+        part: plainPart,
+        options,
+      });
+      await sendRenderedBotPart({
+        api: { sendMessage, sendRichMessage },
+        chatId: 100,
+        part: { ...richPart, fallbackText: "Hello raw" },
+        options,
+      });
+
+      expect(sendMessage).toHaveBeenNthCalledWith(1, 100, "plain text", options);
+      expect(sendMessage).toHaveBeenNthCalledWith(2, 100, "Hello raw", options);
     });
   });
 });

@@ -68,6 +68,27 @@ export function shouldRetryTelegramServerError(method: string): boolean {
   return TRANSIENT_RETRY_SAFE_TELEGRAM_METHODS.has(method);
 }
 
+/**
+ * Text the bot composes itself goes out without a link preview. Paths that
+ * carry the agent's text pass AGENT_TEXT_LINK_PREVIEW_OPTIONS to keep it.
+ */
+export function withBotLinkPreviewDefault<P>(method: string, payload: P): P {
+  if (method !== "sendMessage" && method !== "editMessageText") {
+    return payload;
+  }
+
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    typeof Reflect.get(payload, "text") !== "string" ||
+    Reflect.get(payload, "link_preview_options") !== undefined
+  ) {
+    return payload;
+  }
+
+  return { ...payload, link_preview_options: { is_disabled: true } };
+}
+
 function isTelegramApiErrorResponse(response: unknown): response is TelegramApiErrorResponse {
   return (
     typeof response === "object" &&
@@ -139,9 +160,11 @@ export function createBot(
       logger.debug(`[Bot API] sendMessage to chat ${(payload as { chat_id?: number }).chat_id}`);
     }
 
+    const sentPayload = withBotLinkPreviewDefault(method, payload);
+
     try {
       const runCall = async () => {
-        const response = await prev(method, payload, signal);
+        const response = await prev(method, sentPayload, signal);
         if (isTelegramApiErrorResponse(response)) {
           throw new TelegramApiResponseError(response);
         }

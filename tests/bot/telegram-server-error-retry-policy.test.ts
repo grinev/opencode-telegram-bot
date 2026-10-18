@@ -12,7 +12,11 @@ vi.mock("../../src/bot/telegram-client-options.js", () => ({
   createTelegramBotOptions: () => ({ client: { fetch: mocked.fetch } }),
 }));
 
-import { createBot, shouldRetryTelegramServerError } from "../../src/bot/index.js";
+import {
+  createBot,
+  shouldRetryTelegramServerError,
+  withBotLinkPreviewDefault,
+} from "../../src/bot/index.js";
 import { createTestAppContainer } from "../helpers/app-container.js";
 import { telegramOutageNoticeService } from "../../src/app/services/telegram-outage-notice-service.js";
 import { flushTelegramOutageNotices } from "../../src/bot/telegram-outage-notices.js";
@@ -176,5 +180,77 @@ describe("bot Telegram 5xx retry policy", () => {
 
     await expect(bot.api.getWebhookInfo()).rejects.toMatchObject({ error_code: 429 });
     expect(mocked.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("bot link preview default", () => {
+  afterEach(() => {
+    container.cleanupProcess("test");
+    telegramOutageNoticeService.__resetForTests();
+    vi.useRealTimers();
+    mocked.fetch.mockReset();
+  });
+
+  function sentPayload(callIndex: number): Record<string, unknown> {
+    const init = mocked.fetch.mock.calls[callIndex]?.[1] as { body: string };
+    return JSON.parse(init.body) as Record<string, unknown>;
+  }
+
+  it("turns the preview off on a text send or edit that names none", () => {
+    expect(withBotLinkPreviewDefault("sendMessage", { chat_id: 1, text: "a" })).toEqual({
+      chat_id: 1,
+      text: "a",
+      link_preview_options: { is_disabled: true },
+    });
+    expect(
+      withBotLinkPreviewDefault("editMessageText", { chat_id: 1, message_id: 2, text: "a" }),
+    ).toEqual({
+      chat_id: 1,
+      message_id: 2,
+      text: "a",
+      link_preview_options: { is_disabled: true },
+    });
+  });
+
+  it("keeps a preview choice the caller made", () => {
+    const payload = { chat_id: 1, text: "a", link_preview_options: { is_disabled: false } };
+
+    expect(withBotLinkPreviewDefault("sendMessage", payload)).toBe(payload);
+  });
+
+  it("leaves rich edits and other methods alone", () => {
+    const richEdit = { chat_id: 1, message_id: 2, rich_message: { blocks: [] } };
+    const richSend = { chat_id: 1, rich_message: { blocks: [] } };
+    const document = { chat_id: 1, caption: "a" };
+
+    expect(withBotLinkPreviewDefault("editMessageText", richEdit)).toBe(richEdit);
+    expect(withBotLinkPreviewDefault("sendRichMessage", richSend)).toBe(richSend);
+    expect(withBotLinkPreviewDefault("sendDocument", document)).toBe(document);
+  });
+
+  it("sends the bot's text with the preview off, retries included", async () => {
+    vi.useFakeTimers();
+    mocked.fetch
+      .mockResolvedValueOnce(telegramApiResponse(429))
+      .mockResolvedValueOnce(telegramApiResponse(200, { message_id: 1 }));
+    const bot = createBot(container);
+
+    const result = bot.api.sendMessage(123, "🌐 webfetch https://example.com/");
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(result).resolves.toEqual({ message_id: 1 });
+    expect(sentPayload(0).link_preview_options).toEqual({ is_disabled: true });
+    expect(sentPayload(1).link_preview_options).toEqual({ is_disabled: true });
+  });
+
+  it("sends the agent's text with the preview it asked for", async () => {
+    mocked.fetch.mockResolvedValue(telegramApiResponse(200, true));
+    const bot = createBot(container);
+
+    await bot.api.editMessageText(123, 456, "https://example.com/", {
+      link_preview_options: { is_disabled: false },
+    });
+
+    expect(sentPayload(0).link_preview_options).toEqual({ is_disabled: false });
   });
 });

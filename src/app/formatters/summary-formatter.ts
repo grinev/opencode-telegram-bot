@@ -325,6 +325,11 @@ export function formatToolInfo(toolInfo: ToolInfo): string | null {
     details = truncateWithEllipsis(input.command, config.bot.bashToolDisplayMaxLength);
   }
 
+  // Code Mode code is cut like a bash command
+  if (tool === "execute" && input && typeof input.code === "string") {
+    details = truncateWithEllipsis(input.code, config.bot.bashToolDisplayMaxLength);
+  }
+
   if (tool === "apply_patch") {
     details = getFirstPatchFile(toolInfo);
   }
@@ -393,6 +398,26 @@ export function formatCompactToolActivity(toolInfo: ToolInfo, maxLength = 64): s
 
   const formatted = formatCompactToolInfo(toolInfo, maxLength, "").trim();
   return formatted || null;
+}
+
+/** A subagent launch's line: the task it runs, from its description, never from its prompt. */
+export function formatRunningTaskLine(
+  input: { [key: string]: unknown } | undefined,
+  maxLength = 128,
+): string {
+  const label = t("progress.compact.task");
+  const description =
+    typeof input?.description === "string" ? input.description.replace(/\s+/g, " ").trim() : "";
+  if (!description) {
+    return label;
+  }
+
+  const line = `${label}: ${description}`;
+  if (line.length <= maxLength) {
+    return line;
+  }
+
+  return `${line.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
 function hasCompactToolDetails(toolInfo: ToolInfo): boolean {

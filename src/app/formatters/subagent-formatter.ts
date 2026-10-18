@@ -5,7 +5,7 @@ import {
   bucketElapsedMs,
   formatDuration,
 } from "./duration-formatter.js";
-import { formatCompactToolInfo } from "./summary-formatter.js";
+import { formatCompactToolInfo, formatRunningTaskLine } from "./summary-formatter.js";
 import type { SubagentInfo } from "../managers/summary-aggregation-manager.js";
 import type { ToolInfo } from "../managers/summary-aggregation-manager.js";
 
@@ -50,10 +50,10 @@ function formatToolStep(subagent: SubagentInfo): string {
     return "";
   }
 
-  // A nested subagent launch says only that one runs, once its arguments are known.
+  // A nested subagent launch names its task, once its arguments are known.
   if (subagent.currentTool === "task") {
     const hasArguments = Object.keys(subagent.currentToolInput ?? {}).length > 0;
-    return hasArguments ? t("progress.compact.task") : "";
+    return hasArguments ? formatRunningTaskLine(subagent.currentToolInput) : "";
   }
 
   const toolTitle = shouldPreferInputDetails(subagent.currentTool, subagent.currentToolInput)
@@ -131,7 +131,7 @@ function formatSubagentActivity(subagent: SubagentInfo, now: number): string {
 
   // Nothing newer on the line: a nested subagent it launched still runs.
   if (subagent.launchStartedAt !== undefined) {
-    const launchLine = t("progress.compact.task");
+    const launchLine = formatRunningTaskLine({ description: subagent.launchDescription });
     const elapsed = formatToolElapsed(subagent.launchStartedAt, now);
     return elapsed ? appendDuration(launchLine, elapsed) : launchLine;
   }

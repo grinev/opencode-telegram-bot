@@ -70,4 +70,25 @@ describe("bot/events/telegram-event-delivery", () => {
     expect([first.messageId, second.messageId, afterReset.messageId]).toEqual([1, 2, 1]);
     expect(api.sendMessageDraft).toHaveBeenNthCalledWith(2, 42, 2, "two");
   });
+
+  it("keeps the agent's link preview and leaves the bot's text to the default", async () => {
+    const { api, destination } = createDestination();
+    const delivery = new TelegramEventDelivery();
+    const agentPreview = { link_preview_options: { is_disabled: false } };
+
+    await delivery.sendRenderedPart(destination, plainPart("reply"), {
+      disable_notification: true,
+    });
+    await delivery.editRenderedPart(destination, 10, plainPart("reply, edited"));
+    await delivery.completeDraftPart(destination, plainPart("draft reply"));
+    await delivery.sendText(destination, "🌐 webfetch https://example.com/");
+
+    expect(api.sendMessage).toHaveBeenNthCalledWith(1, 42, "reply", {
+      disable_notification: true,
+      ...agentPreview,
+    });
+    expect(api.editMessageText).toHaveBeenCalledWith(42, 10, "reply, edited", agentPreview);
+    expect(api.sendMessage).toHaveBeenNthCalledWith(2, 42, "draft reply", agentPreview);
+    expect(api.sendMessage).toHaveBeenNthCalledWith(3, 42, "🌐 webfetch https://example.com/");
+  });
 });

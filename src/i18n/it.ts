@@ -295,6 +295,8 @@ export const it: I18nDictionary = {
   "stop.warn_maybe_finished":
     "⚠️ Flusso di eventi interrotto, ma l'agente potrebbe aver già terminato.",
   "stop.success": "✅ Azione dell'agente interrotta. Non verranno più inviati messaggi da questa esecuzione.",
+  "stop.success_background_running":
+    "✅ Agent action interrupted.\nBackground operations keep running: {count}\nTheir progress and results will still appear here.",
   "stop.warn_still_busy":
     "⚠️ Segnale inviato, ma l'agente è ancora occupato.\n\nIl flusso di eventi è già disattivato, quindi non verranno inviati messaggi intermedi.",
   "stop.warn_timeout":

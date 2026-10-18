@@ -933,23 +933,24 @@ describe("summary/aggregator", () => {
         expect(lastCards(onSubagent)[0]).toMatchObject({ status: "running" });
       });
 
-      it("keeps a background card followed, ignoring its activity, until its real end", () => {
+      it("leaves a background card running on an interrupt, until its own end", () => {
         const onSubagent = vi.fn();
         summaryAggregator.setOnSubagent(onSubagent);
         startSubagent();
         launchInBackground();
         emitChildTool("call-1");
+        const startedAt = lastCards(onSubagent)[0]!.createdAt as number;
 
         summaryAggregator.interruptSubagents();
-        const interrupted = lastCards(onSubagent)[0]!;
-        expect(interrupted).toMatchObject({ status: "interrupted", background: true });
-
-        const callsAfterInterrupt = onSubagent.mock.calls.length;
+        emitInterruptedIdle("root-session");
         emitChildTool("call-2");
-        emitIdle("root-session");
-        expect(onSubagent.mock.calls).toHaveLength(callsAfterInterrupt);
+        expect(lastCards(onSubagent)[0]).toMatchObject({
+          status: "running",
+          background: true,
+          currentToolCallId: "call-2",
+        });
 
-        vi.spyOn(Date, "now").mockReturnValue((interrupted.finishedAt as number) + 5_000);
+        vi.spyOn(Date, "now").mockReturnValue(startedAt + 75_000);
         try {
           emitIdle("child-session-1");
         } finally {
@@ -958,11 +959,11 @@ describe("summary/aggregator", () => {
 
         expect(lastCards(onSubagent)[0]).toMatchObject({
           status: "completed",
-          finishedAt: (interrupted.finishedAt as number) + 5_000,
+          finishedAt: startedAt + 75_000,
         });
       });
 
-      it("switches an interrupted background card to the failure its subagent reports", () => {
+      it("ends a background card left running with the failure its subagent reports", () => {
         const onSubagent = vi.fn();
         summaryAggregator.setOnSubagent(onSubagent);
         startSubagent();
@@ -974,18 +975,54 @@ describe("summary/aggregator", () => {
         expect(lastCards(onSubagent)[0]).toMatchObject({ status: "error", terminalMessage: "boom" });
       });
 
-      it("keeps an interrupted background card as it is when its subagent is interrupted too", () => {
+      it("ends a background card interrupted once OpenCode reports its subagent interrupted", () => {
         const onSubagent = vi.fn();
         summaryAggregator.setOnSubagent(onSubagent);
         startSubagent();
         launchInBackground();
 
         summaryAggregator.interruptSubagents();
-        const callsAfterInterrupt = onSubagent.mock.calls.length;
         emitInterruptedIdle("child-session-1");
-        emitIdle("child-session-1");
 
-        expect(onSubagent.mock.calls).toHaveLength(callsAfterInterrupt);
+        expect(lastCards(onSubagent)[0]).toMatchObject({
+          status: "interrupted",
+          finishedAt: expect.any(Number),
+        });
+      });
+
+      it("passes on a question a background subagent asks after the parent run is interrupted", async () => {
+        const onQuestion = vi.fn();
+        summaryAggregator.setOnQuestion(onQuestion);
+        startSubagent();
+        launchInBackground();
+        emitInterruptedIdle("root-session");
+        summaryAggregator.interruptSubagents();
+
+        summaryAggregator.processEvent({
+          type: "question.asked",
+          properties: {
+            id: "q-background",
+            sessionID: "child-session-1",
+            questions: [{ header: "Pick", question: "Which?", options: [] }],
+          },
+        } as unknown as Event);
+
+        await vi.waitFor(() => expect(onQuestion).toHaveBeenCalledTimes(1));
+        expect(onQuestion.mock.calls[0]?.[2]).toBe("child-session-1");
+      });
+
+      it("counts the cards still running past the turn", () => {
+        startSubagent();
+        expect(summaryAggregator.countFollowedBackgroundSubagents()).toBe(0);
+
+        launchInBackground();
+        expect(summaryAggregator.countFollowedBackgroundSubagents()).toBe(1);
+
+        summaryAggregator.interruptSubagents();
+        expect(summaryAggregator.countFollowedBackgroundSubagents()).toBe(1);
+
+        emitIdle("child-session-1");
+        expect(summaryAggregator.countFollowedBackgroundSubagents()).toBe(0);
       });
 
       it("does not touch a card that already ended", () => {
@@ -1241,10 +1278,38 @@ describe("summary/aggregator", () => {
         expect(lastCard(onSubagent)).toMatchObject({
           currentTool: undefined,
           launchStartedAt: 1_000,
+          launchDescription: "Again",
         });
 
         emitLaunch("launch-1", "completed");
-        expect(lastCard(onSubagent)).toMatchObject({ launchStartedAt: undefined });
+        expect(lastCard(onSubagent)).toMatchObject({
+          launchStartedAt: undefined,
+          launchDescription: undefined,
+        });
+      });
+
+      it("names the newest open launch's task as its call last reported it", () => {
+        const onSubagent = vi.fn();
+        summaryAggregator.setOnSubagent(onSubagent);
+        startSubagent();
+
+        at(1_000, () => emitLaunch("launch-1", "running", { prompt: "Count" }));
+        expect(lastCard(onSubagent)).toMatchObject({
+          launchStartedAt: 1_000,
+          launchDescription: undefined,
+        });
+
+        at(2_000, () =>
+          emitLaunch("launch-1", "running", { prompt: "Count", description: "Count" }),
+        );
+        expect(lastCard(onSubagent)).toMatchObject({
+          currentToolInput: { prompt: "Count", description: "Count" },
+          launchDescription: "Count",
+        });
+
+        // A later event without it keeps the task the call already named.
+        at(3_000, () => emitLaunch("launch-1", "running", { prompt: "Count" }));
+        expect(lastCard(onSubagent)).toMatchObject({ launchDescription: "Count" });
       });
 
       it("leaves the line to a newer tool when a background launch ends", () => {
@@ -1302,17 +1367,40 @@ describe("summary/aggregator", () => {
         expect(onSubagent.mock.calls).toHaveLength(callsAfterEnd);
       });
 
-      it("ends a held card interrupted on /abort, without waiting for its launch", () => {
+      it("keeps a held card waiting on its launch through /abort", () => {
         const onSubagent = holdParentEnd();
         createSession("nested-session-1", "child-session-1");
 
         summaryAggregator.interruptSubagents();
-        expect(lastCard(onSubagent)).toMatchObject({ status: "interrupted" });
-
-        const callsAfterInterrupt = onSubagent.mock.calls.length;
-        emitLaunch("launch-1", "completed", { prompt: "Count", background: true });
-        expect(onSubagent.mock.calls).toHaveLength(callsAfterInterrupt);
+        expect(lastCard(onSubagent)).toMatchObject({
+          status: "running",
+          waitsOnBackgroundLaunch: true,
+        });
+        expect(summaryAggregator.countFollowedBackgroundSubagents()).toBe(1);
         expect(summaryAggregator.getRootSessionId("nested-session-1")).toBe("root-session");
+
+        at(9_000, () => emitLaunch("launch-1", "completed", { prompt: "Count", background: true }));
+        expect(lastCard(onSubagent)).toMatchObject({ status: "completed", finishedAt: 5_000 });
+      });
+
+      it("shows an interrupted parent's end only once its background launch ends", () => {
+        const onSubagent = vi.fn();
+        summaryAggregator.setOnSubagent(onSubagent);
+        startSubagent();
+        at(1_000, () => emitLaunch("launch-1", "running", { prompt: "Count", background: true }));
+        emitChildTool("call-1");
+
+        at(4_000, () => summaryAggregator.interruptSubagents());
+        expect(lastCard(onSubagent)).toMatchObject({
+          status: "running",
+          currentTool: undefined,
+          launchStartedAt: 1_000,
+          waitsOnBackgroundLaunch: true,
+        });
+
+        emitIdle("root-session");
+        at(9_000, () => emitLaunch("launch-1", "completed", { prompt: "Count", background: true }));
+        expect(lastCard(onSubagent)).toMatchObject({ status: "interrupted", finishedAt: 4_000 });
       });
 
       it("stops following a held card when background operations stop", () => {

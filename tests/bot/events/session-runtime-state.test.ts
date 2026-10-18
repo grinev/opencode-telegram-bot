@@ -174,6 +174,15 @@ describe("bot/events/session-runtime-state", () => {
         "card-fg",
       ]);
     });
+
+    it("counts the background commands of one session, leaving subagent calls to their cards", () => {
+      addBackground("session-1");
+      runtime.runningToolTracker.track("session-1", "call-task", true);
+      runtime.setRunningToolInfo({ ...toolInfo("session-1"), callId: "call-task", tool: "task" });
+      runtime.runningToolTracker.track("session-2", "call-bg-2", true);
+
+      expect(runtime.countBackgroundCommands("session-1")).toBe(1);
+    });
   });
 
   it("keeps a session's entries apart from a same-named call in another session", () => {

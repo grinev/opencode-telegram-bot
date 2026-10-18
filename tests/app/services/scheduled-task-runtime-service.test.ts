@@ -57,6 +57,7 @@ vi.mock("../../../src/app/services/scheduled-task-session-ignore-service.js", ()
 }));
 
 vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
+  AGENT_TEXT_LINK_PREVIEW_OPTIONS: { link_preview_options: { is_disabled: false } },
   sendBotText: mocked.sendBotTextMock,
 }));
 
@@ -208,7 +209,7 @@ describe("app/services/scheduled-task-runtime-service", () => {
       expect.objectContaining({
         chatId: 777,
         format: "markdown_v2",
-        options: { disable_notification: true },
+        options: { disable_notification: true, link_preview_options: { is_disabled: false } },
         text: expect.stringMatching(/Send report[\s\S]*All good/),
       }),
     );

@@ -661,6 +661,60 @@ describe("bot/commands/messages", () => {
     });
   });
 
+  it("replays the forked session's latest reply with its link preview", async () => {
+    container.interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "messages",
+        stage: "detail",
+        messageId: 600,
+        projectDirectory: "D:\\Projects\\Repo",
+        sessionId: "session-1",
+        messages: [{ id: "msg-1", text: "test prompt", created: 1000 }],
+        page: 0,
+        selectedIndex: 0,
+      },
+    });
+    mocked.sessionForkMock.mockResolvedValue({
+      data: { id: "session-2", title: "Forked Session", directory: "D:\\Projects\\Repo" },
+      error: null,
+    });
+    mocked.attachToSessionMock.mockResolvedValue({
+      busy: false,
+      alreadyAttached: false,
+      restoredQuestion: false,
+      restoredPermissions: 0,
+    });
+    mocked.ingestSessionInfoForCacheMock.mockResolvedValue(undefined);
+    mocked.sessionMessagesMock.mockResolvedValue({
+      data: [
+        {
+          info: { id: "assistant-1", role: "assistant", time: { created: 2000 } },
+          parts: [{ type: "text", text: "See https://example.com/" }],
+        },
+      ],
+      error: null,
+    });
+
+    const ctx = createCallbackContext("messages:fork", 600);
+    Object.assign(ctx.api, {
+      sendRichMessage: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error("Bad Request: rich"), { error_code: 400 })),
+    });
+    await handleMessagesCallback(ctx, testDeps);
+
+    const sendMessage = ctx.api.sendMessage as ReturnType<typeof vi.fn>;
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith(
+        777,
+        "See https://example.com/",
+        expect.objectContaining({ link_preview_options: { is_disabled: false } }),
+      );
+    });
+  });
+
   it("handles fork error", async () => {
     const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
     container.interactionManager.start({

@@ -322,8 +322,7 @@ describe("bot/commands/abort", () => {
     function createBackgroundDeps() {
       return {
         ...createDeps(),
-        stopBackgroundCommands: vi.fn(),
-        stopBackgroundOperations: vi.fn(),
+        countBackgroundOperations: vi.fn().mockReturnValue(0),
         interruptSubagents: vi.fn(),
       };
     }
@@ -340,17 +339,22 @@ describe("bot/commands/abort", () => {
       mocked.currentSession = { id: "session-1", title: "Session", directory: "D:/repo" };
     });
 
-    it("stops following background commands before it asks OpenCode to abort", async () => {
+    it("says how many background operations keep running in the success reply", async () => {
       mocked.abortMock.mockResolvedValue({ data: true, error: null });
       mocked.statusMock.mockResolvedValue({ data: { "session-1": { type: "idle" } }, error: null });
+      const editMessageText = vi.fn().mockResolvedValue(undefined);
       const deps = createBackgroundDeps();
+      deps.countBackgroundOperations.mockReturnValue(2);
 
-      await abortCommand(createCtx() as never, deps);
+      await abortCommand(createCtx(editMessageText) as never, deps);
 
-      expect(deps.stopBackgroundCommands).toHaveBeenCalledWith("abort_command", "session-1");
-      expect(defined(deps.stopBackgroundCommands.mock.invocationCallOrder[0])).toBeLessThan(
-        defined(mocked.abortMock.mock.invocationCallOrder[0]),
+      expect(deps.countBackgroundOperations).toHaveBeenCalledWith("session-1");
+      expect(editMessageText).toHaveBeenCalledWith(
+        777,
+        88,
+        t("stop.success_background_running", { count: 2 }),
       );
+      expect(t("stop.success_background_running", { count: 2 })).toContain("2");
     });
 
     it("interrupts the subagent cards right after the success reply", async () => {
@@ -366,7 +370,6 @@ describe("bot/commands/abort", () => {
       expect(defined(editMessageText.mock.invocationCallOrder[0])).toBeLessThan(
         defined(deps.interruptSubagents.mock.invocationCallOrder[0]),
       );
-      expect(deps.stopBackgroundOperations).not.toHaveBeenCalled();
     });
 
     it("interrupts the subagent cards even when the success reply cannot be shown", async () => {
@@ -378,7 +381,6 @@ describe("bot/commands/abort", () => {
       await abortCommand(createCtx(editMessageText) as never, deps);
 
       expect(deps.interruptSubagents).toHaveBeenCalledWith("abort_command");
-      expect(deps.stopBackgroundOperations).not.toHaveBeenCalled();
     });
 
     it("interrupts the subagent cards in the silent abort /start shares", async () => {
@@ -389,7 +391,7 @@ describe("bot/commands/abort", () => {
       await abortCurrentOperation(createCtx() as never, deps, { notifyUser: false });
 
       expect(deps.interruptSubagents).toHaveBeenCalledWith("abort_command");
-      expect(deps.stopBackgroundOperations).not.toHaveBeenCalled();
+      expect(deps.countBackgroundOperations).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -406,7 +408,7 @@ describe("bot/commands/abort", () => {
         },
       ],
       ["a local failure", () => mocked.abortMock.mockRejectedValue(new Error("network failed"))],
-    ])("leaves the subagent cards as they were on %s", async (_case, arrange) => {
+    ])("neither interrupts cards nor counts operations on %s", async (_case, arrange) => {
       vi.useFakeTimers();
       try {
         arrange();
@@ -416,8 +418,8 @@ describe("bot/commands/abort", () => {
         await vi.advanceTimersByTimeAsync(6_000);
         await aborting;
 
-        expect(deps.stopBackgroundOperations).toHaveBeenCalledWith("abort_command", "session-1");
         expect(deps.interruptSubagents).not.toHaveBeenCalled();
+        expect(deps.countBackgroundOperations).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }

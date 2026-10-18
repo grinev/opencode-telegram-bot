@@ -35,7 +35,7 @@ export interface BotEventSubscriptionService {
   setTelegramContext(bot: Bot<Context> | null, chatId: number | null): void;
   clearRuntimeState(reason: string): void;
   stopBackgroundOperations(reason: string, sessionId?: string): void;
-  stopBackgroundCommands(reason: string, sessionId?: string): void;
+  countBackgroundOperations(sessionId: string): number;
   interruptSubagents(reason: string): void;
   endRunLostWithServer(reason: string): Promise<void>;
   cleanup(reason: string): void;
@@ -120,6 +120,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   stopBackgroundCommands = (reason: string, sessionId?: string): void => {
     this.runtime.stopBackgroundCommands(reason, sessionId);
   };
+
+  countBackgroundOperations = (sessionId: string): number =>
+    this.runtime.countBackgroundCommands(sessionId) +
+    this.deps.summaryAggregator.countFollowedBackgroundSubagents();
 
   interruptSubagents = (reason: string): void => {
     logger.debug(`[Bot] Interrupting running subagent cards: reason=${reason}`);

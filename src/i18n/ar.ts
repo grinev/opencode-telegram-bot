@@ -277,6 +277,8 @@ export const ar: I18nDictionary = {
     "⚠️ تم إيقاف تدفق الأحداث، لكن الخادم لم يؤكد الإيقاف.\n\nتحقق من /status ثم أعد محاولة /abort بعد بضع ثوانٍ.",
   "stop.warn_maybe_finished": "⚠️ تم إيقاف تدفق الأحداث، لكن الوكيل ربما كان قد انتهى بالفعل.",
   "stop.success": "✅ تم إيقاف إجراء الوكيل. لن تُرسل أي رسائل أخرى من هذا التشغيل.",
+  "stop.success_background_running":
+    "✅ Agent action interrupted.\nBackground operations keep running: {count}\nTheir progress and results will still appear here.",
   "stop.warn_still_busy":
     "⚠️ تم إرسال الإشارة، لكن الوكيل لا يزال مشغولًا.\n\nتدفق الأحداث معطّل بالفعل، لذلك لن تُرسل رسائل وسيطة.",
   "stop.warn_timeout":

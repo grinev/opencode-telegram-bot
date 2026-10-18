@@ -163,6 +163,8 @@ export interface SubagentInfo {
   background?: boolean | undefined;
   /** When the newest of the nested subagents it launched, still running, started. */
   launchStartedAt?: number | undefined;
+  /** The task of that newest launch, from its call's description. */
+  launchDescription?: string | undefined;
   /** A nested subagent it launched in the background still runs: the card outlives its parent's turn. */
   waitsOnBackgroundLaunch?: boolean | undefined;
   createdAt: number;
@@ -240,6 +242,8 @@ interface SubagentLaunch {
   background: boolean;
   /** The call carries its arguments, so the launch may be shown. */
   shown: boolean;
+  /** The latest description its call reported. */
+  description?: string | undefined;
 }
 
 type SubagentEndStatus = Extract<SubagentStatus, "completed" | "error" | "interrupted">;
@@ -939,11 +943,11 @@ export class SummaryAggregator {
     return [...state.launches.values()].some((launch) => launch.background);
   }
 
-  private getNewestLaunchStartedAt(state: SubagentState): number | undefined {
-    let newest: number | undefined;
+  private getNewestLaunch(state: SubagentState): SubagentLaunch | undefined {
+    let newest: SubagentLaunch | undefined;
     for (const launch of state.launches.values()) {
-      if (launch.shown && (newest === undefined || launch.startedAt >= newest)) {
-        newest = launch.startedAt;
+      if (launch.shown && (newest === undefined || launch.startedAt >= newest.startedAt)) {
+        newest = launch;
       }
     }
     return newest;
@@ -951,18 +955,12 @@ export class SummaryAggregator {
 
   /**
    * A card whose end is still to come past its parent's turn: a background one running, or
-   * interrupted by the bot while its child may still report the real end; or one waiting on
-   * a nested subagent it launched in the background.
+   * one waiting on a nested subagent it launched in the background.
    */
   private isFollowedBackgroundSubagent(cardId: string): boolean {
     const state = this.subagentStates.get(cardId);
     if (!state) {
       return false;
-    }
-
-    if (state.status === "interrupted") {
-      // A held end already happened: there is no real end left to wait for.
-      return Boolean(state.background && !state.heldEnd);
     }
 
     return (
@@ -987,6 +985,11 @@ export class SummaryAggregator {
     }
   }
 
+  /** The cards still running past the turn, for the `/abort` reply. */
+  countFollowedBackgroundSubagents(): number {
+    return this.subagentOrder.filter((cardId) => this.isFollowedBackgroundSubagent(cardId)).length;
+  }
+
   /** Stops following background subagents; their cards stay as they were. */
   retireBackgroundSubagents(): void {
     for (const cardId of [...this.subagentOrder]) {
@@ -997,10 +1000,11 @@ export class SummaryAggregator {
   }
 
   /**
-   * Ends every card still running as interrupted, timed to now. A foreground card is done
-   * with; a background one stays followed, so its child's real end, reported later, still
-   * replaces the mark. After a server restart every card is dropped, its child left
-   * resumable.
+   * Ends every foreground card still running as interrupted, timed to now. A background card
+   * keeps running: the interrupt may not reach it, so only its child's own report ends it.
+   * A card waiting on a nested subagent it launched in the background holds the interruption
+   * until that launch ends. After a server restart every card ends and is dropped, its child
+   * left resumable.
    */
   interruptSubagents(serverRestarted = false): void {
     const now = Date.now();
@@ -1008,6 +1012,16 @@ export class SummaryAggregator {
     for (const cardId of this.subagentOrder) {
       const state = this.subagentStates.get(cardId);
       if (!state || (state.status !== "pending" && state.status !== "running")) {
+        continue;
+      }
+
+      if (!serverRestarted && (state.background || state.heldEnd)) {
+        continue;
+      }
+
+      if (!serverRestarted && this.hasBackgroundLaunch(state)) {
+        this.holdSubagentEnd(state, "interrupted", undefined);
+        changed = true;
         continue;
       }
 
@@ -1039,12 +1053,6 @@ export class SummaryAggregator {
     state.currentToolTitle = undefined;
     state.currentToolCallId = undefined;
     state.currentToolStartedAt = undefined;
-  }
-
-  /** An interrupted card waits only for its child's real end; other events leave it be. */
-  private isInterruptedSubagentSession(sessionId: string): boolean {
-    const cardId = this.subagentCardIdBySessionId.get(sessionId);
-    return Boolean(cardId && this.subagentStates.get(cardId)?.status === "interrupted");
   }
 
   /** A card whose own run ended waits only for its background launches to end. */
@@ -1103,7 +1111,8 @@ export class SummaryAggregator {
         currentToolStartedAt: state.currentToolStartedAt,
         terminalMessage: state.terminalMessage,
         background: state.background,
-        launchStartedAt: this.getNewestLaunchStartedAt(state),
+        launchStartedAt: this.getNewestLaunch(state)?.startedAt,
+        launchDescription: this.getNewestLaunch(state)?.description,
         waitsOnBackgroundLaunch: this.hasBackgroundLaunch(state),
         createdAt: state.createdAt,
         finishedAt: state.finishedAt,
@@ -1133,6 +1142,7 @@ export class SummaryAggregator {
         terminalMessage: subagent.terminalMessage,
         background: subagent.background,
         launchStartedAt: subagent.launchStartedAt,
+        launchDescription: subagent.launchDescription,
         waitsOnBackgroundLaunch: subagent.waitsOnBackgroundLaunch,
         finishedAt: subagent.finishedAt,
       })),
@@ -1471,7 +1481,7 @@ export class SummaryAggregator {
       return;
     }
 
-    if (info.id === this.currentSessionId || this.isInterruptedSubagentSession(info.id)) {
+    if (info.id === this.currentSessionId) {
       return;
     }
 
@@ -1498,11 +1508,7 @@ export class SummaryAggregator {
     };
     cost?: number;
   }): void {
-    if (
-      this.finishedSubagentSessionIds.has(info.sessionID) ||
-      this.isInterruptedSubagentSession(info.sessionID) ||
-      this.hasHeldEnd(info.sessionID)
-    ) {
+    if (this.finishedSubagentSessionIds.has(info.sessionID) || this.hasHeldEnd(info.sessionID)) {
       return;
     }
 
@@ -1543,10 +1549,7 @@ export class SummaryAggregator {
     input?: { [key: string]: unknown },
     title?: string,
   ): void {
-    if (
-      this.finishedSubagentSessionIds.has(sessionId) ||
-      this.isInterruptedSubagentSession(sessionId)
-    ) {
+    if (this.finishedSubagentSessionIds.has(sessionId)) {
       return;
     }
 
@@ -1618,13 +1621,16 @@ export class SummaryAggregator {
 
     const shown = Object.keys(state.input ?? {}).length > 0;
     const background = isBackgroundTaskCall(state);
+    const description =
+      typeof state.input?.description === "string" ? state.input.description : undefined;
     if (!launch) {
-      subagent.launches.set(callId, { startedAt: Date.now(), background, shown });
+      subagent.launches.set(callId, { startedAt: Date.now(), background, shown, description });
       return true;
     }
 
     launch.background ||= background;
     launch.shown ||= shown;
+    launch.description = description ?? launch.description;
     if (subagent.currentToolCallId === callId) {
       return true;
     }
@@ -1635,11 +1641,7 @@ export class SummaryAggregator {
   }
 
   private updateSubagentStepStart(sessionId: string, snapshot?: string): void {
-    if (
-      this.finishedSubagentSessionIds.has(sessionId) ||
-      this.isInterruptedSubagentSession(sessionId) ||
-      this.hasHeldEnd(sessionId)
-    ) {
+    if (this.finishedSubagentSessionIds.has(sessionId) || this.hasHeldEnd(sessionId)) {
       return;
     }
 
@@ -1664,11 +1666,7 @@ export class SummaryAggregator {
     cost: number,
     snapshot?: string,
   ): void {
-    if (
-      this.finishedSubagentSessionIds.has(sessionId) ||
-      this.isInterruptedSubagentSession(sessionId) ||
-      this.hasHeldEnd(sessionId)
-    ) {
+    if (this.finishedSubagentSessionIds.has(sessionId) || this.hasHeldEnd(sessionId)) {
       return;
     }
 
@@ -1705,27 +1703,8 @@ export class SummaryAggregator {
       return;
     }
 
-    // Already marked interrupted: only a real finish or failure replaces the mark.
-    if (subagent.status === "interrupted" && status === "interrupted") {
-      this.retireSubagent(cardId);
-      return;
-    }
-
-    // A nested subagent it launched in the background still runs: the card keeps that
-    // launch's line and shows its own end once the launch ends.
-    if (subagent.status !== "interrupted" && this.hasBackgroundLaunch(subagent)) {
-      for (const [callId, launch] of subagent.launches) {
-        if (!launch.background) {
-          subagent.launches.delete(callId);
-        }
-      }
-      subagent.heldEnd = {
-        status,
-        terminalMessage: terminalMessage?.trim() || undefined,
-        finishedAt: Date.now(),
-      };
-      this.clearSubagentActivity(subagent);
-      subagent.updatedAt = Date.now();
+    if (this.hasBackgroundLaunch(subagent)) {
+      this.holdSubagentEnd(subagent, status, terminalMessage);
       this.emitSubagentState();
       return;
     }
@@ -1733,6 +1712,29 @@ export class SummaryAggregator {
     // Frozen on purpose: the card is re-rendered on a heartbeat, so a duration
     // derived from the current time would keep growing after the run ended.
     this.endSubagent(subagent, status, terminalMessage, Date.now());
+  }
+
+  /**
+   * A nested subagent it launched in the background still runs: the card keeps that
+   * launch's line and shows its own end once the launch ends.
+   */
+  private holdSubagentEnd(
+    subagent: SubagentState,
+    status: SubagentEndStatus,
+    terminalMessage: string | undefined,
+  ): void {
+    for (const [callId, launch] of subagent.launches) {
+      if (!launch.background) {
+        subagent.launches.delete(callId);
+      }
+    }
+    subagent.heldEnd = {
+      status,
+      terminalMessage: terminalMessage?.trim() || undefined,
+      finishedAt: Date.now(),
+    };
+    this.clearSubagentActivity(subagent);
+    subagent.updatedAt = Date.now();
   }
 
   private endSubagent(

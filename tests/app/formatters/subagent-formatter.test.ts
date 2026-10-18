@@ -530,7 +530,7 @@ describe("summary/subagent-formatter", () => {
       };
     }
 
-    it("shows only that a task runs, never its description or prompt", async () => {
+    it("names the task from its description, never from its prompt", async () => {
       setRuntimeLocale("en");
 
       const text = await renderSubagentCard(
@@ -546,8 +546,8 @@ describe("summary/subagent-formatter", () => {
         now,
       );
 
-      expect(text.split("\n").at(-1)).toBe("🤖 Running Task");
-      expect(text).not.toContain("Count Kotlin files");
+      expect(text.split("\n").at(-1)).toBe("🤖 Running Task: Count Kotlin files");
+      expect(text).not.toContain("Count the number of Kotlin files");
     });
 
     it("shows no launch line while the launch call is still composed", async () => {
@@ -579,6 +579,17 @@ describe("summary/subagent-formatter", () => {
     it("falls back to a launch still running when nothing newer is on the line", async () => {
       setRuntimeLocale("en");
 
+      const text = await renderSubagentCard(
+        buildSubagent({ launchStartedAt: now - 25_000, launchDescription: "Count Kotlin files" }),
+        now,
+      );
+
+      expect(text.split("\n").at(-1)).toBe("🤖 Running Task: Count Kotlin files · 🕒 20s");
+    });
+
+    it("falls back to the bare launch line when the launch's task is not known", async () => {
+      setRuntimeLocale("en");
+
       const text = await renderSubagentCard(buildSubagent({ launchStartedAt: now - 25_000 }), now);
 
       expect(text.split("\n").at(-1)).toBe("🤖 Running Task · 🕒 20s");
@@ -598,6 +609,24 @@ describe("summary/subagent-formatter", () => {
       );
 
       expect(text.split("\n").at(-1)).toBe("💻 bash npm test");
+    });
+
+    it("shows a long execute step as its cut code, not its title", async () => {
+      setRuntimeLocale("en");
+
+      const text = await renderSubagentCard(
+        buildSubagent({
+          currentTool: "execute",
+          currentToolInput: { code: `return 1;\n${"c".repeat(200)}` },
+          currentToolTitle: "Run code",
+          currentToolStartedAt: now,
+        }),
+        now,
+      );
+
+      const line = text.split("\n").at(-1);
+      expect(line).toMatch(/^🛠️ execute return 1; c+\.\.\.$/);
+      expect(line).toHaveLength(128);
     });
   });
 

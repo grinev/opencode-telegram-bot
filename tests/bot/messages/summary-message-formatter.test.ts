@@ -1,13 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   formatSummary,
   formatSummaryWithMode,
 } from "../../../src/bot/messages/summary-message-formatter.js";
 import {
   formatCompactToolActivity,
+  formatRunningTaskLine,
   formatToolInfo,
   prepareCodeFile,
 } from "../../../src/app/formatters/summary-formatter.js";
+import { resetRuntimeLocale, setRuntimeLocale } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 
 const mocked = vi.hoisted(() => ({
@@ -272,6 +274,75 @@ describe("bot/messages/summary-message-formatter", () => {
     expect(text).toHaveLength("💻 bash ".length + 128);
   });
 
+  it("truncates long execute code like a bash command, over its title", () => {
+    const longCode = `const files = await tools.glob({ pattern: "**/*.ts" });\n${"a".repeat(160)}`;
+
+    const text = formatToolInfo({
+      sessionId: "s1",
+      messageId: "m4e",
+      callId: "c4e",
+      tool: "execute",
+      state: { status: "completed" } as never,
+      title: "Run code",
+      input: {
+        code: longCode,
+      },
+    });
+
+    expect(text).toBe(`🛠️ execute ${longCode.slice(0, 125)}...`);
+  });
+
+  it("shows short execute code whole with its newlines", () => {
+    const text = formatToolInfo({
+      sessionId: "s1",
+      messageId: "m4f",
+      callId: "c4f",
+      tool: "execute",
+      state: { status: "running" } as never,
+      input: {
+        code: "const a = 1;\nreturn a;",
+      },
+    });
+
+    expect(text).toBe("🛠️ execute const a = 1;\nreturn a;");
+  });
+
+  it("keeps execute uncut when its code is not text", () => {
+    const text = formatToolInfo({
+      sessionId: "s1",
+      messageId: "m4g",
+      callId: "c4g",
+      tool: "execute",
+      state: { status: "running" } as never,
+      title: "Run code",
+      input: {
+        code: 42,
+      },
+    });
+
+    expect(text).toBe("🛠️ execute Run code");
+  });
+
+  it("cuts a compact execute line at the compact limit", () => {
+    const text = formatCompactToolActivity(
+      {
+        sessionId: "s1",
+        messageId: "m4h",
+        callId: "c4h",
+        tool: "execute",
+        state: { status: "running" } as never,
+        input: {
+          code: `return 1;\n${"b".repeat(200)}`,
+        },
+      },
+      128,
+    );
+
+    expect(text).toBe(
+      `🛠️ execute return 1; ${"b".repeat(128 - "🛠️ execute return 1; ".length - 3)}...`,
+    );
+  });
+
   it("formats apply_patch tool details without dumping full patch", () => {
     const text = formatToolInfo({
       sessionId: "s1",
@@ -523,6 +594,56 @@ describe("bot/messages/summary-message-formatter", () => {
         },
       });
       expect(formatCompactToolActivity(finished, 128)).toBe("🩹 apply_patch src/a.ts (+1)");
+    });
+  });
+
+  describe("running task line", () => {
+    beforeEach(() => {
+      setRuntimeLocale("en");
+    });
+
+    afterEach(() => {
+      resetRuntimeLocale();
+    });
+
+    it("names the task from its description, never from its prompt", () => {
+      const line = formatRunningTaskLine({
+        description: "Count Kotlin files",
+        prompt: "Count the number of Kotlin files under src/main",
+      });
+
+      expect(line).toBe("🤖 Running Task: Count Kotlin files");
+    });
+
+    it.each([
+      ["no input", undefined],
+      ["a prompt only", { prompt: "Count the files" }],
+      ["a blank description", { description: " \n\t " }],
+      ["a description that is not text", { description: 42 }],
+    ])("shows the bare line for %s", (_case, input) => {
+      expect(formatRunningTaskLine(input)).toBe("🤖 Running Task");
+    });
+
+    it("shows a multi-line description on one line", () => {
+      expect(formatRunningTaskLine({ description: "  Count\n  Kotlin   files\n" })).toBe(
+        "🤖 Running Task: Count Kotlin files",
+      );
+    });
+
+    it("cuts the whole line at the activity-line length with an ellipsis", () => {
+      const line = formatRunningTaskLine({ description: "word ".repeat(60) });
+
+      expect(line.length).toBeLessThanOrEqual(128);
+      expect(line.startsWith("🤖 Running Task: word word")).toBe(true);
+      expect(line.endsWith("…")).toBe(true);
+    });
+
+    it("keeps the locale's own label", () => {
+      setRuntimeLocale("ru");
+
+      expect(formatRunningTaskLine({ description: "Count Kotlin files" })).toBe(
+        "🤖 Выполняю задачу: Count Kotlin files",
+      );
     });
   });
 });

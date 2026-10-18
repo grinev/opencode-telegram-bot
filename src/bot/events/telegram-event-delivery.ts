@@ -5,6 +5,7 @@ import { InputFile, type Bot, type Context } from "grammy";
 import type { CodeFileData } from "../../app/formatters/summary-formatter.js";
 import { logger } from "../../utils/logger.js";
 import {
+  AGENT_TEXT_LINK_PREVIEW_OPTIONS,
   completeDraftPart,
   editRenderedBotPart,
   getTelegramRenderedPartSignature,
@@ -130,7 +131,7 @@ export class TelegramEventDelivery {
       api: destination.api,
       chatId: destination.chatId,
       part,
-      options,
+      options: { ...options, ...AGENT_TEXT_LINK_PREVIEW_OPTIONS },
       ...(allowPlainFallback === undefined ? {} : { allowPlainFallback }),
     });
   }
@@ -147,7 +148,7 @@ export class TelegramEventDelivery {
         chatId: destination.chatId,
         messageId,
         part,
-        options,
+        options: { ...options, ...AGENT_TEXT_LINK_PREVIEW_OPTIONS },
         allowPlainFallback: false,
       });
     } catch (error) {
@@ -185,7 +186,7 @@ export class TelegramEventDelivery {
       api: destination.api,
       chatId: destination.chatId,
       part,
-      options,
+      options: { ...options, ...AGENT_TEXT_LINK_PREVIEW_OPTIONS },
     });
   }
 

@@ -2,7 +2,6 @@ import type {
   Agent,
   AssistantMessage,
   Command,
-  FileDiff,
   FilePartInput,
   GlobalSession,
   McpStatus,
@@ -15,6 +14,7 @@ import type {
   QuestionInfo,
   QuestionRequest,
   Session,
+  SnapshotFileDiff,
   TextPartInput,
   ToolState,
   UserMessage,
@@ -320,9 +320,9 @@ export function toV1Message(
   return null;
 }
 
-export function toV1FileDiff(diff: FileDiffInfo): FileDiff {
+export function toV1FileDiff(diff: FileDiffInfo): SnapshotFileDiff {
   return {
-    path: diff.file,
+    file: diff.file,
     status: diff.status,
     additions: diff.additions,
     deletions: diff.deletions,

@@ -257,6 +257,8 @@ export const zh: I18nDictionary = {
     "⚠️ 事件流已停止，但服务器未确认中止。\n\n检查 /status，并在几秒后重试 /abort。",
   "stop.warn_maybe_finished": "⚠️ 事件流已停止，但代理可能已完成。",
   "stop.success": "✅ 代理操作已中断。本次运行的后续消息将不再发送。",
+  "stop.success_background_running":
+    "✅ Agent action interrupted.\nBackground operations keep running: {count}\nTheir progress and results will still appear here.",
   "stop.warn_still_busy": "⚠️ 信号已发送，但代理仍在忙。\n\n事件流已禁用，因此不会发送中间消息。",
   "stop.warn_timeout": "⚠️ 中止请求超时。\n\n事件流已禁用，请在几秒后重试 /abort。",
   "stop.warn_local_only": "⚠️ 已在本地停止事件流，但服务器端中止失败。",

@@ -584,6 +584,12 @@ describe("bot/commands/sessions", () => {
     expect(sent.some((text) => text.includes("unanswered prompt"))).toBe(false);
     expect(sent.some((text) => text.includes("Recent messages:"))).toBe(false);
     expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
+
+    const sendCalls = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls;
+    const replyCall = sendCalls.find((call) => String(call[1]).includes("finished reply"));
+    const quoteCall = sendCalls.find((call) => String(call[1]).includes("answered prompt"));
+    expect(replyCall?.[2]).toMatchObject({ link_preview_options: { is_disabled: false } });
+    expect(quoteCall?.[2]).not.toHaveProperty("link_preview_options");
   });
 
   it("still sends the empty notice when the first history page fails", async () => {
@@ -923,6 +929,9 @@ describe("bot/commands/sessions", () => {
     expect(assistantResponseCalls.map((call) => call[1]).join("")).not.toContain(
       "User prompt should not be forwarded",
     );
+    for (const call of assistantResponseCalls) {
+      expect(call[2]).toMatchObject({ link_preview_options: { is_disabled: false } });
+    }
   });
 
   it("does not send preview or latest assistant response for background question notifications", async () => {

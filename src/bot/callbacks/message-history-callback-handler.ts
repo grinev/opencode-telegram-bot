@@ -19,7 +19,10 @@ import { cancelMenu } from "./feedback.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { renderAssistantFinalPartsSafe } from "../messages/assistant-rendering.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
-import { sendRenderedBotPart } from "../messages/telegram-text.js";
+import {
+  AGENT_TEXT_LINK_PREVIEW_OPTIONS,
+  sendRenderedBotPart,
+} from "../messages/telegram-text.js";
 import {
   buildMessageDetailKeyboard,
   buildMessagesListKeyboard,
@@ -193,6 +196,7 @@ async function sendLatestAssistantResponse(
       api,
       chatId,
       part,
+      options: AGENT_TEXT_LINK_PREVIEW_OPTIONS,
     });
   }
 }

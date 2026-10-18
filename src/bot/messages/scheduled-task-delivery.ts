@@ -6,11 +6,17 @@ import type {
 import type { ScheduledTaskDeliverySender } from "../../app/services/scheduled-task-runtime-service.js";
 import { formatSummaryWithMode } from "./summary-message-formatter.js";
 import { escapePlainTextForTelegramMarkdownV2 } from "../../utils/telegram-markdown.js";
-import { sendBotText } from "./telegram-text.js";
+import { AGENT_TEXT_LINK_PREVIEW_OPTIONS, sendBotText } from "./telegram-text.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
+
+interface ScheduledTaskMessagePart {
+  text: string;
+  /** Parts carrying the agent's reply keep Telegram's link preview. */
+  carriesResult: boolean;
+}
 
 function getScheduledTaskDeliveryFormat(): "raw" | "markdown_v2" {
   return config.bot.messageFormatMode === "markdown" ? "markdown_v2" : "raw";
@@ -22,30 +28,38 @@ function getSilentDeliveryOptions(): { options: { disable_notification: true } }
     : {};
 }
 
-function buildScheduledTaskSuccessMessageParts(delivery: QueuedScheduledTaskDelivery): string[] {
+function toResultParts(texts: string[]): ScheduledTaskMessagePart[] {
+  return texts.map((text) => ({ text, carriesResult: true }));
+}
+
+function buildScheduledTaskSuccessMessageParts(
+  delivery: QueuedScheduledTaskDelivery,
+): ScheduledTaskMessagePart[] {
   if (!delivery.resultText) {
-    return [delivery.notificationText];
+    return [{ text: delivery.notificationText, carriesResult: false }];
   }
 
   if (config.bot.messageFormatMode !== "markdown") {
-    return formatSummaryWithMode(
-      `${delivery.notificationText}\n\n${delivery.resultText}`,
-      config.bot.messageFormatMode,
+    return toResultParts(
+      formatSummaryWithMode(
+        `${delivery.notificationText}\n\n${delivery.resultText}`,
+        config.bot.messageFormatMode,
+      ),
     );
   }
 
   const header = escapePlainTextForTelegramMarkdownV2(delivery.notificationText);
   const resultParts = formatSummaryWithMode(delivery.resultText, config.bot.messageFormatMode);
   if (resultParts.length === 0) {
-    return [header];
+    return [{ text: header, carriesResult: false }];
   }
 
   const firstPart = `${header}\n\n${resultParts[0]}`;
   if (firstPart.length <= TELEGRAM_MESSAGE_LIMIT) {
-    return [firstPart, ...resultParts.slice(1)];
+    return toResultParts([firstPart, ...resultParts.slice(1)]);
   }
 
-  return [header, ...resultParts];
+  return [{ text: header, carriesResult: false }, ...toResultParts(resultParts)];
 }
 
 export function createScheduledTaskDeliverySender(
@@ -57,7 +71,7 @@ export function createScheduledTaskDeliverySender(
       const messageParts =
         delivery.status === "success"
           ? buildScheduledTaskSuccessMessageParts(delivery)
-          : [delivery.notificationText];
+          : [{ text: delivery.notificationText, carriesResult: false }];
       const format = delivery.status === "success" ? getScheduledTaskDeliveryFormat() : "raw";
       const suppressResultNotification = delivery.status === "success" && Boolean(delivery.footerText);
       const resultDeliveryOptions =
@@ -65,13 +79,18 @@ export function createScheduledTaskDeliverySender(
           ? { options: { disable_notification: true } }
           : getSilentDeliveryOptions();
 
+      const partOptions =
+        "options" in resultDeliveryOptions ? resultDeliveryOptions.options : undefined;
+
       for (const part of messageParts) {
         await sendBotText({
           api,
           chatId,
-          text: part,
+          text: part.text,
           format,
-          ...resultDeliveryOptions,
+          options: part.carriesResult
+            ? { ...partOptions, ...AGENT_TEXT_LINK_PREVIEW_OPTIONS }
+            : partOptions,
         });
       }
 

@@ -290,6 +290,8 @@ export const ko: I18nDictionary = {
     "⚠️ 이벤트 스트림은 중지되었지만 서버가 중단을 확인하지 않았습니다.\n\n/status를 확인하고 몇 초 후 /abort를 다시 시도해 주세요.",
   "stop.warn_maybe_finished": "⚠️ 이벤트 스트림이 중지되었지만 에이전트가 이미 작업을 마쳤을 수도 있습니다.",
   "stop.success": "✅ 에이전트 작업이 중단되었습니다. 이 실행의 추가 메시지는 더 이상 전송되지 않습니다.",
+  "stop.success_background_running":
+    "✅ Agent action interrupted.\nBackground operations keep running: {count}\nTheir progress and results will still appear here.",
   "stop.warn_still_busy":
     "⚠️ 신호를 보냈지만 에이전트가 아직 작업 중입니다.\n\n이벤트 스트림이 이미 비활성화되어 중간 메시지는 전송되지 않습니다.",
   "stop.warn_timeout":

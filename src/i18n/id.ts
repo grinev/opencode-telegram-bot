@@ -281,6 +281,8 @@ export const id: I18nDictionary = {
   "stop.warn_maybe_finished": "⚠️ Stream event dihentikan, tetapi agent mungkin sudah selesai.",
   "stop.success":
     "✅ Aksi agent dihentikan. Tidak ada lagi pesan dari tugas ini yang akan dikirim.",
+  "stop.success_background_running":
+    "✅ Agent action interrupted.\nBackground operations keep running: {count}\nTheir progress and results will still appear here.",
   "stop.warn_still_busy":
     "⚠️ Sinyal terkirim, tetapi agent masih sibuk.\n\nStream event sudah dinonaktifkan, jadi tidak ada pesan perantara yang akan dikirim.",
   "stop.warn_timeout":

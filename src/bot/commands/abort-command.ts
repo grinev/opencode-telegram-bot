@@ -17,11 +17,10 @@ export type AbortCommandDeps = Pick<
   AppContainer,
   | "assistantRunState"
   | "attachManager"
+  | "countBackgroundOperations"
   | "foregroundSessionState"
   | "interruptSubagents"
   | "resetInteractions"
-  | "stopBackgroundCommands"
-  | "stopBackgroundOperations"
 >;
 
 interface AbortCurrentOperationOptions {
@@ -105,15 +104,8 @@ export async function abortCurrentOperation(
       return;
     }
 
-    // What ran in the background stays in the chat as it was at the abort. Subagent cards
-    // wait for the answer: interrupted on success, left as they were otherwise.
-    deps.stopBackgroundCommands("abort_command", currentSession.id);
-    const leaveSubagentCards = () =>
-      deps.stopBackgroundOperations("abort_command", currentSession.id);
-
     let waitingMessageId: number | null = null;
     let chatId: number | null = null;
-    let abortConfirmed = false;
 
     if (notifyUser) {
       // No reply_markup here: this message is edited below, and Telegram
@@ -124,7 +116,6 @@ export async function abortCurrentOperation(
 
       if (!chatId) {
         logger.warn("[Abort] Chat context is missing while aborting active session");
-        leaveSubagentCards();
         return;
       }
     }
@@ -146,7 +137,6 @@ export async function abortCurrentOperation(
 
       if (abortError) {
         logger.warn("[Abort] Abort request failed:", abortError);
-        leaveSubagentCards();
         await releaseAbortBusyState(deps, currentSession.id, "abort_unconfirmed");
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
           await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_unconfirmed"));
@@ -155,7 +145,6 @@ export async function abortCurrentOperation(
       }
 
       if (abortResult !== true) {
-        leaveSubagentCards();
         await releaseAbortBusyState(deps, currentSession.id, "abort_maybe_finished");
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
           await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_maybe_finished"));
@@ -173,24 +162,26 @@ export async function abortCurrentOperation(
         await releaseAbortBusyState(deps, currentSession.id, "abort_confirmed");
         try {
           if (notifyUser && chatId !== null && waitingMessageId !== null) {
-            await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.success"));
+            // Background operations are not stopped by the bot: they end with what OpenCode
+            // reports about them later, so the reply says they are still coming.
+            const backgroundCount = deps.countBackgroundOperations(currentSession.id);
+            await ctx.api.editMessageText(
+              chatId,
+              waitingMessageId,
+              backgroundCount > 0
+                ? t("stop.success_background_running", { count: backgroundCount })
+                : t("stop.success"),
+            );
           }
         } finally {
           // The abort succeeded even when its reply could not be shown.
-          abortConfirmed = true;
           deps.interruptSubagents("abort_command");
         }
-      } else {
-        leaveSubagentCards();
-        if (notifyUser && chatId !== null && waitingMessageId !== null) {
-          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_still_busy"));
-        }
+      } else if (notifyUser && chatId !== null && waitingMessageId !== null) {
+        await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_still_busy"));
       }
     } catch (error) {
       clearTimeout(timeoutId);
-      if (!abortConfirmed) {
-        leaveSubagentCards();
-      }
       await releaseAbortBusyState(deps, currentSession.id, "abort_error");
 
       if (error instanceof Error && error.name === "AbortError") {

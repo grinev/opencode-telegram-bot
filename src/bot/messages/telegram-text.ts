@@ -21,6 +21,11 @@ type TelegramSendRichOptions = Parameters<SendMessageApi["sendRichMessage"]>[2];
 
 export type TelegramTextFormat = "raw" | "markdown_v2";
 
+/** The agent's text keeps Telegram's link preview; bot text defaults to none. */
+export const AGENT_TEXT_LINK_PREVIEW_OPTIONS = {
+  link_preview_options: { is_disabled: false },
+} as const;
+
 interface SendBotTextParams {
   api: Pick<Api<RawApi>, "sendMessage">;
   chatId: Parameters<SendMessageApi["sendMessage"]>[0];
@@ -91,6 +96,21 @@ function stripRichFormattingOptions<T extends TelegramSendMessageOptions | undef
   delete rawOptions.parse_mode;
 
   return rawOptions as T;
+}
+
+/** Rich messages have no link preview setting; they go out as Telegram draws them. */
+function stripLinkPreviewOptions<T extends TelegramSendMessageOptions | undefined>(options: T): T {
+  if (!options) {
+    return options;
+  }
+
+  const richOptions = {
+    ...options,
+  } as NonNullable<T> & { link_preview_options?: unknown };
+
+  delete richOptions.link_preview_options;
+
+  return richOptions as T;
 }
 
 function isPlainPart(part: TelegramRenderedPart): boolean {
@@ -167,7 +187,7 @@ export async function sendRenderedBotPart({
     const sentMessage = await api.sendRichMessage(
       chatId,
       { blocks: part.blocks },
-      rawOptions as TelegramSendRichOptions,
+      stripLinkPreviewOptions(rawOptions) as TelegramSendRichOptions,
     );
 
     return {
@@ -235,7 +255,12 @@ export async function editRenderedBotPart({
   }
 
   try {
-    await api.editMessageText(chatId, messageId, { blocks: part.blocks }, rawOptions);
+    await api.editMessageText(
+      chatId,
+      messageId,
+      { blocks: part.blocks },
+      stripLinkPreviewOptions(rawOptions),
+    );
 
     return {
       deliveredSignature: getTelegramRenderedPartSignature(part),
@@ -327,7 +352,7 @@ export async function completeDraftPart({
   const sentMessage = await api.sendRichMessage(
     chatId,
     { blocks: part.blocks },
-    rawOptions as TelegramSendRichOptions,
+    stripLinkPreviewOptions(rawOptions) as TelegramSendRichOptions,
   );
   return {
     messageId: sentMessage.message_id,

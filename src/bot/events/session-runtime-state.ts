@@ -623,6 +623,13 @@ export class SessionRuntimeState {
     }
   }
 
+  /** Background command calls of a session still followed; subagents count by their cards. */
+  countBackgroundCommands(sessionId: string): number {
+    return this.runningToolTracker
+      .backgroundCallIds(sessionId)
+      .filter((callId) => this.getRunningToolInfo(sessionId, callId)?.tool !== "task").length;
+  }
+
   /** The subagent-card half of `stopBackgroundOperations`. */
   private stopBackgroundSubagents(sessionId?: string): void {
     this.toolCallStreamer.freezePinnedEntries(sessionId, true);

@@ -292,6 +292,8 @@ export const es: I18nDictionary = {
     "⚠️ Flujo de eventos detenido, pero el agente podría haber terminado ya.",
   "stop.success":
     "✅ Acción del agente interrumpida. No se enviarán más mensajes de esta ejecución.",
+  "stop.success_background_running":
+    "✅ Agent action interrupted.\nBackground operations keep running: {count}\nTheir progress and results will still appear here.",
   "stop.warn_still_busy":
     "⚠️ Señal enviada, pero el agente sigue ocupado.\n\nEl flujo de eventos ya está deshabilitado, así que no se enviarán mensajes intermedios.",
   "stop.warn_timeout":

@@ -281,6 +281,8 @@ export const en = {
     "⚠️ Event stream stopped, but server did not confirm abort.\n\nCheck /status and retry /abort in a few seconds.",
   "stop.warn_maybe_finished": "⚠️ Event stream stopped, but the agent may have already finished.",
   "stop.success": "✅ Agent action interrupted. No more messages from this run will be sent.",
+  "stop.success_background_running":
+    "✅ Agent action interrupted.\nBackground operations keep running: {count}\nTheir progress and results will still appear here.",
   "stop.warn_still_busy":
     "⚠️ Signal sent, but agent is still busy.\n\nEvent stream is already disabled, so no intermediate messages will be sent.",
   "stop.warn_timeout":

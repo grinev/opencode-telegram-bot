@@ -295,6 +295,8 @@ export const de: I18nDictionary = {
     "⚠️ Event-Stream gestoppt, aber der Agent konnte bereits fertig sein.",
   "stop.success":
     "✅ Agent-Aktion unterbrochen. Von diesem Lauf werden keine weiteren Nachrichten gesendet.",
+  "stop.success_background_running":
+    "✅ Agent action interrupted.\nBackground operations keep running: {count}\nTheir progress and results will still appear here.",
   "stop.warn_still_busy":
     "⚠️ Signal gesendet, aber der Agent ist noch beschäftigt.\n\nDer Event-Stream ist bereits deaktiviert, daher werden keine Zwischenmeldungen gesendet.",
   "stop.warn_timeout":

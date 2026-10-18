@@ -18,7 +18,11 @@ import { formatSessionTitle } from "../../app/formatters/session-title-formatter
 import { alert, failure } from "./feedback.js";
 import { attachToSession } from "../../app/services/attach-service.js";
 import { renderAssistantFinalPartsSafe } from "../messages/assistant-rendering.js";
-import { sendBotText, sendRenderedBotPart } from "../messages/telegram-text.js";
+import {
+  AGENT_TEXT_LINK_PREVIEW_OPTIONS,
+  sendBotText,
+  sendRenderedBotPart,
+} from "../messages/telegram-text.js";
 import {
   buildSessionPickQuote,
   findEligibleReply,
@@ -534,7 +538,7 @@ async function sendSessionPickTranscript(
   const parts = renderAssistantFinalPartsSafe(reply.text);
   for (const part of parts) {
     await waitForSessionPickSend();
-    await sendRenderedBotPart({ api, chatId, part });
+    await sendRenderedBotPart({ api, chatId, part, options: AGENT_TEXT_LINK_PREVIEW_OPTIONS });
   }
 }
 
@@ -599,6 +603,7 @@ async function sendLatestAssistantResponse(
       api,
       chatId,
       part,
+      options: AGENT_TEXT_LINK_PREVIEW_OPTIONS,
     });
   }
 }
