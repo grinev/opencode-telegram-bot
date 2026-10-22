@@ -109,6 +109,7 @@ No public inbound ports are required for normal usage.
 - Ignore messages from non-authorized users
 - Ignore updates queued while the bot was offline or unreachable, so they are not executed on startup
 - Mid-session, messages older than 60 seconds after an outage are still not executed; the chat gets one notice that messages were skipped while Telegram was unreachable
+- A message delayed by a long-running update handler (for example a session pick while the reply keeps streaming) is not treated as an outage: after 5 seconds without chat output the bot says it is busy, messages delayed up to 15 seconds are executed after the handler, and older ones are dropped with a separate "the bot was busy" notice
 - If Telegram is unreachable at startup (network error, 5xx, 429), keep retrying with a growing delay capped at 60 seconds until it answers, then start polling; a rejected or invalid token (401/404) or any other fatal startup error logs the cause and exits the process with code 1 so a supervisor can restart it
 
 ### Configuration
@@ -244,7 +245,7 @@ Agent picker behavior:
 - [x] Native Telegram rich message formatting for assistant replies (Bot API 10.1)
 - [x] Incoming Telegram rich formatted messages (Bot API 10.1): converted to Markdown, accepted anywhere text is accepted, with photos attached and unsupported message types answered explicitly
 - [x] Startup either reaches Telegram polling or the process exits: transient Telegram failures are retried in-process; a bad token or other fatal startup error exits with code 1
-- [x] After a Telegram outage the bot answers again without restart; an undelivered assistant reply is not resent, and skipped stale messages are reported once
+- [x] After a Telegram outage the bot answers again without restart; an undelivered assistant reply is not resent, and skipped stale messages are reported once per cause
 
 ## Current Task List
 

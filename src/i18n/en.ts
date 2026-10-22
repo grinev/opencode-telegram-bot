@@ -98,6 +98,10 @@ export const en = {
   "bot.session_error": "🔴 OpenCode returned an error: {message}",
   "bot.assistant_reply_undelivered":
     "⚠️ The last assistant reply could not be delivered. Send your message again if you still need it.",
+  "bot.busy_operation":
+    "⏳ The bot is busy with the current operation. Wait for it to finish — messages sent now may be skipped.",
+  "bot.busy_messages_skipped":
+    "⚠️ The bot was busy and skipped some messages. Please send them again.",
   "bot.stale_messages_skipped":
     "⚠️ Some messages were skipped while Telegram was unreachable. Please send them again.",
   "bot.session_retry":

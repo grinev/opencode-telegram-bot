@@ -105,6 +105,10 @@ export const id: I18nDictionary = {
   "bot.session_error": "🔴 OpenCode mengembalikan kesalahan: {message}",
   "bot.assistant_reply_undelivered":
     "⚠️ Balasan terakhir dari asisten tidak berhasil dikirim. Kirim ulang pesanmu jika masih membutuhkannya.",
+  "bot.busy_operation":
+    "⏳ Bot sedang sibuk dengan operasi saat ini. Tunggu hingga selesai — pesan yang dikirim sekarang mungkin dilewati.",
+  "bot.busy_messages_skipped":
+    "⚠️ Bot sedang sibuk dan melewatkan beberapa pesan. Kirim ulang pesan-pesan itu.",
   "bot.stale_messages_skipped":
     "⚠️ Beberapa pesan terlewat saat Telegram tidak bisa dijangkau. Kirim ulang pesan-pesan itu.",
   "bot.session_retry":

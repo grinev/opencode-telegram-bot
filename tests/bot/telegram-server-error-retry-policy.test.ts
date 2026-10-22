@@ -108,6 +108,19 @@ describe("bot Telegram 5xx retry policy", () => {
     expect(mocked.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("tracks draft sends as chat activity", async () => {
+    mocked.fetch.mockResolvedValue(telegramApiResponse(200, true));
+    const bot = createBot(container);
+    telegramOutageNoticeService.__resetForTests();
+
+    await bot.api.sendMessageDraft(123, 1, "hi");
+    expect(telegramOutageNoticeService.msSinceLastChatSend()).not.toBeNull();
+
+    telegramOutageNoticeService.__resetForTests();
+    await bot.api.sendRichMessageDraft(123, 2, { markdown: "hi" });
+    expect(telegramOutageNoticeService.msSinceLastChatSend()).not.toBeNull();
+  });
+
   it("retries a connection-not-established error when creating a message", async () => {
     vi.useFakeTimers();
     const refused = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });

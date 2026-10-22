@@ -98,6 +98,10 @@ export const tr: I18nDictionary = {
   "bot.session_error": "🔴 OpenCode bir hata döndürdü: {message}",
   "bot.assistant_reply_undelivered":
     "⚠️ The last assistant reply could not be delivered. Send your message again if you still need it.",
+  "bot.busy_operation":
+    "⏳ Bot şu anki işlemle meşgul. Bitmesini bekleyin — şimdi gönderilen mesajlar atlanabilir.",
+  "bot.busy_messages_skipped":
+    "⚠️ Bot meşguldü ve bazı mesajları atladı. Lütfen tekrar gönderin.",
   "bot.stale_messages_skipped":
     "⚠️ Some messages were skipped while Telegram was unreachable. Please send them again.",
   "bot.session_retry":

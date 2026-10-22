@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Api } from "grammy";
 import { telegramOutageNoticeService } from "../../src/app/services/telegram-outage-notice-service.js";
 import { flushTelegramOutageNotices } from "../../src/bot/telegram-outage-notices.js";
+import { t } from "../../src/i18n/index.js";
 
 describe("telegram-outage-notices", () => {
   beforeEach(() => {
@@ -39,6 +40,37 @@ describe("telegram-outage-notices", () => {
     await flush;
 
     expect(sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends the busy notice for messages delayed by a long handler", async () => {
+    telegramOutageNoticeService.markMessagesSkipped("busy");
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
+
+    await flushTelegramOutageNotices({
+      api: { sendMessage } as unknown as Api,
+      chatId: 1,
+    });
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith(1, t("bot.busy_messages_skipped"));
+  });
+
+  it("queues both reasons when a burst mixes outage and busy skips", async () => {
+    telegramOutageNoticeService.markMessagesSkipped("outage");
+    telegramOutageNoticeService.markMessagesSkipped("busy");
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
+
+    const flush = flushTelegramOutageNotices({
+      api: { sendMessage } as unknown as Api,
+      chatId: 1,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    await flush;
+
+    expect(sendMessage).toHaveBeenNthCalledWith(1, 1, t("bot.stale_messages_skipped"));
+    expect(sendMessage).toHaveBeenNthCalledWith(2, 1, t("bot.busy_messages_skipped"));
   });
 
   it("spaces two notices one second apart", async () => {

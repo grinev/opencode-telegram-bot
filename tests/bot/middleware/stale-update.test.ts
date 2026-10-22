@@ -19,6 +19,8 @@ vi.mock("../../../src/utils/logger.js", () => ({
 
 import { staleUpdateMiddleware } from "../../../src/bot/middleware/stale-update.js";
 import { telegramOutageNoticeService } from "../../../src/app/services/telegram-outage-notice-service.js";
+import { updateBusyWindowService } from "../../../src/app/services/update-busy-window-service.js";
+import { t } from "../../../src/i18n/index.js";
 
 const NOW_MS = Date.UTC(2026, 6, 27, 12, 0, 0);
 const NOW_SECONDS = Math.floor(NOW_MS / 1000);
@@ -65,6 +67,7 @@ describe("staleUpdateMiddleware", () => {
     vi.setSystemTime(NOW_MS);
     mocked.loggerWarnMock.mockReset();
     telegramOutageNoticeService.__resetForTests();
+    updateBusyWindowService.__resetForTests();
   });
 
   afterEach(() => {
@@ -175,6 +178,65 @@ describe("staleUpdateMiddleware", () => {
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs a message at the busy-cancel boundary", async () => {
+    updateBusyWindowService.record(NOW_MS - 120_000, NOW_MS - 10_000);
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
+    const ctx = createMessageContext(15, { sendMessage });
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await staleUpdateMiddleware(ctx, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(mocked.loggerWarnMock).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("drops a message delayed by a busy bot past the cancel window with the busy notice", async () => {
+    updateBusyWindowService.record(NOW_MS - 20 * 60_000, NOW_MS - 10_000);
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
+    const ctx = createMessageContext(16, { sendMessage });
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await staleUpdateMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(mocked.loggerWarnMock).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith(1, t("bot.busy_messages_skipped"));
+  });
+
+  it("runs a transport-delayed message without a busy window", async () => {
+    const ctx = createMessageContext(30);
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await staleUpdateMiddleware(ctx, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(mocked.loggerWarnMock).not.toHaveBeenCalled();
+  });
+
+  it("prefers the busy notice for an old message covered by a busy window", async () => {
+    updateBusyWindowService.record(NOW_MS - 30 * 60_000, NOW_MS - 10_000);
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
+    const ctx = createMessageContext(61, { sendMessage });
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await staleUpdateMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith(1, t("bot.busy_messages_skipped"));
+  });
+
+  it("keeps the outage notice for a stale message outside busy windows", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
+    const ctx = createMessageContext(61, { sendMessage });
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await staleUpdateMiddleware(ctx, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith(1, t("bot.stale_messages_skipped"));
   });
 
   it("passes through a message dated in the future when clocks drift", async () => {

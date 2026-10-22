@@ -23,10 +23,8 @@ import { normalizeRichMessage } from "./handlers/rich-message-handler.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { interactionGuardMiddleware } from "./middleware/interaction-guard.js";
 import { staleUpdateMiddleware } from "./middleware/stale-update.js";
-import {
-  ensureCommandsInitialized,
-  registerCommandRouter,
-} from "./routers/command-router.js";
+import { updateBusyWindowMiddleware } from "./middleware/update-busy-window.js";
+import { ensureCommandsInitialized, registerCommandRouter } from "./routers/command-router.js";
 import { registerMessageRouter } from "./routers/message-router.js";
 import { createAttachPresentation } from "./services/attach-presentation.js";
 import { createTelegramBotOptions } from "./telegram-client-options.js";
@@ -44,6 +42,8 @@ const STARTUP_MANAGED_TELEGRAM_METHODS = new Set(["deleteWebhook", "getMe", "get
 const CHAT_DELIVERY_TELEGRAM_METHODS = new Set([
   "sendMessage",
   "sendRichMessage",
+  "sendMessageDraft",
+  "sendRichMessageDraft",
   "editMessageText",
   "sendDocument",
   "sendAudio",
@@ -211,7 +211,10 @@ export function createBot(
   });
 
   bot.use(authMiddleware);
+  // The busy timer must wrap only handlers that actually run: the stale check drops
+  // updates before it.
   bot.use(staleUpdateMiddleware);
+  bot.use(updateBusyWindowMiddleware);
   bot.on("message:rich_message", normalizeRichMessage);
   bot.use((ctx, next) => ensureCommandsInitialized(ctx, next, localCommandRegistry));
   const guardDeps = { ...container, localCommandRegistry };

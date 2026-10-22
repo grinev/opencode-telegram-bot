@@ -9,6 +9,7 @@ export async function resetSingletonState(): Promise<void> {
     { promptAttachment },
     { __resetStreamThrottleForTests },
     { telegramOutageNoticeService },
+    { updateBusyWindowService },
     { __resetServerHealthStateForTests },
     modelSelectionModule,
     promptHandoverDeliveryModule,
@@ -26,6 +27,7 @@ export async function resetSingletonState(): Promise<void> {
     import("../../src/app/managers/prompt-attachment-manager.js"),
     import("../../src/bot/streaming/stream-throttle.js"),
     import("../../src/app/services/telegram-outage-notice-service.js"),
+    import("../../src/app/services/update-busy-window-service.js"),
     import("../../src/opencode/server-health.js"),
     import("../../src/app/services/model-selection-service.js"),
     import("../../src/bot/handlers/prompt-handover.js"),
@@ -43,6 +45,7 @@ export async function resetSingletonState(): Promise<void> {
   promptHandover.__resetForTests();
   promptAttachment.__resetForTests();
   telegramOutageNoticeService.__resetForTests();
+  updateBusyWindowService.__resetForTests();
   __resetSessionDirectoryCacheForTests();
   __resetServerHealthStateForTests();
 

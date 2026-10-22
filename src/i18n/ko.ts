@@ -107,6 +107,10 @@ export const ko: I18nDictionary = {
   "bot.session_error": "🔴 OpenCode 오류가 발생했습니다: {message}",
   "bot.assistant_reply_undelivered":
     "⚠️ The last assistant reply could not be delivered. Send your message again if you still need it.",
+  "bot.busy_operation":
+    "⏳ 봇이 현재 작업으로 바쁩니다. 작업이 끝날 때까지 기다려 주세요. 지금 보낸 메시지는 건너뛸 수 있습니다.",
+  "bot.busy_messages_skipped":
+    "⚠️ 봇이 바빠서 일부 메시지를 건너뛰었습니다. 다시 보내 주세요.",
   "bot.stale_messages_skipped":
     "⚠️ Some messages were skipped while Telegram was unreachable. Please send them again.",
   "bot.session_retry":

@@ -14,11 +14,14 @@ export interface FlushTelegramOutageNoticesOptions {
 
 const unretriedSend = new AsyncLocalStorage<true>();
 
-const NOTICE_TEXT: Record<TelegramOutageNoticeKind, "bot.assistant_reply_undelivered" | "bot.stale_messages_skipped"> =
-  {
-    undelivered: "bot.assistant_reply_undelivered",
-    skipped: "bot.stale_messages_skipped",
-  };
+const NOTICE_TEXT: Record<
+  TelegramOutageNoticeKind,
+  "bot.assistant_reply_undelivered" | "bot.stale_messages_skipped" | "bot.busy_messages_skipped"
+> = {
+  undelivered: "bot.assistant_reply_undelivered",
+  skipped: "bot.stale_messages_skipped",
+  busy: "bot.busy_messages_skipped",
+};
 
 export function isUnretriedTelegramSend(): boolean {
   return unretriedSend.getStore() === true;
@@ -72,6 +75,9 @@ export async function flushTelegramOutageNotices(
     }
     if (due.skipped) {
       await sendNotice(options, "skipped");
+    }
+    if (due.busy) {
+      await sendNotice(options, "busy");
     }
   } finally {
     telegramOutageNoticeService.finishFlush();

@@ -90,6 +90,8 @@ export const zh: I18nDictionary = {
   "bot.session_error": "🔴 OpenCode 返回错误：{message}",
   "bot.assistant_reply_undelivered":
     "⚠️ The last assistant reply could not be delivered. Send your message again if you still need it.",
+  "bot.busy_operation": "⏳ 机器人正在执行当前操作。请等待完成——现在发送的消息可能会被跳过。",
+  "bot.busy_messages_skipped": "⚠️ 机器人忙，跳过了一些消息。请重新发送。",
   "bot.stale_messages_skipped":
     "⚠️ Some messages were skipped while Telegram was unreachable. Please send them again.",
   "bot.session_retry": "🔁 {message}\n\n提供方在重复重试时持续返回同一错误。使用 /abort 可停止。",
