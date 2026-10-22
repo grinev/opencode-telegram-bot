@@ -64,7 +64,7 @@ describe("bot/events/dashboard-handler", () => {
   });
 
   it("applies values at once during a hold and queues the redraw and the card's files in order", async () => {
-    aggregator.holdOutbound();
+    const generation = aggregator.holdOutbound();
 
     emitSessionDiff(aggregator, "src/a.ts");
     emitSessionDiff(aggregator, "src/b.ts");
@@ -72,7 +72,7 @@ describe("bot/events/dashboard-handler", () => {
 
     expect(calls).toEqual(["value:src/a.ts", "value:src/b.ts"]);
 
-    await aggregator.drainOutbound(0);
+    await aggregator.drainOutbound(0, generation);
 
     expect(calls).toEqual([
       "value:src/a.ts",

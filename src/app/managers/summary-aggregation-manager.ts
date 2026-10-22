@@ -361,6 +361,11 @@ function normalizeSnapshotValue(value: unknown): unknown {
   return value;
 }
 
+interface DeferredOutboundTask {
+  key?: string;
+  task: () => void | Promise<void>;
+}
+
 export class SummaryAggregator {
   private currentSessionId: string | null = null;
   private textMessageStates: Map<string, TextMessageState> = new Map();
@@ -392,8 +397,17 @@ export class SummaryAggregator {
   private onSessionDiffCallback: SessionDiffCallback | null = null;
   private onFileChangeCallback: FileChangeCallback | null = null;
   private onClearedCallback: ClearedCallback | null = null;
+  // The hold and its queue outlive a session clear: they belong to the outbound-hold
+  // lifecycle (session picks and lost-run endings), not to the session state. The array and
+  // the coalescing map are only ever changed together.
   private outboundHeld = false;
-  private deferredOutbound: Array<() => void | Promise<void>> = [];
+  private outboundHoldGeneration = 0;
+  private outboundIdleWaiters: Array<() => void> = [];
+  private deferredOutbound: DeferredOutboundTask[] = [];
+  // Coalescable tasks, last-wins: a held stream keeps one partial-text task per message
+  // instead of one per delta.
+  private deferredOutboundByKey = new Map<string, DeferredOutboundTask>();
+  private drainPromise: Promise<void> | null = null;
   private processedToolStates: Set<string> = new Set();
   private thinkingFiredForMessages: Set<string> = new Set();
   private thinkingFinishedForMessages: Set<string> = new Set();
@@ -559,34 +573,99 @@ export class SummaryAggregator {
     this.liveTurnStartedAt ??= Date.now();
   }
 
-  holdOutbound(): void {
+  holdOutbound(): number {
     this.outboundHeld = true;
+    this.outboundHoldGeneration += 1;
+    return this.outboundHoldGeneration;
   }
 
   hasDeferredOutbound(): boolean {
     return this.deferredOutbound.length > 0;
   }
 
-  async drainOutbound(gapMs: number): Promise<void> {
-    if (!this.outboundHeld) {
+  /**
+   * Replays the held outbound queue for a hold generation. Only one drain runs at a time:
+   * a concurrent caller awaits the running drain and then re-checks its own generation.
+   * A drain stops when a newer hold starts, leaving the queue to that hold's own release.
+   */
+  async drainOutbound(gapMs: number, generation: number): Promise<void> {
+    if (!this.outboundHeld || generation !== this.outboundHoldGeneration) {
       return;
     }
 
+    if (this.drainPromise) {
+      await this.drainPromise;
+      await this.drainOutbound(gapMs, generation);
+      return;
+    }
+
+    const drain = this.runDrain(generation, gapMs).finally(() => {
+      if (this.drainPromise === drain) {
+        this.drainPromise = null;
+      }
+    });
+    this.drainPromise = drain;
+    await drain;
+  }
+
+  /**
+   * Resolves once the held queue is empty, whoever drains it: a superseded caller can wait
+   * for its output without taking over a newer hold.
+   */
+  whenOutboundIdle(): Promise<void> {
+    if (!this.outboundHeld) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      this.outboundIdleWaiters.push(resolve);
+    });
+  }
+
+  private markOutboundIdle(): void {
+    this.outboundHeld = false;
+    const waiters = this.outboundIdleWaiters;
+    this.outboundIdleWaiters = [];
+    for (const resolve of waiters) {
+      resolve();
+    }
+  }
+
+  private async runDrain(generation: number, gapMs: number): Promise<void> {
     let first = true;
     for (;;) {
-      const task = this.deferredOutbound.shift();
-      if (!task) {
-        this.outboundHeld = false;
+      if (this.outboundHoldGeneration !== generation) {
+        return;
+      }
+
+      const next = this.deferredOutbound[0];
+      if (!next) {
+        this.markOutboundIdle();
         return;
       }
 
       if (!first) {
         await new Promise((resolve) => setTimeout(resolve, gapMs));
       }
+
+      // A newer hold can start during the gap: leave the queue to it.
+      if (this.outboundHoldGeneration !== generation) {
+        return;
+      }
+
+      const entry = this.deferredOutbound.shift();
+      if (!entry) {
+        this.markOutboundIdle();
+        return;
+      }
+
+      if (entry.key) {
+        this.deferredOutboundByKey.delete(entry.key);
+      }
       first = false;
 
       try {
-        await task();
+        await entry.task();
       } catch (err) {
         logger.error("[Aggregator] Error in deferred outbound callback:", err);
       }
@@ -598,20 +677,44 @@ export class SummaryAggregator {
    */
   runOutbound(task: () => void | Promise<void>): Promise<void> {
     if (this.outboundHeld) {
-      this.deferredOutbound.push(task);
+      this.deferOutbound(task);
       return Promise.resolve();
     }
 
     return Promise.resolve(task());
   }
 
-  private scheduleOutbound(task: () => void | Promise<void>, immediate: boolean): void {
+  private scheduleOutbound(
+    task: () => void | Promise<void>,
+    immediate: boolean,
+    coalesceKey?: string,
+  ): void {
     if (this.outboundHeld) {
-      this.deferredOutbound.push(task);
+      this.deferOutbound(task, coalesceKey);
       return;
     }
 
     this.deliverOutbound(task, immediate);
+  }
+
+  /**
+   * Defers a task for the hold. A coalescable key keeps only the latest task in the slot
+   * the key first took, so a long stream cannot grow the queue by its delta count.
+   */
+  private deferOutbound(task: () => void | Promise<void>, coalesceKey?: string): void {
+    if (coalesceKey) {
+      const existing = this.deferredOutboundByKey.get(coalesceKey);
+      if (existing) {
+        existing.task = task;
+        return;
+      }
+    }
+
+    const entry: DeferredOutboundTask = coalesceKey ? { key: coalesceKey, task } : { task };
+    if (coalesceKey) {
+      this.deferredOutboundByKey.set(coalesceKey, entry);
+    }
+    this.deferredOutbound.push(entry);
   }
 
   /**
@@ -2402,9 +2505,13 @@ export class SummaryAggregator {
     }
 
     const callback = this.onThinkingCallback;
-    this.scheduleOutbound(() => {
-      callback({ sessionId, messageId, sections, isFirstUpdate });
-    }, true);
+    this.scheduleOutbound(
+      () => {
+        callback({ sessionId, messageId, sections, isFirstUpdate });
+      },
+      true,
+      `thinking:${sessionId}:${messageId}:${isFirstUpdate ? "first" : "next"}`,
+    );
   }
 
   private emitThinkingFinishedOnce(sessionId: string, messageId: string): void {
@@ -2475,13 +2582,17 @@ export class SummaryAggregator {
     }
 
     const callback = this.onPartialCallback;
-    this.scheduleOutbound(() => {
-      try {
-        callback(sessionId, messageId, messageText);
-      } catch (err) {
-        logger.error("[Aggregator] Error in partial callback:", err);
-      }
-    }, false);
+    this.scheduleOutbound(
+      () => {
+        try {
+          callback(sessionId, messageId, messageText);
+        } catch (err) {
+          logger.error("[Aggregator] Error in partial callback:", err);
+        }
+      },
+      false,
+      `partial:${sessionId}:${messageId}`,
+    );
   }
 
   private getOrCreateTextMessageState(messageID: string): TextMessageState {

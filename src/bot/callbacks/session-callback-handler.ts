@@ -143,11 +143,12 @@ export async function selectSessionById(
 
   const deliverPick = options.postSelectAction === "preview" && Boolean(ctx.chat);
   let pickMessages: SessionPickMessage[] | null = null;
+  let pickGeneration: number | null = null;
   let pickBusy = false;
   if (deliverPick) {
     pickBusy = await readSessionBusy(session.id, currentProject.worktree);
     pickMessages = await loadSessionPickMessages(session.id, currentProject.worktree, pickBusy);
-    deps.summaryAggregator.holdOutbound();
+    pickGeneration = deps.summaryAggregator.holdOutbound();
   }
 
   try {
@@ -223,8 +224,8 @@ export async function selectSessionById(
       }
     }
   } finally {
-    if (deliverPick) {
-      await releaseSessionPickHold(deps.summaryAggregator);
+    if (deliverPick && pickGeneration !== null) {
+      releaseSessionPickHold(deps.summaryAggregator, pickGeneration);
     }
   }
 
@@ -379,13 +380,27 @@ function waitForSessionPickSend(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, sessionPickSendGapMs()));
 }
 
-async function releaseSessionPickHold(
+/**
+ * Releases the outbound hold in the background: the deferred live-stream updates are
+ * replayed at a send gap, and awaiting that here would block grammY's sequential update
+ * loop for as long as the picked session keeps streaming.
+ */
+function releaseSessionPickHold(
   aggregator: SessionSelectDeps["summaryAggregator"],
-): Promise<void> {
-  if (aggregator.hasDeferredOutbound()) {
-    await waitForSessionPickSend();
-  }
-  await aggregator.drainOutbound(sessionPickSendGapMs());
+  generation: number,
+): void {
+  safeBackgroundTask({
+    taskName: "sessions.releasePickOutbound",
+    task: async () => {
+      try {
+        if (aggregator.hasDeferredOutbound()) {
+          await waitForSessionPickSend();
+        }
+      } finally {
+        await aggregator.drainOutbound(sessionPickSendGapMs(), generation);
+      }
+    },
+  });
 }
 
 async function readSessionBusy(sessionId: string, directory: string): Promise<boolean> {

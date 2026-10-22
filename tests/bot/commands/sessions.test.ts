@@ -510,7 +510,9 @@ describe("bot/commands/sessions", () => {
         reply_markup: { inline_keyboard: [] },
       }),
     ]);
-    expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
+    expect(safeBackgroundTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({ taskName: "sessions.releasePickOutbound" }),
+    );
     expect((ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls[2]?.[1]).toBe(
       t("sessions.preview.empty"),
     );
@@ -585,13 +587,193 @@ describe("bot/commands/sessions", () => {
     const replyIndex = sent.findIndex((text) => text.includes("finished reply"));
     const waitingIndex = sent.findIndex((text) => text.includes("newer prompt"));
     expect(waitingIndex).toBeGreaterThan(replyIndex);
-    expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
+    expect(safeBackgroundTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({ taskName: "sessions.releasePickOutbound" }),
+    );
 
     const sendCalls = (ctx.api.sendMessage as ReturnType<typeof vi.fn>).mock.calls;
     const replyCall = sendCalls.find((call) => String(call[1]).includes("finished reply"));
     const quoteCall = sendCalls.find((call) => String(call[1]).includes("older prompt"));
     expect(replyCall?.[2]).toMatchObject({ link_preview_options: { is_disabled: false } });
     expect(quoteCall?.[2]).not.toHaveProperty("link_preview_options");
+  });
+
+  it("does not wait for the deferred outbound drain when picking a session", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+    mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: {
+            id: "user-1",
+            role: "user",
+            time: { created: 1 },
+          },
+          parts: [{ type: "text", text: "the prompt" }],
+        },
+        {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            parentID: "user-1",
+            time: { created: 2, completed: 3 },
+          },
+          parts: [{ type: "text", text: "the reply" }],
+        },
+      ],
+      error: null,
+    });
+
+    startInteractionForTest(container.interactionManager, {
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    const actualSafeBackgroundTask = await vi.importActual<
+      typeof import("../../../src/utils/safe-background-task.js")
+    >("../../../src/utils/safe-background-task.js");
+    safeBackgroundTaskMock.mockImplementation(actualSafeBackgroundTask.safeBackgroundTask);
+
+    const deps = createDeps();
+    const holdSpy = vi.spyOn(deps.summaryAggregator, "holdOutbound").mockReturnValue(42);
+    const drainSpy = vi
+      .spyOn(deps.summaryAggregator, "drainOutbound")
+      .mockImplementation(() => new Promise<void>(() => {}));
+
+    const ctx = createCallbackContext("session:session-1", 456);
+    await handleSessionSelect(ctx, deps);
+
+    expect(safeBackgroundTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({ taskName: "sessions.releasePickOutbound" }),
+    );
+    expect(holdSpy).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    expect(drainSpy).toHaveBeenCalledTimes(1);
+    expect(drainSpy.mock.calls[0]?.[1]).toBe(42);
+  });
+
+  it("drains the pick hold even when the pre-drain check throws", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+    mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: {
+            id: "user-1",
+            role: "user",
+            time: { created: 1 },
+          },
+          parts: [{ type: "text", text: "the prompt" }],
+        },
+        {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            parentID: "user-1",
+            time: { created: 2, completed: 3 },
+          },
+          parts: [{ type: "text", text: "the reply" }],
+        },
+      ],
+      error: null,
+    });
+
+    startInteractionForTest(container.interactionManager, {
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    const actualSafeBackgroundTask = await vi.importActual<
+      typeof import("../../../src/utils/safe-background-task.js")
+    >("../../../src/utils/safe-background-task.js");
+    safeBackgroundTaskMock.mockImplementation(actualSafeBackgroundTask.safeBackgroundTask);
+
+    const deps = createDeps();
+    vi.spyOn(deps.summaryAggregator, "holdOutbound").mockReturnValue(7);
+    vi.spyOn(deps.summaryAggregator, "hasDeferredOutbound").mockImplementation(() => {
+      throw new Error("check failed");
+    });
+    const drainSpy = vi
+      .spyOn(deps.summaryAggregator, "drainOutbound")
+      .mockImplementation(() => new Promise<void>(() => {}));
+
+    const ctx = createCallbackContext("session:session-1", 456);
+    await handleSessionSelect(ctx, deps);
+    await Promise.resolve();
+
+    expect(drainSpy).toHaveBeenCalledWith(expect.any(Number), 7);
+  });
+
+  it("drains a deferred task in the background after a pick", async () => {
+    mocked.sessionGetMock.mockResolvedValueOnce({
+      data: createSession(0),
+      error: null,
+    });
+    mocked.sessionMessagesMock.mockReset();
+    mocked.sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: {
+            id: "user-1",
+            role: "user",
+            time: { created: 1 },
+          },
+          parts: [{ type: "text", text: "the prompt" }],
+        },
+        {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            parentID: "user-1",
+            time: { created: 2, completed: 3 },
+          },
+          parts: [{ type: "text", text: "the reply" }],
+        },
+      ],
+      error: null,
+    });
+
+    startInteractionForTest(container.interactionManager, {
+      kind: "inline",
+      expectedInput: "callback",
+      metadata: {
+        menuKind: "session",
+        messageId: 456,
+      },
+    });
+
+    const actualSafeBackgroundTask = await vi.importActual<
+      typeof import("../../../src/utils/safe-background-task.js")
+    >("../../../src/utils/safe-background-task.js");
+    safeBackgroundTaskMock.mockImplementation(actualSafeBackgroundTask.safeBackgroundTask);
+
+    const deps = createDeps();
+    const task = vi.fn();
+    deps.summaryAggregator.holdOutbound();
+    await deps.summaryAggregator.runOutbound(task);
+    expect(task).not.toHaveBeenCalled();
+
+    const ctx = createCallbackContext("session:session-1", 456);
+    await handleSessionSelect(ctx, deps);
+
+    await vi.waitFor(() => {
+      expect(task).toHaveBeenCalledTimes(1);
+    });
+    expect(deps.summaryAggregator.hasDeferredOutbound()).toBe(false);
   });
 
   it("still sends the empty notice when the first history page fails", async () => {

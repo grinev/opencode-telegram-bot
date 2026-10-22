@@ -272,6 +272,47 @@ describe("bot/services/event-subscription-service lost run", () => {
     expect(last).not.toContain("⏳");
   });
 
+  it("releases the ending hold when the ending throws", async () => {
+    const aggregator = container.summaryAggregator;
+    const interruptSpy = vi.spyOn(aggregator, "interruptSubagents").mockImplementation(() => {
+      throw new Error("interrupt failed");
+    });
+
+    try {
+      const ending = service!.endRunLostWithServer("opencode_stop");
+
+      await expect(ending).rejects.toThrow("interrupt failed");
+      await expect(aggregator.whenOutboundIdle()).resolves.toBeUndefined();
+    } finally {
+      interruptSpy.mockRestore();
+    }
+  });
+
+  it("stays pending when a newer hold takes over the ending queue", async () => {
+    emitTool(container, "bash", "running", "call-bash", { command: "npm test" });
+    await settle();
+
+    const aggregator = container.summaryAggregator;
+    const ending = service!.endRunLostWithServer("opencode_stop");
+    const newerGeneration = aggregator.holdOutbound();
+
+    let settled = false;
+    void ending.then(() => {
+      settled = true;
+    });
+    await settle();
+    expect(settled).toBe(false);
+
+    const draining = aggregator.drainOutbound(0, newerGeneration);
+    await settle();
+    await draining;
+    await ending;
+    expect(settled).toBe(true);
+
+    const last = collectSentTexts(api).filter((text) => text.includes("npm test")).at(-1) ?? "";
+    expect(last).not.toContain("⏳");
+  });
+
   it("closes the poll on screen as not answered instead of deleting it", async () => {
     emitTool(container, "question", "running", "call-question", {});
     await settle();
