@@ -22,15 +22,15 @@ describe("generateSecMsGec", () => {
   beforeEach(() => _resetClockSkew());
   afterEach(() => _resetClockSkew());
 
-  it("produces a 64-char uppercase hex string", () => {
+  it("produces a v2 token (<16 hex>-<64 hex>)", () => {
     const token = generateSecMsGec(new Date("2024-01-01T00:00:00Z"));
-    expect(token).toMatch(/^[0-9A-F]{64}$/);
+    expect(token).toMatch(/^[0-9A-F]{16}-[0-9A-F]{64}$/);
   });
 
   it("matches the reference vector for a fixed time", () => {
     const token = generateSecMsGec(new Date("2024-01-01T00:00:00Z"));
     expect(token).toBe(
-      "2AC0A57C1214B9458F8725BB7800499BB594EC29DDA83424BC14661707141F2F",
+      "9586E5FBB4BD2CFF-DE636BA8369C7431ED826BDEEB00ECA1CC52826A6BB736DCB150A2AF37DFC498",
     );
   });
 
@@ -48,8 +48,8 @@ describe("generateSecMsGec", () => {
 });
 
 describe("SEC_MS_GEC_VERSION / EDGE_DEFAULT_VOICE", () => {
-  it("exposes a Chromium-prefixed GEC version", () => {
-    expect(SEC_MS_GEC_VERSION).toMatch(/^1-\d+\.\d+\.\d+\.\d+$/);
+  it("exposes a Chromium-prefixed v2 GEC version", () => {
+    expect(SEC_MS_GEC_VERSION).toMatch(/^2-\d+\.\d+\.\d+\.\d+$/);
   });
 
   it("uses a Neural voice as default", () => {

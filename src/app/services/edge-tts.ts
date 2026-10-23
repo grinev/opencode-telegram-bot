@@ -1,4 +1,5 @@
-import { createHash, randomBytes, randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
+import { generateSecMsGecV2 } from "./edge-tts-drm.js";
 import { WebSocket } from "ws";
 import { logger } from "../../utils/logger.js";
 
@@ -20,13 +21,9 @@ const WSS_URL = `wss://${BASE_URL}/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_T
 
 const CHROMIUM_FULL_VERSION = "143.0.3650.75";
 const CHROMIUM_MAJOR_VERSION = CHROMIUM_FULL_VERSION.split(".")[0];
-export const SEC_MS_GEC_VERSION = `1-${CHROMIUM_FULL_VERSION}`;
+export const SEC_MS_GEC_VERSION = `2-${CHROMIUM_FULL_VERSION}`;
 
 export const EDGE_DEFAULT_VOICE = "en-US-EmmaMultilingualNeural";
-
-const WIN_EPOCH_SECONDS = 11644473600;
-const TICKS_PER_SECOND = 10_000_000;
-const ROUND_SECONDS = 300;
 
 const WSS_HEADERS: Record<string, string> = {
   Pragma: "no-cache",
@@ -48,17 +45,15 @@ let clockSkewSeconds = 0;
 /**
  * Generates the Sec-MS-GEC DRM token Microsoft requires on every request.
  *
- * The token is the SHA256 (uppercased hex) of `<ticks><token>` where `ticks`
- * is the current time as Windows file time (100-ns intervals since 1601-01-01)
- * rounded down to the nearest 5 minutes. Rounded to limit token churn; the
+ * The service no longer accepts the v1 SHA256 token (it answers HTTP 403); the
+ * current token is the v2 `<16 hex>-<64 hex>` digest over `<ticks><token>`,
+ * where `ticks` is the current time as Windows file time (100-ns intervals
+ * since 1601-01-01) rounded down to the nearest 5 minutes, and is sent with
+ * `Sec-MS-GEC-Version=2-<Chromium version>`. Rounding limits token churn; the
  * server accepts any token valid within the current 5-minute window.
  */
 export function generateSecMsGec(now: Date = new Date()): string {
-  let seconds = now.getTime() / 1000 + clockSkewSeconds + WIN_EPOCH_SECONDS;
-  seconds -= seconds % ROUND_SECONDS;
-  const ticks = BigInt(Math.round(seconds)) * BigInt(TICKS_PER_SECOND);
-  const strToHash = `${ticks}${TRUSTED_CLIENT_TOKEN}`;
-  return createHash("sha256").update(strToHash, "ascii").digest("hex").toUpperCase();
+  return generateSecMsGecV2(now.getTime() / 1000 + clockSkewSeconds);
 }
 
 /** @internal Reset clock skew (for tests only). */
