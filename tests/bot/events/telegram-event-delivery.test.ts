@@ -1,3 +1,6 @@
+import { promises as fs } from "fs";
+import * as os from "os";
+import * as path from "path";
 import { describe, expect, it, vi } from "vitest";
 import {
   TelegramEventDelivery,
@@ -10,6 +13,7 @@ function createDestination() {
     sendMessageDraft: vi.fn().mockResolvedValue(true),
     editMessageText: vi.fn().mockResolvedValue(undefined),
     deleteMessage: vi.fn().mockResolvedValue(true),
+    sendDocument: vi.fn().mockResolvedValue({ message_id: 11 }),
   };
 
   return { api, destination: { api, chatId: 42 } as unknown as TelegramDestination };
@@ -90,5 +94,29 @@ describe("bot/events/telegram-event-delivery", () => {
     expect(api.editMessageText).toHaveBeenCalledWith(42, 10, "reply, edited", agentPreview);
     expect(api.sendMessage).toHaveBeenNthCalledWith(2, 42, "draft reply", agentPreview);
     expect(api.sendMessage).toHaveBeenNthCalledWith(3, 42, "🌐 webfetch https://example.com/");
+  });
+
+  it("stages outgoing documents in the OS temp directory, not beside the installed package", async () => {
+    const { destination } = createDestination();
+    const writeFile = vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
+
+    let stagedPath = "";
+    writeFile.mockImplementation((filePath) => {
+      stagedPath = String(filePath);
+      return Promise.resolve();
+    });
+
+    try {
+      await new TelegramEventDelivery().sendDocument(destination, {
+        buffer: Buffer.from("diff"),
+        filename: "write_app.ts.txt",
+        caption: "",
+      });
+    } finally {
+      writeFile.mockRestore();
+    }
+
+    expect(stagedPath).not.toBe("");
+    expect(path.dirname(stagedPath)).toBe(path.join(os.tmpdir(), "opencode-telegram-bot"));
   });
 });
