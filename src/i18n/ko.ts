@@ -298,6 +298,7 @@ export const ko: I18nDictionary = {
   "opencode_start.already_running_external":
     "✅ OpenCode 서버가 외부 프로세스로 이미 실행 중입니다\n\n버전: {version}\n\n이 서버는 봇이 시작한 것이 아니므로 /opencode-stop으로 중지할 수 없습니다.",
   "opencode_start.already_running": "✅ OpenCode 서버가 이미 실행 중입니다\n\n버전: {version}",
+  "opencode_start.connected": "✅ 실행 중인 OpenCode 서버에 연결했습니다\n{url} · v{version}",
   "opencode_start.remote_configured": "⚠️ /opencode_start는 로컬 OpenCode 서버에서만 동작합니다.",
   "opencode_start.starting": "🔄 OpenCode 서버를 시작하는 중...",
   "opencode_start.start_error":

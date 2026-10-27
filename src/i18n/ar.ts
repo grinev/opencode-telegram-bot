@@ -285,6 +285,7 @@ export const ar: I18nDictionary = {
   "opencode_start.already_running_external":
     "✅ خادم OpenCode يعمل بالفعل كعملية خارجية\n\nالإصدار: {version}\n\nلم يتم تشغيل هذا الخادم بواسطة البوت، لذلك لا يمكن إيقافه باستخدام /opencode-stop.",
   "opencode_start.already_running": "✅ خادم OpenCode يعمل بالفعل\n\nالإصدار: {version}",
+  "opencode_start.connected": "✅ تم الاتصال بخادم OpenCode قيد التشغيل\n{url} · v{version}",
   "opencode_start.remote_configured": "⚠️ يعمل /opencode_start فقط مع خادم OpenCode محلي.",
   "opencode_start.starting": "🔄 جارٍ تشغيل خادم OpenCode...",
   "opencode_start.start_error":

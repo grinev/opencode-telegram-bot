@@ -289,6 +289,7 @@ export const en = {
   "opencode_start.already_running_external":
     "✅ OpenCode Server is already running as an external process\n\nVersion: {version}\n\nThis server was not started by bot, so /opencode-stop cannot stop it.",
   "opencode_start.already_running": "✅ OpenCode Server is already running\n\nVersion: {version}",
+  "opencode_start.connected": "✅ Connected to a running OpenCode Server\n{url} · v{version}",
   "opencode_start.remote_configured": "⚠️ /opencode_start works only with a local OpenCode Server.",
   "opencode_start.starting": "🔄 Starting OpenCode Server...",
   "opencode_start.start_error":

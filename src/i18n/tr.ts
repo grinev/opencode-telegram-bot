@@ -287,6 +287,7 @@ export const tr: I18nDictionary = {
   "opencode_start.already_running_external":
     "✅ OpenCode Sunucusu zaten harici bir süreç olarak çalışıyor\n\nSürüm: {version}\n\nBu sunucu bot tarafından başlatılmadı, bu yüzden /opencode-stop onu durduramaz.",
   "opencode_start.already_running": "✅ OpenCode Sunucusu zaten çalışıyor\n\nSürüm: {version}",
+  "opencode_start.connected": "✅ Çalışan bir OpenCode Sunucusuna bağlanıldı\n{url} · v{version}",
   "opencode_start.remote_configured":
     "⚠️ /opencode_start yalnızca yerel bir OpenCode Sunucusu ile çalışır.",
   "opencode_start.starting": "🔄 OpenCode Sunucusu başlatılıyor...",

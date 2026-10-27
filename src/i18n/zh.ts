@@ -263,6 +263,7 @@ export const zh: I18nDictionary = {
   "opencode_start.already_running_external":
     "✅ OpenCode 服务器正作为外部进程运行\n\n版本：{version}\n\n该服务器不是由机器人启动，因此 /opencode-stop 无法停止它。",
   "opencode_start.already_running": "✅ OpenCode 服务器已在运行\n\n版本：{version}",
+  "opencode_start.connected": "✅ 已连接到正在运行的 OpenCode 服务器\n{url} · v{version}",
   "opencode_start.remote_configured": "⚠️ /opencode_start 仅适用于本地 OpenCode 服务器。",
   "opencode_start.starting": "🔄 正在启动 OpenCode 服务器...",
   "opencode_start.start_error":

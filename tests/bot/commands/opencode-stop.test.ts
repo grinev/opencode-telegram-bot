@@ -67,6 +67,10 @@ vi.mock("../../../src/app/services/prompt-inbox-service.js", () => ({
 
 import { opencodeStopCommand } from "../../../src/bot/commands/opencode-stop-command.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
+import {
+  __resetOpencodeServerTargetForTests,
+  switchOpencodeServer,
+} from "../../../src/opencode/server-target.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 import { startInteractionForTest } from "../../helpers/interaction.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
@@ -115,6 +119,7 @@ describe("bot/commands/opencode-stop-command", () => {
     mocked.clearPromptResponseModeMock.mockReset();
     mocked.notifyUnavailableMock.mockReset();
     promptQueue.__resetForTests();
+    __resetOpencodeServerTargetForTests();
     container.interactionManager.clear("test_setup");
 
     mocked.config.opencode.apiUrl = "http://localhost:4096";
@@ -162,6 +167,20 @@ describe("bot/commands/opencode-stop-command", () => {
     expect(ctx.reply).toHaveBeenCalledWith(t("opencode_stop.not_running"));
     expect(mocked.killServerProcessMock).not.toHaveBeenCalled();
     expect(mocked.clearRuntimeStateMock).not.toHaveBeenCalled();
+  });
+
+  it("stops the server the bot switched to instead of the configured one", async () => {
+    const ctx = createContext();
+    switchOpencodeServer({ url: "http://127.0.0.1:28894" });
+    mocked.resolveLocalOpencodeTargetMock.mockReturnValue({ host: "127.0.0.1", port: 28894 });
+    mocked.findServerPidMock.mockResolvedValue(789);
+    mocked.killServerProcessMock.mockResolvedValue(true);
+
+    await opencodeStopCommand(ctx as never, createDeps());
+
+    expect(mocked.resolveLocalOpencodeTargetMock).toHaveBeenCalledWith("http://127.0.0.1:28894");
+    expect(mocked.findServerPidMock).toHaveBeenCalledWith(28894);
+    expect(mocked.killServerProcessMock).toHaveBeenCalledWith(789, 5000);
   });
 
   it("stops the process found on the configured port without a health check", async () => {

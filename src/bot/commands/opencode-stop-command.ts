@@ -1,6 +1,6 @@
 import { CommandContext, Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
-import { config } from "../../config.js";
+import { getActiveOpencodeServer } from "../../opencode/server-target.js";
 import {
   findServerPid,
   killServerProcess,
@@ -72,7 +72,8 @@ export async function opencodeStopCommand(
       return;
     }
 
-    const localTarget = resolveLocalOpencodeTarget(config.opencode.apiUrl);
+    // After a switch to another server, that server is the one stopped.
+    const localTarget = resolveLocalOpencodeTarget(getActiveOpencodeServer().url);
     if (!localTarget) {
       await ctx.reply(t("opencode_stop.remote_configured"));
       return;

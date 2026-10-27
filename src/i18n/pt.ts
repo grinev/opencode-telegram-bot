@@ -302,6 +302,7 @@ export const pt: I18nDictionary = {
   "opencode_start.already_running_external":
     "✅ O OpenCode Server já está em execução como um processo externo\n\nVersão: {version}\n\nEste servidor não foi iniciado pelo bot, então /opencode-stop não pode encerrá-lo.",
   "opencode_start.already_running": "✅ O OpenCode Server já está em execução\n\nVersão: {version}",
+  "opencode_start.connected": "✅ Conectado a um OpenCode Server em execução\n{url} · v{version}",
   "opencode_start.remote_configured":
     "⚠️ O /opencode_start funciona apenas com um OpenCode Server local.",
   "opencode_start.starting": "🔄 Iniciando o OpenCode Server...",

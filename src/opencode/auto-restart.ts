@@ -2,7 +2,7 @@ import { config } from "../config.js";
 import { isContainerRuntime } from "../runtime/container.js";
 import { logger } from "../utils/logger.js";
 import { opencodeClient, opencodeServerVersion } from "./client.js";
-import { canStartLocalOpencodeServer } from "./local-start.js";
+import { resolveUnavailableOpencodeServer } from "./local-start.js";
 import type { OpencodeReadyLifecycle } from "./ready-lifecycle.js";
 import { explainFailedHealthCheck } from "./server-health.js";
 import {
@@ -154,10 +154,20 @@ export class OpencodeAutoRestartService {
         return;
       }
 
-      if (!(await canStartLocalOpencodeServer(this.localTarget, "once"))) {
+      const resolution = await resolveUnavailableOpencodeServer(this.localTarget, "once");
+      if (resolution.kind === "refuse") {
         logger.debug(
           `[OpenCodeAutoRestart] OpenCode server is unavailable; not starting a local server: reason=${reason}`,
         );
+        return;
+      }
+
+      if (resolution.kind === "answers" || resolution.kind === "connected") {
+        logger.info(
+          `[OpenCodeAutoRestart] OpenCode server answers: version=${resolution.version}, reason=${reason}`,
+        );
+        this.serverWasHealthy = true;
+        await this.opencodeReadyLifecycle.notifyReady(`auto_restart_${reason}`);
         return;
       }
 

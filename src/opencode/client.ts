@@ -1,23 +1,27 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
 import { config, type OpencodeServerVersion } from "../config.js";
+import { getActiveOpencodeServer, type OpencodeServerTarget } from "./server-target.js";
 import {
   createV2OpencodeClient,
-  findRegisteredV2ServerUrl,
+  findRegisteredV2Server,
+  type RegisteredV2Server,
   type V2ClientExtension,
 } from "./v2/client.js";
 
 const PROBE_TIMEOUT_MS = 5000;
 
-const getAuth = () => {
-  if (!config.opencode.password) {
+const getAuth = (server: OpencodeServerTarget) => {
+  if (!server.password) {
     return undefined;
   }
-  const credentials = `${config.opencode.username}:${config.opencode.password}`;
+  const credentials = `${server.username ?? ""}:${server.password}`;
   return `Basic ${Buffer.from(credentials).toString("base64")}`;
 };
 
-const authHeaders = (): Record<string, string> | undefined => {
-  const auth = getAuth();
+const authHeaders = (
+  server: OpencodeServerTarget = getActiveOpencodeServer(),
+): Record<string, string> | undefined => {
+  const auth = getAuth(server);
   return auth ? { Authorization: auth } : undefined;
 };
 
@@ -26,16 +30,20 @@ export const opencodeServerVersion: OpencodeServerVersion =
   config.opencode.serverVersion === "v2" ? "v2" : "v1";
 
 function createClient() {
-  const headers = authHeaders();
   if (opencodeServerVersion === "v2") {
+    // Read on every request, so the client follows a switch to another server.
     return createV2OpencodeClient({
-      baseUrl: config.opencode.apiUrl,
-      ...(headers ? { headers } : {}),
+      get baseUrl() {
+        return getActiveOpencodeServer().url;
+      },
+      get headers() {
+        return authHeaders() ?? {};
+      },
     });
   }
   return createOpencodeClient({
     baseUrl: config.opencode.apiUrl,
-    headers,
+    headers: authHeaders(),
   });
 }
 
@@ -69,17 +77,16 @@ function readServerVersion(version: OpencodeServerVersion, body: unknown): strin
 }
 
 /**
- * Asks the configured URL whether it answers the given API version, with the configured
- * credentials. Used to explain a failed health check, never to switch clients.
+ * Asks a server (by default the active one) whether it answers the given API version, with
+ * that server's credentials.
  */
 export async function probeOpencodeServer(
   version: OpencodeServerVersion,
+  server: OpencodeServerTarget = getActiveOpencodeServer(),
 ): Promise<OpencodeServerProbe> {
-  const baseUrl = config.opencode.apiUrl.endsWith("/")
-    ? config.opencode.apiUrl
-    : `${config.opencode.apiUrl}/`;
+  const baseUrl = server.url.endsWith("/") ? server.url : `${server.url}/`;
   try {
-    const headers = authHeaders();
+    const headers = authHeaders(server);
     const response = await fetch(new URL(PROBE_ROUTES[version], baseUrl), {
       ...(headers ? { headers } : {}),
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
@@ -98,7 +105,7 @@ export async function probeOpencodeServer(
   }
 }
 
-/** URL of the registered OpenCode V2 background server, or null when none answers. */
-export async function findRegisteredOpencodeServerUrl(): Promise<string | null> {
-  return findRegisteredV2ServerUrl();
+/** The registered OpenCode V2 background server and its credentials, or null when none answers. */
+export async function findRegisteredOpencodeServer(): Promise<RegisteredV2Server | null> {
+  return findRegisteredV2Server();
 }

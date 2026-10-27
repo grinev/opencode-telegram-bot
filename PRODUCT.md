@@ -31,7 +31,8 @@ No public inbound ports are required for normal usage.
 
 - Works with OpenCode V1 and OpenCode V2 servers; the API version is set in configuration (`OPENCODE_SERVER_VERSION`, default V1) and a server of the other version is reported in the log
 - Check OpenCode server status (running / not running)
-- Start OpenCode server from the app: `opencode serve` on V1, the registered background server (`opencode serve --service`) on V2; no start while the configured address answers with the wrong password or as the other version, while the local `opencode` executable is the other version, or on V2 while a registered V2 server runs on another port — the reason goes to the log
+- Start OpenCode server from the app: `opencode serve` on V1, the registered background server (`opencode serve --service`) on V2; no start while the configured address answers with the wrong password or as the other version, or while the local `opencode` executable is the other version — the reason goes to the log
+- On V2, when the configured address does not answer and OpenCode's registered V2 server runs on another port, `/opencode_start` and auto-restart connect the bot to that server instead of starting one; the connection lasts until the bot restarts, and `/opencode_stop` then stops that server
 - Stop OpenCode server from the app
 - Optionally monitor and auto-restart a local OpenCode server, with the same start rules
 

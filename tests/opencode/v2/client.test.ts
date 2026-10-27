@@ -4,6 +4,7 @@ import { isExpectedOpencodeUnavailableError } from "../../../src/utils/opencode-
 
 const fake = vi.hoisted(() => ({
   makeOptions: null as unknown,
+  discover: vi.fn(),
   events: [] as unknown[],
   client: {
     server: { info: vi.fn() },
@@ -38,8 +39,13 @@ vi.mock("@opencode/client", () => ({
   },
 }));
 
+vi.mock("@opencode/client/service", () => ({
+  Service: { discover: fake.discover },
+}));
+
 import {
   createV2OpencodeClient,
+  findRegisteredV2Server,
   type V2ClientExtension,
 } from "../../../src/opencode/v2/client.js";
 
@@ -88,6 +94,50 @@ describe("opencode/v2/client", () => {
     expect(fake.makeOptions).toEqual({
       baseUrl: "http://127.0.0.1:49374",
       headers: { Authorization: "Basic abc" },
+    });
+  });
+
+  it("hands its options to the SDK as is, so getters on them are read per request", () => {
+    let baseUrl = "http://127.0.0.1:49374";
+    const options = {
+      get baseUrl() {
+        return baseUrl;
+      },
+    };
+    createV2OpencodeClient(options);
+
+    baseUrl = "http://127.0.0.1:28894";
+
+    expect(fake.makeOptions).toBe(options);
+    expect((fake.makeOptions as { baseUrl: string }).baseUrl).toBe("http://127.0.0.1:28894");
+  });
+
+  describe("findRegisteredV2Server", () => {
+    it("returns the registered server with its registry credentials", async () => {
+      fake.discover.mockResolvedValue({
+        url: "http://127.0.0.1:28894",
+        auth: { type: "basic", username: "opencode", password: "secret" },
+      });
+
+      await expect(findRegisteredV2Server()).resolves.toEqual({
+        url: "http://127.0.0.1:28894",
+        username: "opencode",
+        password: "secret",
+      });
+    });
+
+    it("returns a registered server without authentication with no credentials", async () => {
+      fake.discover.mockResolvedValue({ url: "http://127.0.0.1:28894" });
+
+      await expect(findRegisteredV2Server()).resolves.toEqual({ url: "http://127.0.0.1:28894" });
+    });
+
+    it("returns null when no registered server answers or the lookup fails", async () => {
+      fake.discover.mockResolvedValueOnce(undefined);
+      await expect(findRegisteredV2Server()).resolves.toBeNull();
+
+      fake.discover.mockRejectedValueOnce(new Error("no registry"));
+      await expect(findRegisteredV2Server()).resolves.toBeNull();
     });
   });
 

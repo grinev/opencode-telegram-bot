@@ -292,6 +292,7 @@ export const ru: I18nDictionary = {
   "opencode_start.already_running_external":
     "✅ OpenCode Server уже запущен внешним процессом\n\nВерсия: {version}\n\nЭтот сервер не был запущен через бота, поэтому команда /opencode-stop не сможет его остановить.",
   "opencode_start.already_running": "✅ OpenCode Server уже запущен\n\nВерсия: {version}",
+  "opencode_start.connected": "✅ Подключено к запущенному OpenCode Server\n{url} · v{version}",
   "opencode_start.remote_configured":
     "⚠️ /opencode_start работает только с локальным OpenCode Server.",
   "opencode_start.starting": "🔄 Запускаю OpenCode Server...",

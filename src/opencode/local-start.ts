@@ -1,5 +1,9 @@
 import { logger } from "../utils/logger.js";
-import { findRegisteredOpencodeServerUrl, opencodeServerVersion } from "./client.js";
+import {
+  findRegisteredOpencodeServer,
+  opencodeServerVersion,
+  probeOpencodeServer,
+} from "./client.js";
 import {
   getOpencodeApiVersion,
   readLocalOpencodeVersion,
@@ -12,6 +16,30 @@ import {
   reportOpencodeProblem,
   type ProblemReportMode,
 } from "./server-health.js";
+import {
+  getConfiguredOpencodeServer,
+  isOnConfiguredOpencodeServer,
+  switchOpencodeServer,
+  type OpencodeServerTarget,
+} from "./server-target.js";
+
+/**
+ * What to do about an active OpenCode server that failed its health check:
+ * - `answers`: the active server, or the configured one again, answers after all;
+ * - `connected`: the bot now talks to the registered V2 server at `url`;
+ * - `start`: start a local server for the configured URL;
+ * - `refuse`: neither; the reason is in the log.
+ */
+export type UnavailableOpencodeServerResolution =
+  | { kind: "answers"; version: string }
+  | { kind: "connected"; url: string; version: string }
+  | { kind: "start" }
+  | { kind: "refuse" };
+
+type RegisteredServerLookup =
+  | { kind: "none" }
+  | { kind: "unusable" }
+  | { kind: "found"; server: OpencodeServerTarget; version: string };
 
 function getUrlPort(url: string): number | null {
   try {
@@ -23,26 +51,35 @@ function getUrlPort(url: string): number | null {
   }
 }
 
-/** Refuses when OpenCode V2 already runs its one registered background server on another port. */
-async function isBlockedByRegisteredServer(
+/** The OpenCode V2 background server registered on another port, checked with its own credentials. */
+async function findRegisteredServerOnAnotherPort(
   target: LocalOpencodeTarget,
   mode: ProblemReportMode,
-): Promise<boolean> {
+): Promise<RegisteredServerLookup> {
   if (opencodeServerVersion !== "v2") {
-    return false;
+    return { kind: "none" };
   }
 
-  const registeredUrl = await findRegisteredOpencodeServerUrl();
-  if (!registeredUrl || getUrlPort(registeredUrl) === target.port) {
-    return false;
+  const registered = await findRegisteredOpencodeServer();
+  if (!registered || getUrlPort(registered.url) === target.port) {
+    return { kind: "none" };
   }
 
-  reportOpencodeProblem(`registered:${registeredUrl}`, mode, () =>
+  const probe = await probeOpencodeServer("v2", registered);
+  if (probe.kind === "found") {
+    return { kind: "found", server: registered, version: probe.serverVersion };
+  }
+
+  const problem =
+    probe.kind === "unauthorized"
+      ? "rejected the credentials from the OpenCode registry"
+      : "did not answer as an OpenCode v2 server";
+  reportOpencodeProblem(`registered:${registered.url}`, mode, () =>
     logger.error(
-      `[OpenCode] Not starting a local OpenCode v2 server for ${describeServerUrl()}: a registered OpenCode v2 background server is already running at ${registeredUrl}, and starting another one would replace it. Set OPENCODE_API_URL=${registeredUrl} and restart the bot, or stop that server (opencode service stop).`,
+      `[OpenCode] Not connecting to the registered OpenCode v2 background server at ${describeServerUrl(registered)}: it ${problem}. Not starting another local server either, since that would replace it; stop that server (opencode service stop) or fix it.`,
     ),
   );
-  return true;
+  return { kind: "unusable" };
 }
 
 /** Refuses when the local `opencode` executable is a release of the other API version. */
@@ -66,22 +103,45 @@ async function isBlockedByExecutableVersion(mode: ProblemReportMode): Promise<bo
 }
 
 /**
- * Decides whether a local OpenCode server may be started for the configured URL, after its
- * health check failed. Every refusal is explained in the log; nothing is started here.
+ * Decides what to do after the active OpenCode server failed its health check, in this
+ * order: the active server, the configured one when the bot is switched away from it, the
+ * configured address's failure cause, the registered V2 server on another port, and the
+ * local `opencode` executable. The bot is switched only to a server that has just answered,
+ * or to the configured one right before a start; every refusal is explained in the log.
  */
-export async function canStartLocalOpencodeServer(
+export async function resolveUnavailableOpencodeServer(
   target: LocalOpencodeTarget,
   mode: ProblemReportMode,
-): Promise<boolean> {
-  const cause = await classifyFailedHealthCheck();
+): Promise<UnavailableOpencodeServerResolution> {
+  const active = await probeOpencodeServer(opencodeServerVersion);
+  if (active.kind === "found") {
+    return { kind: "answers", version: active.serverVersion };
+  }
+
+  const configured = getConfiguredOpencodeServer();
+  if (!isOnConfiguredOpencodeServer()) {
+    const configuredProbe = await probeOpencodeServer(opencodeServerVersion, configured);
+    if (configuredProbe.kind === "found") {
+      switchOpencodeServer(null);
+      return { kind: "answers", version: configuredProbe.serverVersion };
+    }
+  }
+
+  const cause = await classifyFailedHealthCheck(configured);
   if (cause.kind !== "unknown") {
-    reportFailedHealthCause(cause, mode);
-    return false;
+    reportFailedHealthCause(cause, mode, configured);
+    return { kind: "refuse" };
   }
 
-  if (await isBlockedByRegisteredServer(target, mode)) {
-    return false;
+  const registered = await findRegisteredServerOnAnotherPort(target, mode);
+  if (registered.kind === "found") {
+    switchOpencodeServer(registered.server);
+    return { kind: "connected", url: registered.server.url, version: registered.version };
+  }
+  if (registered.kind === "unusable" || (await isBlockedByExecutableVersion(mode))) {
+    return { kind: "refuse" };
   }
 
-  return !(await isBlockedByExecutableVersion(mode));
+  switchOpencodeServer(null);
+  return { kind: "start" };
 }

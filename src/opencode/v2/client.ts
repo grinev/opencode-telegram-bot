@@ -146,10 +146,9 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * `V2ClientExtension`; everything else is absent.
  */
 export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient {
-  const client: OpenCodeClient = OpenCode.make({
-    baseUrl: options.baseUrl,
-    ...(options.headers ? { headers: options.headers } : {}),
-  });
+  // Handed over as is: the SDK reads the address and headers on every request and stream
+  // connect, so an options object with getters follows a server switch.
+  const client: OpenCodeClient = OpenCode.make(options);
 
   // Replies to V2 forms and permissions need the session and, for forms, the fields;
   // both are learned from the lists and the event stream.
@@ -688,13 +687,26 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
   return adapter as unknown as OpencodeClient;
 }
 
+export interface RegisteredV2Server {
+  url: string;
+  username?: string;
+  password?: string;
+}
+
 /**
- * URL of the V2 background server registered for this user, or null when no registered
- * server answers. There is one per user: a new registered server replaces it.
+ * The V2 background server registered for this user, with the credentials it expects, or
+ * null when no registered server answers. There is one per user: a new registered server
+ * replaces it.
  */
-export async function findRegisteredV2ServerUrl(): Promise<string | null> {
+export async function findRegisteredV2Server(): Promise<RegisteredV2Server | null> {
   try {
-    return (await Service.discover())?.url ?? null;
+    const endpoint = await Service.discover();
+    if (!endpoint) {
+      return null;
+    }
+    return endpoint.auth
+      ? { url: endpoint.url, username: endpoint.auth.username, password: endpoint.auth.password }
+      : { url: endpoint.url };
   } catch {
     return null;
   }

@@ -2,7 +2,7 @@ import { CommandContext, Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
 import { opencodeClient, opencodeServerVersion } from "../../opencode/client.js";
-import { canStartLocalOpencodeServer } from "../../opencode/local-start.js";
+import { resolveUnavailableOpencodeServer } from "../../opencode/local-start.js";
 import { resolveLocalOpencodeTarget, startLocalOpencodeServer } from "../../opencode/process.js";
 import { explainFailedHealthCheck } from "../../opencode/server-health.js";
 import { logger } from "../../utils/logger.js";
@@ -116,8 +116,23 @@ export async function opencodeStartCommand(
     // would then skip the ready refresh (model catalog, selection check, session restore).
     deps.opencodeReadyLifecycle.notifyUnavailable("opencode_start_not_running");
 
-    if (!(await canStartLocalOpencodeServer(localTarget, "always"))) {
+    const resolution = await resolveUnavailableOpencodeServer(localTarget, "always");
+    if (resolution.kind === "refuse") {
       await ctx.reply(t("opencode_start.error"));
+      return;
+    }
+
+    if (resolution.kind === "answers") {
+      await ctx.reply(t("opencode_start.already_running", { version: resolution.version }));
+      await deps.opencodeReadyLifecycle.notifyReady("opencode_start_already_running");
+      return;
+    }
+
+    if (resolution.kind === "connected") {
+      await ctx.reply(
+        t("opencode_start.connected", { url: resolution.url, version: resolution.version }),
+      );
+      await deps.opencodeReadyLifecycle.notifyReady("opencode_start_connected");
       return;
     }
 

@@ -151,8 +151,14 @@ describe("opencode/server-health", () => {
     const health = await checkOpencodeHealth();
 
     expect(health.healthy).toBe(false);
-    expect(mocked.probeMock).toHaveBeenCalledWith("v1");
-    expect(mocked.probeMock).toHaveBeenCalledWith("v2");
+    expect(mocked.probeMock).toHaveBeenCalledWith(
+      "v1",
+      expect.objectContaining({ url: "http://user:secret@127.0.0.1:4096" }),
+    );
+    expect(mocked.probeMock).toHaveBeenCalledWith(
+      "v2",
+      expect.objectContaining({ url: "http://user:secret@127.0.0.1:4096" }),
+    );
     expect(mocked.loggerErrorMock).not.toHaveBeenCalled();
   });
 
