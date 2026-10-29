@@ -261,7 +261,7 @@ export const en = {
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
   "detach.no_active_session": "ℹ️ Bot is already detached from any session.",
   "detach.success":
-    "✅ Detached from session: {title}\n\nThe OpenCode session was not stopped. If it is still running, it will continue separately. To check it later, select it again via /sessions.",
+    "✅ Detached from session: {title}\n\nThe OpenCode session was not stopped. If it is still running, it will continue separately. To check it later, select it again via /recent.",
   "detach.error": "🔴 Failed to detach from the current session.",
 
   "new.project_not_selected":

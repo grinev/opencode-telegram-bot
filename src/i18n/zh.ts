@@ -241,7 +241,7 @@ export const zh: I18nDictionary = {
   "detach.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
   "detach.no_active_session": "ℹ️ 机器人当前未附加到任何会话。",
   "detach.success":
-    "✅ 已从会话分离：{title}\n\nOpenCode 会话未停止。如果它仍在运行，将继续独立执行。稍后可通过 /sessions 重新选择它来查看。",
+    "✅ 已从会话分离：{title}\n\nOpenCode 会话未停止。如果它仍在运行，将继续独立执行。稍后可通过 /recent 重新选择它来查看。",
   "detach.error": "🔴 无法从当前会话分离。",
 
   "new.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",

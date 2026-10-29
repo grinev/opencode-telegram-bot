@@ -259,7 +259,7 @@ export const tr: I18nDictionary = {
   "detach.project_not_selected": "🏗 Proje seçilmedi.\n\nÖnce /projects ile bir proje seçin.",
   "detach.no_active_session": "ℹ️ Bot zaten hiçbir oturuma bağlı değil.",
   "detach.success":
-    "✅ Oturumdan ayrılındı: {title}\n\nOpenCode oturumu durdurulmadı. Hâlâ çalışıyorsa ayrı olarak devam edecek. Daha sonra kontrol etmek için /sessions ile yeniden seçin.",
+    "✅ Oturumdan ayrılındı: {title}\n\nOpenCode oturumu durdurulmadı. Hâlâ çalışıyorsa ayrı olarak devam edecek. Daha sonra kontrol etmek için /recent ile yeniden seçin.",
   "detach.error": "🔴 Geçerli oturumdan ayrılınamadı.",
 
   "new.project_not_selected": "🏗 Proje seçilmedi.\n\nÖnce /projects ile bir proje seçin.",

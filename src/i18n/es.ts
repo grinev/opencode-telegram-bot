@@ -269,7 +269,7 @@ export const es: I18nDictionary = {
     "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
   "detach.no_active_session": "ℹ️ El bot ya no está conectado a ninguna sesión.",
   "detach.success":
-    "✅ Desconectado de la sesión: {title}\n\nLa sesión de OpenCode no se detuvo. Si todavía está en ejecución, continuará por separado. Para revisarla más tarde, selecciónala de nuevo con /sessions.",
+    "✅ Desconectado de la sesión: {title}\n\nLa sesión de OpenCode no se detuvo. Si todavía está en ejecución, continuará por separado. Para revisarla más tarde, selecciónala de nuevo con /recent.",
   "detach.error": "🔴 No se pudo desconectar de la sesión actual.",
 
   "new.project_not_selected":

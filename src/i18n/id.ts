@@ -262,7 +262,7 @@ export const id: I18nDictionary = {
   "detach.project_not_selected": "🏗 Proyek belum dipilih.\n\nPilih dulu proyek dengan /projects.",
   "detach.no_active_session": "ℹ️ Bot sudah terlepas dari sesi mana pun.",
   "detach.success":
-    "✅ Terlepas dari sesi: {title}\n\nSesi OpenCode tidak dihentikan. Jika masih berjalan, sesi akan lanjut sendiri. Untuk memeriksanya nanti, pilih lagi lewat /sessions.",
+    "✅ Terlepas dari sesi: {title}\n\nSesi OpenCode tidak dihentikan. Jika masih berjalan, sesi akan lanjut sendiri. Untuk memeriksanya nanti, pilih lagi lewat /recent.",
   "detach.error": "🔴 Gagal melepaskan dari sesi saat ini.",
 
   "new.project_not_selected": "🏗 Proyek belum dipilih.\n\nPilih dulu proyek dengan /projects.",
