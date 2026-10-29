@@ -4,11 +4,17 @@ import { getDateLocale, t } from "../../i18n/index.js";
 import { formatSessionTitle } from "../../app/formatters/session-title-formatter.js";
 import { logger } from "../../utils/logger.js";
 import { collectFromPresentFolders } from "../../app/services/folder-presence-service.js";
+import {
+  loadSessionStatuses,
+  type SessionRunStatus,
+} from "../../app/services/session-status-service.js";
+import { SESSION_STATUS_GLYPHS, buildSessionStatusLegend } from "./session-status-legend.js";
 
 export const SESSION_CALLBACK_PREFIX = "session:";
 const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
 const BACKGROUND_SESSION_CALLBACK_PREFIX = "background-session:";
 const SESSION_FETCH_EXTRA_COUNT = 1;
+const SESSION_BUTTON_TEXT_LIMIT = 64;
 
 export type SessionListItem = {
   id: string;
@@ -17,6 +23,7 @@ export type SessionListItem = {
   time: {
     created: number;
   };
+  status: SessionRunStatus;
 };
 
 export type SessionPage = {
@@ -110,11 +117,9 @@ export function buildBackgroundSessionOpenKeyboard(
 }
 
 function formatSessionsSelectText(page: number): string {
-  if (page === 0) {
-    return t("sessions.select");
-  }
-
-  return t("sessions.select_page", { page: page + 1 });
+  const heading =
+    page === 0 ? t("sessions.select") : t("sessions.select_page", { page: page + 1 });
+  return [heading, "", buildSessionStatusLegend()].join("\n");
 }
 
 export async function loadSessionPage(
@@ -141,12 +146,26 @@ export async function loadSessionPage(
   const hasNext = sessions.length > endExclusive;
   const pagedSessions = sessions.slice(startIndex, endExclusive);
 
+  let statuses = new Map<string, SessionRunStatus>();
+  try {
+    statuses = await loadSessionStatuses(
+      directory,
+      sessions.map((session) => session.id),
+    );
+  } catch (error) {
+    // The statuses are decoration: a failed lookup must not hide the page.
+    logger.warn("[Sessions] Failed to load session statuses; showing the page without them:", error);
+  }
+
   logger.debug(
     `[Sessions] Loaded page=${page + 1}, startIndex=${startIndex}, endExclusive=${endExclusive}, pageSize=${pageSize}, items=${pagedSessions.length}, hasNext=${hasNext}`,
   );
 
   return {
-    sessions: pagedSessions as SessionListItem[],
+    sessions: pagedSessions.map((session) => ({
+      ...session,
+      status: statuses.get(session.id) ?? "idle",
+    })) as SessionListItem[],
     hasNext,
     page,
   };
@@ -159,8 +178,19 @@ function buildSessionsKeyboard(pageData: SessionPage, pageSize: number): InlineK
 
   pageData.sessions.forEach((session, index) => {
     const date = new Date(session.time.created).toLocaleDateString(localeForDate);
-    const label = `${pageStartIndex + index + 1}. ${formatSessionTitle(session.title)} (${date})`;
-    keyboard.text(label, `${SESSION_CALLBACK_PREFIX}${session.id}`).row();
+    const prefix = `${SESSION_STATUS_GLYPHS[session.status]} ${pageStartIndex + index + 1}. `;
+    const suffix = ` (${date})`;
+    const available = Math.max(
+      0,
+      SESSION_BUTTON_TEXT_LIMIT - [...prefix].length - [...suffix].length,
+    );
+    const displayTitle = formatSessionTitle(session.title);
+    const title = [...displayTitle];
+    const trimmedTitle =
+      title.length > available
+        ? `${title.slice(0, Math.max(0, available - 1)).join("")}…`
+        : displayTitle;
+    keyboard.text(`${prefix}${trimmedTitle}${suffix}`, `${SESSION_CALLBACK_PREFIX}${session.id}`).row();
   });
 
   if (pageData.page > 0) {

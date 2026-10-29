@@ -44,7 +44,7 @@ No public inbound ports are required for normal usage.
 
 ### Session management
 
-- Fetch last N sessions (name + date)
+- Fetch last N sessions of the current project (name + date + run status)
 - Select an existing session, show the last user input as a quote and the last assistant reply in full (plus the newest input still waiting for its reply), then follow its live updates
 - Browse up to `SESSIONS_LIST_LIMIT` recent root sessions across projects and git worktrees with running, idle, question and permission status (a question or permission request a subagent is waiting on counts for its root session); select one to switch project and follow it, including after detach
 - Switching to an existing session adopts the agent, model, and variant it last ran with
@@ -142,7 +142,7 @@ Current command set:
 - `/new` - create a new session
 - `/abort` - stop the current task; background operations OpenCode keeps running stay followed, and the success reply then says how many keep running in place of "No more messages from this run will be sent": each background command and each subagent card still running counts once, a nested launch inside its card, the same number in compact and full mode
 - `/detach` - detach the bot from the current session without stopping it; messages waiting for its running task stay with it and reach it as if the bot had stayed attached (no buttons, withdrawn only by `/abort` there or `/opencode_stop`); a later command or prompt HTTP failure for that session is not posted to chat unless the bot has re-attached to it
-- `/sessions` - show and switch recent sessions
+- `/sessions` - show and switch recent sessions of the current project with their status
 - `/recent` - show recent sessions across projects and worktrees with their status and switch directly to one
 - `/messages` - browse user messages in the current session
 - `/projects` - show and switch projects

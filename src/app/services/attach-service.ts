@@ -6,7 +6,7 @@ import type { PermissionPromptChange, PermissionRequest } from "../types/permiss
 import type { SessionInfo } from "../types/session.js";
 import { clearSession, getCurrentSession } from "./session-service.js";
 import { getCurrentProject } from "../stores/settings-store.js";
-import { resolveSessionParentChain } from "./recent-sessions-service.js";
+import { resolveSessionParentChain } from "./session-status-service.js";
 import { resetStreamThrottle } from "../../bot/streaming/stream-throttle.js";
 import { logger } from "../../utils/logger.js";
 import {

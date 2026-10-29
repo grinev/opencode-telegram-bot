@@ -6,6 +6,10 @@ import {
 } from "../../../src/bot/callbacks/session-callback-handler.js";
 import { sessionsCommand } from "../../../src/bot/commands/sessions-command.js";
 import { buildBackgroundSessionOpenKeyboard } from "../../../src/bot/menus/session-selection-menu.js";
+import {
+  SESSION_STATUS_GLYPHS,
+  buildSessionStatusLegend,
+} from "../../../src/bot/menus/session-status-legend.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { safeBackgroundTask } from "../../../src/utils/safe-background-task.js";
@@ -23,6 +27,8 @@ const mocked = vi.hoisted(() => ({
   sessionGetMock: vi.fn(),
   sessionMessagesMock: vi.fn(),
   sessionStatusMock: vi.fn(),
+  questionListMock: vi.fn(),
+  permissionListMock: vi.fn(),
   sessionMessageMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
   clearInteractionMock: vi.fn(),
@@ -56,6 +62,8 @@ vi.mock("../../../src/opencode/client.js", () => ({
       status: mocked.sessionStatusMock,
       message: mocked.sessionMessageMock,
     },
+    question: { list: mocked.questionListMock },
+    permission: { list: mocked.permissionListMock },
   },
 }));
 
@@ -227,6 +235,10 @@ describe("bot/commands/sessions", () => {
     mocked.sessionMessagesMock.mockResolvedValue({ data: [], error: null });
     mocked.sessionStatusMock.mockReset();
     mocked.sessionStatusMock.mockResolvedValue({ data: {}, error: null });
+    mocked.questionListMock.mockReset();
+    mocked.questionListMock.mockResolvedValue({ data: [], error: null });
+    mocked.permissionListMock.mockReset();
+    mocked.permissionListMock.mockResolvedValue({ data: [], error: null });
     mocked.sessionMessageMock.mockReset();
     mocked.setCurrentSessionMock.mockReset();
     mocked.clearInteractionMock.mockReset();
@@ -277,6 +289,64 @@ describe("bot/commands/sessions", () => {
     expect(keyboardRows[11]?.[0]?.callback_data).toBe("inline:cancel:session");
   });
 
+  it("caps a long session title to the button text limit", async () => {
+    mocked.sessionListMock.mockResolvedValueOnce({
+      data: [{ ...createSession(0), title: "A".repeat(100) }],
+      error: null,
+    });
+
+    const ctx = createCommandContext();
+    await sessionsCommand(ctx as never, createDeps());
+
+    const label = getKeyboardButtons(ctx)[0]?.[0]?.text ?? "";
+    expect([...label].length).toBeLessThanOrEqual(64);
+    expect(label.startsWith(`${SESSION_STATUS_GLYPHS.idle} 1. `)).toBe(true);
+    expect(label).toContain("…");
+    expect(label).toMatch(/ \(.+\)$/);
+  });
+
+  it("keeps the session list when statuses cannot be loaded", async () => {
+    mocked.sessionListMock.mockResolvedValueOnce({
+      data: [createSession(0)],
+      error: null,
+    });
+    mocked.questionListMock.mockRejectedValueOnce(new Error("statuses down"));
+
+    const ctx = createCommandContext();
+    await sessionsCommand(ctx as never, createDeps());
+
+    const label = getKeyboardButtons(ctx)[0]?.[0]?.text;
+    expect(label).toContain(SESSION_STATUS_GLYPHS.idle);
+  });
+
+  it("shows the run status of each session in the list", async () => {
+    mocked.sessionListMock.mockResolvedValueOnce({
+      data: [createSession(0), createSession(1), createSession(2), createSession(3)],
+      error: null,
+    });
+    mocked.sessionStatusMock.mockResolvedValueOnce({
+      data: { "session-1": { type: "busy" }, "session-2": { type: "retry" } },
+      error: null,
+    });
+    mocked.questionListMock.mockResolvedValueOnce({
+      data: [{ sessionID: "session-3" }],
+      error: null,
+    });
+    mocked.permissionListMock.mockResolvedValueOnce({
+      data: [{ sessionID: "session-4" }],
+      error: null,
+    });
+
+    const ctx = createCommandContext();
+    await sessionsCommand(ctx as never, createDeps());
+
+    const labels = getKeyboardButtons(ctx).map((row) => row[0]?.text ?? "");
+    expect(labels[0]).toContain(SESSION_STATUS_GLYPHS.running);
+    expect(labels[1]).toContain(SESSION_STATUS_GLYPHS.running);
+    expect(labels[2]).toContain(SESSION_STATUS_GLYPHS.question);
+    expect(labels[3]).toContain(SESSION_STATUS_GLYPHS.permission);
+  });
+
   it("leaves out sessions whose folder is gone without letting them take places on the page", async () => {
     const sessions = Array.from({ length: 13 }, (_, index) => ({
       ...createSession(index),
@@ -318,7 +388,9 @@ describe("bot/commands/sessions", () => {
     await sessionsCommand(ctx as never, createDeps());
 
     const label = getKeyboardButtons(ctx)[0]?.[0]?.text;
-    expect(label).toMatch(new RegExp(`^1\\. ${t("pinned.default_session_title")} \\(`));
+    expect(label).toMatch(
+      new RegExp(`^${SESSION_STATUS_GLYPHS.idle} 1\\. ${t("pinned.default_session_title")} \\(`),
+    );
   });
 
   it("confirms the selection of an unnamed session as a new session and keeps its title empty", async () => {
@@ -388,7 +460,9 @@ describe("bot/commands/sessions", () => {
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
 
-    expect(text).toBe(t("sessions.select_page", { page: 2 }));
+    expect(text).toBe(
+      [t("sessions.select_page", { page: 2 }), "", buildSessionStatusLegend()].join("\n"),
+    );
     const inlineRows = options.reply_markup.inline_keyboard;
     expect(inlineRows[0]?.[0]?.callback_data).toBe("session:session-11");
     expect(inlineRows[1]?.[0]?.callback_data).toBe("session:session-12");

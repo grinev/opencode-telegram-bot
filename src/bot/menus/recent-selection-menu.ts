@@ -1,13 +1,14 @@
 import { InlineKeyboard } from "grammy";
 import { getProjectFolderName } from "./project-selection-menu.js";
-import type { RecentSession, RecentStatus } from "../../app/services/recent-sessions-service.js";
+import type { RecentSession } from "../../app/services/recent-sessions-service.js";
 import { t } from "../../i18n/index.js";
 import { formatSessionTitle } from "../../app/formatters/session-title-formatter.js";
+import {
+  SESSION_STATUS_GLYPHS,
+  buildSessionStatusLegend,
+} from "./session-status-legend.js";
 
 export const RECENT_CALLBACK_PREFIX = "recent:";
-const GLYPHS: Record<RecentStatus, string> = {
-  running: "⏳", idle: "○", question: "❓", permission: "🔐",
-};
 
 function shortenProject(name: string): string {
   if ([...name].length <= 40) return name;
@@ -72,7 +73,7 @@ export function buildRecentMenu(rows: RecentSession[]): { text: string; keyboard
   const names = projectLabels(projectNames(rows));
   rows.forEach(({ session, status }, index) => {
     const project = names[index] ?? "";
-    const prefix = `${GLYPHS[status]} [${project}] `;
+    const prefix = `${SESSION_STATUS_GLYPHS[status]} [${project}] `;
     const available = Math.max(0, 64 - [...prefix].length);
     const displayTitle = formatSessionTitle(session.title);
     const title = [...displayTitle];
@@ -82,7 +83,7 @@ export function buildRecentMenu(rows: RecentSession[]): { text: string; keyboard
     keyboard.text(`${prefix}${trimmed}`, `${RECENT_CALLBACK_PREFIX}${index}`).row();
   });
   return {
-    text: [t("recent.heading"), "", `⏳ ${t("recent.running")} · ○ ${t("recent.idle")} · ❓ ${t("recent.question")} · 🔐 ${t("recent.permission")}`].join("\n"),
+    text: [t("recent.heading"), "", buildSessionStatusLegend()].join("\n"),
     keyboard,
   };
 }
