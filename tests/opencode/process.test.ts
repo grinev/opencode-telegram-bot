@@ -11,6 +11,7 @@ import {
   getOpencodeApiVersion,
   parseOpencodeVersionOutput,
   readNpmShimTarget,
+  resolvePosixOpencodeExecutable,
 } from "../../src/opencode/process.js";
 
 const V2_NPM_SHIM = [
@@ -25,6 +26,27 @@ const V2_NPM_SHIM = [
   '"%dp0%\\node_modules\\@opencode\\cli\\bin\\opencode.exe"   %*',
   "",
 ].join("\r\n");
+
+function withTempOpencodeEnv(run: (paths: { pathDir: string; homeExe: string }) => void): void {
+  const originalPath = process.env.PATH;
+  const originalHome = process.env.HOME;
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-telegram-bot-"));
+  const pathDir = path.join(tempRoot, "path-bin");
+  const homeDir = path.join(tempRoot, "home");
+  const homeExe = path.join(homeDir, ".opencode", "bin", "opencode");
+
+  try {
+    fs.mkdirSync(pathDir, { recursive: true });
+    fs.mkdirSync(path.dirname(homeExe), { recursive: true });
+    process.env.PATH = pathDir;
+    process.env.HOME = homeDir;
+    run({ pathDir, homeExe });
+  } finally {
+    process.env.PATH = originalPath;
+    process.env.HOME = originalHome;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
 
 describe("opencode/process", () => {
   it("matches the exact local port on Windows netstat output", async () => {
@@ -64,10 +86,46 @@ describe("opencode/process", () => {
       return;
     }
 
-    expect(command).toEqual({
-      command: "opencode",
-      args: ["serve", "--port", "4987"],
-      windowsHide: false,
+    expect(command.args).toEqual(["serve", "--port", "4987"]);
+    expect(command.windowsHide).toBe(false);
+    expect(command.command.endsWith("opencode")).toBe(true);
+  });
+
+  it("resolves opencode from PATH before the installer fallback", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    withTempOpencodeEnv(({ pathDir, homeExe }) => {
+      fs.writeFileSync(path.join(pathDir, "opencode"), "#!/bin/sh\n", { mode: 0o755 });
+      fs.writeFileSync(homeExe, "#!/bin/sh\n", { mode: 0o755 });
+
+      expect(resolvePosixOpencodeExecutable()).toBe("opencode");
+    });
+  });
+
+  it("falls back to the OpenCode installer directory when PATH has no opencode", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    withTempOpencodeEnv(({ homeExe }) => {
+      fs.writeFileSync(homeExe, "#!/bin/sh\n", { mode: 0o755 });
+
+      expect(resolvePosixOpencodeExecutable()).toBe(homeExe);
+    });
+  });
+
+  it("skips a non-executable opencode file on PATH and uses the installer fallback", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    withTempOpencodeEnv(({ pathDir, homeExe }) => {
+      fs.writeFileSync(path.join(pathDir, "opencode"), "not executable\n", { mode: 0o644 });
+      fs.writeFileSync(homeExe, "#!/bin/sh\n", { mode: 0o755 });
+
+      expect(resolvePosixOpencodeExecutable()).toBe(homeExe);
     });
   });
 

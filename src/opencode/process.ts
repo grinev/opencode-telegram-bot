@@ -1,5 +1,6 @@
 import { exec, execFile, spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { accessSync, constants as fsConstants, existsSync, readFileSync, statSync } from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import type { OpencodeServerVersion } from "../config.js";
@@ -59,6 +60,62 @@ export function readNpmShimTarget(shimPath: string): string | null {
   }
 }
 
+function isExecutableFile(filePath: string): boolean {
+  try {
+    if (!statSync(filePath).isFile()) {
+      return false;
+    }
+    accessSync(filePath, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Directories the OpenCode installer adds to the shell rc files, not to a service PATH. */
+const POSIX_OPENCODE_FALLBACK_DIRS = [
+  path.join(".opencode", "bin"),
+  path.join(".local", "bin"),
+  path.join(".npm-global", "bin"),
+];
+
+const POSIX_OPENCODE_FALLBACK_PATHS = [
+  "/usr/local/bin/opencode",
+  "/opt/homebrew/bin/opencode",
+  "/usr/bin/opencode",
+];
+
+/**
+ * The `opencode` command to run on Linux and macOS. PATH keeps precedence, so the bot
+ * starts whichever opencode the shell would. Service managers (systemd, cron, a desktop
+ * launcher) start the bot with a PATH that usually lacks the installer's directory, so
+ * fall back to the places the installer and npm use.
+ */
+export function resolvePosixOpencodeExecutable(): string {
+  const pathEntries = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  for (const entry of pathEntries) {
+    if (isExecutableFile(path.join(entry, "opencode"))) {
+      return "opencode";
+    }
+  }
+
+  const home = os.homedir();
+  for (const relativeDir of POSIX_OPENCODE_FALLBACK_DIRS) {
+    const candidate = path.join(home, relativeDir, "opencode");
+    if (isExecutableFile(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (const candidate of POSIX_OPENCODE_FALLBACK_PATHS) {
+    if (isExecutableFile(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "opencode";
+}
+
 function resolveWindowsOpencodeExe(): string {
   const pathEnv = process.env.PATH ?? "";
   const pathEntries = pathEnv.split(path.delimiter).filter(Boolean);
@@ -111,7 +168,7 @@ function createOpencodeCommand(args: string[]): OpencodeServeSpawnCommand {
     return { command: "cmd.exe", args: ["/c", "opencode", ...args], windowsHide: true };
   }
 
-  return { command: "opencode", args, windowsHide: false };
+  return { command: resolvePosixOpencodeExecutable(), args, windowsHide: false };
 }
 
 /**
