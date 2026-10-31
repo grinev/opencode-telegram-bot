@@ -1,6 +1,3 @@
-import { promises as fs } from "fs";
-import * as os from "os";
-import * as path from "path";
 import { InputFile, type Bot, type Context } from "grammy";
 import type { CodeFileData } from "../../app/formatters/summary-formatter.js";
 import { logger } from "../../utils/logger.js";
@@ -13,11 +10,6 @@ import {
   sendRenderedBotPart,
 } from "../messages/telegram-text.js";
 import type { TelegramRenderedPart } from "../render/types.js";
-
-// The package directory can be read-only (a global npm install is owned by
-// root), so outgoing files belong under the OS temp directory, not next to the
-// compiled code. A failed mkdir there broke every tool-output upload.
-const TEMP_DIR = path.join(os.tmpdir(), "opencode-telegram-bot");
 
 type TelegramApi = Bot<Context>["api"];
 type SendMessageOptions = Parameters<TelegramApi["sendMessage"]>[2];
@@ -103,23 +95,18 @@ export class TelegramEventDelivery {
     fileData: CodeFileData,
     options?: SendDocumentOptions,
   ): Promise<void> {
-    const tempFilePath = path.join(TEMP_DIR, fileData.filename);
+    logger.debug(`[Bot] Sending code file: ${fileData.filename} (${fileData.buffer.length} bytes)`);
 
-    try {
-      logger.debug(
-        `[Bot] Sending code file: ${fileData.filename} (${fileData.buffer.length} bytes)`,
-      );
-
-      await fs.mkdir(TEMP_DIR, { recursive: true });
-      await fs.writeFile(tempFilePath, fileData.buffer);
-
-      await destination.api.sendDocument(destination.chatId, new InputFile(tempFilePath), {
+    // Hand the buffer straight to grammY: no temp file on disk, so no writable
+    // install directory to depend on and no name collisions between uploads.
+    await destination.api.sendDocument(
+      destination.chatId,
+      new InputFile(fileData.buffer, fileData.filename),
+      {
         caption: fileData.caption,
         ...options,
-      });
-    } finally {
-      await fs.unlink(tempFilePath).catch(() => {});
-    }
+      },
+    );
   }
 
   sendRenderedPart(
