@@ -1,7 +1,5 @@
-import { promises as fs } from "fs";
-import * as os from "os";
-import * as path from "path";
 import { describe, expect, it, vi } from "vitest";
+import { InputFile } from "grammy";
 import {
   TelegramEventDelivery,
   type TelegramDestination,
@@ -96,27 +94,21 @@ describe("bot/events/telegram-event-delivery", () => {
     expect(api.sendMessage).toHaveBeenNthCalledWith(3, 42, "🌐 webfetch https://example.com/");
   });
 
-  it("stages outgoing documents in the OS temp directory, not beside the installed package", async () => {
-    const { destination } = createDestination();
-    const writeFile = vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
+  it("sends the document buffer with its filename instead of staging a file", async () => {
+    const { api, destination } = createDestination();
+    const buffer = Buffer.from("diff");
 
-    let stagedPath = "";
-    writeFile.mockImplementation((filePath) => {
-      stagedPath = String(filePath);
-      return Promise.resolve();
+    await new TelegramEventDelivery().sendDocument(destination, {
+      buffer,
+      filename: "write_app.ts.txt",
+      caption: "diff of app.ts",
     });
 
-    try {
-      await new TelegramEventDelivery().sendDocument(destination, {
-        buffer: Buffer.from("diff"),
-        filename: "write_app.ts.txt",
-        caption: "",
-      });
-    } finally {
-      writeFile.mockRestore();
-    }
-
-    expect(stagedPath).not.toBe("");
-    expect(path.dirname(stagedPath)).toBe(path.join(os.tmpdir(), "opencode-telegram-bot"));
+    const [chatId, inputFile, options] = api.sendDocument.mock.calls[0] ?? [];
+    expect(chatId).toBe(42);
+    expect(inputFile).toBeInstanceOf(InputFile);
+    expect(inputFile.filename).toBe("write_app.ts.txt");
+    await expect(inputFile.toRaw()).resolves.toBe(buffer);
+    expect(options).toEqual({ caption: "diff of app.ts" });
   });
 });
