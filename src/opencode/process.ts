@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import type { OpencodeServerVersion } from "../config.js";
+import { logger } from "../utils/logger.js";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -72,11 +73,19 @@ function isExecutableFile(filePath: string): boolean {
   }
 }
 
-/** Directories the OpenCode installer adds to the shell rc files, not to a service PATH. */
+/** Set it to an absolute executable path to override the search below. */
+const OPENCODE_BIN_PATH_ENV = "OPENCODE_BIN_PATH";
+
+/** Directories the installers and package managers use, not a service PATH. */
 const POSIX_OPENCODE_FALLBACK_DIRS = [
   path.join(".opencode", "bin"),
   path.join(".local", "bin"),
   path.join(".npm-global", "bin"),
+  path.join(".bun", "bin"),
+  path.join(".local", "share", "pnpm"),
+  path.join("Library", "pnpm"),
+  path.join(".yarn", "bin"),
+  path.join(".config", "yarn", "global", "bin"),
 ];
 
 const POSIX_OPENCODE_FALLBACK_PATHS = [
@@ -86,12 +95,20 @@ const POSIX_OPENCODE_FALLBACK_PATHS = [
 ];
 
 /**
- * The `opencode` command to run on Linux and macOS. PATH keeps precedence, so the bot
- * starts whichever opencode the shell would. Service managers (systemd, cron, a desktop
- * launcher) start the bot with a PATH that usually lacks the installer's directory, so
- * fall back to the places the installer and npm use.
+ * The `opencode` command to run on Linux and macOS. An explicit
+ * `OPENCODE_BIN_PATH` wins, then PATH keeps precedence, so the bot starts
+ * whichever opencode the shell would. Service managers (systemd, cron, a desktop
+ * launcher) start the bot with a PATH that usually lacks the installer's
+ * directory, so fall back to the places the installers and package managers use.
  */
 export function resolvePosixOpencodeExecutable(): string {
+  const configured = process.env[OPENCODE_BIN_PATH_ENV]?.trim();
+  // Only an absolute path: a relative value would let spawn resolve the bare
+  // name through PATH and start a different executable than the one checked here.
+  if (configured && path.isAbsolute(configured) && isExecutableFile(configured)) {
+    return configured;
+  }
+
   const pathEntries = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
   for (const entry of pathEntries) {
     if (isExecutableFile(path.join(entry, "opencode"))) {
@@ -157,18 +174,21 @@ function resolveWindowsOpencodeExe(): string {
 
 /** The local `opencode` executable with the given arguments, resolved per platform. */
 function createOpencodeCommand(args: string[]): OpencodeServeSpawnCommand {
+  let command: OpencodeServeSpawnCommand;
+
   if (process.platform === "win32") {
     const resolvedExe = resolveWindowsOpencodeExe();
 
-    if (resolvedExe) {
-      return { command: resolvedExe, args, windowsHide: true };
-    }
-
-    // Safe fallback: works with default npm installs where only opencode.cmd is on PATH.
-    return { command: "cmd.exe", args: ["/c", "opencode", ...args], windowsHide: true };
+    command = resolvedExe
+      ? { command: resolvedExe, args, windowsHide: true }
+      : // Safe fallback: works with default npm installs where only opencode.cmd is on PATH.
+        { command: "cmd.exe", args: ["/c", "opencode", ...args], windowsHide: true };
+  } else {
+    command = { command: resolvePosixOpencodeExecutable(), args, windowsHide: false };
   }
 
-  return { command: resolvePosixOpencodeExecutable(), args, windowsHide: false };
+  logger.debug(`[OpenCode] Using executable: ${command.command}`);
+  return command;
 }
 
 /**

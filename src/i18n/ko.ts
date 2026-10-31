@@ -305,7 +305,7 @@ export const ko: I18nDictionary = {
   "opencode_start.remote_configured": "⚠️ /opencode_start는 로컬 OpenCode 서버에서만 동작합니다.",
   "opencode_start.starting": "🔄 OpenCode 서버를 시작하는 중...",
   "opencode_start.start_error":
-    "🔴 OpenCode 서버 시작에 실패했습니다\n\n오류: {error}\n\nOpenCode CLI가 설치되어 있고 PATH에서 사용 가능한지 확인해 주세요:\nopencode --version\nnpm install -g @opencode-ai/cli",
+    "🔴 OpenCode 서버 시작에 실패했습니다\n\n오류: {error}\n\nOpenCode CLI가 설치되어 있고 PATH 또는 표준 설치 디렉터리에서 사용 가능한지 확인하세요(OPENCODE_BIN_PATH로 다른 실행 파일을 지정할 수 있습니다):\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ OpenCode 서버가 시작되었지만 응답하지 않습니다\n\nPID: {pid}\n\n서버가 아직 시작 중일 수 있습니다. 몇 초 후 /status를 시도해 주세요.",
   "opencode_start.success":

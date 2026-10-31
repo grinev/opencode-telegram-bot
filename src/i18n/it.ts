@@ -309,7 +309,7 @@ export const it: I18nDictionary = {
   "opencode_start.remote_configured": "⚠️ /opencode_start funziona solo con un server OpenCode locale.",
   "opencode_start.starting": "🔄 Avvio del server OpenCode...",
   "opencode_start.start_error":
-    "🔴 Avvio del server OpenCode non riuscito\n\nErrore: {error}\n\nControlla che la CLI OpenCode sia installata e disponibile nel PATH:\nopencode --version\nnpm install -g @opencode-ai/cli",
+    "🔴 Avvio del server OpenCode non riuscito\n\nErrore: {error}\n\nControlla che la CLI OpenCode sia installata e disponibile nel PATH o in una directory di installazione standard (OPENCODE_BIN_PATH può indicare un eseguibile personalizzato):\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ Il server OpenCode è stato avviato, ma non risponde\n\nPID: {pid}\n\nIl server potrebbe essere ancora in fase di avvio. Prova /status tra qualche secondo.",
   "opencode_start.success":

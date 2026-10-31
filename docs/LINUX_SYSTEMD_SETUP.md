@@ -45,6 +45,18 @@ WantedBy=multi-user.target
 
 Run the bot in foreground mode. Do not use `--daemon` under `systemd`.
 
+### If `opencode` is not on the service PATH
+
+The bot uses `opencode` from `PATH` first. When the service PATH has no
+`opencode`, it also checks the directories the installers and package managers
+use: `~/.opencode/bin`, `~/.local/bin`, `~/.npm-global/bin`, `~/.bun/bin`,
+`~/.local/share/pnpm`, `~/Library/pnpm`, `~/.yarn/bin`,
+`~/.config/yarn/global/bin`, `/usr/local/bin`, `/opt/homebrew/bin` and
+`/usr/bin`. To run a different executable, set `OPENCODE_BIN_PATH` to its
+absolute path, either in the bot `.env` file or as
+`Environment=OPENCODE_BIN_PATH=...` in the unit. A relative or non-executable
+value is ignored, and the search above applies.
+
 ## 4. Enable and start the service
 
 ```bash
