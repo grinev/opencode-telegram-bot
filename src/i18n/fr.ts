@@ -315,7 +315,7 @@ export const fr: I18nDictionary = {
     "⚠️ /opencode_start fonctionne uniquement avec un serveur OpenCode local.",
   "opencode_start.starting": "🔄 Démarrage du serveur OpenCode...",
   "opencode_start.start_error":
-    "🔴 Impossible de démarrer le serveur OpenCode\n\nErreur : {error}\n\nVérifiez que l'interface en ligne de commande OpenCode est installée et disponible dans le PATH :\nopencode --version\nnpm install -g @opencode-ai/cli",
+    "🔴 Impossible de démarrer le serveur OpenCode\n\nErreur : {error}\n\nVérifiez que l'interface en ligne de commande OpenCode est installée et disponible dans le PATH ou dans un répertoire d'installation standard (OPENCODE_BIN_PATH peut pointer vers un autre exécutable) :\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ Le serveur OpenCode a démarré, mais ne répond pas encore\n\nPID : {pid}\n\nLe serveur est peut-être encore en cours de démarrage. Essayez /status dans quelques secondes.",
   "opencode_start.success":

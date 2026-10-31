@@ -295,7 +295,7 @@ export const tr: I18nDictionary = {
     "⚠️ /opencode_start yalnızca yerel bir OpenCode Sunucusu ile çalışır.",
   "opencode_start.starting": "🔄 OpenCode Sunucusu başlatılıyor...",
   "opencode_start.start_error":
-    "🔴 OpenCode Sunucusu başlatılamadı\n\nHata: {error}\n\nOpenCode CLI'nin kurulu ve PATH içinde erişilebilir olduğunu kontrol edin:\nopencode --version\nnpm install -g @opencode-ai/cli",
+    "🔴 OpenCode Sunucusu başlatılamadı\n\nHata: {error}\n\nOpenCode CLI'nin kurulu ve PATH içinde veya standart bir kurulum dizininde erişilebilir olduğunu kontrol edin (OPENCODE_BIN_PATH başka bir çalıştırılabilir dosyayı gösterebilir):\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ OpenCode Sunucusu başlatıldı, ancak yanıt vermiyor\n\nPID: {pid}\n\nSunucu hâlâ başlıyor olabilir. Birkaç saniye içinde /status deneyin.",
   "opencode_start.success":

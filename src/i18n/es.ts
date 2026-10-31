@@ -309,7 +309,7 @@ export const es: I18nDictionary = {
     "⚠️ /opencode_start solo funciona con un OpenCode Server local.",
   "opencode_start.starting": "🔄 Iniciando OpenCode Server...",
   "opencode_start.start_error":
-    "🔴 No se pudo iniciar OpenCode Server\n\nError: {error}\n\nRevisa que OpenCode CLI esté instalado y disponible en PATH:\nopencode --version\nnpm install -g @opencode-ai/cli",
+    "🔴 No se pudo iniciar OpenCode Server\n\nError: {error}\n\nRevisa que OpenCode CLI esté instalado y disponible en PATH o en un directorio de instalación estándar (OPENCODE_BIN_PATH puede apuntar a otro ejecutable):\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ OpenCode Server se inició, pero no responde\n\nPID: {pid}\n\nEl servidor puede estar iniciando. Prueba /status en unos segundos.",
   "opencode_start.success":

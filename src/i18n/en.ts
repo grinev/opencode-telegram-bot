@@ -296,7 +296,7 @@ export const en = {
   "opencode_start.remote_configured": "⚠️ /opencode_start works only with a local OpenCode Server.",
   "opencode_start.starting": "🔄 Starting OpenCode Server...",
   "opencode_start.start_error":
-    "🔴 Failed to start OpenCode Server\n\nError: {error}\n\nCheck that OpenCode CLI is installed and available in PATH:\nopencode --version\nnpm install -g @opencode-ai/cli",
+    "🔴 Failed to start OpenCode Server\n\nError: {error}\n\nCheck that OpenCode CLI is installed and available in PATH or a standard install directory (OPENCODE_BIN_PATH can point to a custom executable):\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ OpenCode Server started, but is not responding\n\nPID: {pid}\n\nServer may still be starting. Try /status in a few seconds.",
   "opencode_start.success":

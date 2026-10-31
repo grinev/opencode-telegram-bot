@@ -299,7 +299,7 @@ export const id: I18nDictionary = {
     "⚠️ /opencode_start hanya berfungsi dengan Server OpenCode lokal.",
   "opencode_start.starting": "🔄 Memulai Server OpenCode...",
   "opencode_start.start_error":
-    "🔴 Gagal memulai Server OpenCode\n\nKesalahan: {error}\n\nPastikan OpenCode CLI terinstal dan tersedia di PATH:\nopencode --version\nnpm install -g @opencode-ai/cli",
+    "🔴 Gagal memulai Server OpenCode\n\nKesalahan: {error}\n\nPastikan OpenCode CLI terinstal dan tersedia di PATH atau direktori instalasi standar (OPENCODE_BIN_PATH dapat menunjuk ke executable lain):\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ Server OpenCode dimulai, tetapi tidak merespons\n\nPID: {pid}\n\nServer mungkin masih dalam proses memulai. Coba /status beberapa detik lagi.",
   "opencode_start.success": "✅ Server OpenCode berhasil dimulai\n\nPID: {pid}\nVersi: {version}",

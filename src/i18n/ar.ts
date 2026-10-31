@@ -292,7 +292,7 @@ export const ar: I18nDictionary = {
   "opencode_start.remote_configured": "⚠️ يعمل /opencode_start فقط مع خادم OpenCode محلي.",
   "opencode_start.starting": "🔄 جارٍ تشغيل خادم OpenCode...",
   "opencode_start.start_error":
-    "🔴 تعذر تشغيل خادم OpenCode\n\nالخطأ: {error}\n\nتأكد من تثبيت OpenCode CLI وأنه متاح في PATH:\nopencode --version\nnpm install -g @opencode-ai/cli",
+    "🔴 تعذر تشغيل خادم OpenCode\n\nالخطأ: {error}\n\nتأكد من تثبيت OpenCode CLI وأنه متاح في PATH أو في دليل تثبيت قياسي (يمكن لـ OPENCODE_BIN_PATH الإشارة إلى ملف تنفيذي آخر):\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ تم تشغيل خادم OpenCode، لكنه لا يستجيب\n\nPID: {pid}\n\nقد لا يزال الخادم قيد التشغيل. جرّب /status بعد بضع ثوانٍ.",
   "opencode_start.success": "✅ تم تشغيل خادم OpenCode بنجاح\n\nPID: {pid}\nالإصدار: {version}",

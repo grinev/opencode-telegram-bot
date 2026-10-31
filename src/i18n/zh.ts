@@ -270,7 +270,7 @@ export const zh: I18nDictionary = {
   "opencode_start.remote_configured": "⚠️ /opencode_start 仅适用于本地 OpenCode 服务器。",
   "opencode_start.starting": "🔄 正在启动 OpenCode 服务器...",
   "opencode_start.start_error":
-    "🔴 启动 OpenCode 服务器失败\n\n错误：{error}\n\n请检查 OpenCode CLI 已安装且在 PATH 中可用：\nopencode --version\nnpm install -g @opencode-ai/cli",
+    "🔴 启动 OpenCode 服务器失败\n\n错误：{error}\n\n请检查 OpenCode CLI 已安装，并在 PATH 或标准安装目录中可用（OPENCODE_BIN_PATH 可指向其他可执行文件）：\nopencode --version\nnpm install -g @opencode-ai/cli",
   "opencode_start.started_not_ready":
     "⚠️ OpenCode 服务器已启动，但未响应\n\nPID：{pid}\n\n服务器可能仍在启动中。几秒后试试 /status。",
   "opencode_start.success": "✅ OpenCode 服务器启动成功\n\nPID：{pid}\n版本：{version}",
