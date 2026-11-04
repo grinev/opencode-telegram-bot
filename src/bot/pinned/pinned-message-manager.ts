@@ -28,6 +28,8 @@ import {
 } from "./pinned-message-format.js";
 import { getSessionStreamThrottleMs } from "../streaming/stream-throttle.js";
 
+type GoalLine = () => string | null;
+
 type SessionHistory = NonNullable<
   Awaited<ReturnType<typeof opencodeClient.session.messages>>["data"]
 >;
@@ -54,6 +56,12 @@ export type PinnedRenderScheduler = (render: () => Promise<void>) => Promise<voi
 const PINNED_HISTORY_MESSAGES_LIMIT = 100;
 
 export class PinnedMessageManager {
+  private goalLine: GoalLine = () => null;
+
+  setGoalLine(read: GoalLine): void {
+    this.goalLine = read;
+  }
+
   private api: Api | null = null;
   private chatId: number | null = null;
   private state: PinnedMessageState = {
@@ -1031,8 +1039,10 @@ export class PinnedMessageManager {
       ? `${this.state.projectPath}: ${this.state.projectBranch}`
       : this.state.projectPath;
 
+    const goalLine = this.goalLine();
     const lines = [
       `${this.state.sessionTitle}`,
+      ...(goalLine ? [goalLine] : []),
       t("pinned.line.project", { project: projectDisplayName }),
     ];
 

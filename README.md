@@ -155,6 +155,7 @@ opencode-telegram config
 | `/opencode_start` | Start the local OpenCode server on the bot machine      |
 | `/opencode_stop`  | Stop the local OpenCode server, including during a run  |
 | `/reload`         | Reload the OpenCode configuration without restarting the server (V2 only) |
+| `/goal`           | Set or control a session goal that continues on its own (V2 only) |
 | `/help`           | Show available commands                                 |
 
 Any regular text message is sent as a prompt to the coding agent only when no blocking interaction is active. Voice/audio messages are transcribed and then sent as prompts when STT is configured.

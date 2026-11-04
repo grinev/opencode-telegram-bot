@@ -327,6 +327,27 @@ describe("opencode/v2/mappers", () => {
     expect(toV1Message(idle, "ses-1", "D:/repo")).toBeNull();
   });
 
+  it("hides a user message the goal plugin marked as its own", () => {
+    const kickoff = {
+      id: "msg-goal",
+      type: "user",
+      time: { created: 1 },
+      text: "keep going",
+      metadata: { source: "goal", goalID: "g1" },
+    } as unknown as SessionMessageInfo;
+    const prompt = {
+      id: "msg-user",
+      type: "user",
+      time: { created: 2 },
+      text: "please rename the module",
+    } as unknown as SessionMessageInfo;
+
+    expect(toV1Message(kickoff, "ses-1", "D:/repo")).toBeNull();
+    expect(toV1Message(prompt, "ses-1", "D:/repo")?.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "text", text: "please rename the module" })]),
+    );
+  });
+
   it("folds enabled V2 models into the V1 providers catalog", () => {
     const model = {
       id: "gpt",

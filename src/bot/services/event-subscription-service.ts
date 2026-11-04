@@ -29,6 +29,7 @@ import { registerToolActivityHandlers } from "../events/handlers/tool-activity-h
 import { registerInteractionHandlers } from "../events/handlers/interaction-handler.js";
 import { registerSessionLifecycleHandlers } from "../events/handlers/session-lifecycle-handler.js";
 import { registerDashboardHandlers } from "../events/handlers/dashboard-handler.js";
+import { registerGoalHandlers } from "../events/handlers/goal-handler.js";
 
 export interface BotEventSubscriptionService {
   ensureEventSubscription(directory: string): Promise<void>;
@@ -48,6 +49,7 @@ export type EventSubscriptionServiceDeps = Pick<
   | "backgroundSessionTracker"
   | "externalUserInputSuppressionManager"
   | "foregroundSessionState"
+  | "goalService"
   | "interactionManager"
   | "keyboardManager"
   | "permissionManager"
@@ -165,6 +167,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     registerInteractionHandlers(handlerDeps);
     registerSessionLifecycleHandlers(handlerDeps);
     registerDashboardHandlers(handlerDeps);
+    registerGoalHandlers(handlerDeps);
 
     logger.info(`[Bot] Subscribing to OpenCode events for project: ${directory}`);
     subscribeToEvents(
@@ -264,6 +267,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       reconcileInboxPrompts(session.id).catch((error) => {
         logger.warn("[Bot] Failed to reconcile the session inbox after reconnect:", error);
       });
+      this.deps.goalService.forgetCapability();
+      void this.deps.goalService.refresh(session.id, session.directory, false);
     }
 
     const bot = this.botInstance;

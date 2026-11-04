@@ -3,6 +3,7 @@ import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
 import { logger } from "../../utils/logger.js";
+import { formatAbortWithGoalPause } from "../../app/formatters/goal-text.js";
 import { t } from "../../i18n/index.js";
 import { markAttachedSessionIdle } from "../../app/services/attach-service.js";
 import { clearPromptResponseMode } from "../handlers/prompt.js";
@@ -19,6 +20,7 @@ export type AbortCommandDeps = Pick<
   | "attachManager"
   | "countBackgroundOperations"
   | "foregroundSessionState"
+  | "goalService"
   | "interruptSubagents"
   | "resetInteractions"
 >;
@@ -110,6 +112,12 @@ export async function abortCurrentOperation(
       return;
     }
 
+    const pauseOutcome = await deps.goalService.pauseForAbort(
+      currentSession.id,
+      currentSession.directory,
+    );
+    const withPause = (text: string) => formatAbortWithGoalPause(text, pauseOutcome);
+
     let waitingMessageId: number | null = null;
     let chatId: number | null = null;
 
@@ -145,7 +153,11 @@ export async function abortCurrentOperation(
         logger.warn("[Abort] Abort request failed:", abortError);
         await releaseAbortBusyState(deps, currentSession.id, "abort_unconfirmed");
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
-          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_unconfirmed"));
+          await ctx.api.editMessageText(
+            chatId,
+            waitingMessageId,
+            withPause(t("stop.warn_unconfirmed")),
+          );
         }
         return;
       }
@@ -153,7 +165,11 @@ export async function abortCurrentOperation(
       if (abortResult !== true) {
         await releaseAbortBusyState(deps, currentSession.id, "abort_maybe_finished");
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
-          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_maybe_finished"));
+          await ctx.api.editMessageText(
+            chatId,
+            waitingMessageId,
+            withPause(t("stop.warn_maybe_finished")),
+          );
         }
         return;
       }
@@ -174,9 +190,11 @@ export async function abortCurrentOperation(
             await ctx.api.editMessageText(
               chatId,
               waitingMessageId,
-              backgroundCount > 0
-                ? t("stop.success_background_running", { count: backgroundCount })
-                : t("stop.success"),
+              withPause(
+                backgroundCount > 0
+                  ? t("stop.success_background_running", { count: backgroundCount })
+                  : t("stop.success"),
+              ),
             );
           }
         } finally {
@@ -187,7 +205,11 @@ export async function abortCurrentOperation(
         // The turn is still going, so a later completion keeps today's footer.
         deps.assistantRunState.clearFooterSuppression(currentSession.id);
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
-          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_still_busy"));
+          await ctx.api.editMessageText(
+            chatId,
+            waitingMessageId,
+            withPause(t("stop.warn_still_busy")),
+          );
         }
       }
     } catch (error) {
@@ -196,12 +218,20 @@ export async function abortCurrentOperation(
 
       if (error instanceof Error && error.name === "AbortError") {
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
-          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_timeout"));
+          await ctx.api.editMessageText(
+            chatId,
+            waitingMessageId,
+            withPause(t("stop.warn_timeout")),
+          );
         }
       } else {
         logger.error("[Abort] Error while aborting session:", error);
         if (notifyUser && chatId !== null && waitingMessageId !== null) {
-          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_local_only"));
+          await ctx.api.editMessageText(
+            chatId,
+            waitingMessageId,
+            withPause(t("stop.warn_local_only")),
+          );
         }
       }
     }

@@ -23,7 +23,8 @@ export async function loadCommandCatalog(projectDirectory: string): Promise<Comm
       return (
         typeof command.name === "string" &&
         command.name.trim().length > 0 &&
-        command.source === "command"
+        command.source === "command" &&
+        command.name.trim().toLowerCase() !== "goal"
       );
     })
     .map((command) => ({

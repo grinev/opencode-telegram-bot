@@ -20,6 +20,7 @@ describe("bot/commands/definitions", () => {
     expect(commands[commands.indexOf("opencode_stop") + 1]).toBe("reload");
     expect(getLocalizedBotCommands().map(({ command }) => command)).toEqual(commands);
     expect(BUILT_IN_COMMAND_NAMES).toContain("reload");
+    expect(commands).toContain("goal");
   });
 
   it("leaves /reload out everywhere on V1", async () => {
@@ -29,5 +30,7 @@ describe("bot/commands/definitions", () => {
     expect(BOT_COMMANDS.map(({ command }) => command)).not.toContain("reload");
     expect(getLocalizedBotCommands().map(({ command }) => command)).not.toContain("reload");
     expect(BUILT_IN_COMMAND_NAMES).not.toContain("reload");
+    expect(BOT_COMMANDS.map(({ command }) => command)).not.toContain("goal");
+    expect(BUILT_IN_COMMAND_NAMES).not.toContain("goal");
   });
 });

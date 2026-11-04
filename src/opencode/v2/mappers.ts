@@ -36,6 +36,7 @@ import type {
   SkillInfo,
 } from "@opencode/client";
 import { isRecord } from "../../utils/type-guards.js";
+import { isGoalInternalMetadata } from "./goal-message.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -314,6 +315,9 @@ export function toV1Message(
   directory: string,
 ): V1MessageWithParts | null {
   if (message.type === "user") {
+    if (isGoalInternalMetadata(message.metadata)) {
+      return null;
+    }
     return toV1UserMessage(message, sessionID);
   }
   if (message.type === "assistant") {
