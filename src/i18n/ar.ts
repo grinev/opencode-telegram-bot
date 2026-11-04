@@ -568,6 +568,13 @@ export const ar: I18nDictionary = {
     "طلبت المهمة المجدولة صلاحية تفاعلية ولا يمكنها المتابعة دون تدخل المستخدم.",
   "tasklist.empty": "📭 لا توجد مهام مجدولة حتى الآن.",
   "tasklist.select": "اختر مهمة مجدولة:",
+  "task.scheduling": "Scheduling",
+  "task.enabled": "On",
+  "task.disabled": "Off",
+  "task.button.enable": "Enable",
+  "task.button.disable": "Disable",
+  "task.toggle.saved": "Saved",
+  "task.toggle.error": "Could not save",
   "tasklist.details":
     "⏰ مهمة مجدولة\n\nالمهمة: {prompt}\nالمشروع: {project}\nالموعد: {schedule}\n{cronLine}المنطقة الزمنية: {timezone}\nالتشغيل التالي: {nextRunAt}\nآخر تشغيل: {lastRunAt}\nعدد مرات التشغيل: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",

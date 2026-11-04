@@ -1,13 +1,19 @@
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setRuntimeMode } from "../../../src/runtime/mode.js";
-import { __resetSettingsForTests, loadSettings } from "../../../src/app/stores/settings-store.js";
+import {
+  __resetSettingsForTests,
+  flushSettings,
+  loadSettings,
+  setCurrentProject,
+} from "../../../src/app/stores/settings-store.js";
 import {
   addScheduledTask,
   listScheduledTasks,
   removeScheduledTask,
+  toggleScheduledTask,
 } from "../../../src/app/stores/scheduled-task-store.js";
 import {
   cleanupScheduledTaskSessionIgnores,
@@ -33,6 +39,7 @@ function createScheduledTask(overrides: Partial<ScheduledTask> = {}): ScheduledT
     scheduleSummary: "Every 5 minutes",
     timezone: "UTC",
     cron: "*/5 * * * *",
+    enabled: true,
     prompt: "Check repository status",
     createdAt: "2026-03-15T10:00:00.000Z",
     nextRunAt: "2026-03-15T10:05:00.000Z",
@@ -88,6 +95,51 @@ describe("app/stores/scheduled-task-store", () => {
     });
   });
 
+  it("persists a disabled cron task and schedules only a future occurrence when enabled", async () => {
+    await addScheduledTask(createScheduledTask());
+    const disabled = await toggleScheduledTask("task-1", false);
+    expect(disabled).toMatchObject({ enabled: false, nextRunAt: null, runCount: 0 });
+    __resetSettingsForTests();
+    await loadSettings();
+    expect(listScheduledTasks()[0]).toMatchObject({ enabled: false, nextRunAt: null });
+    const before = Date.now();
+    const enabled = await toggleScheduledTask("task-1", true);
+    expect(enabled).toMatchObject({ enabled: true, runCount: 0 });
+    expect(enabled).toMatchObject({ activationPending: true });
+    expect(Date.parse(enabled?.nextRunAt ?? "")).toBeGreaterThan(before);
+  });
+
+  it("keeps task and unrelated settings on a real write failure and allows a later retry", async () => {
+    await addScheduledTask(createScheduledTask());
+    setCurrentProject({ id: "project", worktree: "/project" });
+    await flushSettings();
+    const tempPath = path.join(tempHome, "settings.json.tmp");
+    await mkdir(tempPath);
+    await expect(toggleScheduledTask("task-1", false)).rejects.toThrow();
+    expect(listScheduledTasks()[0]).toMatchObject({ enabled: true });
+    const file = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf8"));
+    expect(file.scheduledTasks[0].enabled).toBe(true);
+    await rm(tempPath, { recursive: true });
+    await toggleScheduledTask("task-1", false);
+    const saved = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf8"));
+    expect(saved.scheduledTasks[0].enabled).toBe(false);
+    expect(saved.currentProject).toMatchObject({ id: "project", worktree: "/project" });
+  });
+
+  it("ignores a repeated request for the same scheduling state", async () => {
+    await addScheduledTask(createScheduledTask());
+    await toggleScheduledTask("task-1", false);
+    expect(await toggleScheduledTask("task-1", false)).toBeNull();
+    expect(listScheduledTasks()[0]).toMatchObject({ enabled: false });
+  });
+
+  it("defaults a legacy cron task to enabled", async () => {
+    const legacy = createScheduledTask();
+    Reflect.deleteProperty(legacy, "enabled");
+    await addScheduledTask(legacy);
+    expect(listScheduledTasks()[0]).toMatchObject({ enabled: true });
+  });
+
   it("removes scheduled task from persisted storage", async () => {
     const firstTask = createScheduledTask();
     const secondTask = createScheduledTask({
@@ -112,12 +164,12 @@ describe("app/stores/scheduled-task-store", () => {
     await registerScheduledTaskSessionIgnore("fresh-session", new Date("2026-03-16T10:00:00.000Z"));
     await registerScheduledTaskSessionIgnore("stale-session", new Date("2026-03-15T09:59:59.000Z"));
 
-    expect(isScheduledTaskSessionIgnored("fresh-session", new Date("2026-03-16T12:00:00.000Z"))).toBe(
-      true,
-    );
-    expect(isScheduledTaskSessionIgnored("stale-session", new Date("2026-03-16T12:00:00.000Z"))).toBe(
-      false,
-    );
+    expect(
+      isScheduledTaskSessionIgnored("fresh-session", new Date("2026-03-16T12:00:00.000Z")),
+    ).toBe(true);
+    expect(
+      isScheduledTaskSessionIgnored("stale-session", new Date("2026-03-16T12:00:00.000Z")),
+    ).toBe(false);
 
     const removed = await cleanupScheduledTaskSessionIgnores(new Date("2026-03-16T12:00:00.000Z"));
 
@@ -133,8 +185,8 @@ describe("app/stores/scheduled-task-store", () => {
 
     await removeScheduledTaskSessionIgnore("fresh-session");
 
-    expect(isScheduledTaskSessionIgnored("fresh-session", new Date("2026-03-16T12:00:00.000Z"))).toBe(
-      false,
-    );
+    expect(
+      isScheduledTaskSessionIgnored("fresh-session", new Date("2026-03-16T12:00:00.000Z")),
+    ).toBe(false);
   });
 });

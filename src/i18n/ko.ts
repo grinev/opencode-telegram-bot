@@ -591,6 +591,13 @@ export const ko: I18nDictionary = {
 
   "tasklist.empty": "📭 아직 예약 작업이 없습니다.",
   "tasklist.select": "예약 작업을 선택하세요:",
+  "task.scheduling": "Scheduling",
+  "task.enabled": "On",
+  "task.disabled": "Off",
+  "task.button.enable": "Enable",
+  "task.button.disable": "Disable",
+  "task.toggle.saved": "Saved",
+  "task.toggle.error": "Could not save",
   "tasklist.details":
     "⏰ 예약 작업\n\n작업: {prompt}\n프로젝트: {project}\n일정: {schedule}\n{cronLine}시간대: {timezone}\n다음 실행: {nextRunAt}\n마지막 실행: {lastRunAt}\n실행 횟수: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",

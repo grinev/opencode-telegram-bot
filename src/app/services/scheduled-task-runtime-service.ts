@@ -128,6 +128,26 @@ export class ScheduledTaskRuntime {
     this.scheduleTask(task);
   }
 
+  async refreshTask(taskId: string): Promise<ScheduledTask | null> {
+    this.removeTaskTimer(taskId);
+    let task = getScheduledTask(taskId);
+    while (
+      task?.kind === "cron" &&
+      task.enabled !== false &&
+      task.activationPending &&
+      (!task.nextRunAt || Date.parse(task.nextRunAt) <= Date.now())
+    ) {
+      task = await updateScheduledTask(taskId, (current) => {
+        if (current.kind !== "cron" || current.enabled === false || !current.activationPending) {
+          return current;
+        }
+        return { ...current, nextRunAt: computeNextRunAt(current) };
+      });
+    }
+    if (this.initialized && task) this.scheduleTask(task);
+    return task;
+  }
+
   removeTask(taskId: string): void {
     const timer = this.timersByTaskId.get(taskId);
     if (timer) {
@@ -198,7 +218,17 @@ export class ScheduledTaskRuntime {
       }
 
       if (normalizedTask.kind === "cron") {
-        if (!normalizedTask.nextRunAt || Number.isNaN(Date.parse(normalizedTask.nextRunAt))) {
+        if (normalizedTask.enabled === false) {
+          if (normalizedTask.nextRunAt !== null) {
+            normalizedTask.nextRunAt = null;
+            hasChanges = true;
+          }
+        } else if (
+          !normalizedTask.nextRunAt ||
+          Number.isNaN(Date.parse(normalizedTask.nextRunAt)) ||
+          (normalizedTask.activationPending &&
+            Date.parse(normalizedTask.nextRunAt) <= now.getTime())
+        ) {
           try {
             normalizedTask.nextRunAt = computeNextRunAt(normalizedTask, now);
           } catch (error) {
@@ -240,9 +270,10 @@ export class ScheduledTaskRuntime {
   }
 
   private scheduleTask(task: ScheduledTask): void {
+    task = getScheduledTask(task.id) ?? task;
     this.removeTaskTimer(task.id);
 
-    if (!task.nextRunAt) {
+    if ((task.kind === "cron" && task.enabled === false) || !task.nextRunAt) {
       return;
     }
 
@@ -256,6 +287,18 @@ export class ScheduledTaskRuntime {
 
     const delayMs = nextRunAtMs - Date.now();
     if (delayMs <= 0) {
+      if (task.kind === "cron" && task.activationPending) {
+        safeBackgroundTask({
+          taskName: `scheduledTask.refresh.${task.id}`,
+          task: async () => {
+            await this.refreshTask(task.id);
+          },
+          onError: (error) => {
+            logger.error(`[ScheduledTaskRuntime] Failed to refresh task: id=${task.id}`, error);
+          },
+        });
+        return;
+      }
       this.startExecution(task.id);
       return;
     }
@@ -327,17 +370,29 @@ export class ScheduledTaskRuntime {
     }
 
     const startedAt = new Date().toISOString();
-    const runningTask = await updateScheduledTask(taskId, (task) => ({
-      ...task,
-      lastStatus: "running",
-      lastError: null,
-      lastRunAt: startedAt,
-      runCount: task.runCount + 1,
-    }));
+    let started = false;
+    const runningTask = await updateScheduledTask(taskId, (task) => {
+      if (!isTaskDue(task)) return task;
+      started = true;
+      return {
+        ...task,
+        ...(task.kind === "cron" ? { activationPending: undefined } : {}),
+        lastStatus: "running",
+        lastError: null,
+        lastRunAt: startedAt,
+        runCount: task.runCount + 1,
+      };
+    });
 
     if (!runningTask) {
       this.removeTask(taskId);
       this.runningTaskIds.delete(taskId);
+      return;
+    }
+
+    if (!started) {
+      this.runningTaskIds.delete(taskId);
+      this.scheduleTask(runningTask);
       return;
     }
 
@@ -395,7 +450,12 @@ export class ScheduledTaskRuntime {
       ...currentTask,
       lastStatus: "success",
       lastError: null,
-      nextRunAt,
+      nextRunAt:
+        currentTask.kind === "cron" && currentTask.enabled === false
+          ? null
+          : currentTask.kind === "cron" && currentTask.activationPending
+            ? currentTask.nextRunAt
+            : nextRunAt,
     }));
 
     if (updatedTask) {
@@ -428,7 +488,12 @@ export class ScheduledTaskRuntime {
       ...currentTask,
       lastStatus: "error",
       lastError: errorMessage,
-      nextRunAt,
+      nextRunAt:
+        currentTask.kind === "cron" && currentTask.enabled === false
+          ? null
+          : currentTask.kind === "cron" && currentTask.activationPending
+            ? currentTask.nextRunAt
+            : nextRunAt,
     }));
 
     if (updatedTask) {

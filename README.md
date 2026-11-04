@@ -151,7 +151,7 @@ opencode-telegram config
 | `/skills`         | Browse and run OpenCode skills                          |
 | `/mcps`           | Browse and toggle MCP servers                           |
 | `/task`           | Create a scheduled task                                 |
-| `/tasklist`       | Browse and delete scheduled tasks                       |
+| `/tasklist`       | Browse, delete and enable or disable recurring scheduled tasks |
 | `/opencode_start` | Start the local OpenCode server on the bot machine      |
 | `/opencode_stop`  | Stop the local OpenCode server, including during a run  |
 | `/reload`         | Reload the OpenCode configuration without restarting the server (V2 only) |
@@ -172,7 +172,7 @@ The `/messages` command displays all user messages in the current session, sorte
 
 ## Scheduled Tasks
 
-Scheduled tasks let you prepare prompts in advance and run them automatically later or on a recurring schedule. This is useful for periodic checks, routine code maintenance, or tasks you want OpenCode to execute while you are away from your computer. Use `/task` to create a scheduled task and `/tasklist` to review or delete existing ones.
+Scheduled tasks let you prepare prompts in advance and run them automatically later or on a recurring schedule. This is useful for periodic checks, routine code maintenance, or tasks you want OpenCode to execute while you are away from your computer. Use `/task` to create a scheduled task and `/tasklist` to review or delete existing ones. Recurring tasks can also be disabled and re-enabled without deleting them; missed runs are not replayed.
 
 - Each task is created from the currently selected OpenCode project, model, and agent
 - The agent is fixed when the task is created and every run uses it; it is shown in the creation confirmation and in the task details in `/tasklist`

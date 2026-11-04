@@ -284,6 +284,7 @@ function buildScheduledTask(
       ...baseTask,
       kind: "cron",
       cron: parsedSchedule.cron,
+      enabled: true,
     };
   }
 

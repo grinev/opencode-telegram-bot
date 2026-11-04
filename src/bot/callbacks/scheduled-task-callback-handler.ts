@@ -3,7 +3,11 @@ import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getDateLocale, t } from "../../i18n/index.js";
 import type { InteractionState } from "../../app/types/interaction.js";
 import type { ScheduledTask, TaskCreationState } from "../../app/types/scheduled-task.js";
-import { getScheduledTask, removeScheduledTask } from "../../app/stores/scheduled-task-store.js";
+import {
+  getScheduledTask,
+  removeScheduledTask,
+  toggleScheduledTask,
+} from "../../app/stores/scheduled-task-store.js";
 import { getAgentDisplayName } from "../../app/types/agent.js";
 import { logger } from "../../utils/logger.js";
 import { cancelMenu, notify } from "./feedback.js";
@@ -16,6 +20,7 @@ import {
   TASKLIST_CANCEL_CALLBACK,
   TASKLIST_DELETE_PREFIX,
   TASKLIST_OPEN_PREFIX,
+  TASKLIST_TOGGLE_PREFIX,
 } from "../menus/scheduled-task-menu.js";
 
 interface TaskListListMetadata {
@@ -195,7 +200,11 @@ function formatTaskDetails(task: ScheduledTask): string {
       mode: getAgentDisplayName(task.agent),
     })}\n${t("status.line.model", { model })}`,
     schedule: task.scheduleSummary,
-    cronLine,
+    cronLine:
+      cronLine +
+      (task.kind === "cron"
+        ? `${t("task.scheduling")}: ${t(task.enabled === false ? "task.disabled" : "task.enabled")}\n`
+        : ""),
     timezone: task.timezone,
     nextRunAt: formatDateTime(task.nextRunAt, task.timezone),
     lastRunAt: formatDateTime(task.lastRunAt, task.timezone),
@@ -307,7 +316,7 @@ export async function handleTaskListCallback(
 
       await ctx.answerCallbackQuery();
       await ctx.editMessageText(formatTaskDetails(task), {
-        reply_markup: buildTaskDetailsKeyboard(task.id),
+        reply_markup: buildTaskDetailsKeyboard(task),
       });
 
       deps.interactionManager.transition({
@@ -320,6 +329,45 @@ export async function handleTaskListCallback(
         },
       });
 
+      return true;
+    }
+
+    if (data.startsWith(TASKLIST_TOGGLE_PREFIX)) {
+      const [action, taskId] = data.slice(TASKLIST_TOGGLE_PREFIX.length).split(":");
+      if ((action !== "on" && action !== "off") || !taskId) {
+        await ctx.answerCallbackQuery({ text: t("tasklist.inactive_callback"), show_alert: true });
+        return true;
+      }
+      if (metadata.stage !== "detail" || metadata.taskId !== taskId) {
+        await ctx.answerCallbackQuery({ text: t("tasklist.inactive_callback"), show_alert: true });
+        return true;
+      }
+      let task: ScheduledTask | null;
+      try {
+        task = await toggleScheduledTask(taskId, action === "on");
+      } catch (error) {
+        logger.error("[TaskList] Failed to toggle task", error);
+        await ctx.answerCallbackQuery({ text: t("task.toggle.error") });
+        return true;
+      }
+      if (!task) {
+        if (getScheduledTask(taskId)) {
+          await ctx.answerCallbackQuery({
+            text: t("tasklist.inactive_callback"),
+            show_alert: true,
+          });
+          return true;
+        }
+        clearTaskListInteraction(deps, "tasklist_selected_task_missing");
+        await ctx.answerCallbackQuery({ text: t("tasklist.inactive_callback"), show_alert: true });
+        await ctx.deleteMessage().catch(() => {});
+        return true;
+      }
+      task = (await deps.scheduledTaskRuntime.refreshTask(task.id)) ?? task;
+      await ctx.answerCallbackQuery({ text: t("task.toggle.saved") });
+      await ctx.editMessageText(formatTaskDetails(task), {
+        reply_markup: buildTaskDetailsKeyboard(task),
+      });
       return true;
     }
 

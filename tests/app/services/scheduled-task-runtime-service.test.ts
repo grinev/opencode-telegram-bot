@@ -149,9 +149,8 @@ function createTask(partial: Partial<ScheduledTask> = {}): ScheduledTask {
 }
 
 async function createDeliverySender() {
-  const { createScheduledTaskDeliverySender } = await import(
-    "../../../src/bot/messages/scheduled-task-delivery.js"
-  );
+  const { createScheduledTaskDeliverySender } =
+    await import("../../../src/bot/messages/scheduled-task-delivery.js");
 
   return createScheduledTaskDeliverySender({ sendMessage: vi.fn() } as never, 777);
 }
@@ -186,9 +185,7 @@ describe("app/services/scheduled-task-runtime-service", () => {
       finishedAt: "2026-03-16T10:01:00.000Z",
       resultText: "All good",
       errorMessage: null,
-      steps: [
-        { messageID: "msg-1", created: 0, streamed: 1_000, output: 12, reasoning: 3 },
-      ],
+      steps: [{ messageID: "msg-1", created: 0, streamed: 1_000, output: 12, reasoning: 3 }],
     });
 
     vi.useFakeTimers();
@@ -333,6 +330,119 @@ describe("app/services/scheduled-task-runtime-service", () => {
 
     expect(mocked.executeScheduledTaskMock).toHaveBeenCalledTimes(1);
 
+    runtime.shutdown();
+    vi.useRealTimers();
+  });
+
+  it("does not recover or run a disabled cron task at startup", async () => {
+    ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
+      await import("../../../src/app/services/scheduled-task-runtime-service.js"));
+    ({ ForegroundSessionState: ForegroundSessionStateClass } =
+      await import("../../../src/app/managers/foreground-session-state-manager.js"));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
+    mocked.tasks = [
+      createTask({ kind: "cron", enabled: false, nextRunAt: null } as Partial<ScheduledTask>),
+    ];
+    const runtime = new ScheduledTaskRuntimeClass(new ForegroundSessionStateClass());
+    await runtime.initialize({ api: {} } as Bot<Context>, await createDeliverySender());
+    await vi.advanceTimersByTimeAsync(86400000);
+    expect(mocked.executeScheduledTaskMock).not.toHaveBeenCalled();
+    expect(mocked.tasks[0]?.nextRunAt).toBeNull();
+    runtime.shutdown();
+    vi.useRealTimers();
+  });
+
+  it("skips an overdue activation after restart without changing ordinary overdue recovery", async () => {
+    ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
+      await import("../../../src/app/services/scheduled-task-runtime-service.js"));
+    ({ ForegroundSessionState: ForegroundSessionStateClass } =
+      await import("../../../src/app/managers/foreground-session-state-manager.js"));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
+    mocked.tasks = [
+      createTask({
+        kind: "cron",
+        id: "activated",
+        activationPending: true,
+        nextRunAt: "2026-03-16T09:59:00.000Z",
+      } as Partial<ScheduledTask>),
+      createTask({ kind: "cron", id: "existing", nextRunAt: "2026-03-16T09:59:00.000Z" }),
+    ];
+    mocked.executeScheduledTaskMock.mockReturnValue(new Promise(() => undefined));
+    const runtime = new ScheduledTaskRuntimeClass(new ForegroundSessionStateClass());
+    await runtime.initialize({ api: {} } as Bot<Context>, await createDeliverySender());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocked.executeScheduledTaskMock).toHaveBeenCalledTimes(1);
+    expect(mocked.executeScheduledTaskMock.mock.calls[0]?.[0].id).toBe("existing");
+    expect(mocked.tasks.find((task) => task.id === "activated")?.nextRunAt).toBe(
+      "2026-03-16T17:00:00.000Z",
+    );
+    runtime.shutdown();
+    vi.useRealTimers();
+  });
+
+  it("refreshes an activation whose first occurrence passed during save", async () => {
+    ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
+      await import("../../../src/app/services/scheduled-task-runtime-service.js"));
+    ({ ForegroundSessionState: ForegroundSessionStateClass } =
+      await import("../../../src/app/managers/foreground-session-state-manager.js"));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
+    const runtime = new ScheduledTaskRuntimeClass(new ForegroundSessionStateClass());
+    await runtime.initialize({ api: {} } as Bot<Context>, await createDeliverySender());
+    mocked.tasks = [
+      createTask({
+        kind: "cron",
+        activationPending: true,
+        nextRunAt: "2026-03-16T09:59:00.000Z",
+      } as Partial<ScheduledTask>),
+    ];
+    const task = await runtime.refreshTask("task-1");
+    expect(task?.nextRunAt).toBe("2026-03-16T17:00:00.000Z");
+    expect(mocked.executeScheduledTaskMock).not.toHaveBeenCalled();
+    runtime.shutdown();
+    vi.useRealTimers();
+  });
+
+  it("finishes and delivers a running cron task after it is disabled", async () => {
+    ({ ScheduledTaskRuntime: ScheduledTaskRuntimeClass } =
+      await import("../../../src/app/services/scheduled-task-runtime-service.js"));
+    ({ ForegroundSessionState: ForegroundSessionStateClass } =
+      await import("../../../src/app/managers/foreground-session-state-manager.js"));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
+    mocked.tasks = [createTask({ kind: "cron", nextRunAt: "2026-03-16T10:00:00.000Z" })];
+    let finish!: (value: unknown) => void;
+    mocked.executeScheduledTaskMock.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const send = vi.fn().mockResolvedValue(true);
+    const runtime = new ScheduledTaskRuntimeClass(new ForegroundSessionStateClass());
+    await runtime.initialize({ api: {} } as Bot<Context>, { send });
+    await vi.advanceTimersByTimeAsync(0);
+    mocked.tasks[0] = {
+      ...defined(mocked.tasks[0]),
+      enabled: false,
+      nextRunAt: null,
+    } as ScheduledTask;
+    runtime.refreshTask("task-1");
+    finish({
+      status: "success",
+      startedAt: "2026-03-16T10:00:00.000Z",
+      finishedAt: "2026-03-16T10:01:00.000Z",
+      resultText: "Done",
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocked.tasks[0]).toMatchObject({
+      enabled: false,
+      nextRunAt: null,
+      lastStatus: "success",
+      runCount: 1,
+    });
+    expect(send).toHaveBeenCalledTimes(1);
     runtime.shutdown();
     vi.useRealTimers();
   });

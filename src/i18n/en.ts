@@ -619,6 +619,13 @@ export const en = {
 
   "tasklist.empty": "📭 No scheduled tasks yet.",
   "tasklist.select": "Select a scheduled task:",
+  "task.scheduling": "Scheduling",
+  "task.enabled": "On",
+  "task.disabled": "Off",
+  "task.button.enable": "Enable",
+  "task.button.disable": "Disable",
+  "task.toggle.saved": "Saved",
+  "task.toggle.error": "Could not save",
   "tasklist.details":
     "⏰ Scheduled task\n\nTask: {prompt}\nProject: {project}\nSchedule: {schedule}\n{cronLine}Timezone: {timezone}\nNext run: {nextRunAt}\nLast run: {lastRunAt}\nRun count: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",

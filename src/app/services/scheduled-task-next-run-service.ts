@@ -268,6 +268,7 @@ function matchesCron(expression: ParsedCronExpression, date: Date, timezone: str
 }
 
 export function isTaskDue(task: ScheduledTask, now: Date = new Date()): boolean {
+  if (task.kind === "cron" && task.enabled === false) return false;
   if (!task.nextRunAt) {
     return false;
   }

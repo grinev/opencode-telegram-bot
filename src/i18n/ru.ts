@@ -586,6 +586,13 @@ export const ru: I18nDictionary = {
 
   "tasklist.empty": "📭 Задач по расписанию пока нет.",
   "tasklist.select": "Выберите задачу по расписанию:",
+  "task.scheduling": "Расписание",
+  "task.enabled": "Вкл",
+  "task.disabled": "Выкл",
+  "task.button.enable": "Включить",
+  "task.button.disable": "Выключить",
+  "task.toggle.saved": "Сохранено",
+  "task.toggle.error": "Не удалось сохранить",
   "tasklist.details":
     "⏰ Задача по расписанию\n\nЗадача: {prompt}\nПроект: {project}\nРасписание: {schedule}\n{cronLine}Часовой пояс: {timezone}\nСледующий запуск: {nextRunAt}\nПоследний запуск: {lastRunAt}\nКоличество запусков: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",

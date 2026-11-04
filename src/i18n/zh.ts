@@ -537,6 +537,13 @@ export const zh: I18nDictionary = {
 
   "tasklist.empty": "📭 还没有定时任务。",
   "tasklist.select": "请选择一个定时任务：",
+  "task.scheduling": "Scheduling",
+  "task.enabled": "On",
+  "task.disabled": "Off",
+  "task.button.enable": "Enable",
+  "task.button.disable": "Disable",
+  "task.toggle.saved": "Saved",
+  "task.toggle.error": "Could not save",
   "tasklist.details":
     "⏰ 定时任务\n\n任务：{prompt}\n项目：{project}\n计划：{schedule}\n{cronLine}时区：{timezone}\n下次运行：{nextRunAt}\n上次运行：{lastRunAt}\n运行次数：{runCount}",
   "tasklist.details.cron": "Cron: {cron}",

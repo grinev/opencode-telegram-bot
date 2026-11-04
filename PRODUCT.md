@@ -149,7 +149,7 @@ Current command set:
 - `/worktree` - show and switch existing git worktrees for the current repository
 - `/settings` - change bot settings
 - `/task` - create a scheduled task
-- `/tasklist` - browse and delete scheduled tasks
+- `/tasklist` - browse and delete scheduled tasks, and enable or disable individual recurring tasks
 - `/rename` - rename current session
 - `/commands` - browse and run custom commands (plus built-ins like `init` and `review`); the server command `goal` is omitted
 - `/skills` - browse and run OpenCode skills
@@ -223,7 +223,7 @@ Agent picker behavior:
 - [x] Skills catalog access (`/skills`)
 - [x] Scheduled task creation flow (`/task`), remembering the agent selected at creation and showing it (alongside the model) in the task confirmation and task details
 - [x] Scheduled task runtime execution with deferred Telegram delivery
-- [x] Scheduled task list and deletion flow (`/tasklist`)
+- [x] Scheduled task list and deletion flow (`/tasklist`), with individual recurring tasks enabled or disabled without deleting them
 - [x] Persistent settings between restarts (`settings.json`)
 - [x] UI localization support via i18n files
 - [x] Service message visibility controls (thinking content and diff-file attachments)

@@ -604,6 +604,13 @@ export const de: I18nDictionary = {
 
   "tasklist.empty": "📭 Noch keine geplanten Aufgaben.",
   "tasklist.select": "Wähle eine geplante Aufgabe:",
+  "task.scheduling": "Scheduling",
+  "task.enabled": "On",
+  "task.disabled": "Off",
+  "task.button.enable": "Enable",
+  "task.button.disable": "Disable",
+  "task.toggle.saved": "Saved",
+  "task.toggle.error": "Could not save",
   "tasklist.details":
     "⏰ Geplante Aufgabe\n\nAufgabe: {prompt}\nProjekt: {project}\nZeitplan: {schedule}\n{cronLine}Zeitzone: {timezone}\nNächster Lauf: {nextRunAt}\nLetzter Lauf: {lastRunAt}\nAnzahl Läufe: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",
