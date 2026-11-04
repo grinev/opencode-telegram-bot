@@ -111,10 +111,16 @@ function emitAssistantCompleted(aggregator: Aggregator): void {
   } as unknown as Event);
 }
 
-function emitSessionIdle(aggregator: Aggregator, options: { interrupted?: boolean } = {}): void {
+function emitSessionIdle(
+  aggregator: Aggregator,
+  options: { interrupted?: boolean; reason?: "user" | "shutdown" } = {},
+): void {
   aggregator.processEvent({
     type: "session.idle",
-    properties: { sessionID: "session-1", ...(options.interrupted ? { interrupted: true } : {}) },
+    properties: {
+      sessionID: "session-1",
+      ...(options.interrupted ? { interrupted: true, ...(options.reason ? { reason: options.reason } : {}) } : {}),
+    },
   } as unknown as Event);
 }
 
@@ -614,12 +620,57 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       expect(activeContainer.assistantRunState.hasRun("session-1")).toBe(false);
     }, 30_000);
 
-    it("sends no footer for a turn stopped from an attached client", async () => {
+    it("names the interruption on a delivered turn stopped from an attached client", async () => {
       const { api, summaryAggregator } = await setup();
 
       emitSessionBusy(summaryAggregator);
       await answerTurn(api, summaryAggregator);
-      emitSessionIdle(summaryAggregator, { interrupted: true });
+      emitSessionIdle(summaryAggregator, { interrupted: true, reason: "user" });
+
+      await vi.waitFor(
+        () => {
+          expect(findFooterCalls(api)).toHaveLength(1);
+        },
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+      expect(String(findFooterCalls(api)[0]?.[1])).toMatch(/interrupted|прерван/);
+      expect(activeContainer.assistantRunState.hasRun("session-1")).toBe(false);
+    }, 30_000);
+
+    it("sends no footer when /abort has already marked a delivered turn footerless", async () => {
+      const { api, summaryAggregator } = await setup({ startAssistantRun: true });
+
+      emitSessionBusy(summaryAggregator);
+      await answerTurn(api, summaryAggregator);
+      activeContainer.assistantRunState.suppressFooter("session-1");
+      emitSessionIdle(summaryAggregator, { interrupted: true, reason: "user" });
+      await settle();
+
+      expect(findFooterCalls(api)).toHaveLength(0);
+      expect(activeContainer.assistantRunState.hasRun("session-1")).toBe(false);
+    }, 30_000);
+
+    it("sends no footer when a permission reject ends a delivered turn", async () => {
+      const { api, summaryAggregator } = await setup();
+
+      emitSessionBusy(summaryAggregator);
+      await answerTurn(api, summaryAggregator);
+      summaryAggregator.processEvent({
+        type: "permission.replied",
+        properties: { sessionID: "session-1", requestID: "perm-1", reply: "reject" },
+      } as unknown as Event);
+      emitSessionIdle(summaryAggregator, { interrupted: true, reason: "user" });
+      await settle();
+
+      expect(findFooterCalls(api)).toHaveLength(0);
+    }, 30_000);
+
+    it("sends no footer when a shutdown idle arrives before the reconnect clear", async () => {
+      const { api, summaryAggregator } = await setup();
+
+      emitSessionBusy(summaryAggregator);
+      await answerTurn(api, summaryAggregator);
+      emitSessionIdle(summaryAggregator, { interrupted: true, reason: "shutdown" });
       await settle();
 
       expect(findFooterCalls(api)).toHaveLength(0);
@@ -631,7 +682,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
 
       emitSessionBusy(summaryAggregator);
       await answerTurn(api, summaryAggregator);
-      emitSessionIdle(summaryAggregator, { interrupted: true });
+      emitSessionIdle(summaryAggregator, { interrupted: true, reason: "user" });
 
       await vi.waitFor(
         () => {
@@ -639,6 +690,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
         },
         { timeout: STREAM_WAIT_TIMEOUT_MS },
       );
+      expect(String(findFooterCalls(api)[0]?.[1])).toMatch(/interrupted|прерван/);
     }, 30_000);
 
     it("forgets the running turn when the event stream reconnects", async () => {
@@ -1124,6 +1176,83 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       expect(assistantRunState.hasRun("session-1")).toBe(true);
       expect(assistantRunState.isResponseCompleted("session-1")).toBe(false);
       expect(activeContainer.foregroundSessionState.isBusy()).toBe(true);
+    }, 30_000);
+
+    it("keeps a step that arrives before the queued pickup callback off the closed run", async () => {
+      const { api, summaryAggregator } = await setupService({
+        startAssistantRun: true,
+        showAssistantRunFooter: true,
+      });
+      await mirrorInboxPrompt("queue");
+      const { assistantRunState } = activeContainer;
+      assistantRunState.markResponseCompleted("session-1", {
+        agent: "test-agent",
+        providerID: "test-provider",
+        modelID: "test-model",
+      });
+
+      emitExternalUserMessage(summaryAggregator, "Next task");
+      summaryAggregator.processEvent({
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "next-step",
+            sessionID: "session-1",
+            role: "assistant",
+            agent: "test-agent",
+            providerID: "test-provider",
+            modelID: "test-model",
+            time: { created: 1, streamed: 1_000, completed: 1_000 },
+            tokens: { input: 0, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+          },
+        },
+      } as unknown as Event);
+
+      await vi.waitFor(
+        () => {
+          expect(findFooterCalls(api)).toHaveLength(1);
+        },
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+
+      expect(String(findFooterCalls(api)[0]?.[1])).not.toContain("tok/s");
+      expect(assistantRunState.finishRun("session-1", "test")?.steps.map((step) => step.messageID)).toEqual([
+        "next-step",
+      ]);
+    }, 30_000);
+
+    it("keeps a steered follow-up's step on the same run", async () => {
+      const { api, summaryAggregator } = await setupService({
+        startAssistantRun: true,
+        showAssistantRunFooter: true,
+      });
+      await mirrorInboxPrompt("steer");
+      const { assistantRunState } = activeContainer;
+      assistantRunState.markResponseCompleted("session-1", {
+        agent: "test-agent",
+        providerID: "test-provider",
+        modelID: "test-model",
+      });
+
+      emitExternalUserMessage(summaryAggregator, "Keep going");
+      summaryAggregator.processEvent({
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "steer-step",
+            sessionID: "session-1",
+            role: "assistant",
+            time: { created: 1, streamed: 1_000, completed: 1_000 },
+            tokens: { input: 0, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+          },
+        },
+      } as unknown as Event);
+      await settle();
+
+      expect(findFooterCalls(api)).toHaveLength(0);
+      expect(assistantRunState.finishRun("session-1", "test")?.steps.map((step) => step.messageID)).toContain(
+        "steer-step",
+      );
     }, 30_000);
 
     it("opens a steered prompt's own run in place of a turn the bot did not start", async () => {

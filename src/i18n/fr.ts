@@ -187,6 +187,7 @@ export const fr: I18nDictionary = {
   "settings.response_streaming.draft": "draft (experimental)",
   "settings.diff_files.label": "Fichiers diff",
   "settings.assistant_footer.label": "Pied de réponse",
+  "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Pin session dashboard",
   "settings.tts.label": "Réponses audio",
   "settings.prompt_queue.label": "File d'attente des messages",

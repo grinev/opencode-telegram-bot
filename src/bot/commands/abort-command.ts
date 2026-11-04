@@ -88,6 +88,12 @@ export async function abortCurrentOperation(
 
   try {
     deps.resetInteractions("abort_command");
+    // V2 reports /abort as the same interrupted idle as a client stop. Mark the run
+    // footerless before any await, so that idle cannot send a footer while abort is in flight.
+    const sessionToAbort = getCurrentSession();
+    if (sessionToAbort) {
+      deps.assistantRunState.suppressFooter(sessionToAbort.id);
+    }
     // Awaited: a prompt still waiting in the OpenCode V2 inbox must not start a new turn
     // once the current one is interrupted.
     await withdrawPromptQueue("abort_command");
@@ -177,8 +183,12 @@ export async function abortCurrentOperation(
           // The abort succeeded even when its reply could not be shown.
           deps.interruptSubagents("abort_command");
         }
-      } else if (notifyUser && chatId !== null && waitingMessageId !== null) {
-        await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_still_busy"));
+      } else {
+        // The turn is still going, so a later completion keeps today's footer.
+        deps.assistantRunState.clearFooterSuppression(currentSession.id);
+        if (notifyUser && chatId !== null && waitingMessageId !== null) {
+          await ctx.api.editMessageText(chatId, waitingMessageId, t("stop.warn_still_busy"));
+        }
       }
     } catch (error) {
       clearTimeout(timeoutId);

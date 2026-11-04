@@ -185,6 +185,7 @@ export const id: I18nDictionary = {
   "settings.response_streaming.draft": "draf (eksperimental)",
   "settings.diff_files.label": "File diff",
   "settings.assistant_footer.label": "Tampilkan footer asisten",
+  "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Sematkan dasbor sesi",
   "settings.tts.label": "Balasan audio",
   "settings.prompt_queue.label": "Antrean pesan",

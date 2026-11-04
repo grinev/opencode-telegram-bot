@@ -200,9 +200,28 @@ type SessionRetryCallback = (retryInfo: SessionRetryInfo) => void;
 export interface SessionIdleInfo {
   /** OpenCode V2 stopped the execution instead of finishing it. */
   interrupted: boolean;
+  /** Why it stopped, when the server said. Absent on a finished idle and on V1. */
+  reason?: "user" | "shutdown" | "superseded" | "inactivity";
 }
 
+/** A finished assistant step, the unit the run's speed is summed from. */
+export interface AssistantStepInfo {
+  messageID: string;
+  created: number;
+  streamed?: number;
+  output: number;
+  reasoning: number;
+}
+
+type AssistantStepCallback = (sessionId: string, step: AssistantStepInfo) => void;
+
 type SessionIdleCallback = (sessionId: string, idleInfo: SessionIdleInfo) => void | Promise<void>;
+
+/** Runs while the idle or pickup event is still being processed, before its callback is scheduled. */
+type SessionBoundaryCallback = (sessionId: string, messageId?: string) => void;
+
+/** A permission reject or a cancelled question, applied before later events can seal the run. */
+type FooterSuppressedCallback = (sessionId: string) => void;
 
 type PermissionCallback = (request: PermissionRequest) => void | Promise<void>;
 
@@ -304,6 +323,30 @@ function isInterruptedIdle(properties: object): boolean {
   return "interrupted" in properties && properties.interrupted === true;
 }
 
+function readInterruptReason(
+  properties: object,
+): SessionIdleInfo["reason"] | undefined {
+  if (!("reason" in properties) || typeof properties.reason !== "string") {
+    return undefined;
+  }
+  if (
+    properties.reason === "user" ||
+    properties.reason === "shutdown" ||
+    properties.reason === "superseded" ||
+    properties.reason === "inactivity"
+  ) {
+    return properties.reason;
+  }
+  return undefined;
+}
+
+function readStreamed(time: object | undefined): number | undefined {
+  if (!time || !("streamed" in time) || typeof time.streamed !== "number") {
+    return undefined;
+  }
+  return time.streamed;
+}
+
 /** A `task` call launched in the background, flagged on its input or on its metadata. */
 function isBackgroundTaskCall(state: ToolState): boolean {
   return (
@@ -373,6 +416,9 @@ export class SummaryAggregator {
   private messages: Map<string, { role: string }> = new Map();
   private messageCount = 0;
   private onCompleteCallback: MessageCompleteCallback | null = null;
+  private onAssistantStepCallback: AssistantStepCallback | null = null;
+  private onSessionBoundaryCallback: SessionBoundaryCallback | null = null;
+  private onFooterSuppressedCallback: FooterSuppressedCallback | null = null;
   private onPartialCallback: MessagePartialCallback | null = null;
   private onExternalUserInputCallback: ExternalUserInputCallback | null = null;
   private onToolCallback: ToolCallback | null = null;
@@ -452,6 +498,18 @@ export class SummaryAggregator {
 
   setOnComplete(callback: MessageCompleteCallback): void {
     this.onCompleteCallback = callback;
+  }
+
+  setOnAssistantStep(callback: AssistantStepCallback): void {
+    this.onAssistantStepCallback = callback;
+  }
+
+  setOnSessionBoundary(callback: SessionBoundaryCallback): void {
+    this.onSessionBoundaryCallback = callback;
+  }
+
+  setOnFooterSuppressed(callback: FooterSuppressedCallback): void {
+    this.onFooterSuppressedCallback = callback;
   }
 
   setOnPartial(callback: MessagePartialCallback): void {
@@ -1933,6 +1991,17 @@ export class SummaryAggregator {
         );
       }
 
+      if (isCompleted && this.onAssistantStepCallback) {
+        const streamed = readStreamed(time);
+        this.onAssistantStepCallback(info.sessionID, {
+          messageID,
+          created: typeof time?.created === "number" ? time.created : 0,
+          ...(streamed !== undefined ? { streamed } : {}),
+          output: assistantInfo.tokens?.output ?? 0,
+          reasoning: assistantInfo.tokens?.reasoning ?? 0,
+        });
+      }
+
       if (isCompleted) {
         const finalText = messageText;
 
@@ -2547,6 +2616,8 @@ export class SummaryAggregator {
 
     this.deliveredExternalUserMessageIds.add(messageId);
     this.cleanupCompletedMessage(messageId);
+    // Before the pickup callback is scheduled, so a step of the next turn cannot join this run.
+    this.onSessionBoundaryCallback?.(sessionId, messageId);
 
     if (!this.onExternalUserInputCallback) {
       return;
@@ -2852,6 +2923,7 @@ export class SummaryAggregator {
   ): void {
     const { sessionID } = event.properties;
     const interrupted = isInterruptedIdle(event.properties);
+    const reason = interrupted ? readInterruptReason(event.properties) : undefined;
 
     if (this.isTrackedChildSession(sessionID)) {
       logger.info(
@@ -2871,6 +2943,8 @@ export class SummaryAggregator {
     }
 
     logger.info(`[Aggregator] Session became idle: ${sessionID}`);
+    // Before the idle callback is scheduled, so a step of the next turn cannot join this run.
+    this.onSessionBoundaryCallback?.(sessionID);
     this.emitSessionRunEnded(sessionID);
     this.liveTurnStartedAt = null;
     this.turnEndCount++;
@@ -2885,7 +2959,10 @@ export class SummaryAggregator {
 
     if (this.onSessionIdleCallback) {
       const callback = this.onSessionIdleCallback;
-      const idleInfo: SessionIdleInfo = { interrupted };
+      const idleInfo: SessionIdleInfo = {
+        interrupted,
+        ...(reason ? { reason } : {}),
+      };
       // Returned, so a drain of held work waits for the run to be closed in the chat.
       this.scheduleOutbound(() => callback(sessionID, idleInfo), true);
     }
@@ -3017,6 +3094,9 @@ export class SummaryAggregator {
     }
 
     logger.info(`[Aggregator] Question settled: requestID=${requestID}, outcome=${outcome}`);
+    if (outcome === "cancelled") {
+      this.onFooterSuppressedCallback?.(sessionID);
+    }
 
     if (this.onQuestionSettledCallback) {
       const callback = this.onQuestionSettledCallback;
@@ -3126,6 +3206,9 @@ export class SummaryAggregator {
     logger.info(
       `[Aggregator] Permission replied: requestID=${requestID}, reply=${reply ?? "unknown"}`,
     );
+    if (reply === "reject") {
+      this.onFooterSuppressedCallback?.(sessionID);
+    }
 
     if (this.onPermissionRepliedCallback) {
       const callback = this.onPermissionRepliedCallback;

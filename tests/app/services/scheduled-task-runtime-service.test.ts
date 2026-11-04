@@ -186,6 +186,9 @@ describe("app/services/scheduled-task-runtime-service", () => {
       finishedAt: "2026-03-16T10:01:00.000Z",
       resultText: "All good",
       errorMessage: null,
+      steps: [
+        { messageID: "msg-1", created: 0, streamed: 1_000, output: 12, reasoning: 3 },
+      ],
     });
 
     vi.useFakeTimers();
@@ -218,7 +221,7 @@ describe("app/services/scheduled-task-runtime-service", () => {
       expect.objectContaining({
         chatId: 777,
         format: "raw",
-        text: "🛠️ Build · 🧠 openai/gpt-5 · 🕒 1m",
+        text: "🛠️ Build · 🧠 openai/gpt-5 · 🕒 1m · ⚡ 15.0 tok/s",
       }),
     );
     expect(footerCall).not.toHaveProperty("options");

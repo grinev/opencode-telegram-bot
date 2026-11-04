@@ -302,6 +302,14 @@ describe("opencode/v2/mappers", () => {
       cost: 0.5,
     });
     expect(mapped?.parts.map((part) => part.type)).toEqual(["reasoning", "tool", "text"]);
+
+    const streamed = {
+      ...message,
+      time: { created: 1, streamed: 4, completed: 5 },
+    } as unknown as SessionMessageInfo;
+    expect(toV1Message(streamed, "ses-1", "D:/repo")?.info).toMatchObject({
+      time: { created: 1, streamed: 4, completed: 5 },
+    });
     expect(mapped?.parts[1]).toMatchObject({
       tool: "bash",
       callID: "call-1",

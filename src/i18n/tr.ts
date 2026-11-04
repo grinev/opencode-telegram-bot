@@ -179,6 +179,7 @@ export const tr: I18nDictionary = {
   "settings.response_streaming.draft": "taslak (deneysel)",
   "settings.diff_files.label": "Diff dosyaları",
   "settings.assistant_footer.label": "Asistan alt bilgisi",
+  "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Oturum panosunu sabitle",
   "settings.tts.label": "Sesli yanıtlar",
   "settings.prompt_queue.label": "Mesaj kuyruğu",

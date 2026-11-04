@@ -20,6 +20,8 @@ const mocked = vi.hoisted(() => ({
   abortMock: vi.fn(),
   statusMock: vi.fn(),
   clearRunMock: vi.fn(),
+  suppressFooterMock: vi.fn(),
+  clearFooterSuppressionMock: vi.fn(),
   markAttachedSessionIdleMock: vi.fn(),
   clearPromptResponseModeMock: vi.fn(),
   inboxCancelMock: vi.fn(),
@@ -75,7 +77,11 @@ const TEST_PERMISSION: PermissionRequest = {
 function createDeps() {
   return {
     ...container,
-    assistantRunState: { clearRun: mocked.clearRunMock } as never,
+    assistantRunState: {
+      clearRun: mocked.clearRunMock,
+      suppressFooter: mocked.suppressFooterMock,
+      clearFooterSuppression: mocked.clearFooterSuppressionMock,
+    } as never,
   };
 }
 
@@ -97,6 +103,8 @@ describe("bot/commands/abort", () => {
     mocked.abortMock.mockReset();
     mocked.statusMock.mockReset();
     mocked.clearRunMock.mockReset();
+    mocked.suppressFooterMock.mockReset();
+    mocked.clearFooterSuppressionMock.mockReset();
     mocked.markAttachedSessionIdleMock.mockReset();
     mocked.markAttachedSessionIdleMock.mockResolvedValue(undefined);
     mocked.clearPromptResponseModeMock.mockReset();
@@ -191,6 +199,10 @@ describe("bot/commands/abort", () => {
     await abortCommand(ctx as never, createDeps());
 
     expect(replyMock).toHaveBeenCalledWith(t("stop.in_progress"));
+    expect(mocked.suppressFooterMock).toHaveBeenCalledWith("session-1");
+    expect(mocked.suppressFooterMock.mock.invocationCallOrder[0]).toBeLessThan(
+      mocked.abortMock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
     expect(mocked.abortMock).toHaveBeenCalled();
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.success"));
 

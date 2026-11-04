@@ -17,6 +17,7 @@ import { keepAssistantDraftsBeforePrompt } from "./assistant-response-handler.js
 import { isCompactProgressMode, type EventHandlerDeps } from "./handler-context.js";
 
 type InteractionDeps = EventHandlerDeps<
+  | "assistantRunState"
   | "interactionManager"
   | "keyboardManager"
   | "permissionManager"
@@ -257,6 +258,10 @@ export function registerInteractionHandlers(deps: InteractionDeps): void {
         });
       }
     }
+  });
+
+  summaryAggregator.setOnFooterSuppressed((sessionId) => {
+    deps.assistantRunState.suppressFooter(sessionId);
   });
 
   summaryAggregator.setOnQuestionSettled(async (sessionId, requestID, outcome) => {
