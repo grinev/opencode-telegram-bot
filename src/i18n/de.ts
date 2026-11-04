@@ -187,6 +187,7 @@ export const de: I18nDictionary = {
   "settings.assistant_footer.label": "Antwort-Footer",
   "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Pin session dashboard",
+  "settings.background_notifications.label": "Notifications from other sessions",
   "settings.tts.label": "Audioantworten",
   "settings.prompt_queue.label": "Nachrichtenwarteschlange",
   "settings.value.on": "Ein",

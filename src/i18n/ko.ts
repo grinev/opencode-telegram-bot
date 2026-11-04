@@ -187,6 +187,7 @@ export const ko: I18nDictionary = {
   "settings.assistant_footer.label": "어시스턴트 푸터",
   "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Pin session dashboard",
+  "settings.background_notifications.label": "Notifications from other sessions",
   "settings.tts.label": "음성 답변",
   "settings.prompt_queue.label": "메시지 대기열",
   "settings.value.on": "켜기",

@@ -229,6 +229,15 @@ export function setPinnedDashboardEnabled(enabled: boolean): void {
   void writeSettingsFile(currentSettings);
 }
 
+export function getShowBackgroundSessionNotifications(): boolean {
+  return currentSettings.showBackgroundSessionNotifications ?? true;
+}
+
+export function setShowBackgroundSessionNotifications(enabled: boolean): void {
+  currentSettings.showBackgroundSessionNotifications = enabled;
+  void writeSettingsFile(currentSettings);
+}
+
 export type { PromptQueueMode, ResponseStreamingMode };
 
 export function getResponseStreamingMode(): ResponseStreamingMode {
@@ -364,6 +373,7 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
     "showThinkingContent",
     "showAssistantRunFooter",
     "pinnedDashboardEnabled",
+    "showBackgroundSessionNotifications",
     "responseStreamingMode",
     "sendDiffFileAttachments",
     "promptQueueEnabled",
@@ -397,7 +407,7 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
         currentSettings.responseStreamingMode = value as ResponseStreamingMode;
       }
     } else {
-      // Boolean settings: compactOutputMode, deleteCompactProgressOnFinish, showThinkingContent, showAssistantRunFooter, pinnedDashboardEnabled, sendDiffFileAttachments, promptQueueEnabled
+      // Boolean settings: compactOutputMode, deleteCompactProgressOnFinish, showThinkingContent, showAssistantRunFooter, pinnedDashboardEnabled, showBackgroundSessionNotifications, sendDiffFileAttachments, promptQueueEnabled
       if (typeof value !== "boolean") {
         throw new Error(
           `INITIAL_SETTINGS_PRESET: "${key}" must be a boolean.`,
@@ -423,6 +433,10 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
         case "pinnedDashboardEnabled":
           if (currentSettings.pinnedDashboardEnabled === undefined)
             currentSettings.pinnedDashboardEnabled = value;
+          break;
+        case "showBackgroundSessionNotifications":
+          if (currentSettings.showBackgroundSessionNotifications === undefined)
+            currentSettings.showBackgroundSessionNotifications = value;
           break;
         case "sendDiffFileAttachments":
           if (currentSettings.sendDiffFileAttachments === undefined)

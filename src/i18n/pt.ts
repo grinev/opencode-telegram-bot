@@ -186,6 +186,7 @@ export const pt: I18nDictionary = {
   "settings.assistant_footer.label": "Rodapé do assistente",
   "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Pin session dashboard",
+  "settings.background_notifications.label": "Notifications from other sessions",
   "settings.tts.label": "Respostas em áudio",
   "settings.prompt_queue.label": "Fila de mensagens",
   "settings.value.on": "Ligado",

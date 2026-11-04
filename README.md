@@ -29,7 +29,7 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
 - **Remote coding** — send prompts to OpenCode from anywhere, receive complete results with code sent as files
 - **Session management** — create new sessions or continue existing ones, just like in the TUI
 - **Track live session** — follow a live OpenCode CLI session; see [Track Existing Session](#track-existing-session)
-- **Background session notifications** — get short notifications when detached or non-current sessions in the current project/worktree reply, ask questions, or request permissions
+- **Background session notifications** — get short notifications when detached or non-current sessions in the current project/worktree reply, ask questions, or request permissions. Turn them off in `/settings` (default on); that silences the chat notices only and does not stop tracking or cancel a pending request
 - **Live status** — pinned message with current project/worktree, model, context usage, and changed files list, updated in real time
 - **Model switching** — pick models from OpenCode favorites and recent history directly in the chat (favorites are shown first), or browse all models by provider
 - **Agent modes** — switch between Plan and Build modes on the fly
@@ -303,6 +303,7 @@ Runtime preferences are changed from `/settings` and stored in `settings.json`:
 - Thinking content display
 - Assistant run footer display
 - Pin session dashboard
+- Notifications from other sessions: on by default. Off silences chat notices about replies, questions and permission requests from sessions that are not the one selected in the bot. Tracking keeps running, and a pending question or permission stays answerable from a TUI or Desktop
 - Diff file attachments
 - Response streaming mode: `edit` or `draft (experimental)`; applies only to final assistant replies, not thinking messages
 - Audio replies: `off`, `all`, or `auto` when TTS is configured

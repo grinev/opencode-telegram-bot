@@ -178,6 +178,7 @@ export const en = {
   "settings.assistant_footer.label": "Assistant footer",
   "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Pin session dashboard",
+  "settings.background_notifications.label": "Notifications from other sessions",
   "settings.tts.label": "Audio replies",
   "settings.prompt_queue.label": "Message queue",
   "settings.value.on": "On",

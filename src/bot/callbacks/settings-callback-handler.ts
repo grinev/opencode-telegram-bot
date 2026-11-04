@@ -9,12 +9,14 @@ import {
   getSendDiffFileAttachments,
   getPinnedDashboardEnabled,
   getShowAssistantRunFooter,
+  getShowBackgroundSessionNotifications,
   getShowThinkingContent,
   getTtsMode,
   setCompactOutputMode,
   setDeleteCompactProgressOnFinish,
   setPinnedDashboardEnabled,
   setPromptQueueMode,
+  setShowBackgroundSessionNotifications,
   setResponseStreamingMode,
   setSendDiffFileAttachments,
   setShowAssistantRunFooter,
@@ -32,6 +34,7 @@ import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/i
 import {
   buildSettingsMenuView,
   SETTINGS_ASSISTANT_FOOTER_CALLBACK,
+  SETTINGS_BACKGROUND_NOTIFICATIONS_CALLBACK,
   SETTINGS_CALLBACK_PREFIX,
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
   SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK,
@@ -187,6 +190,16 @@ export async function handleSettingsCallback(
           task: () => deps.pinnedMessageManager.refreshSessionValues(),
         });
       }
+      const { text, keyboard } = buildSettingsMenuView();
+      await ctx.answerCallbackQuery({ text: t("settings.saved") });
+      await ctx.editMessageText(text, {
+        reply_markup: appendInlineMenuCancelButton(keyboard, "settings"),
+      });
+      return true;
+    }
+
+    if (callbackData === SETTINGS_BACKGROUND_NOTIFICATIONS_CALLBACK) {
+      setShowBackgroundSessionNotifications(!getShowBackgroundSessionNotifications());
       const { text, keyboard } = buildSettingsMenuView();
       await ctx.answerCallbackQuery({ text: t("settings.saved") });
       await ctx.editMessageText(text, {

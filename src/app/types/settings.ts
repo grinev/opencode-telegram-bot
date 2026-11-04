@@ -24,6 +24,7 @@ export interface Settings {
   showThinkingContent?: boolean | undefined;
   showAssistantRunFooter?: boolean | undefined;
   pinnedDashboardEnabled?: boolean | undefined;
+  showBackgroundSessionNotifications?: boolean | undefined;
   responseStreamingMode?: ResponseStreamingMode | undefined;
   sendDiffFileAttachments?: boolean | undefined;
   promptQueueEnabled?: boolean | undefined;
