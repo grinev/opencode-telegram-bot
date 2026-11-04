@@ -1,4 +1,9 @@
-import { getScheduledTasks, setScheduledTasks } from "./settings-store.js";
+import {
+  getScheduledTasks,
+  setScheduledTasks,
+  setScheduledTasksConfirmed,
+} from "./settings-store.js";
+import { computeNextRunAt } from "../services/scheduled-task-next-run-service.js";
 import { logger } from "../../utils/logger.js";
 import type { ScheduledTask } from "../types/scheduled-task.js";
 import { cloneScheduledTask } from "../types/scheduled-task.js";
@@ -91,4 +96,28 @@ export async function updateScheduledTask(
       result: cloneScheduledTask(nextTask),
     };
   });
+}
+
+export async function toggleScheduledTask(
+  taskId: string,
+  enabled: boolean,
+): Promise<ScheduledTask | null> {
+  const run = async (): Promise<ScheduledTask | null> => {
+    const tasks = listScheduledTasks();
+    const index = tasks.findIndex((task) => task.id === taskId);
+    const task = tasks[index];
+    if (!task || task.kind !== "cron" || (task.enabled !== false) === enabled) return null;
+    const updated = {
+      ...task,
+      enabled,
+      activationPending: enabled || undefined,
+      nextRunAt: enabled ? computeNextRunAt(task) : null,
+    };
+    tasks[index] = updated;
+    await setScheduledTasksConfirmed(tasks);
+    return updated;
+  };
+  const result = scheduledTaskMutationQueue.then(run, run);
+  scheduledTaskMutationQueue = result.catch(() => undefined);
+  return result;
 }

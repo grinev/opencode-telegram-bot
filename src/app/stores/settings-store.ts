@@ -59,10 +59,7 @@ async function readSettingsFile(): Promise<Settings> {
     return await readSettingsFileAt(settingsFilePath);
   } catch (primaryError) {
     if (!isFileNotFound(primaryError)) {
-      logger.warn(
-        `[SettingsManager] Cannot read settings file ${settingsFilePath}:`,
-        primaryError,
-      );
+      logger.warn(`[SettingsManager] Cannot read settings file ${settingsFilePath}:`, primaryError);
     }
 
     try {
@@ -345,6 +342,20 @@ export function setScheduledTasks(tasks: ScheduledTask[]): Promise<void> {
   return writeSettingsFile(currentSettings);
 }
 
+export function setScheduledTasksConfirmed(tasks: ScheduledTask[]): Promise<void> {
+  const write = settingsWriteQueue.then(async () => {
+    await writeSettingsFileAtomically({
+      ...currentSettings,
+      scheduledTasks: cloneScheduledTasks(tasks),
+    });
+    currentSettings.scheduledTasks = cloneScheduledTasks(tasks);
+  });
+  settingsWriteQueue = write.catch((error: unknown) => {
+    logger.error("[SettingsManager] Error writing scheduled tasks:", error);
+  });
+  return write;
+}
+
 export function getScheduledTaskSessionIgnores(): ScheduledTaskSessionIgnoreInfo[] {
   return cloneScheduledTaskSessionIgnores(currentSettings.scheduledTaskSessionIgnores) ?? [];
 }
@@ -409,9 +420,7 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
     } else {
       // Boolean settings: compactOutputMode, deleteCompactProgressOnFinish, showThinkingContent, showAssistantRunFooter, pinnedDashboardEnabled, showBackgroundSessionNotifications, sendDiffFileAttachments, promptQueueEnabled
       if (typeof value !== "boolean") {
-        throw new Error(
-          `INITIAL_SETTINGS_PRESET: "${key}" must be a boolean.`,
-        );
+        throw new Error(`INITIAL_SETTINGS_PRESET: "${key}" must be a boolean.`);
       }
       switch (key) {
         case "compactOutputMode":

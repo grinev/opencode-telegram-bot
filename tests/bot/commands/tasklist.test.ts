@@ -12,12 +12,15 @@ const mocked = vi.hoisted(() => ({
   getScheduledTaskMock: vi.fn(),
   removeScheduledTaskMock: vi.fn(),
   runtimeRemoveTaskMock: vi.fn(),
+  toggleScheduledTaskMock: vi.fn(),
+  runtimeRefreshTaskMock: vi.fn(),
 }));
 
 vi.mock("../../../src/app/stores/scheduled-task-store.js", () => ({
   listScheduledTasks: mocked.listScheduledTasksMock,
   getScheduledTask: mocked.getScheduledTaskMock,
   removeScheduledTask: mocked.removeScheduledTaskMock,
+  toggleScheduledTask: mocked.toggleScheduledTaskMock,
 }));
 
 function createTask(id: string, overrides: Partial<Record<string, unknown>> = {}) {
@@ -73,7 +76,10 @@ function createCallbackContext(data: string, messageId: number): Context {
 function createDeps() {
   return {
     ...container,
-    scheduledTaskRuntime: { removeTask: mocked.runtimeRemoveTaskMock } as never,
+    scheduledTaskRuntime: {
+      removeTask: mocked.runtimeRemoveTaskMock,
+      refreshTask: mocked.runtimeRefreshTaskMock,
+    } as never,
   };
 }
 
@@ -90,6 +96,8 @@ describe("bot/commands/tasklist", () => {
     mocked.getScheduledTaskMock.mockReset();
     mocked.removeScheduledTaskMock.mockReset();
     mocked.runtimeRemoveTaskMock.mockReset();
+    mocked.toggleScheduledTaskMock.mockReset();
+    mocked.runtimeRefreshTaskMock.mockReset();
     mocked.removeScheduledTaskMock.mockResolvedValue(true);
   });
 
@@ -175,7 +183,9 @@ describe("bot/commands/tasklist", () => {
     expect(handled).toBe(true);
     expect(ctx.editMessageText).toHaveBeenCalledTimes(1);
 
-    const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [string];
+    const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [
+      string,
+    ];
     expect(text).toContain("Check weather forecast");
     expect(text).toContain("D:\\Projects\\RepoA");
     expect(text).toContain("🛠️ Build");
@@ -194,6 +204,59 @@ describe("bot/commands/tasklist", () => {
         stage: "detail",
         taskId: "task-1",
       },
+    });
+  });
+
+  it("updates the open cron card after toggling", async () => {
+    container.interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: { flow: "tasklist", stage: "detail", messageId: 300, taskId: "task-1" },
+    });
+    mocked.toggleScheduledTaskMock.mockResolvedValue(
+      createTask("task-1", { enabled: false, nextRunAt: null }),
+    );
+    const ctx = createCallbackContext("tasklist:toggle:off:task-1", 300);
+    await handleTaskListCallback(ctx, createDeps());
+    expect(mocked.runtimeRefreshTaskMock).toHaveBeenCalledWith("task-1");
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("task.toggle.saved") });
+    expect(ctx.editMessageText).toHaveBeenCalledWith(
+      expect.stringContaining(`${t("task.scheduling")}: ${t("task.disabled")}`),
+      expect.anything(),
+    );
+  });
+
+  it("keeps the card and runtime unchanged if saving fails", async () => {
+    container.interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: { flow: "tasklist", stage: "detail", messageId: 300, taskId: "task-1" },
+    });
+    mocked.toggleScheduledTaskMock.mockRejectedValue(new Error("disk error"));
+    const ctx = createCallbackContext("tasklist:toggle:off:task-1", 300);
+    await handleTaskListCallback(ctx, createDeps());
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("task.toggle.error") });
+    expect(ctx.editMessageText).not.toHaveBeenCalled();
+    expect(mocked.runtimeRefreshTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a duplicate toggle without closing the existing card", async () => {
+    container.interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: { flow: "tasklist", stage: "detail", messageId: 300, taskId: "task-1" },
+    });
+    mocked.toggleScheduledTaskMock.mockResolvedValue(null);
+    mocked.getScheduledTaskMock.mockReturnValue(createTask("task-1", { enabled: false }));
+    const ctx = createCallbackContext("tasklist:toggle:off:task-1", 300);
+    await handleTaskListCallback(ctx, createDeps());
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("tasklist.inactive_callback"),
+      show_alert: true,
+    });
+    expect(ctx.deleteMessage).not.toHaveBeenCalled();
+    expect(container.interactionManager.getSnapshot()).toMatchObject({
+      metadata: { stage: "detail", taskId: "task-1" },
     });
   });
 
@@ -287,7 +350,9 @@ describe("bot/commands/tasklist", () => {
     const ctx = createCallbackContext("tasklist:open:task-long", 700);
     await handleTaskListCallback(ctx, createDeps());
 
-    const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [string];
+    const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [
+      string,
+    ];
     expect(text).toContain("...");
     expect(Buffer.byteLength(text, "utf-8")).toBeLessThanOrEqual(4096);
   });
@@ -313,7 +378,9 @@ describe("bot/commands/tasklist", () => {
     const ctx = createCallbackContext("tasklist:open:task-short", 800);
     await handleTaskListCallback(ctx, createDeps());
 
-    const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [string];
+    const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [
+      string,
+    ];
     expect(text).toContain(shortPrompt);
     expect(text).not.toContain("...");
   });
@@ -340,7 +407,9 @@ describe("bot/commands/tasklist", () => {
     const ctx = createCallbackContext("tasklist:open:task-ar", 900);
     await handleTaskListCallback(ctx, createDeps());
 
-    const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [string];
+    const [text] = defined((ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0]) as [
+      string,
+    ];
     expect(text).toContain("...");
     expect(Buffer.byteLength(text, "utf-8")).toBeLessThanOrEqual(4096);
   });

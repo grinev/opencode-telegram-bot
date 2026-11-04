@@ -582,6 +582,13 @@ export const id: I18nDictionary = {
 
   "tasklist.empty": "📭 Belum ada tugas terjadwal.",
   "tasklist.select": "Pilih tugas terjadwal:",
+  "task.scheduling": "Scheduling",
+  "task.enabled": "On",
+  "task.disabled": "Off",
+  "task.button.enable": "Enable",
+  "task.button.disable": "Disable",
+  "task.toggle.saved": "Saved",
+  "task.toggle.error": "Could not save",
   "tasklist.details":
     "⏰ Tugas terjadwal\n\nTugas: {prompt}\nProyek: {project}\nJadwal: {schedule}\n{cronLine}Zona waktu: {timezone}\nDijalankan berikutnya: {nextRunAt}\nTerakhir dijalankan: {lastRunAt}\nSudah dijalankan: {runCount} kali",
   "tasklist.details.cron": "Cron: {cron}",

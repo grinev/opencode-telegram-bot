@@ -585,6 +585,13 @@ export const tr: I18nDictionary = {
 
   "tasklist.empty": "📭 Henüz zamanlanmış görev yok.",
   "tasklist.select": "Bir zamanlanmış görev seçin:",
+  "task.scheduling": "Scheduling",
+  "task.enabled": "On",
+  "task.disabled": "Off",
+  "task.button.enable": "Enable",
+  "task.button.disable": "Disable",
+  "task.toggle.saved": "Saved",
+  "task.toggle.error": "Could not save",
   "tasklist.details":
     "⏰ Zamanlanmış görev\n\nGörev: {prompt}\nProje: {project}\nZamanlama: {schedule}\n{cronLine}Saat dilimi: {timezone}\nSonraki çalışma: {nextRunAt}\nSon çalışma: {lastRunAt}\nÇalışma sayısı: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",

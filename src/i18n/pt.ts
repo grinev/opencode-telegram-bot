@@ -601,6 +601,13 @@ export const pt: I18nDictionary = {
 
   "tasklist.empty": "📭 Ainda não há tarefas agendadas.",
   "tasklist.select": "Selecione uma tarefa agendada:",
+  "task.scheduling": "Scheduling",
+  "task.enabled": "On",
+  "task.disabled": "Off",
+  "task.button.enable": "Enable",
+  "task.button.disable": "Disable",
+  "task.toggle.saved": "Saved",
+  "task.toggle.error": "Could not save",
   "tasklist.details":
     "⏰ Tarefa agendada\n\nTarefa: {prompt}\nProjeto: {project}\nAgendamento: {schedule}\n{cronLine}Fuso horário: {timezone}\nPróxima execução: {nextRunAt}\nÚltima execução: {lastRunAt}\nNúmero de execuções: {runCount}",
   "tasklist.details.cron": "Cron: {cron}",
