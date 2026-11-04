@@ -190,6 +190,12 @@ export const ru: I18nDictionary = {
   "projects.empty":
     "📭 Проектов нет.\n\nОткройте директорию в OpenCode и создайте хотя бы одну сессию, после этого она появится здесь.",
   "projects.select": "Выберите проект:",
+  "projects.search.button": "🔍 Поиск",
+  "projects.search.prompt": "🔍 Введите название проекта:",
+  "projects.search.results": "Результаты поиска «{query}»:",
+  "projects.search.no_results": "Проекты по запросу «{query}» не найдены",
+  "projects.search.again": "↩ Искать снова",
+  "projects.search.cancel": "❌ Отмена",
   "projects.select_with_current": "Выберите проект:\n\nТекущий: 🏗 {project}",
   "projects.page_indicator": "Страница {current}/{total}",
   "projects.prev_page": "⬅️ Назад",

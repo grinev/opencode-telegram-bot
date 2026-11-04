@@ -8,6 +8,11 @@ import type { ProjectInfo } from "../../app/types/project.js";
 
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 export const PROJECT_PAGE_CALLBACK_PREFIX = "projects:page:";
+export const PROJECT_SEARCH_CALLBACK = "projects:search";
+export const PROJECT_SEARCH_PAGE_PREFIX = "projects:search:page:";
+export const PROJECT_SEARCH_RESULT_PREFIX = "projects:search:result:";
+export const PROJECT_SEARCH_AGAIN = "projects:search:again";
+export const PROJECT_SEARCH_CANCEL = "projects:search:cancel";
 
 interface ProjectsPaginationRange {
   page: number;
@@ -121,8 +126,10 @@ async function getActiveProjectWorktree(): Promise<string | null> {
 async function buildProjectsKeyboard(
   projects: ProjectInfo[],
   page: number,
+  search = false,
 ): Promise<InlineKeyboard> {
   const keyboard = new InlineKeyboard();
+  if (!search) keyboard.text(t("projects.search.button"), PROJECT_SEARCH_CALLBACK).row();
   const currentProject = getCurrentProject();
   const activeProjectWorktree = await getActiveProjectWorktree();
   const pageSize = config.bot.projectsListLimit;
@@ -142,26 +149,79 @@ async function buildProjectsKeyboard(
           worktreeKey(project.worktree) === worktreeKey(activeProjectWorktree)));
     const label = buildProjectButtonLabel(startIndex + index, project.worktree);
     const labelWithCheck = formatProjectButtonLabel(label, Boolean(isActive));
-    keyboard.text(labelWithCheck, `project:${project.id}`).row();
+    keyboard
+      .text(
+        labelWithCheck,
+        search ? `${PROJECT_SEARCH_RESULT_PREFIX}${startIndex + index}` : `project:${project.id}`,
+      )
+      .row();
   });
 
   if (totalPages > 1) {
     if (normalizedPage > 0) {
       keyboard.text(
         t("projects.prev_page"),
-        `${PROJECT_PAGE_CALLBACK_PREFIX}${normalizedPage - 1}`,
+        `${search ? PROJECT_SEARCH_PAGE_PREFIX : PROJECT_PAGE_CALLBACK_PREFIX}${normalizedPage - 1}`,
       );
     }
 
     if (normalizedPage < totalPages - 1) {
       keyboard.text(
         t("projects.next_page"),
-        `${PROJECT_PAGE_CALLBACK_PREFIX}${normalizedPage + 1}`,
+        `${search ? PROJECT_SEARCH_PAGE_PREFIX : PROJECT_PAGE_CALLBACK_PREFIX}${normalizedPage + 1}`,
       );
     }
   }
 
   return keyboard;
+}
+
+export async function filterProjectsForSearch(
+  projects: ProjectInfo[],
+  query: string,
+): Promise<ProjectInfo[]> {
+  const needle = query.trim().toLowerCase();
+  const current = getCurrentProject();
+  const activeWorktree = await getActiveProjectWorktree();
+  return projects.filter((project) => {
+    const active =
+      current &&
+      (project.id === current.id ||
+        project.worktree === current.worktree ||
+        (activeWorktree !== null && worktreeKey(project.worktree) === worktreeKey(activeWorktree)));
+    return (
+      getProjectFolderName(project.worktree).toLowerCase().includes(needle) ||
+      Boolean(
+        active &&
+        current?.name &&
+        current.name !== current.worktree &&
+        current.name.toLowerCase().includes(needle),
+      )
+    );
+  });
+}
+
+export async function buildProjectSearchView(
+  projects: ProjectInfo[],
+  query: string,
+  page: number,
+): Promise<{ text: string; keyboard: InlineKeyboard }> {
+  const { page: normalizedPage, totalPages } = calculateProjectsPaginationRange(
+    projects.length,
+    page,
+    config.bot.projectsListLimit,
+  );
+  let text = projects.length
+    ? t("projects.search.results", { query })
+    : t("projects.search.no_results", { query });
+  if (totalPages > 1)
+    text += `\n\n${t("projects.page_indicator", { current: String(normalizedPage + 1), total: String(totalPages) })}`;
+  const keyboard = await buildProjectsKeyboard(projects, normalizedPage, true);
+  keyboard
+    .row()
+    .text(t("projects.search.again"), PROJECT_SEARCH_AGAIN)
+    .text(t("projects.search.cancel"), PROJECT_SEARCH_CANCEL);
+  return { text, keyboard };
 }
 
 export async function buildProjectsMenuView(
