@@ -212,6 +212,14 @@ export const en = {
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",
   "sessions.empty": "📭 No sessions found.\n\nCreate a new session with /new.",
   "sessions.select": "Select a session:",
+  "sessions.current_marker": "(current)",
+  "sessions.search.button": "🔍 Search",
+  "sessions.search.prompt": "🔍 Enter session title or id:",
+  "sessions.search.results": "Search results for \"{query}\":",
+  "sessions.search.results_page": "Search results for \"{query}\" (page {page}):",
+  "sessions.search.no_results": "No sessions found for \"{query}\"",
+  "sessions.search.again": "↩ Search again",
+  "sessions.search.cancel": "❌ Cancel",
   "sessions.select_page": "Select a session (page {page}):",
   "sessions.fetch_error":
     "🔴 OpenCode Server is unavailable or an error occurred while loading sessions.",
@@ -769,6 +777,14 @@ export const en = {
 } as const;
 
 export const projectSearchFallback = {
+  "sessions.current_marker": en["sessions.current_marker"],
+  "sessions.search.button": en["sessions.search.button"],
+  "sessions.search.prompt": en["sessions.search.prompt"],
+  "sessions.search.results": en["sessions.search.results"],
+  "sessions.search.results_page": en["sessions.search.results_page"],
+  "sessions.search.no_results": en["sessions.search.no_results"],
+  "sessions.search.again": en["sessions.search.again"],
+  "sessions.search.cancel": en["sessions.search.cancel"],
   "projects.search.button": en["projects.search.button"],
   "projects.search.prompt": en["projects.search.prompt"],
   "projects.search.results": en["projects.search.results"],
