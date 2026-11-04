@@ -98,6 +98,7 @@ interface CommandParams {
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const MESSAGE_PAGE_SIZE = 200;
 const MAX_MESSAGE_PAGES = 50;
+const SESSION_PAGE_SIZE = 100;
 const COMPLETION_POLL_INTERVAL_MS = 250;
 const COMPLETION_POLL_ATTEMPTS = 40;
 const SERVER_IDENTITY_TIMEOUT_MS = 2_000;
@@ -502,13 +503,42 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
     session: {
       list: (params: { directory?: string; limit?: number; roots?: boolean }) =>
         run(async () => {
-          const result = await client.session.list({
-            order: "desc",
-            ...(params.directory ? { directory: params.directory } : {}),
-            ...(params.limit ? { limit: params.limit } : {}),
-            ...(params.roots ? { parentID: null } : {}),
-          });
-          return result.data.map(toV1Session);
+          if (params.limit) {
+            const result = await client.session.list({
+              order: "desc",
+              ...(params.directory ? { directory: params.directory } : {}),
+              ...(params.limit ? { limit: params.limit } : {}),
+              ...(params.roots ? { parentID: null } : {}),
+            });
+            return result.data.map(toV1Session);
+          }
+
+          // No limit means the caller wants the whole list, not just its first page.
+          // A cursor carries its own order; the server refuses both together.
+          const all = [];
+          const seen = new Set<string>();
+          let cursor: string | undefined;
+          for (;;) {
+            const result = await client.session.list({
+              limit: SESSION_PAGE_SIZE,
+              ...(cursor
+                ? { cursor }
+                : {
+                    order: "desc",
+                    ...(params.directory ? { directory: params.directory } : {}),
+                    ...(params.roots ? { parentID: null } : {}),
+                  }),
+            });
+            all.push(...result.data);
+            const next = result.cursor?.next;
+            // A cursor already followed would repeat a page forever, directly or in a cycle.
+            if (!next || seen.has(next) || result.data.length === 0) {
+              break;
+            }
+            seen.add(next);
+            cursor = next;
+          }
+          return all.map(toV1Session);
         }),
       get: (params: { sessionID: string }) =>
         run(async () => toV1Session(await client.session.get({ sessionID: params.sessionID }))),

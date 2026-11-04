@@ -26,6 +26,7 @@ import { handleRenameCancel } from "./rename-callback-handler.js";
 import { handleSettingsCallback } from "./settings-callback-handler.js";
 import {
   handleBackgroundSessionOpen,
+  handleSessionSearchCallback,
   handleSessionSelect,
 } from "./session-callback-handler.js";
 import { handleSkillsCallback } from "./skills-catalog-callback-handler.js";
@@ -191,7 +192,10 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
       "session",
       {
         name: "session",
-        handlers: [(ctx) => handleSessionSelect(ctx, botDeps)],
+        handlers: [
+          (ctx) => handleSessionSearchCallback(ctx, botDeps),
+          (ctx) => handleSessionSelect(ctx, botDeps),
+        ],
         errorScope: "interaction",
       },
     ],

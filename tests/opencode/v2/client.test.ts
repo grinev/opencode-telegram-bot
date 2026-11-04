@@ -9,6 +9,7 @@ const fake = vi.hoisted(() => ({
   client: {
     server: { info: vi.fn() },
     session: {
+      list: vi.fn(),
       get: vi.fn(),
       switchAgent: vi.fn(),
       switchModel: vi.fn(),
@@ -384,6 +385,78 @@ describe("opencode/v2/client", () => {
     expect(result.data?.parts).toEqual([
       expect.objectContaining({ type: "text", text: '{"kind":"once"}' }),
     ]);
+  });
+
+  it("reads every page of the session list when no limit is asked for", async () => {
+    fake.client.session.list
+      .mockResolvedValueOnce({ data: [SESSION], cursor: { next: "cursor-1" } })
+      .mockResolvedValueOnce({ data: [{ ...SESSION, id: "ses-2" }], cursor: {} });
+
+    const result = await createClient().session.list({ directory: "D:/repo", roots: true });
+
+    expect(fake.client.session.list).toHaveBeenNthCalledWith(1, {
+      limit: 100,
+      order: "desc",
+      directory: "D:/repo",
+      parentID: null,
+    });
+    expect(fake.client.session.list).toHaveBeenNthCalledWith(2, { limit: 100, cursor: "cursor-1" });
+    expect(result.data?.map((session) => session.id)).toEqual(["ses-1", "ses-2"]);
+  });
+
+  it("keeps reading session pages until the server runs out of them", async () => {
+    const pageCount = 60;
+    fake.client.session.list.mockImplementation(async ({ cursor }: { cursor?: string }) => {
+      const page = cursor ? Number(cursor.split("-")[1]) : 0;
+      return {
+        data: [{ ...SESSION, id: `ses-${page}` }],
+        cursor: page + 1 < pageCount ? { next: `page-${page + 1}` } : {},
+      };
+    });
+
+    const result = await createClient().session.list({ directory: "D:/repo", roots: true });
+
+    expect(fake.client.session.list).toHaveBeenCalledTimes(pageCount);
+    expect(result.data).toHaveLength(pageCount);
+  });
+
+  it("stops reading session pages when the server repeats a cursor", async () => {
+    fake.client.session.list.mockResolvedValue({ data: [SESSION], cursor: { next: "cursor-1" } });
+
+    const result = await createClient().session.list({ directory: "D:/repo", roots: true });
+
+    expect(fake.client.session.list).toHaveBeenCalledTimes(2);
+    expect(result.data).toHaveLength(2);
+  });
+
+  it("stops reading session pages when cursors cycle instead of repeating directly", async () => {
+    fake.client.session.list.mockImplementation(async ({ cursor }: { cursor?: string }) => ({
+      data: [SESSION],
+      cursor: { next: cursor === "a" ? "b" : "a" },
+    }));
+
+    await createClient().session.list({ directory: "D:/repo", roots: true });
+
+    expect(fake.client.session.list).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps the session list to one request when a limit is asked for", async () => {
+    fake.client.session.list.mockResolvedValue({ data: [SESSION], cursor: { next: "cursor-1" } });
+
+    const result = await createClient().session.list({
+      directory: "D:/repo",
+      limit: 11,
+      roots: true,
+    });
+
+    expect(fake.client.session.list).toHaveBeenCalledTimes(1);
+    expect(fake.client.session.list).toHaveBeenCalledWith({
+      order: "desc",
+      directory: "D:/repo",
+      limit: 11,
+      parentID: null,
+    });
+    expect(result.data).toHaveLength(1);
   });
 
   it("caps the message request at the server's maximum page size", async () => {

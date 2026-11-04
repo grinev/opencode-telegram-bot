@@ -9,6 +9,7 @@ import {
 } from "../callbacks/model-selection-callback-handler.js";
 import { handleQuestionTextAnswer } from "../callbacks/question-callback-handler.js";
 import { handleProjectSearchTextInput } from "../callbacks/project-callback-handler.js";
+import { handleSessionSearchTextInput } from "../callbacks/session-callback-handler.js";
 import { handleRenameTextAnswer } from "../callbacks/rename-callback-handler.js";
 import { handleContextButtonPress } from "../menus/context-control-menu.js";
 import { showAgentSelectionMenu } from "../menus/agent-selection-menu.js";
@@ -227,6 +228,10 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     }
 
     if (await handleProjectSearchTextInput(ctx, container)) {
+      return;
+    }
+
+    if (await handleSessionSearchTextInput(ctx, container)) {
       return;
     }
 

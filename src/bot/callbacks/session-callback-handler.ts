@@ -15,7 +15,7 @@ import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
 import { formatSessionTitle } from "../../app/formatters/session-title-formatter.js";
-import { alert, failure } from "./feedback.js";
+import { alert, cancelMenu, failure } from "./feedback.js";
 import { attachToSession } from "../../app/services/attach-service.js";
 import { renderAssistantFinalPartsSafe } from "../messages/assistant-rendering.js";
 import {
@@ -38,7 +38,10 @@ import {
   parseSessionIdCallback,
   parseSessionPageCallback,
   SESSION_CALLBACK_PREFIX,
+  SESSION_SEARCH_QUERY_MAX_LENGTH,
   loadSessionPage,
+  searchSessions,
+  buildSessionSearchView,
 } from "../menus/session-selection-menu.js";
 
 export type SessionSelectDeps = Pick<
@@ -57,11 +60,180 @@ export type SessionSelectDeps = Pick<
   bot: Bot<Context>;
 };
 
+type SessionSearchDeps = Pick<AppContainer, "interactionManager">;
+
+function sessionSearchState(deps: SessionSearchDeps) {
+  const state = deps.interactionManager.getSnapshot();
+  return state?.kind === "custom" && state.metadata.flow === "session-search"
+    ? state.metadata
+    : null;
+}
+
+function sameSessionSearch(deps: SessionSearchDeps, state: Record<string, unknown>): boolean {
+  const current = sessionSearchState(deps);
+  return !!current && current.token === state.token && current.stage === state.stage;
+}
+
+function startSessionSearch(deps: SessionSearchDeps): void {
+  deps.interactionManager.start({
+    kind: "custom",
+    expectedInput: "text",
+    allowedCommands: [],
+    metadata: { flow: "session-search", stage: "input", token: Symbol("session-search") },
+  });
+}
+
+export async function handleSessionSearchTextInput(
+  ctx: Context,
+  deps: SessionSearchDeps,
+): Promise<boolean> {
+  const state = sessionSearchState(deps);
+  if (!state || state.stage !== "input" || ctx.message?.text === undefined) return false;
+  // A session title never comes near this length; the cap keeps the heading sendable.
+  const query = ctx.message.text.slice(0, SESSION_SEARCH_QUERY_MAX_LENGTH);
+  if (!query.trim()) return true;
+  try {
+    const project = getCurrentProject();
+    if (!project) throw new Error("Project no longer selected");
+    const sessions = await searchSessions(project.worktree, query);
+    if (!sameSessionSearch(deps, state)) return true;
+    const view = buildSessionSearchView(sessions, query, 0, config.bot.sessionsListLimit);
+    const sent = await ctx.reply(view.text, { reply_markup: view.keyboard });
+    if (!sameSessionSearch(deps, state)) return true;
+    deps.interactionManager.transition({
+      expectedInput: "callback",
+      metadata: {
+        ...state,
+        stage: "results",
+        query,
+        messageId: sent.message_id,
+        ids: sessions.map((session) => session.id),
+      },
+    });
+  } catch (error) {
+    logger.error("[Sessions] Error searching sessions:", error);
+    if (sameSessionSearch(deps, state)) {
+      deps.interactionManager.clear("session_search_error");
+      await ctx.reply(t("sessions.fetch_error"));
+    }
+  }
+  return true;
+}
+
+export async function handleSessionSearchCallback(
+  ctx: Context,
+  deps: SessionSelectDeps,
+): Promise<boolean> {
+  const data = ctx.callbackQuery?.data;
+  if (!data || (data !== "session:search" && !data.startsWith("session:search:"))) return false;
+  if (isForegroundBusy(deps)) {
+    await replyBusyBlocked(ctx);
+    return true;
+  }
+  if (data === "session:search") {
+    if (!(await ensureActiveInlineMenu(ctx, "session", deps))) return true;
+    const initial = deps.interactionManager.getSnapshot();
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    const current = deps.interactionManager.getSnapshot();
+    if (current?.kind !== "inline" || current.metadata.messageId !== initial?.metadata.messageId)
+      return true;
+    startSessionSearch(deps);
+    await ctx.reply(t("sessions.search.prompt"));
+    return true;
+  }
+  const state = sessionSearchState(deps);
+  if (
+    !state ||
+    state.stage !== "results" ||
+    state.messageId !== ctx.callbackQuery?.message?.message_id
+  ) {
+    await ctx
+      .answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true })
+      .catch(() => {});
+    return true;
+  }
+  if (data === "session:search:cancel") {
+    deps.interactionManager.clear("session_search_cancelled");
+    await cancelMenu(ctx);
+    return true;
+  }
+  if (data === "session:search:again") {
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    if (!sameSessionSearch(deps, state)) return true;
+    startSessionSearch(deps);
+    await ctx.reply(t("sessions.search.prompt"));
+    return true;
+  }
+  if (data.startsWith("session:search:page:")) {
+    const raw = data.slice("session:search:page:".length);
+    if (!/^\d+$/.test(raw) || typeof state.query !== "string") return true;
+    try {
+      const project = getCurrentProject();
+      if (!project) throw new Error("Project no longer selected");
+      const sessions = await searchSessions(project.worktree, state.query);
+      if (!sameSessionSearch(deps, state)) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        return true;
+      }
+      const view = buildSessionSearchView(
+        sessions,
+        state.query,
+        Number(raw),
+        config.bot.sessionsListLimit,
+      );
+      await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+      if (!sameSessionSearch(deps, state)) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        return true;
+      }
+      deps.interactionManager.transition({
+        expectedInput: "callback",
+        metadata: { ...state, ids: sessions.map((session) => session.id) },
+      });
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error("[Sessions] Error loading search page:", error);
+      await ctx.answerCallbackQuery({ text: t("sessions.page_load_error_callback") });
+    }
+    return true;
+  }
+  if (data.startsWith("session:search:result:")) {
+    const raw = data.slice("session:search:result:".length);
+    const id = /^\d+$/.test(raw) && Array.isArray(state.ids) ? state.ids[Number(raw)] : undefined;
+    if (typeof id !== "string") {
+      await failure(ctx, "sessions.select_error");
+      return true;
+    }
+    try {
+      await selectSessionById(ctx, deps, id, {
+        source: "menu",
+        deleteCallbackMessage: true,
+        removeCallbackReplyMarkup: false,
+        postSelectAction: "preview",
+        searchState: state,
+      });
+    } catch (error) {
+      if (!sameSessionSearch(deps, state)) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        return true;
+      }
+      deps.resetInteractions("session_select_error");
+      logger.error("[Sessions] Error selecting session:", error);
+      await failure(ctx, "sessions.select_error");
+    }
+    return true;
+  }
+  return true;
+}
+
 interface SelectSessionByIdOptions {
   source: "menu" | "background_notification";
   deleteCallbackMessage: boolean;
   removeCallbackReplyMarkup: boolean;
   postSelectAction: "preview" | "latest_assistant_response" | "none";
+  searchState?: Record<string, unknown>;
 }
 
 const LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT = 20;
@@ -105,6 +277,11 @@ export async function selectSessionById(
     sessionID: sessionId,
     directory: currentProject.worktree,
   });
+
+  if (options.searchState && !sameSessionSearch(deps, options.searchState)) {
+    await ctx.answerCallbackQuery().catch(() => {});
+    return;
+  }
 
   if (error || !session) {
     throw error || new Error("Failed to get session details");
@@ -163,7 +340,10 @@ export async function selectSessionById(
         try {
           await ctx.api.deleteMessage(ctx.chat.id, loadingMessageId);
         } catch (deleteError) {
-          logger.debug("[Sessions] Failed to delete loading message after follow error:", deleteError);
+          logger.debug(
+            "[Sessions] Failed to delete loading message after follow error:",
+            deleteError,
+          );
         }
       }
       logger.error("[Sessions] Error following selected session:", err);
@@ -219,7 +399,8 @@ export async function selectSessionById(
       if (options.postSelectAction === "latest_assistant_response") {
         safeBackgroundTask({
           taskName: "sessions.sendLatestAssistantResponse",
-          task: () => sendLatestAssistantResponse(ctx.api, chatId, session.id, currentProject.worktree),
+          task: () =>
+            sendLatestAssistantResponse(ctx.api, chatId, session.id, currentProject.worktree),
         });
       }
     }
@@ -263,7 +444,9 @@ export async function handleBackgroundSessionOpen(
   }
 
   if (shouldBlockBackgroundSessionOpen(deps)) {
-    await ctx.answerCallbackQuery({ text: t("interaction.blocked.finish_current") }).catch(() => {});
+    await ctx
+      .answerCallbackQuery({ text: t("interaction.blocked.finish_current") })
+      .catch(() => {});
     return true;
   }
 
@@ -272,13 +455,14 @@ export async function handleBackgroundSessionOpen(
       source: "background_notification",
       deleteCallbackMessage: false,
       removeCallbackReplyMarkup: true,
-      postSelectAction: payload.kind === "assistant_response" ? "latest_assistant_response" : "none",
+      postSelectAction:
+        payload.kind === "assistant_response" ? "latest_assistant_response" : "none",
     });
   } catch (error) {
     logger.error("[Sessions] Error selecting background session:", error);
-    await ctx.answerCallbackQuery({ text: t("sessions.select_error"), show_alert: true }).catch(
-      () => {},
-    );
+    await ctx
+      .answerCallbackQuery({ text: t("sessions.select_error"), show_alert: true })
+      .catch(() => {});
   }
 
   return true;
