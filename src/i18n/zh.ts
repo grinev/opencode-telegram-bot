@@ -167,6 +167,7 @@ export const zh: I18nDictionary = {
   "settings.assistant_footer.label": "回复页脚",
   "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Pin session dashboard",
+  "settings.background_notifications.label": "Notifications from other sessions",
   "settings.tts.label": "语音回复",
   "settings.prompt_queue.label": "消息队列",
   "settings.value.on": "开启",

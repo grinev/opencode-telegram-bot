@@ -8,14 +8,17 @@ import { de } from "../../../src/i18n/de.js";
 import { en } from "../../../src/i18n/en.js";
 import { es } from "../../../src/i18n/es.js";
 import { fr } from "../../../src/i18n/fr.js";
+import { id } from "../../../src/i18n/id.js";
 import { it as itLocale } from "../../../src/i18n/it.js";
 import { ko } from "../../../src/i18n/ko.js";
 import { pt } from "../../../src/i18n/pt.js";
 import { ru } from "../../../src/i18n/ru.js";
+import { tr } from "../../../src/i18n/tr.js";
 import { zh } from "../../../src/i18n/zh.js";
 import { defined } from "../../helpers/defined.js";
 import {
   SETTINGS_ASSISTANT_FOOTER_CALLBACK,
+  SETTINGS_BACKGROUND_NOTIFICATIONS_CALLBACK,
   SETTINGS_CALLBACK_PREFIX,
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
   SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK,
@@ -44,6 +47,8 @@ const mocked = vi.hoisted(() => ({
   setShowAssistantRunFooterMock: vi.fn(),
   getPinnedDashboardEnabledMock: vi.fn(),
   setPinnedDashboardEnabledMock: vi.fn(),
+  getShowBackgroundSessionNotificationsMock: vi.fn(),
+  setShowBackgroundSessionNotificationsMock: vi.fn(),
   applyPinnedDashboardEnabledMock: vi.fn(),
   refreshSessionValuesMock: vi.fn(),
   getTtsModeMock: vi.fn(),
@@ -79,6 +84,8 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
   setShowAssistantRunFooter: mocked.setShowAssistantRunFooterMock,
   getPinnedDashboardEnabled: mocked.getPinnedDashboardEnabledMock,
   setPinnedDashboardEnabled: mocked.setPinnedDashboardEnabledMock,
+  getShowBackgroundSessionNotifications: mocked.getShowBackgroundSessionNotificationsMock,
+  setShowBackgroundSessionNotifications: mocked.setShowBackgroundSessionNotificationsMock,
   getTtsMode: mocked.getTtsModeMock,
   setTtsMode: mocked.setTtsModeMock,
   getPromptQueueMode: mocked.getPromptQueueModeMock,
@@ -122,6 +129,8 @@ describe("bot/commands/settings-command", () => {
     mocked.setShowAssistantRunFooterMock.mockReset();
     mocked.getPinnedDashboardEnabledMock.mockReset();
     mocked.setPinnedDashboardEnabledMock.mockReset();
+    mocked.getShowBackgroundSessionNotificationsMock.mockReset();
+    mocked.setShowBackgroundSessionNotificationsMock.mockReset();
     mocked.applyPinnedDashboardEnabledMock.mockReset();
     mocked.getTtsModeMock.mockReset();
     mocked.setTtsModeMock.mockReset();
@@ -132,6 +141,7 @@ describe("bot/commands/settings-command", () => {
     mocked.getSendDiffFileAttachmentsMock.mockReturnValue(true);
     mocked.getShowAssistantRunFooterMock.mockReturnValue(true);
     mocked.getPinnedDashboardEnabledMock.mockReturnValue(true);
+    mocked.getShowBackgroundSessionNotificationsMock.mockReturnValue(true);
     mocked.applyPinnedDashboardEnabledMock.mockResolvedValue(undefined);
     mocked.getPromptQueueModeMock.mockReturnValue("off");
     container.interactionManager.clear("settings_test_reset");
@@ -171,12 +181,15 @@ describe("bot/commands/settings-command", () => {
       `${t("settings.pin_session_dashboard.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[5][0].text).toBe(
-      `${t("settings.tts.label")}: ${t("status.tts.auto")}`,
+      `${t("settings.background_notifications.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[6][0].text).toBe(
+      `${t("settings.tts.label")}: ${t("status.tts.auto")}`,
+    );
+    expect(opts.reply_markup.inline_keyboard[7][0].text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.off")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[7][0].text).toBe(t("inline.button.close"));
+    expect(opts.reply_markup.inline_keyboard[8][0].text).toBe(t("inline.button.close"));
   });
 
   it("shows thinking content setting when compact output is disabled", async () => {
@@ -211,9 +224,12 @@ describe("bot/commands/settings-command", () => {
       `${t("settings.pin_session_dashboard.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[6][0].text).toBe(
-      `${t("settings.tts.label")}: ${t("status.tts.off")}`,
+      `${t("settings.background_notifications.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[7][0].text).toBe(
+      `${t("settings.tts.label")}: ${t("status.tts.off")}`,
+    );
+    expect(opts.reply_markup.inline_keyboard[8][0].text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.off")}`,
     );
   });
@@ -257,6 +273,8 @@ describe("bot/callbacks/settings-callback-handler", () => {
     mocked.setShowAssistantRunFooterMock.mockReset();
     mocked.getPinnedDashboardEnabledMock.mockReset();
     mocked.setPinnedDashboardEnabledMock.mockReset();
+    mocked.getShowBackgroundSessionNotificationsMock.mockReset();
+    mocked.setShowBackgroundSessionNotificationsMock.mockReset();
     mocked.applyPinnedDashboardEnabledMock.mockReset();
     mocked.getTtsModeMock.mockReset();
     mocked.setTtsModeMock.mockReset();
@@ -267,6 +285,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     mocked.getSendDiffFileAttachmentsMock.mockReturnValue(true);
     mocked.getShowAssistantRunFooterMock.mockReturnValue(true);
     mocked.getPinnedDashboardEnabledMock.mockReturnValue(true);
+    mocked.getShowBackgroundSessionNotificationsMock.mockReturnValue(true);
     mocked.applyPinnedDashboardEnabledMock.mockResolvedValue(undefined);
     mocked.getPromptQueueModeMock.mockReturnValue("off");
     container.interactionManager.clear("settings_test_reset");
@@ -323,6 +342,9 @@ describe("bot/callbacks/settings-callback-handler", () => {
       `${t("settings.pin_session_dashboard.label")}: ${t("settings.value.on")}`,
     );
     expect(defined(opts?.reply_markup?.inline_keyboard[5]?.[0]).text).toBe(
+      `${t("settings.background_notifications.label")}: ${t("settings.value.on")}`,
+    );
+    expect(defined(opts?.reply_markup?.inline_keyboard[6]?.[0]).text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.off")}`,
     );
   });
@@ -432,6 +454,29 @@ describe("bot/callbacks/settings-callback-handler", () => {
     );
   });
 
+  it("toggles notifications from other sessions and returns to settings menu", async () => {
+    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getShowThinkingContentMock.mockReturnValue(true);
+    mocked.getShowBackgroundSessionNotificationsMock
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+    mocked.getTtsModeMock.mockReturnValue("off");
+    activateSettingsMenu();
+    const ctx = createCallbackContext(SETTINGS_BACKGROUND_NOTIFICATIONS_CALLBACK);
+
+    const result = await handleSettingsCallback(ctx, createDeps());
+
+    expect(result).toBe(true);
+    expect(mocked.setShowBackgroundSessionNotificationsMock).toHaveBeenCalledWith(false);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
+    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const [text, opts] = call;
+    expect(text).toBe(t("settings.menu.title"));
+    expect(defined(opts?.reply_markup?.inline_keyboard[6]?.[0]).text).toBe(
+      `${t("settings.background_notifications.label")}: ${t("settings.value.off")}`,
+    );
+  });
+
   it("toggles the prompt queue setting and returns to settings menu", async () => {
     mocked.getCompactOutputModeMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
@@ -448,7 +493,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
     const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(defined(opts?.reply_markup?.inline_keyboard[7]?.[0]).text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[8]?.[0]).text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.on")}`,
     );
   });
@@ -520,7 +565,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
     const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(defined(opts?.reply_markup?.inline_keyboard[6]?.[0]).text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[7]?.[0]).text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.all")}`,
     );
   });
@@ -635,6 +680,18 @@ describe("pin session dashboard labels", () => {
     expect(ru["settings.pin_session_dashboard.label"]).toBe("Закреплять дашборд сессии");
     for (const dictionary of [ar, de, es, fr, itLocale, ko, pt, zh]) {
       expect(dictionary["settings.pin_session_dashboard.label"]).toBe("Pin session dashboard");
+    }
+  });
+});
+
+describe("background session notification labels", () => {
+  it("uses the settled English and Russian labels and English in every other dictionary", () => {
+    expect(en["settings.background_notifications.label"]).toBe("Notifications from other sessions");
+    expect(ru["settings.background_notifications.label"]).toBe("Уведомления из других сессий");
+    for (const dictionary of [ar, de, es, fr, id, itLocale, ko, pt, tr, zh]) {
+      expect(dictionary["settings.background_notifications.label"]).toBe(
+        "Notifications from other sessions",
+      );
     }
   });
 });

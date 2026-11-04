@@ -14,6 +14,7 @@ import {
   getSendDiffFileAttachments,
   getPinnedDashboardEnabled,
   getShowAssistantRunFooter,
+  getShowBackgroundSessionNotifications,
   getShowThinkingContent,
   getScheduledTasks,
   getTtsMode,
@@ -24,6 +25,7 @@ import {
   setResponseStreamingMode,
   setSendDiffFileAttachments,
   setShowAssistantRunFooter,
+  setShowBackgroundSessionNotifications,
   setShowThinkingContent,
 } from "../../../src/app/stores/settings-store.js";
 
@@ -91,6 +93,23 @@ describe("app/stores/settings-store", () => {
     await loadSettings();
 
     expect(getPinnedDashboardEnabled()).toBe(true);
+  });
+
+  it("shows background session notifications by default", async () => {
+    await loadSettings();
+
+    expect(getShowBackgroundSessionNotifications()).toBe(true);
+  });
+
+  it("loads the background session notifications setting from settings.json", async () => {
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      JSON.stringify({ showBackgroundSessionNotifications: false }),
+    );
+
+    await loadSettings();
+
+    expect(getShowBackgroundSessionNotifications()).toBe(false);
   });
 
   it("loads the pinned session dashboard setting from settings.json", async () => {
@@ -192,7 +211,7 @@ describe("app/stores/settings-store", () => {
     vi.resetModules();
     vi.stubEnv(
       "INITIAL_SETTINGS_PRESET",
-      '{"showAssistantRunFooter":false,"compactOutputMode":true,"deleteCompactProgressOnFinish":true,"ttsMode":"auto","responseStreamingMode":"draft","sendDiffFileAttachments":false,"showThinkingContent":false,"promptQueueEnabled":true,"pinnedDashboardEnabled":false}',
+      '{"showAssistantRunFooter":false,"compactOutputMode":true,"deleteCompactProgressOnFinish":true,"ttsMode":"auto","responseStreamingMode":"draft","sendDiffFileAttachments":false,"showThinkingContent":false,"promptQueueEnabled":true,"pinnedDashboardEnabled":false,"showBackgroundSessionNotifications":false}',
     );
 
     const store = await import("../../../src/app/stores/settings-store.js");
@@ -207,6 +226,7 @@ describe("app/stores/settings-store", () => {
     expect(store.getShowThinkingContent()).toBe(false);
     expect(store.getPromptQueueMode()).toBe("queue");
     expect(store.getPinnedDashboardEnabled()).toBe(false);
+    expect(store.getShowBackgroundSessionNotifications()).toBe(false);
 
     vi.unstubAllEnvs();
     vi.resetModules();
@@ -225,6 +245,37 @@ describe("app/stores/settings-store", () => {
     await store.loadSettings();
 
     expect(store.getShowAssistantRunFooter()).toBe(true);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("does not overwrite a persisted background notifications setting with INITIAL_SETTINGS_PRESET", async () => {
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      JSON.stringify({ showBackgroundSessionNotifications: true }),
+    );
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"showBackgroundSessionNotifications":false}');
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getShowBackgroundSessionNotifications()).toBe(true);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("throws when the background notifications preset value is not a boolean", async () => {
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"showBackgroundSessionNotifications":"off"}');
+
+    await expect(async () => {
+      const store = await import("../../../src/app/stores/settings-store.js");
+      await store.loadSettings();
+    }).rejects.toThrow(/"showBackgroundSessionNotifications" must be a boolean/);
 
     vi.unstubAllEnvs();
     vi.resetModules();
@@ -379,6 +430,18 @@ describe("app/stores/settings-store", () => {
 
     vi.unstubAllEnvs();
     vi.resetModules();
+  });
+
+  it("persists background session notifications setting to settings.json", async () => {
+    await loadSettings();
+
+    setShowBackgroundSessionNotifications(false);
+
+    expect(getShowBackgroundSessionNotifications()).toBe(false);
+    await vi.waitFor(async () => {
+      const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
+      expect(settings.showBackgroundSessionNotifications).toBe(false);
+    });
   });
 
   it("persists assistant run footer setting to settings.json", async () => {

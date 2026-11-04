@@ -180,6 +180,7 @@ export const ar: I18nDictionary = {
   "settings.assistant_footer.label": "تذييل الرد",
   "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Pin session dashboard",
+  "settings.background_notifications.label": "Notifications from other sessions",
   "settings.tts.label": "الردود الصوتية",
   "settings.prompt_queue.label": "قائمة انتظار الرسائل",
   "settings.value.on": "مفعّل",

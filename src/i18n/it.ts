@@ -190,6 +190,7 @@ export const it: I18nDictionary = {
   "settings.assistant_footer.label": "Footer dell'assistente",
   "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Pin session dashboard",
+  "settings.background_notifications.label": "Notifications from other sessions",
   "settings.tts.label": "Risposte audio",
   "settings.prompt_queue.label": "Coda messaggi",
   "settings.value.on": "On",

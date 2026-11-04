@@ -1,3 +1,4 @@
+import { getShowBackgroundSessionNotifications } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import type { BackgroundSessionNotification } from "../../app/managers/background-session-manager.js";
 import { buildBackgroundSessionOpenKeyboard } from "../menus/session-selection-menu.js";
@@ -37,6 +38,10 @@ export function createBackgroundNoticeDelivery(
   delivery: TelegramEventDelivery,
 ): (notification: BackgroundSessionNotification) => Promise<void> {
   return async (notification) => {
+    if (!getShowBackgroundSessionNotifications()) {
+      return;
+    }
+
     const destination = policy.getDestination(notification.sessionId);
     if (!destination) {
       return;

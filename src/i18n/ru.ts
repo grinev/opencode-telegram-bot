@@ -178,6 +178,7 @@ export const ru: I18nDictionary = {
   "settings.assistant_footer.label": "Футер ответа",
   "assistant.footer.interrupted": "прерван",
   "settings.pin_session_dashboard.label": "Закреплять дашборд сессии",
+  "settings.background_notifications.label": "Уведомления из других сессий",
   "settings.tts.label": "Аудиоответы",
   "settings.prompt_queue.label": "Очередь сообщений",
   "settings.value.on": "Вкл",

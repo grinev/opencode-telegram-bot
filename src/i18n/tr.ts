@@ -181,6 +181,7 @@ export const tr: I18nDictionary = {
   "settings.assistant_footer.label": "Asistan alt bilgisi",
   "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Oturum panosunu sabitle",
+  "settings.background_notifications.label": "Notifications from other sessions",
   "settings.tts.label": "Sesli yanıtlar",
   "settings.prompt_queue.label": "Mesaj kuyruğu",
   "settings.value.on": "Açık",

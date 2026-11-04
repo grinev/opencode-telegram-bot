@@ -187,6 +187,7 @@ export const id: I18nDictionary = {
   "settings.assistant_footer.label": "Tampilkan footer asisten",
   "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Sematkan dasbor sesi",
+  "settings.background_notifications.label": "Notifications from other sessions",
   "settings.tts.label": "Balasan audio",
   "settings.prompt_queue.label": "Antrean pesan",
   "settings.value.on": "Aktif",
