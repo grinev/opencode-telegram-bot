@@ -18,7 +18,7 @@ import {
   handleModelSelect,
 } from "./model-selection-callback-handler.js";
 import { handlePermissionCallback } from "./permission-callback-handler.js";
-import { handleProjectSelect } from "./project-callback-handler.js";
+import { handleProjectSearchCallback, handleProjectSelect } from "./project-callback-handler.js";
 import { handlePromptAttachmentCancel } from "./prompt-attachment-callback-handler.js";
 import { handleQuestionCallback } from "./question-callback-handler.js";
 import { handleRecentSelect } from "./recent-callback-handler.js";
@@ -163,7 +163,7 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
       "projects",
       {
         name: "projects",
-        handlers: [(ctx) => handleProjectSelect(ctx, container)],
+        handlers: [(ctx) => handleProjectSearchCallback(ctx, container), (ctx) => handleProjectSelect(ctx, container)],
         errorScope: "interaction",
       },
     ],

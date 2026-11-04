@@ -40,6 +40,7 @@ No public inbound ports are required for normal usage.
 
 - Fetch available projects from OpenCode API (name + path)
 - Select and switch projects
+- Search the `/projects` list by project name, with paginated results and the current-project marker
 - Persist selected project between restarts (`settings.json`)
 
 ### Session management

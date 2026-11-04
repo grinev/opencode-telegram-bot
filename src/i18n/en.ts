@@ -191,6 +191,12 @@ export const en = {
   "projects.empty":
     "📭 No projects found.\n\nOpen a directory in OpenCode and create at least one session, then it will appear here.",
   "projects.select": "Select a project:",
+  "projects.search.button": "🔍 Search",
+  "projects.search.prompt": "🔍 Enter project name:",
+  "projects.search.results": "Search results for \"{query}\":",
+  "projects.search.no_results": "No projects found for \"{query}\"",
+  "projects.search.again": "↩ Search again",
+  "projects.search.cancel": "❌ Cancel",
   "projects.select_with_current": "Select a project:\n\nCurrent: 🏗 {project}",
   "projects.page_indicator": "Page {current}/{total}",
   "projects.prev_page": "⬅️ Previous",
@@ -761,6 +767,15 @@ export const en = {
   "local_command.failed": "Command failed with exit code {exitCode}: {stderr}",
   "local_command.timeout": "The command timed out.",
 } as const;
+
+export const projectSearchFallback = {
+  "projects.search.button": en["projects.search.button"],
+  "projects.search.prompt": en["projects.search.prompt"],
+  "projects.search.results": en["projects.search.results"],
+  "projects.search.no_results": en["projects.search.no_results"],
+  "projects.search.again": en["projects.search.again"],
+  "projects.search.cancel": en["projects.search.cancel"],
+};
 
 export type I18nKey = keyof typeof en;
 export type I18nDictionary = Record<I18nKey, string>;

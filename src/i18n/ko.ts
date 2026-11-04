@@ -1,4 +1,4 @@
-import type { I18nDictionary } from "./en.js";
+import { projectSearchFallback, type I18nDictionary } from "./en.js";
 
 /**
  * Korean localization for OpenCode Telegram Bot.
@@ -8,6 +8,7 @@ import type { I18nDictionary } from "./en.js";
  * Keep this dictionary complete to avoid falling back to another locale.
  */
 export const ko: I18nDictionary = {
+  ...projectSearchFallback,
   "cmd.description.recent": "모든 프로젝트의 최근 세션",
   "recent.heading": "모든 프로젝트의 최근 세션 (/recent로 새로고침):",
   "recent.empty": "📭 프로젝트에 세션이 없습니다.",

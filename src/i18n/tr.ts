@@ -1,6 +1,7 @@
-import type { I18nDictionary } from "./en.js";
+import { projectSearchFallback, type I18nDictionary } from "./en.js";
 
 export const tr: I18nDictionary = {
+  ...projectSearchFallback,
   "cmd.description.recent": "Projelerdeki son oturumlar",
   "recent.heading": "Projelerdeki son oturumlar (/recent ile yenile):",
   "recent.empty": "📭 Projelerde oturum bulunamadı.",

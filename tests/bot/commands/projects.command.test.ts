@@ -4,6 +4,10 @@ import { projectsCommand } from "../../../src/bot/commands/projects-command.js";
 import { t } from "../../../src/i18n/index.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import {
+  buildProjectSearchView,
+  filterProjectsForSearch,
+} from "../../../src/bot/menus/project-selection-menu.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: null as { id: string; worktree: string; name?: string } | null,
@@ -117,7 +121,39 @@ describe("bot/commands/projects command", () => {
       inline_keyboard: Array<Array<{ text: string }>>;
     };
 
-    expect(keyboard.inline_keyboard[0]?.[0]?.text).toContain("✅");
-    expect(keyboard.inline_keyboard[1]?.[0]?.text).not.toContain("✅");
+    expect(keyboard.inline_keyboard[0]?.[0]?.text).toBe(t("projects.search.button"));
+    expect(keyboard.inline_keyboard[1]?.[0]?.text).toContain("✅");
+    expect(keyboard.inline_keyboard[2]?.[0]?.text).not.toContain("✅");
+  });
+
+  it("searches folder names and the displayed current name, not paths or ids", async () => {
+    mocked.currentProject = { id: "selected", worktree: "/repo/alpha", name: "Special Name" };
+    const projects = [
+      { id: "selected", worktree: "/repo/alpha", name: "Special Name" },
+      { id: "hidden-id", worktree: "/secret/beta", name: "Other" },
+    ];
+    expect(await filterProjectsForSearch(projects, " ALP ")).toEqual([projects[0]]);
+    expect(await filterProjectsForSearch(projects, "special")).toEqual([projects[0]]);
+    expect(await filterProjectsForSearch(projects, "secret")).toEqual([]);
+    expect(await filterProjectsForSearch(projects, "hidden-id")).toEqual([]);
+    mocked.currentProject = { id: "selected", worktree: "/repo/alpha", name: "/repo/alpha" };
+    expect(await filterProjectsForSearch(projects, "repo")).toEqual([]);
+    mocked.currentProject = { id: "selected", worktree: "/repo/alpha", name: "frontend/web" };
+    expect(await filterProjectsForSearch(projects, "frontend")).toEqual([projects[0]]);
+  });
+
+  it("renders a results heading, current marker and retry controls", async () => {
+    mocked.currentProject = { id: "selected", worktree: "/repo/alpha", name: "alpha" };
+    const view = await buildProjectSearchView(
+      [{ id: "selected", worktree: "/repo/alpha" }],
+      "  Alpha  ",
+      0,
+    );
+    expect(view.text).toBe(t("projects.search.results", { query: "  Alpha  " }));
+    expect(view.keyboard.inline_keyboard[0]?.[0]?.text).toContain("✅");
+    expect(view.keyboard.inline_keyboard.at(-1)?.map((button) => button.text)).toEqual([
+      t("projects.search.again"),
+      t("projects.search.cancel"),
+    ]);
   });
 });
