@@ -45,6 +45,48 @@ describe("opencode/v2/events", () => {
     expect(failed?.properties).toEqual({ sessionID: SESSION });
   });
 
+  it("carries the interrupt reason on the idle", () => {
+    const translate = createV2EventTranslator();
+    const idle = payloads(translate, [
+      event(
+        "session.execution.interrupted",
+        { sessionID: SESSION, reason: "shutdown" },
+        false,
+      ),
+    ]).find((item) => item.type === "session.idle");
+
+    expect(idle?.properties).toEqual({
+      sessionID: SESSION,
+      interrupted: true,
+      reason: "shutdown",
+    });
+  });
+
+  it("keeps step stream time on the message update that ends the step", () => {
+    const translate = createV2EventTranslator();
+    const updated = payloads(translate, [
+      event("session.step.started", {
+        sessionID: SESSION,
+        assistantMessageID: MESSAGE,
+        agent: "build",
+        model: { providerID: "openai", id: "gpt" },
+        started: 100,
+      }),
+      event("session.step.streamed", { sessionID: SESSION, assistantMessageID: MESSAGE }),
+      event("session.step.ended", {
+        sessionID: SESSION,
+        assistantMessageID: MESSAGE,
+        finish: "stop",
+        cost: 0,
+        tokens: { input: 1, output: 4, reasoning: 2, cache: { read: 0, write: 0 } },
+      }),
+    ]).filter((item) => item.type === "message.updated");
+
+    expect(updated.at(-1)?.properties).toMatchObject({
+      info: { time: { created: 100, streamed: 1000, completed: 1000 } },
+    });
+  });
+
   it("turns a streamed V2 reply into the V1 message and part events", () => {
     const translate = createV2EventTranslator();
 

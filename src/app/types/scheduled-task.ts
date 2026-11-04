@@ -1,3 +1,4 @@
+import type { AssistantRunStep } from "../formatters/assistant-run-footer-formatter.js";
 import type { ModelInfo } from "./model.js";
 
 export type ScheduledTaskKind = "cron" | "once";
@@ -107,6 +108,8 @@ export interface ScheduledTaskExecutionResult {
   finishedAt: string;
   resultText: string | null;
   errorMessage: string | null;
+  /** Assistant steps of a successful run, for the footer's speed. Absent on error. */
+  steps?: AssistantRunStep[];
 }
 
 export interface QueuedScheduledTaskDelivery {

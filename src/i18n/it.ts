@@ -188,6 +188,7 @@ export const it: I18nDictionary = {
   "settings.response_streaming.draft": "bozza (sperimentale)",
   "settings.diff_files.label": "File di diff",
   "settings.assistant_footer.label": "Footer dell'assistente",
+  "assistant.footer.interrupted": "interrupted",
   "settings.pin_session_dashboard.label": "Pin session dashboard",
   "settings.tts.label": "Risposte audio",
   "settings.prompt_queue.label": "Coda messaggi",

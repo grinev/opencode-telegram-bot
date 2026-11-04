@@ -28,7 +28,11 @@ export async function closeForegroundRun(
 
   await runtime.compactProgressStreamer.finalize(sessionId, getDeleteCompactProgressOnFinish());
 
-  if (!getShowAssistantRunFooter() || !completedRun?.hasCompletedResponse) {
+  if (
+    !getShowAssistantRunFooter() ||
+    !completedRun?.hasCompletedResponse ||
+    completedRun.suppressFooter
+  ) {
     return;
   }
 
@@ -47,6 +51,8 @@ export async function closeForegroundRun(
       providerID,
       modelID,
       elapsedMs: Date.now() - completedRun.startedAt,
+      steps: completedRun.steps,
+      interrupted: completedRun.interrupted,
     }),
     {
       ...(keyboard ? { reply_markup: keyboard } : {}),

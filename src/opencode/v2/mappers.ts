@@ -261,7 +261,9 @@ function toV1AssistantMessage(
     time: {
       created: message.time.created,
       ...(message.time.completed ? { completed: message.time.completed } : {}),
-    },
+      // The V1 SDK type has no stream time; the poll still needs it for the speed sum.
+      ...(message.time.streamed !== undefined ? { streamed: message.time.streamed } : {}),
+    } as AssistantMessage["time"],
     ...(message.error ? { error: toV1ErrorPayload(message.error) } : {}),
     parentID: "",
     modelID: message.model.id,

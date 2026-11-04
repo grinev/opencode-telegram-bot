@@ -68,6 +68,7 @@ async function pickUpInboxPrompt(
 
   try {
     if (item.inbox?.delivery === "queue" && deps.assistantRunState.hasRun(sessionId)) {
+      deps.assistantRunState.sealRun(sessionId);
       const completedRun = deps.assistantRunState.finishRun(sessionId, "inbox_queue_pickup");
       clearPromptResponseMode(sessionId);
       await closeForegroundRun(deps, sessionId, destination, completedRun, "inbox_queue_pickup");
@@ -332,6 +333,20 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
 
     beginEditReply(runtime, sessionId, messageId);
     enqueueAssistantReply(runtime, sessionId, messageId, preparedStreamPayload);
+  });
+
+  summaryAggregator.setOnAssistantStep((sessionId, step) => {
+    deps.assistantRunState.recordStep(sessionId, step);
+  });
+
+  summaryAggregator.setOnSessionBoundary((sessionId, messageId) => {
+    if (messageId) {
+      const mirrored = promptQueue.findByInboxId(messageId);
+      if (mirrored?.inbox?.delivery !== "queue") {
+        return;
+      }
+    }
+    deps.assistantRunState.sealRun(sessionId);
   });
 
   summaryAggregator.setOnComplete((sessionId, messageId, messageText, completionInfo) => {

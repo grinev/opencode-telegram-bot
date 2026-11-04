@@ -8,6 +8,7 @@ import {
   cleanupScheduledTaskSessionIgnores,
   registerScheduledTaskSessionIgnore,
 } from "./scheduled-task-session-ignore-service.js";
+import type { AssistantRunStep } from "../formatters/assistant-run-footer-formatter.js";
 import type { ScheduledTask, ScheduledTaskExecutionResult } from "../types/scheduled-task.js";
 
 const SCHEDULED_TASK_SESSION_TITLE = "Scheduled task run";
@@ -132,6 +133,34 @@ function toErrorMessage(error: unknown): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function collectAssistantSteps(
+  messages: Array<{
+    info: {
+      id?: string;
+      role: string;
+      summary?: unknown;
+      time?: { created?: number; streamed?: number };
+      tokens?: { output?: number; reasoning?: number };
+    };
+  }>,
+): AssistantRunStep[] {
+  const steps: AssistantRunStep[] = [];
+  for (const message of messages) {
+    if (!message || message.info.role !== "assistant" || message.info.summary) {
+      continue;
+    }
+    const streamed = message.info.time?.streamed;
+    steps.push({
+      messageID: message.info.id ?? "",
+      created: typeof message.info.time?.created === "number" ? message.info.time.created : 0,
+      ...(typeof streamed === "number" ? { streamed } : {}),
+      output: message.info.tokens?.output ?? 0,
+      reasoning: message.info.tokens?.reasoning ?? 0,
+    });
+  }
+  return steps;
 }
 
 function findLatestAssistantMessage(
@@ -375,7 +404,7 @@ async function failIfInteractiveRequest(
 async function loadAssistantResult(
   sessionId: string,
   directory: string,
-): Promise<ReturnType<typeof extractAssistantResult>> {
+): Promise<ReturnType<typeof extractAssistantResult> & { steps: AssistantRunStep[] }> {
   const { data: messages, error: messagesError } = await opencodeClient.session.messages({
     sessionID: sessionId,
     directory,
@@ -385,14 +414,17 @@ async function loadAssistantResult(
     throw messagesError || new Error("Failed to load scheduled task messages");
   }
 
-  return extractAssistantResult(findLatestAssistantMessage(messages));
+  return {
+    ...extractAssistantResult(findLatestAssistantMessage(messages)),
+    steps: collectAssistantSteps(messages),
+  };
 }
 
 async function waitForScheduledTaskResult(
   taskId: string,
   sessionId: string,
   directory: string,
-): Promise<string> {
+): Promise<{ resultText: string; steps: AssistantRunStep[] }> {
   const startedAtMs = Date.now();
   const executionTimeoutMs = getExecutionTimeoutMs();
   let idlePollsWithoutResult = 0;
@@ -415,7 +447,7 @@ async function waitForScheduledTaskResult(
 
     if (assistantResult.completed) {
       if (assistantResult.resultText) {
-        return assistantResult.resultText;
+        return { resultText: assistantResult.resultText, steps: assistantResult.steps };
       }
 
       completedEmptyResultReadCount += 1;
@@ -459,7 +491,10 @@ async function waitForScheduledTaskResult(
 
       if (confirmedAssistantResult.completed) {
         if (confirmedAssistantResult.resultText) {
-          return confirmedAssistantResult.resultText;
+          return {
+            resultText: confirmedAssistantResult.resultText,
+            steps: confirmedAssistantResult.steps,
+          };
         }
 
         completedEmptyResultReadCount += 1;
@@ -552,15 +587,16 @@ export async function executeScheduledTask(
       throw promptError || new Error("Scheduled task prompt execution failed");
     }
 
-    const resultText = await waitForScheduledTaskResult(task.id, session.id, session.directory);
+    const result = await waitForScheduledTaskResult(task.id, session.id, session.directory);
 
     return {
       taskId: task.id,
       status: "success",
       startedAt,
       finishedAt: new Date().toISOString(),
-      resultText,
+      resultText: result.resultText,
       errorMessage: null,
+      steps: result.steps,
     };
   } catch (error) {
     const errorMessage = toErrorMessage(error);

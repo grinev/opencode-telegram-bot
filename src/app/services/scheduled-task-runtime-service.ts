@@ -3,7 +3,10 @@ import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
-import { formatAssistantRunFooter } from "../formatters/assistant-run-footer-formatter.js";
+import {
+  formatAssistantRunFooter,
+  type AssistantRunStep,
+} from "../formatters/assistant-run-footer-formatter.js";
 import { executeScheduledTask } from "./scheduled-task-executor-service.js";
 import type { ForegroundSessionState } from "../managers/foreground-session-state-manager.js";
 import { cleanupScheduledTaskSessionIgnores } from "./scheduled-task-session-ignore-service.js";
@@ -50,6 +53,7 @@ function buildSuccessDelivery(
   startedAt: string,
   runAt: string,
   resultText: string,
+  steps: readonly AssistantRunStep[] | undefined,
 ): QueuedScheduledTaskDelivery {
   return {
     taskId: task.id,
@@ -66,6 +70,7 @@ function buildSuccessDelivery(
       providerID: task.model.providerID,
       modelID: task.model.modelID,
       elapsedMs: calculateElapsedMs(startedAt, runAt),
+      ...(steps ? { steps } : {}),
     }),
   };
 }
@@ -345,6 +350,7 @@ export class ScheduledTaskRuntime {
           result.startedAt,
           result.finishedAt,
           result.resultText || "",
+          result.steps,
         );
       } else {
         await this.handleFailedExecution(
@@ -363,8 +369,9 @@ export class ScheduledTaskRuntime {
     startedAt: string,
     finishedAt: string,
     resultText: string,
+    steps: readonly AssistantRunStep[] | undefined,
   ): Promise<void> {
-    const delivery = buildSuccessDelivery(task, startedAt, finishedAt, resultText);
+    const delivery = buildSuccessDelivery(task, startedAt, finishedAt, resultText, steps);
 
     if (task.kind === "once") {
       await removeScheduledTask(task.id);
