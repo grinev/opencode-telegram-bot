@@ -74,6 +74,16 @@ export interface V2ClientExtension {
      */
     list: (params: { path: string }) => Promise<Result<string[]>>;
   };
+  goal: {
+    /** `opencode.goal` get. `data` is the goal object, or null when the session has none. */
+    get: (params: { sessionID: string; directory?: string }) => Promise<Result<unknown>>;
+    /** Runs the server command named goal. A missing plugin is `GoalUnsupportedError`. */
+    command: (params: {
+      sessionID: string;
+      directory?: string;
+      text: string;
+    }) => Promise<Result<true>>;
+  };
 }
 
 interface CommandParams {
@@ -112,6 +122,41 @@ function toV1Error(error: unknown): unknown {
     return { name: "NotFoundError", data: { message: error.message } };
   }
   return error;
+}
+
+function asGoalError(error: unknown, source: "rpc" | "command"): unknown {
+  if (isUnsupportedGoalError(error, source)) {
+    const message = error instanceof Error ? error.message : "";
+    return { name: "GoalUnsupportedError", message };
+  }
+  return toV1Error(error);
+}
+
+function isUnsupportedGoalError(error: unknown, source: "rpc" | "command"): boolean {
+  const name = error instanceof Error ? error.name : "";
+  const tag =
+    typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string"
+      ? error._tag
+      : "";
+  const type =
+    typeof error === "object" && error !== null && "type" in error && typeof error.type === "string"
+      ? error.type
+      : "";
+  if (
+    name === "CommandNotFoundError" ||
+    tag === "CommandNotFoundError" ||
+    name.endsWith("CommandNotFoundError")
+  ) {
+    return true;
+  }
+  if (type === "rpc.method_not_found" || type === "rpc.unavailable") {
+    return true;
+  }
+  if (source !== "rpc" || !(error instanceof Error) || error.name !== "ClientError") {
+    return false;
+  }
+  const details = error as Error & { reason?: unknown; cause?: { status?: unknown } };
+  return details.reason === "UnexpectedStatus" && details.cause?.status === 404;
 }
 
 async function run<T>(operation: () => Promise<T>): Promise<Result<T>> {
@@ -650,6 +695,34 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
           forms.delete(form.id);
           return true;
         }),
+    },
+    goal: {
+      get: async (params: { sessionID: string; directory?: string }) => {
+        try {
+          const result = await client.rpc.call({
+            rpcID: "opencode.goal",
+            method: "get",
+            input: { sessionID: params.sessionID },
+            ...(params.directory ? { location: { directory: params.directory } } : {}),
+          });
+          return { data: result.output ?? null, error: undefined };
+        } catch (error) {
+          return { data: undefined, error: asGoalError(error, "rpc") };
+        }
+      },
+      command: async (params: { sessionID: string; text: string }) => {
+        try {
+          await client.session.command({
+            sessionID: params.sessionID,
+            name: "goal",
+            text: params.text,
+            delivery: "queue",
+          });
+          return { data: true as const, error: undefined };
+        } catch (error) {
+          return { data: undefined, error: asGoalError(error, "command") };
+        }
+      },
     },
     permission: {
       list: (params?: { directory?: string }) =>

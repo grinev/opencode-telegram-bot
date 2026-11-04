@@ -14,13 +14,16 @@ import { AttachManager } from "../managers/attach-manager.js";
 import { BackgroundSessionTracker } from "../managers/background-session-manager.js";
 import { ExternalUserInputSuppressionManager } from "../managers/external-input-suppression-manager.js";
 import { ForegroundSessionState } from "../managers/foreground-session-state-manager.js";
+import { GoalManager } from "../managers/goal-manager.js";
 import { InteractionManager, type InteractionErrorScope } from "../managers/interaction-manager.js";
 import { PermissionManager } from "../managers/permission-manager.js";
 import { QuestionManager } from "../managers/question-manager.js";
 import { RenameManager } from "../managers/rename-manager.js";
 import { TaskCreationManager } from "../managers/scheduled-task-creation-manager.js";
 import { SummaryAggregator } from "../managers/summary-aggregation-manager.js";
+import { GoalService } from "../services/goal-service.js";
 import { HealthServer } from "../services/health-server-service.js";
+import { formatDashboardGoalLine } from "../formatters/goal-text.js";
 import { ScheduledTaskRuntime } from "../services/scheduled-task-runtime-service.js";
 
 const HEARTBEAT_INTERVAL_MS = 5000;
@@ -39,6 +42,8 @@ export interface AppContainer {
   readonly backgroundSessionTracker: BackgroundSessionTracker;
   readonly externalUserInputSuppressionManager: ExternalUserInputSuppressionManager;
   readonly foregroundSessionState: ForegroundSessionState;
+  readonly goalManager: GoalManager;
+  readonly goalService: GoalService;
   readonly healthServer: HealthServer;
   readonly interactionManager: InteractionManager;
   readonly keyboardManager: KeyboardManager;
@@ -88,6 +93,10 @@ export interface AppContainer {
 
 export function createAppContainer(): AppContainer {
   const foregroundSessionState = new ForegroundSessionState();
+  const goalManager = new GoalManager();
+  const goalService = new GoalService(goalManager);
+  const pinnedMessageManager = new PinnedMessageManager();
+  pinnedMessageManager.setGoalLine(() => formatDashboardGoalLine(goalManager.snapshot().goal));
   const interactionManager = new InteractionManager();
   const opencodeReadyLifecycle = new OpencodeReadyLifecycle();
   const summaryAggregator = new SummaryAggregator();
@@ -113,13 +122,15 @@ export function createAppContainer(): AppContainer {
     backgroundSessionTracker: new BackgroundSessionTracker(),
     externalUserInputSuppressionManager: new ExternalUserInputSuppressionManager(),
     foregroundSessionState,
+    goalManager,
+    goalService,
     healthServer: new HealthServer(),
     interactionManager,
     keyboardManager: new KeyboardManager(),
     opencodeAutoRestartService: new OpencodeAutoRestartService(opencodeReadyLifecycle),
     opencodeReadyLifecycle,
     permissionManager: new PermissionManager(interactionManager),
-    pinnedMessageManager: new PinnedMessageManager(),
+    pinnedMessageManager,
     questionManager: new QuestionManager(interactionManager),
     renameManager: new RenameManager(interactionManager),
     scheduledTaskRuntime: new ScheduledTaskRuntime(foregroundSessionState),

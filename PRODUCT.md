@@ -140,7 +140,7 @@ Current command set:
 
 - `/status` - bot version, server, project, and session status
 - `/new` - create a new session
-- `/abort` - stop the current task; background operations OpenCode keeps running stay followed, and the success reply then says how many keep running in place of "No more messages from this run will be sent": each background command and each subagent card still running counts once, a nested launch inside its card, the same number in compact and full mode
+- `/abort` - stop the current task and, on OpenCode V2, pause an active session goal even between turns; the reply names the pause only when one happened or the pause itself failed, and never calls a failed pause a success. Background operations OpenCode keeps running stay followed, and the success reply then says how many keep running in place of "No more messages from this run will be sent": each background command and each subagent card still running counts once, a nested launch inside its card, the same number in compact and full mode
 - `/detach` - detach the bot from the current session without stopping it; messages waiting for its running task stay with it and reach it as if the bot had stayed attached (no buttons, withdrawn only by `/abort` there or `/opencode_stop`); a later command or prompt HTTP failure for that session is not posted to chat unless the bot has re-attached to it
 - `/sessions` - show and switch recent sessions
 - `/recent` - show recent sessions across projects and worktrees with their status and switch directly to one
@@ -151,11 +151,12 @@ Current command set:
 - `/task` - create a scheduled task
 - `/tasklist` - browse and delete scheduled tasks
 - `/rename` - rename current session
-- `/commands` - browse and run custom commands (plus built-ins like `init` and `review`)
+- `/commands` - browse and run custom commands (plus built-ins like `init` and `review`); the server command `goal` is omitted
 - `/skills` - browse and run OpenCode skills
 - `/opencode_start` - start local OpenCode server
 - `/opencode_stop` - stop local OpenCode server; available during an active request and kills the local process even if health is hung
 - `/reload` - V2 only: reload the OpenCode configuration (config, plugins, providers and models, agents, commands, skills, MCP) for every loaded project without restarting the server; available during an active request, blocked while an interaction is on screen; the model menu reflects the reloaded providers at once
+- `/goal` - V2 only: set, replace, pause, resume, clear, or show the current session's goal. Start, replacement and resume ask for confirmation first, because the goal continues on its own in that session and spends tokens, with no cost cap. Pause and clear do not ask. A completed goal cannot be resumed. While the agent is busy, `/abort` is how a goal is paused. The command menu and `/help` list it; `/commands` does not. Typed on V1 it is an unknown command
 - `/help` - show command help
 - `/ls` - interactive file browser for the current project directory; a text file can be attached to the next prompt from its detail view
 
@@ -215,7 +216,7 @@ Agent picker behavior:
 - [x] Background notifications for detached/non-current sessions in the currently selected project/worktree, with an opt-out in `/settings` that defaults to on and does not cancel the request in OpenCode
 - [x] Telegram-friendly result delivery, including sending generated code/files when needed
 - [x] Interactive question and permission handling directly in chat (buttons + custom answers)
-- [x] Live pinned session status in chat (project, model with variant in parentheses when set, context usage, changed files), with an opt-out in `/settings` that defaults to on
+- [x] Live pinned session status in chat (project, model with variant in parentheses when set, context usage, changed files), with an opt-out in `/settings` that defaults to on. On OpenCode V2, when the session has a goal, a line after the title shows its status and a short objective; no goal means no line
 - [x] In-chat controls for model, agent, variant, and context
 - [x] Built-in and custom command catalog access (`/commands`)
 - [x] Trusted local JSON commands from the persistent application home, executed without OpenCode or model tokens
@@ -246,6 +247,7 @@ Agent picker behavior:
 - [x] Incoming Telegram rich formatted messages (Bot API 10.1): converted to Markdown, accepted anywhere text is accepted, with photos attached and unsupported message types answered explicitly
 - [x] Startup either reaches Telegram polling or the process exits: transient Telegram failures are retried in-process; a bad token or other fatal startup error exits with code 1
 - [x] After a Telegram outage the bot answers again without restart; an undelivered assistant reply is not resent, and skipped stale messages are reported once
+- [x] OpenCode V2 session goal (`/goal`): the server continues the same session after idle; the bot shows status, confirms start, replacement and resume, pauses on `/abort` and `/start`, and hides goal kickoff and continuation from the chat
 
 ## Current Task List
 

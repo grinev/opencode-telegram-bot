@@ -1,5 +1,6 @@
 import type { AssistantMessage, Event, Part, Session, ToolState } from "@opencode-ai/sdk/v2";
 import type { FormInfo, OpenCodeEvent, SessionInboxItem } from "@opencode/client";
+import { isGoalInternalMetadata } from "./goal-message.js";
 import {
   toolContentText,
   toV1ErrorPayload,
@@ -79,6 +80,28 @@ export interface V2EventTranslatorOptions {
  * items are the exception when the caller passes them in: a message queued before a
  * reconnect is delivered on the next subscription, and its pickup needs the item.
  */
+function translateGoalChanged(event: OpenCodeEvent): Event[] {
+  if (event.type !== "rpc.opencode.goal.changed") {
+    return [];
+  }
+
+  const data = event.data as { sessionID?: unknown; goal?: unknown };
+  if (typeof data.sessionID !== "string") {
+    return [];
+  }
+
+  return [
+    {
+      id: event.id,
+      type: "goal.changed",
+      properties: {
+        sessionID: data.sessionID,
+        goal: data.goal ?? null,
+      },
+    } as unknown as Event,
+  ];
+}
+
 export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) {
   const sessions = new Map<string, SessionState>();
   const messages = new Map<string, AssistantMessageState>();
@@ -393,7 +416,7 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
       case "session.inbox.delivered": {
         const item = inbox.get(event.data.inboxID);
         inbox.delete(event.data.inboxID);
-        if (!item || item.type !== "user") {
+        if (!item || item.type !== "user" || isGoalInternalMetadata(item.payload.metadata)) {
           return [];
         }
         const { sessionID, inboxID } = event.data;
@@ -731,7 +754,7 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
         ];
 
       default:
-        return [];
+        return translateGoalChanged(event);
     }
   };
 

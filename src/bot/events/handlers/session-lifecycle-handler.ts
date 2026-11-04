@@ -1,6 +1,7 @@
 import { t } from "../../../i18n/index.js";
 import { logger } from "../../../utils/logger.js";
 import { markAttachedSessionIdle } from "../../../app/services/attach-service.js";
+import { getCurrentSession } from "../../../app/services/session-service.js";
 import { shouldSuppressUserAbortSessionError } from "../../../app/managers/abort-suppression-manager.js";
 import { clearPromptResponseMode } from "../../handlers/prompt.js";
 import { dispatchNextQueuedPrompt } from "../../handlers/prompt-queue-dispatch.js";
@@ -20,6 +21,7 @@ type SessionLifecycleDeps = EventHandlerDeps<
   | "assistantRunState"
   | "attachManager"
   | "foregroundSessionState"
+  | "goalService"
   | "keyboardManager"
   | "scheduledTaskRuntime"
   | "summaryAggregator"
@@ -111,6 +113,10 @@ export function registerSessionLifecycleHandlers(deps: SessionLifecycleDeps): vo
       deps.foregroundSessionState.markIdle(sessionId);
       await deps.scheduledTaskRuntime.flushDeferredDeliveries();
       void dispatchNextQueuedPrompt();
+      const followed = getCurrentSession();
+      if (followed?.id === sessionId) {
+        void deps.goalService.refresh(sessionId, followed.directory, true);
+      }
     }
   });
 

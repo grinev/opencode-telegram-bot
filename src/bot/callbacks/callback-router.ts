@@ -5,6 +5,7 @@ import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { handleAgentSelect } from "./agent-selection-callback-handler.js";
 import { handleCommandsCallback } from "./command-catalog-callback-handler.js";
+import { handleGoalCallback } from "./goal-callback-handler.js";
 import { handleCompactConfirm, handleCompactDetails } from "./context-control-callback-handler.js";
 import { handleLsCallback, handleOpenCallback } from "./file-browser-callback-handler.js";
 import { handleInlineMenuCancel } from "./inline-menu-cancel-callback-handler.js";
@@ -82,6 +83,14 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
       {
         name: "commands",
         handlers: [(ctx) => handleCommandsCallback(ctx, botDeps)],
+        errorScope: "interaction",
+      },
+    ],
+    [
+      "goal",
+      {
+        name: "goal",
+        handlers: [(ctx) => handleGoalCallback(ctx, container)],
         errorScope: "interaction",
       },
     ],

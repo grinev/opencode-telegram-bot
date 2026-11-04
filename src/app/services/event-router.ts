@@ -13,6 +13,7 @@ export type EventRouterDeps = Pick<
   | "attachManager"
   | "backgroundSessionTracker"
   | "foregroundSessionState"
+  | "goalService"
   | "scheduledTaskRuntime"
   | "summaryAggregator"
 >;
@@ -86,6 +87,14 @@ export function createEventRouter({
           task: () => ingestSessionInfoForCache(info),
         });
       }
+    }
+
+    if ((event as { type: string }).type === "goal.changed") {
+      const properties = event.properties as { sessionID?: string; goal?: unknown };
+      if (properties.sessionID) {
+        void deps.goalService.applyChanged(properties.sessionID, properties.goal ?? null);
+      }
+      return;
     }
 
     if (config.bot.trackBackgroundSessions) {

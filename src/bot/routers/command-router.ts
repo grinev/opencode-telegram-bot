@@ -5,6 +5,7 @@ import { settingsCommand } from "../commands/settings-command.js";
 import { opencodeStartCommand } from "../commands/opencode-start-command.js";
 import { opencodeStopCommand } from "../commands/opencode-stop-command.js";
 import { reloadCommand } from "../commands/reload-command.js";
+import { goalCommand } from "../commands/goal-command.js";
 import { projectsCommand } from "../commands/projects-command.js";
 import { worktreeCommand } from "../commands/worktree-command.js";
 import { openCommand } from "../commands/open-command.js";
@@ -93,6 +94,9 @@ export function registerCommandRouter(bot: Bot<Context>, deps: CommandRouterDeps
   bot.command("opencode_stop", (ctx) => opencodeStopCommand(ctx, container));
   if (isKnownCommand("reload")) {
     bot.command("reload", (ctx) => reloadCommand(ctx, container));
+  }
+  if (isKnownCommand("goal")) {
+    bot.command("goal", (ctx) => goalCommand(ctx, container));
   }
   bot.command("projects", (ctx) => projectsCommand(ctx, container));
   bot.command("worktree", (ctx) => worktreeCommand(ctx, container));
