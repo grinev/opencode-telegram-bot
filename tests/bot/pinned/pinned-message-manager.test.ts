@@ -428,33 +428,68 @@ describe("pinned/manager", () => {
     });
   });
 
-  describe("addFileChange debouncing", () => {
+  describe("file refresh debouncing", () => {
     beforeEach(async () => {
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
       fakeApi.editMessageText.mockClear();
+      mocked.opencodeClient.session.diff.mockClear();
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     });
 
-    it("coalesces rapid file changes into a single pinned update", async () => {
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/a.ts", additions: 1, deletions: 0 });
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/b.ts", additions: 2, deletions: 1 });
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/c.ts", additions: 3, deletions: 0 });
+    it("coalesces rapid file changes into one diff fetch and shows that diff", async () => {
+      mocked.opencodeClient.session.diff.mockResolvedValue({
+        data: [
+          { file: "D:/repo/src/a.ts", additions: 7, deletions: 0 },
+          { file: "D:/repo/src/b.ts", additions: 1, deletions: 2 },
+        ],
+      });
+
+      pinnedMessageManager.requestFileRefresh();
+      pinnedMessageManager.requestFileRefresh();
+      pinnedMessageManager.requestFileRefresh();
 
       expect(fakeApi.editMessageText).not.toHaveBeenCalled();
+      expect(mocked.opencodeClient.session.diff).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1000);
 
+      expect(mocked.opencodeClient.session.diff).toHaveBeenCalledTimes(1);
       expect(fakeApi.editMessageText).toHaveBeenCalledTimes(1);
       const text = String(defined(fakeApi.editMessageText.mock.calls[0]?.[2]));
-      expect(text).toContain("src/a.ts (+1)");
-      expect(text).toContain("src/b.ts (+2 -1)");
-      expect(text).toContain("src/c.ts (+3)");
+      expect(text).toContain("src/a.ts (+7)");
+      expect(text).toContain("src/b.ts (+1 -2)");
+      expect(pinnedMessageManager.getState().changedFiles).toEqual([
+        { file: "D:/repo/src/a.ts", additions: 7, deletions: 0 },
+        { file: "D:/repo/src/b.ts", additions: 1, deletions: 2 },
+      ]);
+    });
+
+    it("does not fetch the diff when another dashboard update arrives before the debounce", async () => {
+      mocked.opencodeClient.session.diff.mockResolvedValue({
+        data: [{ file: "D:/repo/src/a.ts", additions: 7, deletions: 0 }],
+      });
+
+      pinnedMessageManager.requestFileRefresh();
+      await pinnedMessageManager.onCostUpdate(0.5);
+
+      expect(mocked.opencodeClient.session.diff).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(mocked.opencodeClient.session.diff).toHaveBeenCalledTimes(1);
+      expect(pinnedMessageManager.getState().changedFiles).toEqual([
+        { file: "D:/repo/src/a.ts", additions: 7, deletions: 0 },
+      ]);
     });
 
     it("restarts the debounce window on every new file change", async () => {
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/a.ts", additions: 1, deletions: 0 });
+      mocked.opencodeClient.session.diff.mockResolvedValue({
+        data: [{ file: "D:/repo/src/a.ts", additions: 1, deletions: 0 }],
+      });
+
+      pinnedMessageManager.requestFileRefresh();
       await vi.advanceTimersByTimeAsync(900);
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/b.ts", additions: 1, deletions: 0 });
+      pinnedMessageManager.requestFileRefresh();
       await vi.advanceTimersByTimeAsync(900);
 
       expect(fakeApi.editMessageText).not.toHaveBeenCalled();
@@ -462,23 +497,88 @@ describe("pinned/manager", () => {
       await vi.advanceTimersByTimeAsync(100);
 
       expect(fakeApi.editMessageText).toHaveBeenCalledTimes(1);
+      expect(mocked.opencodeClient.session.diff).toHaveBeenCalledTimes(1);
     });
 
-    it("accumulates additions and deletions for the same file", async () => {
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/a.ts", additions: 1, deletions: 2 });
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/a.ts", additions: 4, deletions: 1 });
+    it("keeps the last list when the refresh fails and does not retry", async () => {
+      await pinnedMessageManager.onSessionDiff([
+        { file: "D:/repo/src/a.ts", additions: 4, deletions: 1 },
+      ]);
+      mocked.opencodeClient.session.diff.mockRejectedValue(new Error("boom"));
 
+      pinnedMessageManager.requestFileRefresh();
       await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(mocked.opencodeClient.session.diff).toHaveBeenCalledTimes(1);
+      expect(pinnedMessageManager.getState().changedFiles).toEqual([
+        { file: "D:/repo/src/a.ts", additions: 4, deletions: 1 },
+      ]);
+    });
+
+    async function startRefreshAndYield(): Promise<void> {
+      pinnedMessageManager.requestFileRefresh();
+      await vi.advanceTimersByTimeAsync(0);
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    }
+
+    it("does not let an older refresh overwrite a newer session diff", async () => {
+      let resolveDiff: (value: {
+        data: Array<{ file: string; additions: number; deletions: number }>;
+      }) => void = () => {};
+      const slow = new Promise<{
+        data: Array<{ file: string; additions: number; deletions: number }>;
+      }>((resolve) => {
+        resolveDiff = resolve;
+      });
+      mocked.opencodeClient.session.diff.mockReturnValue(slow);
+
+      await startRefreshAndYield();
+      await pinnedMessageManager.onSessionDiff([
+        { file: "D:/repo/src/new.ts", additions: 7, deletions: 0 },
+      ]);
+      resolveDiff({ data: [{ file: "D:/repo/src/old.ts", additions: 10, deletions: 3 }] });
+      await slow;
 
       expect(pinnedMessageManager.getState().changedFiles).toEqual([
-        { file: "D:/repo/src/a.ts", additions: 5, deletions: 3 },
+        { file: "D:/repo/src/new.ts", additions: 7, deletions: 0 },
+      ]);
+    });
+
+    it("drops a refresh for a session that was switched away", async () => {
+      let resolveDiff: (value: {
+        data: Array<{ file: string; additions: number; deletions: number }>;
+      }) => void = () => {};
+      const slow = new Promise<{
+        data: Array<{ file: string; additions: number; deletions: number }>;
+      }>((resolve) => {
+        resolveDiff = resolve;
+      });
+      mocked.opencodeClient.session.diff.mockReturnValueOnce(slow);
+
+      await startRefreshAndYield();
+      mocked.opencodeClient.session.diff.mockResolvedValue({
+        data: [{ file: "D:/repo/src/b.ts", additions: 1, deletions: 0 }],
+      });
+
+      await pinnedMessageManager.onSessionChange("ses-2", "Other");
+      resolveDiff({ data: [{ file: "D:/repo/src/a.ts", additions: 9, deletions: 0 }] });
+      await slow;
+
+      expect(pinnedMessageManager.getState().sessionId).toBe("ses-2");
+      expect(pinnedMessageManager.getState().changedFiles).toEqual([
+        { file: "D:/repo/src/b.ts", additions: 1, deletions: 0 },
       ]);
     });
 
     it("lengthens the debounce window after a minute of activity", async () => {
       noteStreamActivity("ses-1", Date.now() - 60_000);
+      mocked.opencodeClient.session.diff.mockResolvedValue({
+        data: [{ file: "D:/repo/src/b.ts", additions: 1, deletions: 0 }],
+      });
 
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/b.ts", additions: 1, deletions: 0 });
+      pinnedMessageManager.requestFileRefresh();
       await vi.advanceTimersByTimeAsync(1999);
       expect(fakeApi.editMessageText).not.toHaveBeenCalled();
 
@@ -604,7 +704,7 @@ describe("pinned/manager", () => {
       );
     });
 
-    it("falls back to tool parts from session messages when session.diff() is empty", async () => {
+    it("does not revive tool history when session.diff() is empty", async () => {
       mocked.opencodeClient.session.messages.mockResolvedValue({
         data: [
           {
@@ -620,36 +720,12 @@ describe("pinned/manager", () => {
               },
               {
                 type: "tool",
-                tool: "apply_patch",
-                state: {
-                  status: "completed",
-                  metadata: { filediff: { file: "D:/repo/src/a.ts", additions: 3, deletions: 0 } },
-                },
-              },
-              {
-                type: "tool",
                 tool: "write",
                 state: {
                   status: "completed",
                   input: { filePath: "D:/repo/src/b.ts", content: "one\ntwo\nthree" },
                 },
               },
-              {
-                type: "tool",
-                tool: "bash",
-                state: { status: "completed", input: { command: "npm test" } },
-              },
-              {
-                type: "tool",
-                tool: "edit",
-                state: {
-                  status: "running",
-                  metadata: {
-                    filediff: { file: "D:/repo/src/pending.ts", additions: 5, deletions: 5 },
-                  },
-                },
-              },
-              { type: "text", text: "done" },
             ],
           },
         ],
@@ -657,13 +733,15 @@ describe("pinned/manager", () => {
 
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
 
-      expect(pinnedMessageManager.getState().changedFiles).toEqual([
-        { file: "D:/repo/src/a.ts", additions: 5, deletions: 1 },
-        { file: "D:/repo/src/b.ts", additions: 3, deletions: 0 },
-      ]);
+      expect(pinnedMessageManager.getState().changedFiles).toEqual([]);
+      expect(fakeApi.sendMessage).toHaveBeenCalledWith(
+        123,
+        expect.not.stringContaining("src/a.ts"),
+      );
     });
 
-    it("restores every file of a multi-file apply_patch from session messages", async () => {
+    it("does not revive tool history when session.diff() fails", async () => {
+      mocked.opencodeClient.session.diff.mockRejectedValue(new Error("boom"));
       mocked.opencodeClient.session.messages.mockResolvedValue({
         data: [
           {
@@ -671,39 +749,11 @@ describe("pinned/manager", () => {
             parts: [
               {
                 type: "tool",
-                tool: "apply_patch",
+                tool: "write",
                 state: {
                   status: "completed",
-                  metadata: {
-                    diff: "combined",
-                    files: [
-                      { filePath: "D:/repo/src/a.ts", relativePath: "src/a.ts", diff: "+x\n-y" },
-                      { filePath: "D:/repo/src/b.ts", relativePath: "src/b.ts", diff: "+z" },
-                    ],
-                  },
+                  input: { filePath: "D:/repo/src/a.ts", content: "one" },
                 },
-              },
-              {
-                type: "tool",
-                tool: "apply_patch",
-                state: {
-                  status: "completed",
-                  metadata: {
-                    files: [
-                      {
-                        file: "src/b.ts",
-                        filePath: "src/b.ts",
-                        relativePath: "src/b.ts",
-                        patch: "+one\n+two",
-                      },
-                    ],
-                  },
-                },
-              },
-              {
-                type: "tool",
-                tool: "apply_patch",
-                state: { status: "error", input: { patchText: "*** Update File: src/c.ts" } },
               },
             ],
           },
@@ -712,10 +762,7 @@ describe("pinned/manager", () => {
 
       await pinnedMessageManager.onSessionChange("ses-1", "Test Session");
 
-      expect(pinnedMessageManager.getState().changedFiles).toEqual([
-        { file: "src/a.ts", additions: 1, deletions: 1 },
-        { file: "src/b.ts", additions: 3, deletions: 0 },
-      ]);
+      expect(pinnedMessageManager.getState().changedFiles).toEqual([]);
     });
 
     it("leaves the diff list empty when neither source reports file changes", async () => {
@@ -742,13 +789,18 @@ describe("pinned/manager", () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     });
 
-    it("ignores an empty diff when tool events already collected file changes", async () => {
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/a.ts", additions: 1, deletions: 0 });
+    it("clears files when the session diff is empty", async () => {
+      await pinnedMessageManager.onSessionDiff([
+        { file: "D:/repo/src/a.ts", additions: 1, deletions: 0 },
+      ]);
+      await vi.advanceTimersByTimeAsync(1000);
 
       await pinnedMessageManager.onSessionDiff([]);
+      await vi.advanceTimersByTimeAsync(1000);
 
-      expect(fakeApi.editMessageText).not.toHaveBeenCalled();
-      expect(pinnedMessageManager.getState().changedFiles).toHaveLength(1);
+      expect(pinnedMessageManager.getState().changedFiles).toEqual([]);
+      const text = String(defined(fakeApi.editMessageText.mock.calls.at(-1)?.[2]));
+      expect(text).not.toContain("src/a.ts");
     });
 
     it("ignores a diff identical to the current one", async () => {
@@ -1566,11 +1618,10 @@ describe("pinned/manager", () => {
 
       await pinnedMessageManager.prepareSessionChange("ses-2", "Second", { directory: "D:/repo" });
       pinnedMessageManager.updateTokensSilent(tokens(7000));
-      pinnedMessageManager.addFileChange({
-        file: "D:/repo/src/new.ts",
-        additions: 2,
-        deletions: 0,
+      mocked.opencodeClient.session.diff.mockResolvedValue({
+        data: [{ file: "D:/repo/src/new.ts", additions: 2, deletions: 0 }],
       });
+      pinnedMessageManager.requestFileRefresh();
       await pinnedMessageManager.onCostUpdate(0.25);
       expect(fakeApi.editMessageText).not.toHaveBeenCalled();
 
@@ -1653,7 +1704,9 @@ describe("pinned/manager", () => {
     it("re-sends a renamed session with the values it holds, without reloading them", async () => {
       mocked.opencodeClient.session.messages.mockResolvedValue(history(9000, 1));
       await showSession("ses-1", "Old title");
-      pinnedMessageManager.addFileChange({ file: "D:/repo/src/a.ts", additions: 4, deletions: 0 });
+      await pinnedMessageManager.onSessionDiff([
+        { file: "D:/repo/src/a.ts", additions: 4, deletions: 0 },
+      ]);
       mocked.opencodeClient.session.messages.mockClear();
       fakeApi.sendMessage.mockClear();
 
@@ -1725,6 +1778,17 @@ describe("pinned/manager", () => {
           777,
           expect.stringContaining("3000/204800"),
         );
+      });
+
+      it("leaves the dashboard as it is when the diff fails, even if history loaded", async () => {
+        mocked.opencodeClient.session.diff.mockRejectedValueOnce(new Error("boom"));
+        mocked.opencodeClient.session.messages.mockResolvedValue(history(3000, 0));
+
+        await restoreSession("ses-1", "Restored session");
+
+        expect(fakeApi.editMessageText).not.toHaveBeenCalled();
+        expect(pinnedMessageManager.getState().sessionId).toBeNull();
+        expect(pinnedMessageManager.getState().changedFiles).toEqual([]);
       });
 
       it("leaves the dashboard as it is when a part fails, and completes on the next restore", async () => {

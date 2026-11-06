@@ -100,7 +100,7 @@ No public inbound ports are required for normal usage.
 ### Session status in chat
 
 - Keep a pinned status message in the chat; it can be turned off in `/settings` (default on)
-- Show session title, project, model, context usage, and changed files; when a variant is set, the model line is `provider/id (variant)`
+- Show session title, project, model, context usage, and changed files; when a variant is set, the model line is `provider/id (variant)`. The changed-file list and its counts are OpenCode's session diff, live and after a switch or restart, not a sum of each edit; an empty diff removes the list, and a failed refresh keeps the last one
 - On a session switch, a bot restart or `/rename`, the dashboard appears with the session's real context, cost and changed files, never a placeholder zero; turning it on in `/settings` sends it at once and corrects it once the values load
 - Picking a model, selecting an agent that applies its own model, or re-selecting the session on the dashboard when it brings another model edits the dashboard at once, mid-run too, to that model and its context limit; a limit the catalog does not list yet shows the default and is corrected once it does
 - Auto-update status from SSE and tool events
@@ -219,7 +219,7 @@ Agent picker behavior:
 - [x] Background notifications for detached/non-current sessions in the currently selected project/worktree, with an opt-out in `/settings` that defaults to on and does not cancel the request in OpenCode
 - [x] Telegram-friendly result delivery, including sending generated code/files when needed
 - [x] Interactive question and permission handling directly in chat (buttons + custom answers)
-- [x] Live pinned session status in chat (project, model with variant in parentheses when set, context usage, changed files), with an opt-out in `/settings` that defaults to on. On OpenCode V2, when the session has a goal, a line after the title shows its status and a short objective; no goal means no line
+- [x] Live pinned session status in chat (project, model with variant in parentheses when set, context usage, changed files from OpenCode's session diff rather than a sum of each edit), with an opt-out in `/settings` that defaults to on. On OpenCode V2, when the session has a goal, a line after the title shows its status and a short objective; no goal means no line
 - [x] In-chat controls for model, agent, variant, and context
 - [x] Built-in and custom command catalog access (`/commands`)
 - [x] Trusted local JSON commands from the persistent application home, executed without OpenCode or model tokens
