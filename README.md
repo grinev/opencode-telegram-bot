@@ -36,6 +36,7 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
 - **Subagent activity** — watch live subagent progress in chat, including the current task, agent, model (with variant when set), and active tool step
 - **Custom Commands** — run OpenCode custom commands (and built-ins like `init`/`review`) from an inline menu with confirmation
 - **Skills Catalog** — browse OpenCode skills from an inline menu and run them immediately or with arguments in the next message
+- **Session goals (V2)** — `/goal` asks for the objective in a separate text message and confirms automatic work and token spending. Start and Continue use the selected agent, model and variant, including in a fresh session before any ordinary prompt. The bottom keyboard keeps its short objective and Pause, Continue or Delete below queued messages. Pause stops future continuations; `/abort` also interrupts the current turn. To create another goal, stop and delete the old one first
 - **Interactive Q&A** — answer agent questions and approve permissions via inline buttons
 - **Runtime settings** — use `/settings` to change runtime preferences; see [Runtime Settings](#runtime-settings)
 - **Voice prompts** — send voice/audio messages, transcribe them via a Whisper-compatible API, and optionally enable spoken replies in `/settings`
@@ -155,7 +156,7 @@ opencode-telegram config
 | `/opencode_start` | Start the local OpenCode server on the bot machine      |
 | `/opencode_stop`  | Stop the local OpenCode server, including during a run  |
 | `/reload`         | Reload the OpenCode configuration without restarting the server (V2 only) |
-| `/goal`           | Set or control a session goal that continues on its own (V2 only) |
+| `/goal`           | Enter a goal in the next message; view it and pause, continue or delete it from the bottom keyboard (V2 only) |
 | `/help`           | Show available commands                                 |
 
 Any regular text message is sent as a prompt to the coding agent only when no blocking interaction is active. Voice/audio messages are transcribed and then sent as prompts when STT is configured.

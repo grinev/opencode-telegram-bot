@@ -158,7 +158,7 @@ Current command set:
 - `/opencode_start` - start local OpenCode server
 - `/opencode_stop` - stop local OpenCode server; available during an active request and kills the local process even if health is hung
 - `/reload` - V2 only: reload the OpenCode configuration (config, plugins, providers and models, agents, commands, skills, MCP) for every loaded project without restarting the server; available during an active request, blocked while an interaction is on screen; the model menu reflects the reloaded providers at once
-- `/goal` - V2 only: set, replace, pause, resume, clear, or show the current session's goal. Start, replacement and resume ask for confirmation first, because the goal continues on its own in that session and spends tokens, with no cost cap. Pause and clear do not ask. A completed goal cannot be resumed. While the agent is busy, `/abort` is how a goal is paused. The command menu and `/help` list it; `/commands` does not. Typed on V1 it is an unknown command
+- `/goal` - V2 only: with no goal, ask for its objective in the next text message and confirm start with a warning about automatic continuation and uncapped token use; with an existing goal, show its details. No command arguments or goal replacement: pause and delete the old goal before creating another. The bottom keyboard shows the short objective and a direct Pause, Continue (with confirmation), or Delete when complete, below queued messages and above the fixed grid. Details of a paused goal offer inline Delete. Details and Pause work during a run; creation, Continue and Delete require idle. All goal controls are blocked during another interaction. Pause stops future continuations without interrupting the current turn; `/abort` pauses and interrupts. The command menu and `/help` list it; `/commands` does not. Typed on V1 it is an unknown command
 - `/help` - show command help
 - `/ls` - interactive file browser for the current project directory; a text file can be attached to the next prompt from its detail view
 
@@ -170,6 +170,8 @@ Text messages (non-commands) are treated as prompts for OpenCode only when no bl
 
 Interaction routing rules:
 
+- Bottom goal controls target the current selected session's only goal and show no ID or token; confirmations and inline Delete stay bound to the goal shown when they opened
+- Confirmed goal start and Continue use the currently selected project agent, model and variant, as normal prompts do; Pause and Delete do not change the session's selection
 - Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills, messages)
 - Agent questions and permission requests are shown one after another: one arriving while another holds the slot waits, and waiting requests appear in the order they arrived; a new question from the session whose poll is on screen replaces it, one from another session (a parallel subagent) waits; `/abort`, `/detach` and `/opencode_stop` drop everything waiting
 - While an interaction is active, unrelated input is blocked with a contextual hint
@@ -250,7 +252,7 @@ Agent picker behavior:
 - [x] Incoming Telegram rich formatted messages (Bot API 10.1): converted to Markdown, accepted anywhere text is accepted, with photos attached and unsupported message types answered explicitly
 - [x] Startup either reaches Telegram polling or the process exits: transient Telegram failures are retried in-process; a bad token or other fatal startup error exits with code 1
 - [x] After a Telegram outage the bot answers again without restart; an undelivered assistant reply is not resent, and skipped stale messages are reported once
-- [x] OpenCode V2 session goal (`/goal`): the server continues the same session after idle; the bot shows status, confirms start, replacement and resume, pauses on `/abort` and `/start`, and hides goal kickoff and continuation from the chat
+- [x] OpenCode V2 session goal (`/goal`): separate text input and confirmed start, persistent short objective with Pause/Continue/Delete below waiting messages, no replacement, and normal Queue/Steer/Off routing; the server continues the same session after idle, `/abort` and `/start` pause it, and goal kickoff and continuation stay hidden
 
 ## Current Task List
 

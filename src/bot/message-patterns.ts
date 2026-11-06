@@ -1,3 +1,7 @@
+import { GOAL_BUTTON_TEXT_PATTERN } from "./keyboards/goal-button.js";
+
+export { GOAL_BUTTON_TEXT_PATTERN };
+
 export const AGENT_MODE_BUTTON_TEXT_PATTERN = /^(📋|🛠️|💬|🔍|📝|📄|📦|🤖)\s.+\s(?:Mode|Agent)$/;
 
 export const MODEL_BUTTON_TEXT_PATTERN = /^🧠\s(?!.*\s(?:Mode|Agent)$)[\s\S]+$/;
@@ -15,6 +19,7 @@ const REPLY_KEYBOARD_BUTTON_TEXT_PATTERNS = [
   VARIANT_BUTTON_TEXT_PATTERN,
   CONTEXT_BUTTON_TEXT_PATTERN,
   QUEUED_PROMPT_BUTTON_TEXT_PATTERN,
+  GOAL_BUTTON_TEXT_PATTERN,
 ];
 
 /**

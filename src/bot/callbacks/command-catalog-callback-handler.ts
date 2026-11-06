@@ -69,6 +69,7 @@ export type ExecuteCommandDeps = Pick<
   | "ensureEventSubscription"
   | "externalUserInputSuppressionManager"
   | "foregroundSessionState"
+  | "goalManager"
   | "interactionManager"
   | "keyboardManager"
   | "permissionManager"

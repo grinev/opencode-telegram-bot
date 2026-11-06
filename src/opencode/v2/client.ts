@@ -82,6 +82,9 @@ export interface V2ClientExtension {
       sessionID: string;
       directory?: string;
       text: string;
+      agent?: string;
+      model?: { providerID: string; modelID: string };
+      variant?: string;
     }) => Promise<Result<true>>;
   };
 }
@@ -740,7 +743,23 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
           return { data: undefined, error: asGoalError(error, "rpc") };
         }
       },
-      command: async (params: { sessionID: string; text: string }) => {
+      command: async (params: {
+        sessionID: string;
+        text: string;
+        agent?: string;
+        model?: { providerID: string; modelID: string };
+        variant?: string;
+      }) => {
+        try {
+          await applySelection(
+            params.sessionID,
+            params.agent,
+            params.model ? { providerID: params.model.providerID, id: params.model.modelID } : undefined,
+            params.variant,
+          );
+        } catch (error) {
+          return { data: undefined, error: { name: "GoalSelectionError", cause: error } };
+        }
         try {
           await client.session.command({
             sessionID: params.sessionID,

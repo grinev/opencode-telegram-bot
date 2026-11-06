@@ -126,7 +126,7 @@ export function createAppContainer(): AppContainer {
     goalService,
     healthServer: new HealthServer(),
     interactionManager,
-    keyboardManager: new KeyboardManager(),
+    keyboardManager: new KeyboardManager(goalManager),
     opencodeAutoRestartService: new OpencodeAutoRestartService(opencodeReadyLifecycle),
     opencodeReadyLifecycle,
     permissionManager: new PermissionManager(interactionManager),

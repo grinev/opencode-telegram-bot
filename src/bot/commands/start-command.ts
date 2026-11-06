@@ -11,7 +11,7 @@ import { t } from "../../i18n/index.js";
 import { detachAttachedSession } from "../../app/services/attach-service.js";
 
 export type StartCommandDeps = AbortCommandDeps &
-  Pick<AppContainer, "keyboardManager" | "pinnedMessageManager" | "resetAggregator">;
+  Pick<AppContainer, "keyboardManager" | "pinnedMessageManager" | "resetAggregator" | "goalManager">;
 
 export async function startCommand(ctx: Context, deps: StartCommandDeps): Promise<void> {
   if (ctx.chat) {

@@ -8,7 +8,13 @@ import {
   localizeGoalReason,
   truncateGoalObjective,
 } from "../../src/app/formatters/goal-text.js";
-import { parseGoalArgument, GOAL_OBJECTIVE_LIMIT } from "../../src/app/types/goal.js";
+import { parseGoalObjective, GOAL_OBJECTIVE_LIMIT } from "../../src/app/types/goal.js";
+import {
+  getGoalButtonLabels,
+  resolveGoalButton,
+  GOAL_BUTTON_TEXT_PATTERN,
+} from "../../src/bot/keyboards/goal-button.js";
+import { isReplyKeyboardButtonText } from "../../src/bot/message-patterns.js";
 import type { GoalState } from "../../src/app/types/goal.js";
 import { isGoalInternalMetadata } from "../../src/opencode/v2/goal-message.js";
 
@@ -22,18 +28,28 @@ const goal: GoalState = {
   reason: "Paused by the user",
 };
 
-describe("goal argument", () => {
-  it("treats an empty argument as status and exact controls as controls", () => {
-    expect(parseGoalArgument("  ")).toEqual({ kind: "status" });
-    expect(parseGoalArgument("PAUSE")).toEqual({ kind: "pause" });
-    expect(parseGoalArgument("Resume")).toEqual({ kind: "resume" });
-    expect(parseGoalArgument("clear")).toEqual({ kind: "clear" });
-    expect(parseGoalArgument("pause now")).toEqual({ kind: "objective", text: "pause now" });
+describe("goal objective", () => {
+  it("rejects empty and reserved controls without executing them", () => {
+    expect(parseGoalObjective("  ")).toEqual({ kind: "empty" });
+    for (const value of [
+      "PAUSE",
+      "Resume",
+      "clear",
+      ' "PAUSE" ',
+      "‘clear’",
+      "“resume”",
+      "'pause'",
+    ]) {
+      expect(parseGoalObjective(value)).toEqual({ kind: "reserved" });
+    }
+    expect(parseGoalObjective("pause now")).toEqual({ kind: "objective", text: "pause now" });
+    expect(parseGoalObjective("\"pause'")).toEqual({ kind: "objective", text: "\"pause'" });
+    expect(parseGoalObjective('" "')).toEqual({ kind: "empty" });
   });
 
   it("rejects an objective past the server limit without treating it as a control", () => {
     const text = "x".repeat(GOAL_OBJECTIVE_LIMIT + 1);
-    expect(parseGoalArgument(text)).toEqual({ kind: "too_long", length: text.length });
+    expect(parseGoalObjective(text)).toEqual({ kind: "too_long", length: text.length });
   });
 });
 
@@ -69,9 +85,8 @@ describe("goal text", () => {
 
   it("keeps the warning when the confirmation does not fit", () => {
     const text = formatGoalConfirmation({
-      action: "replace",
-      objective: "n".repeat(3000),
-      current: "o".repeat(3000),
+      action: "start",
+      objective: "n".repeat(4000),
     });
     expect(text.length).toBeLessThanOrEqual(3800);
     expect(text).toContain("tokens");
@@ -114,6 +129,45 @@ describe("goal manager", () => {
     manager.follow("ses");
     manager.suppressPauseNotice();
     expect(manager.apply("ses", { ...goal, status: "paused" }, true)).toBeNull();
+  });
+
+  it("keeps internal bindings without displaying them and resolves plain controls against the current state", () => {
+    const manager = new GoalManager();
+    manager.follow("ses");
+    manager.apply("ses", goal, false);
+    const labels = getGoalButtonLabels(manager);
+    expect(labels).toHaveLength(2);
+    for (const label of labels) {
+      expect(GOAL_BUTTON_TEXT_PATTERN.test(label)).toBe(true);
+      expect(isReplyKeyboardButtonText(label)).toBe(true);
+    }
+    expect(resolveGoalButton(manager, labels[1]!)).toBe("pause");
+    const token = manager.getControlToken();
+    expect(labels.every((label) => !label.includes(token))).toBe(true);
+    expect(labels[1]).toBe("⏸ Pause");
+    manager.apply("ses", { ...goal, rounds: 3, updatedAt: goal.updatedAt + 1 }, false);
+    expect(manager.getControlToken()).toBe(token);
+    expect(manager.claimControl(token)).toBe(true);
+    expect(manager.claimControl(token)).toBe(false);
+    expect(resolveGoalButton(manager, labels[1]!)).toBe("pause");
+    expect(getGoalButtonLabels(manager)).toEqual(labels);
+    manager.apply("ses", { ...goal, status: "paused" }, false);
+    expect(resolveGoalButton(manager, labels[1]!)).toBeNull();
+    expect(resolveGoalButton(manager, getGoalButtonLabels(manager)[1]!)).toBe("resume");
+    manager.apply("ses", { ...goal, status: "complete" }, false);
+    expect(resolveGoalButton(manager, getGoalButtonLabels(manager)[1]!)).toBe("clear");
+  });
+
+  it("clears the followed binding and ignores a late result after detach", () => {
+    const manager = new GoalManager();
+    manager.follow("ses");
+    manager.apply("ses", goal, false);
+    const labels = getGoalButtonLabels(manager);
+    manager.clear();
+    manager.apply("ses", goal, true);
+    expect(manager.snapshot()).toEqual({ sessionId: null, goal: null });
+    expect(getGoalButtonLabels(manager)).toEqual([]);
+    expect(resolveGoalButton(manager, labels[0]!)).toBeNull();
   });
 });
 

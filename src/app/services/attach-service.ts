@@ -60,7 +60,7 @@ export function configureAttachPresentation(deps: AttachPresentationDeps | null)
 
 export type AttachStateDeps = Pick<AppContainer, "attachManager">;
 
-export type DetachSessionDeps = Pick<AppContainer, "attachManager" | "resetAggregator">;
+export type DetachSessionDeps = Pick<AppContainer, "attachManager" | "resetAggregator" | "goalManager">;
 
 type AttachRestoreDeps = Pick<
   AppContainer,
@@ -615,6 +615,7 @@ export async function restorePendingInteractionsAfterReconnect(
 }
 
 export function detachAttachedSession(reason: string, deps: DetachSessionDeps): void {
+  deps.goalManager.clear();
   if (!deps.attachManager.isAttached()) {
     return;
   }

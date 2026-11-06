@@ -8,11 +8,18 @@ import type { ModelInfo } from "../../app/types/model.js";
 import { logger } from "../../utils/logger.js";
 import type { ContextInfo, KeyboardState } from "./keyboard-types.js";
 import { t } from "../../i18n/index.js";
+import type { GoalManager } from "../../app/managers/goal-manager.js";
+import { getGoalButtonLabels } from "./goal-button.js";
 
 /**
  * Keyboard Manager - manages Reply Keyboard state and updates
  */
 export class KeyboardManager {
+  constructor(private readonly goalManager?: GoalManager) {}
+
+  public getGoalLabels(): string[] {
+    return this.goalManager ? getGoalButtonLabels(this.goalManager) : [];
+  }
   private state: KeyboardState | null = null;
 
   private api: Api | null = null;
@@ -130,6 +137,7 @@ export class KeyboardManager {
       this.state.contextInfo ?? undefined,
       this.state.variantName,
       getQueuedPromptButtonLabels(),
+      this.getGoalLabels(),
     );
   }
 

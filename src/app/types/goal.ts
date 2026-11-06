@@ -16,26 +16,29 @@ export interface GoalNotice {
   reason?: string;
 }
 
-export type GoalArgument =
-  | { kind: "status" }
-  | { kind: "pause" }
-  | { kind: "resume" }
-  | { kind: "clear" }
+export type GoalObjective =
+  | { kind: "empty" }
+  | { kind: "reserved" }
   | { kind: "objective"; text: string }
   | { kind: "too_long"; length: number };
 
 /** The server rejects an objective longer than this and does not start it. */
 export const GOAL_OBJECTIVE_LIMIT = 4000;
 
-export function parseGoalArgument(raw: string): GoalArgument {
+export function parseGoalObjective(raw: string): GoalObjective {
   const text = raw.trim();
   if (text.length === 0) {
-    return { kind: "status" };
+    return { kind: "empty" };
   }
 
-  const control = text.toLowerCase();
+  const pairs: Record<string, string> = { '"': '"', "'": "'", "“": "”", "‘": "’" };
+  const unquoted = pairs[text.charAt(0)] === text.at(-1) ? text.slice(1, -1).trim() : text;
+  if (!unquoted) {
+    return { kind: "empty" };
+  }
+  const control = unquoted.toLowerCase();
   if (control === "pause" || control === "resume" || control === "clear") {
-    return { kind: control };
+    return { kind: "reserved" };
   }
 
   if (text.length > GOAL_OBJECTIVE_LIMIT) {

@@ -127,6 +127,7 @@ export interface ProcessPromptDeps
     | "attachManager"
     | "externalUserInputSuppressionManager"
     | "foregroundSessionState"
+    | "goalManager"
     | "interactionManager"
     | "keyboardManager"
     | "permissionManager"

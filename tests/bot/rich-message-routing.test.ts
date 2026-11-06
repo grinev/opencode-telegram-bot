@@ -245,6 +245,23 @@ describe("bot/rich-message-routing", () => {
     expect(mocked.queuePromptForMerging).not.toHaveBeenCalled();
   });
 
+  it.each([true, false])("refuses rich photos during goal input without accepting their text (hasText=%s)", async (hasText) => {
+    container.interactionManager.start({
+      kind: "custom", expectedInput: "text", metadata: { flow: "goal", stage: "objective", sessionId: "session-1", directory: "repo" },
+    });
+    const command = vi.spyOn(container.goalService, "command");
+    const { bot, replies } = createRoutingBot();
+    await bot.handleUpdate(richUpdate([
+      ...(hasText ? [{ type: "paragraph" as const, text: "Fix the tests" }] : []),
+      { type: "photo", photo: [{ file_id: "photo-1", file_unique_id: "p", width: 100, height: 100 }] },
+    ]));
+    expect(replies).toContain(t("interaction.blocked.expected_text"));
+    expect(container.interactionManager.getSnapshot()?.metadata.stage).toBe("objective");
+    expect(command).not.toHaveBeenCalled();
+    expect(mocked.queuePromptForMerging).not.toHaveBeenCalled();
+    expect(promptQueue.size()).toBe(0);
+  });
+
   it("sends a photo-only rich prompt through merging without downloading", async () => {
     const { bot } = createRoutingBot();
 

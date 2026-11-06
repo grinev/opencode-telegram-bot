@@ -852,6 +852,15 @@ describe("attach/service", () => {
     expect(mocked.questionListMock).toHaveBeenCalledTimes(2);
   });
 
+  it("drops the local goal even when already detached and rejects late results", () => {
+    const goal = { id: "goal-1", objective: "Fix tests", status: "active" as const, rounds: 0, maxRounds: 50, updatedAt: 1 };
+    container.goalManager.follow("session-1");
+    container.goalManager.apply("session-1", goal, false);
+    detachAttachedSession("already_detached", deps);
+    container.goalManager.apply("session-1", goal, false);
+    expect(container.goalManager.snapshot()).toEqual({ sessionId: null, goal: null });
+  });
+
   it("detaches locally without stopping the directory event listener", async () => {
     const { noteStreamActivity, getStreamThrottleMs } = await import(
       "../../../src/bot/streaming/stream-throttle.js"

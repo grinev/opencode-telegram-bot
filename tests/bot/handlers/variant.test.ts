@@ -74,6 +74,7 @@ function mockContext(overrides: Record<string, unknown> = {}) {
 function createDeps() {
   return createTestAppContainer({
     keyboardManager: {
+      getKeyboard: vi.fn(),
       initialize: mocked.keyboardInitializeMock,
       updateModel: mocked.keyboardUpdateModelMock,
       updateVariant: mocked.keyboardUpdateVariantMock,
