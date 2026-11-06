@@ -100,7 +100,7 @@ export function registerDashboardHandlers(deps: DashboardDeps): void {
     if (!pinnedMessageManager.isInitialized()) {
       return;
     }
-    pinnedMessageManager.addFileChange(change);
+    pinnedMessageManager.requestFileRefresh();
   });
 
   pinnedMessageManager.setOnKeyboardUpdate(async (tokensUsed, tokensLimit) => {

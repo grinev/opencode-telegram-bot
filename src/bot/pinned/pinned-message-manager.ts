@@ -16,7 +16,6 @@ import {
   waitForModelContextLimit,
 } from "../../app/services/model-context-limit-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
-import { getPatchFileChanges } from "../../app/formatters/summary-formatter.js";
 import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import type { FileChange, PinnedMessageState, TokensInfo } from "./pinned-message-types.js";
@@ -50,7 +49,7 @@ interface PreparedSession {
 export type PinnedRenderScheduler = (render: () => Promise<void>) => Promise<void>;
 
 /**
- * How many recent messages the pinned dashboard reads for its context and changed files.
+ * How many recent messages the pinned dashboard reads for its context.
  * Fetching the whole history of a long session can be hundreds of MB and stalls every switch.
  */
 const PINNED_HISTORY_MESSAGES_LIMIT = 100;
@@ -94,6 +93,8 @@ export class PinnedMessageManager {
   private preparing: Promise<void> | null = null;
   private prepared: PreparedSession | null = null;
   private valueUpdateCount = 0;
+  private filesDirty = false;
+  private fileRefreshGeneration = 0;
   private renderScheduler: PinnedRenderScheduler = (render) => render();
 
   /**
@@ -141,6 +142,7 @@ export class PinnedMessageManager {
     logger.info(`[PinnedManager] Session changed: ${sessionId}, title: ${sessionTitle}`);
 
     const generation = ++this.sessionGeneration;
+    this.invalidateFileRefresh();
     const sameSession = this.state.sessionId === sessionId;
 
     await this.trackPrepare(async () => {
@@ -189,6 +191,7 @@ export class PinnedMessageManager {
     logger.info(`[PinnedManager] Restoring existing pinned message for session: ${sessionId}`);
 
     const generation = ++this.sessionGeneration;
+    this.invalidateFileRefresh();
 
     await this.trackPrepare(async () => {
       if (!getPinnedDashboardEnabled()) {
@@ -231,6 +234,11 @@ export class PinnedMessageManager {
   async showPreparedSession(): Promise<void> {
     const prepared = this.prepared;
     if (!prepared || prepared.generation !== this.sessionGeneration) {
+      return;
+    }
+    // A file event that arrived after the load is part of the first frame, not a later edit.
+    await this.applyDirtyFileRefresh();
+    if (this.prepared !== prepared || prepared.generation !== this.sessionGeneration) {
       return;
     }
     this.prepared = null;
@@ -276,6 +284,7 @@ export class PinnedMessageManager {
     );
     const generation = this.sessionGeneration;
     const updateCount = this.valueUpdateCount;
+    const fileGeneration = this.fileRefreshGeneration;
 
     const values = await this.loadSessionValues(sessionId, directory);
     if (
@@ -291,8 +300,17 @@ export class PinnedMessageManager {
       this.state.tokensUsed = values.context.tokensUsed;
       this.state.cost = values.context.cost;
     }
-    if (values.changedFiles) {
-      this.state.changedFiles = values.changedFiles;
+    // A file event that arrived while this loaded is newer: leave Files for that refresh.
+    if (
+      values.changedFiles &&
+      fileGeneration === this.fileRefreshGeneration &&
+      !this.filesDirty
+    ) {
+      this.fileRefreshGeneration++;
+      if (!this.areFileDiffsEqual(this.state.changedFiles, values.changedFiles)) {
+        this.state.changedFiles = values.changedFiles;
+        this.valueUpdateCount++;
+      }
     }
     await this.updatePinnedMessage();
   }
@@ -633,14 +651,12 @@ export class PinnedMessageManager {
   }
 
   /**
-   * Called when session.diff SSE event is received.
-   * Only overwrites if non-empty (API may return empty while tool events collected data).
+   * Called when a session.diff event is received. The payload is the session diff,
+   * including an empty list, and it wins over a fetch already in flight.
    */
   async onSessionDiff(diffs: FileChange[]): Promise<void> {
-    if (diffs.length === 0 && this.state.changedFiles.length > 0) {
-      logger.debug("[PinnedManager] Ignoring empty session.diff, keeping tool-collected data");
-      return;
-    }
+    this.invalidateFileRefresh();
+    this.valueUpdateCount++;
 
     if (this.areFileDiffsEqual(this.state.changedFiles, diffs)) {
       logger.debug("[PinnedManager] Ignoring unchanged session.diff");
@@ -648,29 +664,26 @@ export class PinnedMessageManager {
     }
 
     this.state.changedFiles = diffs;
-    this.valueUpdateCount++;
     logger.debug(`[PinnedManager] Session diff updated: ${diffs.length} files`);
     this.scheduleDebouncedUpdate();
   }
 
   /**
-   * Called when a single file is changed (from tool events: edit/write)
+   * A followed-session file change. Files are re-read from the session diff on the
+   * next debounced redraw; the tool's own counts are not added.
    */
-  addFileChange(change: FileChange): void {
-    const existing = this.state.changedFiles.find((f) => f.file === change.file);
-    if (existing) {
-      existing.additions += change.additions;
-      existing.deletions += change.deletions;
-    } else {
-      this.state.changedFiles.push(change);
+  requestFileRefresh(): void {
+    if (!this.state.sessionId) {
+      return;
     }
-    this.valueUpdateCount++;
-    logger.debug(
-      `[PinnedManager] File change added: ${change.file} (+${change.additions} -${change.deletions}), total: ${this.state.changedFiles.length}`,
-    );
-
-    // Schedule debounced update (avoid spamming Telegram API on rapid tool events)
+    this.filesDirty = true;
     this.scheduleDebouncedUpdate();
+  }
+
+  /** Drops an in-flight session-diff fetch so it cannot commit after a newer snapshot. */
+  private invalidateFileRefresh(): void {
+    this.fileRefreshGeneration++;
+    this.filesDirty = false;
   }
 
   private scheduleDebouncedUpdate(): void {
@@ -681,13 +694,17 @@ export class PinnedMessageManager {
     const delayMs = getSessionStreamThrottleMs(this.state.sessionId ?? "");
     this.updateDebounceTimer = setTimeout(() => {
       this.updateDebounceTimer = null;
-      void this.renderScheduler(() => this.updatePinnedMessage());
+      void this.renderScheduler(async () => {
+        await this.applyDirtyFileRefresh();
+        await this.updatePinnedMessage();
+      });
     }, delayMs);
   }
 
   /**
    * Load a session's context, cost and changed files in parallel, without touching the held
-   * state. Files come from session.diff(), or from the history's tool parts when it is empty.
+   * state. Files come only from session.diff(); an empty diff is an empty list, and a failed
+   * diff leaves changedFiles null.
    */
   private async loadSessionValues(
     sessionId: string,
@@ -706,19 +723,11 @@ export class PinnedMessageManager {
       this.fetchSessionCost(sessionId, directory),
     ]);
 
-    let changedFiles: FileChange[] | null = null;
-    if (diff && diff.length > 0) {
-      changedFiles = diff
-        .filter((d): d is typeof d & { file: string } => !!d.file)
-        .map((d) => ({
-          file: d.file,
-          additions: d.additions,
-          deletions: d.deletions,
-        }));
-      logger.info(`[PinnedManager] Loaded ${changedFiles.length} file diffs from session.diff()`);
-    } else if (history) {
-      changedFiles = this.readFileChangesFromHistory(history);
-      logger.info(`[PinnedManager] Loaded ${changedFiles.length} file diffs from messages`);
+    const changedFiles = diff ? this.mapSessionDiff(diff) : null;
+    if (diff) {
+      logger.info(
+        `[PinnedManager] Loaded ${changedFiles?.length ?? 0} file diffs from session.diff()`,
+      );
     }
 
     return {
@@ -760,107 +769,69 @@ export class PinnedMessageManager {
     }
   }
 
+  private mapSessionDiff(diff: SessionDiff): FileChange[] {
+    return diff
+      .filter((entry): entry is typeof entry & { file: string } => !!entry.file)
+      .map((entry) => ({
+        file: entry.file,
+        additions: entry.additions,
+        deletions: entry.deletions,
+      }));
+  }
+
   /**
-   * Extract file changes from a session's completed edit/write/apply_patch tool parts
+   * Re-read Files from the session diff when a file change marked them dirty.
+   * A failed fetch keeps the last good list and does not schedule another try.
+   * A newer snapshot or a switch drops this result.
    */
-  private readFileChangesFromHistory(history: SessionHistory): FileChange[] {
-    const filesMap = new Map<string, FileChange>();
-
-    let toolCount = 0;
-    let fileToolCount = 0;
-
-    for (const { parts } of history) {
-      for (const part of parts) {
-        if (part.type !== "tool") continue;
-        toolCount++;
-
-        const toolPart = part as {
-          tool: string;
-          state: {
-            status: string;
-            input?: { [key: string]: unknown };
-            metadata?: { [key: string]: unknown };
-          };
-        };
-
-        if (toolPart.state.status !== "completed") continue;
-
-        if (
-          toolPart.tool === "edit" ||
-          toolPart.tool === "write" ||
-          toolPart.tool === "apply_patch"
-        ) {
-          fileToolCount++;
-        }
-
-        const patchChanges =
-          toolPart.tool === "apply_patch" ? getPatchFileChanges(toolPart.state.metadata) : [];
-
-        if (patchChanges.length > 0) {
-          for (const change of patchChanges) {
-            const existing = filesMap.get(change.path);
-            if (existing) {
-              existing.additions += change.additions;
-              existing.deletions += change.deletions;
-            } else {
-              filesMap.set(change.path, {
-                file: change.path,
-                additions: change.additions,
-                deletions: change.deletions,
-              });
-            }
-          }
-        } else if (
-          (toolPart.tool === "edit" || toolPart.tool === "apply_patch") &&
-          toolPart.state.metadata &&
-          "filediff" in toolPart.state.metadata
-        ) {
-          const filediff = toolPart.state.metadata.filediff as {
-            file?: string;
-            additions?: number;
-            deletions?: number;
-          };
-          if (filediff.file) {
-            const existing = filesMap.get(filediff.file);
-            if (existing) {
-              existing.additions += filediff.additions || 0;
-              existing.deletions += filediff.deletions || 0;
-            } else {
-              filesMap.set(filediff.file, {
-                file: filediff.file,
-                additions: filediff.additions || 0,
-                deletions: filediff.deletions || 0,
-              });
-            }
-          }
-        } else if (
-          toolPart.tool === "write" &&
-          toolPart.state.input &&
-          "filePath" in toolPart.state.input &&
-          "content" in toolPart.state.input
-        ) {
-          const filePath = toolPart.state.input.filePath as string;
-          const content = toolPart.state.input.content as string;
-          const lines = content.split("\n").length;
-          const existing = filesMap.get(filePath);
-          if (existing) {
-            existing.additions += lines;
-          } else {
-            filesMap.set(filePath, {
-              file: filePath,
-              additions: lines,
-              deletions: 0,
-            });
-          }
-        }
-      }
+  private async applyDirtyFileRefresh(): Promise<void> {
+    if (!this.filesDirty) {
+      return;
     }
 
-    logger.debug(
-      `[PinnedManager] readFileChangesFromHistory: found ${toolCount} tool parts, ${fileToolCount} file tools`,
+    const sessionId = this.state.sessionId;
+    const session = getCurrentSession();
+    const directory = this.resolveDirectory(
+      session?.id === sessionId ? session.directory : undefined,
     );
+    if (!sessionId || !directory) {
+      this.filesDirty = false;
+      return;
+    }
 
-    return Array.from(filesMap.values());
+    if (this.updateDebounceTimer) {
+      clearTimeout(this.updateDebounceTimer);
+      this.updateDebounceTimer = null;
+    }
+
+    const refreshGeneration = ++this.fileRefreshGeneration;
+    const sessionGeneration = this.sessionGeneration;
+    this.filesDirty = false;
+
+    const diff = await this.fetchSessionDiff(sessionId, directory);
+    if (
+      refreshGeneration !== this.fileRefreshGeneration ||
+      sessionGeneration !== this.sessionGeneration ||
+      this.state.sessionId !== sessionId
+    ) {
+      return;
+    }
+
+    if (this.filesDirty) {
+      await this.applyDirtyFileRefresh();
+      return;
+    }
+
+    if (!diff) {
+      return;
+    }
+
+    const files = this.mapSessionDiff(diff);
+    this.valueUpdateCount++;
+    if (this.areFileDiffsEqual(this.state.changedFiles, files)) {
+      return;
+    }
+    this.state.changedFiles = files;
   }
 
   /**
@@ -1443,6 +1414,7 @@ export class PinnedMessageManager {
    */
   async clear(): Promise<void> {
     this.sessionGeneration++;
+    this.invalidateFileRefresh();
     this.prepared = null;
 
     if (!getPinnedDashboardEnabled()) {
