@@ -8,7 +8,7 @@ import type {
   InteractionState,
   InteractionKind,
 } from "../../app/types/interaction.js";
-import { QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../message-patterns.js";
+import { GOAL_BUTTON_TEXT_PATTERN, QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../message-patterns.js";
 import type { LocalCommandRegistry } from "../../app/services/local-command-registry.js";
 import { isKnownCommand } from "../routers/command-utils.js";
 
@@ -25,7 +25,7 @@ function isBusyAllowedCommand(command: string | undefined, localCommandRegistry?
 }
 
 // Allowed while a task runs, but not over an interaction: the server would cancel it under the user.
-const BUSY_ALLOWED_OUTSIDE_INTERACTION_COMMANDS = new Set<string>(["/reload"]);
+const BUSY_ALLOWED_OUTSIDE_INTERACTION_COMMANDS = new Set<string>(["/reload", "/goal"]);
 
 function isBusyAllowedOutsideInteraction(command: string | undefined): boolean {
   return Boolean(
@@ -170,6 +170,20 @@ export function resolveInteractionGuardDecision(
   const state = interactionManager.getSnapshot();
   const { inputType, command } = classifyIncomingInput(ctx);
   const isBusy = foregroundSessionState.isBusy() || attachManager.isBusy();
+
+  const goalLabel = typeof ctx.message?.text === "string" && GOAL_BUTTON_TEXT_PATTERN.test(ctx.message.text);
+  if (goalLabel && state) {
+    return createBlockDecision(inputType, state, "expected_callback", command, false);
+  }
+  if (goalLabel && !state) {
+    if (!isBusy || ctx.message!.text!.startsWith("◎ ") || ctx.message!.text!.startsWith("⏸ ")) {
+      return createAllowDecision(inputType, null, command, isBusy);
+    }
+    return createBusyBlockDecision(inputType, null, "expected_text", command);
+  }
+  if (state?.metadata.flow === "goal" && (ctx.callbackQuery?.data === "goal:cancel" || ctx.callbackQuery?.data === "goal:confirm")) {
+    return createAllowDecision(inputType, state, command, isBusy);
+  }
 
   if (state && interactionManager.isExpired()) {
     interactionManager.clear("expired");

@@ -84,19 +84,12 @@ export function formatGoalWarning(maxRounds?: number): string {
 }
 
 export function formatGoalConfirmation(options: {
-  action: "start" | "replace" | "resume";
+  action: "start" | "resume";
   objective: string;
-  current?: string;
   maxRounds?: number;
 }): string {
   const warning = formatGoalWarning(options.maxRounds);
-  const body =
-    options.action === "replace"
-      ? t("goal.confirm.replace", {
-          current: options.current ?? "",
-          proposed: options.objective,
-        })
-      : options.action === "resume"
+  const body = options.action === "resume"
         ? t("goal.confirm.resume", { objective: options.objective })
         : t("goal.confirm.start", { objective: options.objective });
 

@@ -18,6 +18,7 @@ export type DetachCommandDeps = Pick<
   | "assistantRunState"
   | "attachManager"
   | "foregroundSessionState"
+  | "goalManager"
   | "keyboardManager"
   | "pinnedMessageManager"
   | "resetAggregator"

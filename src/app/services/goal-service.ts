@@ -74,25 +74,42 @@ export class GoalService {
     return goal ? { kind: "goal", goal } : { kind: "none" };
   }
 
-  async command(sessionId: string, directory: string, text: string): Promise<GoalCommandResult> {
+  async command(
+    sessionId: string,
+    directory: string,
+    text: string,
+    selection?: {
+      agent: string;
+      model: { providerID: string; modelID: string };
+      variant?: string;
+    },
+  ): Promise<GoalCommandResult> {
     if (!this.available()) {
       return { kind: "unsupported" };
     }
 
     let error: unknown;
     try {
-      ({ error } = await opencodeV2Client.goal.command({ sessionID: sessionId, directory, text }));
+      ({ error } = await opencodeV2Client.goal.command({ sessionID: sessionId, directory, text, ...selection }));
     } catch (caught) {
-      return this.readFailure(caught).kind === "unsupported"
-        ? { kind: "unsupported" }
-        : { kind: "error", message: messageOf(caught) || localizeGoalReason("The goal stopped after an error") };
+      if (isUnsupported(caught, "command")) {
+        this.capability = "unsupported";
+        return { kind: "unsupported" };
+      }
+      return { kind: "error", message: messageOf(caught) || localizeGoalReason("The goal stopped after an error") };
     }
     if (!error) {
       this.capability = "supported";
       return { kind: "ok" };
     }
 
-    if (isUnsupported(error)) {
+    if (isRecord(error) && error.name === "GoalSelectionError") {
+      const message = messageOf(error.cause);
+      logger.warn("[Goal] Failed to apply selected run context", { sessionId, message });
+      return { kind: "error", message };
+    }
+
+    if (isUnsupported(error, "command")) {
       this.capability = "unsupported";
       return { kind: "unsupported" };
     }
@@ -111,7 +128,7 @@ export class GoalService {
    * a transition observed while following should be told once.
    */
   async refresh(sessionId: string, directory: string, announce: boolean): Promise<GoalReadResult> {
-    this.manager.follow(sessionId);
+    const controlToken = this.manager.getControlToken();
     const result = await this.read(sessionId, directory);
     if (result.kind === "error") {
       logger.warn("[Goal] Refresh failed; keeping the last snapshot", {
@@ -123,6 +140,14 @@ export class GoalService {
 
     if (result.kind === "unsupported") {
       return result;
+    }
+
+    const current = this.manager.snapshot();
+    if (current.sessionId !== sessionId) {
+      return result;
+    }
+    if (this.manager.getControlToken() !== controlToken) {
+      return current.goal ? { kind: "goal", goal: current.goal } : { kind: "none" };
     }
 
     const goal = result.kind === "goal" ? result.goal : null;
@@ -148,7 +173,7 @@ export class GoalService {
   }
 
   /**
-   * A user `/goal pause`. One notice is the caller's to send; a changed event
+   * A user presses Pause. One notice is the caller's to send; a changed event
    * for this pause is not announced again.
    */
   async pauseFromCommand(
@@ -160,6 +185,7 @@ export class GoalService {
     | { kind: "rejected"; message: string }
     | { kind: "error" }
   > {
+    const shown = this.manager.snapshot();
     this.manager.suppressPauseNotice();
     const paused = await this.command(sessionId, directory, "pause");
     if (paused.kind === "unsupported") {
@@ -173,12 +199,27 @@ export class GoalService {
         : { kind: "error" };
     }
 
+    const readToken = this.manager.getControlToken();
     const read = await this.read(sessionId, directory);
-    const goal = read.kind === "goal" ? read.goal : null;
-    if (goal) {
-      this.manager.markAnnounced(goal);
-      this.manager.apply(sessionId, goal, false);
+    const latest = this.manager.snapshot();
+    if (latest.sessionId !== sessionId || latest.goal?.id !== shown.goal?.id || latest.goal?.objective !== shown.goal?.objective) {
+      if (latest.sessionId === sessionId) this.manager.clearPauseSuppression();
+      return { kind: "error" };
     }
+    let goal = read.kind === "goal" ? read.goal : null;
+    if (readToken !== this.manager.getControlToken() || (latest.goal && goal && latest.goal.updatedAt > goal.updatedAt)) {
+      goal = latest.goal;
+    }
+    if (goal?.id !== shown.goal?.id || goal?.objective !== shown.goal?.objective) {
+      this.manager.clearPauseSuppression();
+      return { kind: "error" };
+    }
+    if (!goal || goal.status !== "paused") {
+      this.manager.clearPauseSuppression();
+      return read.kind === "unsupported" ? { kind: "unsupported" } : { kind: "error" };
+    }
+    this.manager.markAnnounced(goal);
+    this.manager.apply(sessionId, goal, false);
     this.manager.clearPauseSuppression();
     await this.publish(sessionId, null);
     return {
@@ -330,7 +371,7 @@ function tPausedByUser(): string {
   return localizeGoalReason("Paused by the user");
 }
 
-function isUnsupported(error: unknown): boolean {
+function isUnsupported(error: unknown, source: "rpc" | "command" = "rpc"): boolean {
   if (!isRecord(error)) {
     return false;
   }
@@ -340,7 +381,7 @@ function isUnsupported(error: unknown): boolean {
   }
 
   const type = typeof error.type === "string" ? error.type : "";
-  return type === "rpc.method_not_found" || type === "rpc.unavailable";
+  return source === "rpc" && (type === "rpc.method_not_found" || type === "rpc.unavailable");
 }
 
 function messageOf(error: unknown): string {

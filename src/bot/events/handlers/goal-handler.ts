@@ -3,7 +3,7 @@ import { logger } from "../../../utils/logger.js";
 import { sendGoalText } from "../../messages/goal-delivery.js";
 import type { EventHandlerDeps } from "./handler-context.js";
 
-type GoalHandlerDeps = EventHandlerDeps<"goalService" | "pinnedMessageManager">;
+type GoalHandlerDeps = EventHandlerDeps<"goalService" | "pinnedMessageManager" | "keyboardManager">;
 
 /** Sends a pause or completion the goal service has already decided is due. */
 export function registerGoalHandlers(deps: GoalHandlerDeps): void {
@@ -23,7 +23,7 @@ export function registerGoalHandlers(deps: GoalHandlerDeps): void {
     }
 
     try {
-      await sendGoalText(destination.api, destination.chatId, formatGoalNotice(notice));
+      await sendGoalText(destination.api, destination.chatId, formatGoalNotice(notice), deps.keyboardManager.getKeyboard());
     } catch (error) {
       logger.warn("[Goal] Failed to send a goal notice", error);
     }

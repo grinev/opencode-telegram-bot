@@ -121,9 +121,9 @@ describe("bot/commands/abort", () => {
     await abortCommand(ctx as never, createDeps());
 
     expect(mocked.withdrawHandedOverPromptsMock).toHaveBeenCalledWith("session-1", "abort_command");
-    expect(
-      defined(mocked.withdrawHandedOverPromptsMock.mock.invocationCallOrder[0]),
-    ).toBeLessThan(defined(mocked.abortMock.mock.invocationCallOrder[0]));
+    expect(defined(mocked.withdrawHandedOverPromptsMock.mock.invocationCallOrder[0])).toBeLessThan(
+      defined(mocked.abortMock.mock.invocationCallOrder[0]),
+    );
   });
 
   it("leaves handed-over messages alone in the abort /start shares", async () => {
@@ -214,6 +214,66 @@ describe("bot/commands/abort", () => {
     expect(shouldSuppressUserAbortSessionError("session-1", "Aborted")).toBe(true);
   });
 
+  it.each(["paused", "failed"] as const)(
+    "sends the final abort result with the accepted goal row when the pause is %s",
+    async (outcome) => {
+      mocked.currentSession = { id: "session-1", title: "Session", directory: "D:/repo" };
+      const goal = {
+        id: "g1",
+        objective: "Fix tests",
+        status: "active" as const,
+        rounds: 0,
+        maxRounds: 50,
+        updatedAt: 1,
+      };
+      container.goalManager.follow("session-1");
+      container.goalManager.apply("session-1", goal, false);
+      vi.spyOn(container.goalService, "pauseForAbort").mockImplementation(async () => {
+        if (outcome === "paused") {
+          container.goalManager.apply(
+            "session-1",
+            { ...goal, status: "paused", updatedAt: 2 },
+            false,
+          );
+          return { kind: "paused", reason: "Paused by the user" };
+        }
+        return { kind: "failed", reason: "Network error" };
+      });
+      mocked.abortMock.mockResolvedValue({ data: true, error: null });
+      mocked.statusMock.mockResolvedValue({ data: { "session-1": { type: "idle" } }, error: null });
+      const api = { editMessageText: vi.fn(), deleteMessage: vi.fn().mockResolvedValue(undefined) };
+      container.keyboardManager.initialize(api as never, 777);
+      const ctx = {
+        chat: { id: 777 },
+        api,
+        reply: vi
+          .fn()
+          .mockResolvedValueOnce({ message_id: 88 })
+          .mockResolvedValue({ message_id: 89 }),
+      };
+
+      await abortCurrentOperation(ctx as never, createDeps());
+
+      expect(ctx.reply).toHaveBeenCalledTimes(2);
+      expect(ctx.reply).toHaveBeenNthCalledWith(1, t("stop.in_progress"));
+      expect(ctx.reply).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining(t("stop.success")),
+        expect.objectContaining({
+          reply_markup: expect.objectContaining({ keyboard: expect.any(Array) }),
+        }),
+      );
+      const markup = ctx.reply.mock.calls[1]?.[1] as {
+        reply_markup: { keyboard: Array<Array<{ text: string }>> };
+      };
+      expect(markup.reply_markup.keyboard[0]?.[1]?.text).toBe(
+        outcome === "paused" ? "▶ Continue" : "⏸ Pause",
+      );
+      expect(api.editMessageText).not.toHaveBeenCalled();
+      expect(api.deleteMessage).toHaveBeenCalledExactlyOnceWith(777, 88);
+    },
+  );
+
   it("drops queued prompts so they do not run after the abort", async () => {
     mocked.currentSession = {
       id: "session-1",
@@ -270,7 +330,10 @@ describe("bot/commands/abort", () => {
 
     await abortCommand(ctx as never, createDeps());
 
-    expect(mocked.inboxCancelMock).toHaveBeenCalledWith({ sessionID: "session-1", inboxID: "msg-1" });
+    expect(mocked.inboxCancelMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      inboxID: "msg-1",
+    });
     expect(order).toEqual(["cancel", "abort"]);
     expect(promptQueue.size()).toBe(0);
   });
@@ -407,8 +470,14 @@ describe("bot/commands/abort", () => {
     });
 
     it.each([
-      ["an API error", () => mocked.abortMock.mockResolvedValue({ data: null, error: new Error("x") })],
-      ["an unconfirmed result", () => mocked.abortMock.mockResolvedValue({ data: false, error: null })],
+      [
+        "an API error",
+        () => mocked.abortMock.mockResolvedValue({ data: null, error: new Error("x") }),
+      ],
+      [
+        "an unconfirmed result",
+        () => mocked.abortMock.mockResolvedValue({ data: false, error: null }),
+      ],
       [
         "a session still busy",
         () => {

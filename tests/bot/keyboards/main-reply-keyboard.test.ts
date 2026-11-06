@@ -81,6 +81,14 @@ describe("bot/keyboards/main-reply-keyboard", () => {
     expect(buttonTextAt(keyboard, 3, 1)).toBe("💡 Default");
   });
 
+  it("places the two goal buttons below waiting messages and above the fixed grid", () => {
+    const keyboard = createMainKeyboard("build", { providerID: "p", modelID: "m" }, undefined, undefined,
+      ["queued 1", "queued 2"], ["goal objective", "pause"]);
+    expect(keyboard.keyboard[2]).toEqual([{ text: "goal objective" }, { text: "pause" }]);
+    expect(buttonTextAt(keyboard, 0, 0)).toBe("queued 1");
+    expect(buttonTextAt(keyboard, 3, 0)).toBe("🛠️ Build Agent");
+  });
+
   it("creates custom agent keyboard and remove payload", () => {
     const keyboard = createAgentKeyboard("custom");
     const nonEmptyRows = keyboard.keyboard.filter((row) => row.length > 0);

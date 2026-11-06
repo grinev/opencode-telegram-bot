@@ -123,6 +123,19 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).not.toHaveBeenCalled();
   });
 
+  it("shows a visible busy alert for inline goal deletion without reaching the action", async () => {
+    deps.foregroundSessionState.markBusy("session-1", "repo");
+    const ctx = createCallbackContext("goal:delete:deadbeef");
+    const next = vi.fn();
+    await interactionGuardMiddleware(ctx, next, deps);
+    expect(next).not.toHaveBeenCalled();
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledExactlyOnceWith({
+      text: t("bot.session_busy"),
+      show_alert: true,
+    });
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
+
   it("allows command from allowed list", async () => {
     startInteractionForTest(deps.interactionManager, {
       kind: "inline",

@@ -454,7 +454,7 @@ async function applyModelSelectionAndNotify(
   }
 
   const variantName = formatVariantForButton(modelInfo.variant || "default");
-  const keyboard = createMainKeyboard(
+  const keyboard = deps.keyboardManager.getKeyboard() ?? createMainKeyboard(
     currentAgent,
     modelInfo,
     contextInfo ?? undefined,

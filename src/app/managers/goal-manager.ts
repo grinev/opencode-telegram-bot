@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { GoalNotice, GoalState } from "../types/goal.js";
 
 export interface GoalSnapshot {
@@ -14,6 +15,27 @@ export class GoalManager {
   private goal: GoalState | null = null;
   private announcedKey: string | null = null;
   private pauseNoticeSuppressed = false;
+  private controlToken = randomBytes(4).toString("hex");
+
+  getControlToken(): string {
+    return this.controlToken;
+  }
+
+  claimControl(token: string): boolean {
+    if (token !== this.controlToken || !this.goal || !this.sessionId) {
+      return false;
+    }
+    this.controlToken = randomBytes(4).toString("hex");
+    return true;
+  }
+
+  clear(): void {
+    this.sessionId = null;
+    this.goal = null;
+    this.announcedKey = null;
+    this.pauseNoticeSuppressed = false;
+    this.controlToken = randomBytes(4).toString("hex");
+  }
 
   snapshot(): GoalSnapshot {
     return { sessionId: this.sessionId, goal: this.goal };
@@ -29,6 +51,7 @@ export class GoalManager {
     this.goal = null;
     this.announcedKey = null;
     this.pauseNoticeSuppressed = false;
+    this.controlToken = randomBytes(4).toString("hex");
   }
 
   suppressPauseNotice(): void {
@@ -50,6 +73,13 @@ export class GoalManager {
       return null;
     }
 
+    if (
+      goal?.id !== this.goal?.id ||
+      goal?.status !== this.goal?.status ||
+      goal?.objective !== this.goal?.objective
+    ) {
+      this.controlToken = randomBytes(4).toString("hex");
+    }
     this.goal = goal;
     if (!goal || (goal.status !== "paused" && goal.status !== "complete")) {
       this.announcedKey = null;

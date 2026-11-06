@@ -14,7 +14,7 @@ import { selectSessionById, type SessionSelectDeps } from "./session-callback-ha
 import { failure } from "./feedback.js";
 
 type RecentSelectDeps = SessionSelectDeps & Pick<AppContainer,
-  "backgroundSessionTracker" | "pinnedMessageManager" | "resetAggregator">;
+  "backgroundSessionTracker" | "pinnedMessageManager" | "resetAggregator" | "goalManager">;
 
 export async function handleRecentSelect(ctx: Context, deps: RecentSelectDeps): Promise<boolean> {
   const data = ctx.callbackQuery?.data;

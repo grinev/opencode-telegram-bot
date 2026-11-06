@@ -7,7 +7,7 @@ vi.mock("../../../src/app/services/prompt-inbox-service.js", () => ({
 }));
 
 import { registerMessageRouter } from "../../../src/bot/routers/message-router.js";
-import { QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../../../src/bot/message-patterns.js";
+import { GOAL_BUTTON_TEXT_PATTERN, QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../../../src/bot/message-patterns.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
@@ -25,9 +25,9 @@ describe("bot/routers/message-router", () => {
       container: createTestAppContainer({ ensureEventSubscription: vi.fn(), setTelegramContext: vi.fn() }),
     });
 
-    expect(bot.hears).toHaveBeenCalledTimes(5);
-    // The queued prompt route must win over the other reply keyboard routes.
-    expect(defined(bot.hears.mock.calls[0]?.[0])).toBe(QUEUED_PROMPT_BUTTON_TEXT_PATTERN);
+    expect(bot.hears).toHaveBeenCalledTimes(6);
+    expect(defined(bot.hears.mock.calls[0]?.[0])).toBe(GOAL_BUTTON_TEXT_PATTERN);
+    expect(defined(bot.hears.mock.calls[1]?.[0])).toBe(QUEUED_PROMPT_BUTTON_TEXT_PATTERN);
     expect(bot.on.mock.calls.map(([event]) => event)).toEqual([
       "message:text",
       "message:text",
@@ -49,7 +49,7 @@ describe("bot/routers/message-router", () => {
         container: createTestAppContainer({ ensureEventSubscription: vi.fn(), setTelegramContext: vi.fn() }),
       });
 
-      return defined(bot.hears.mock.calls[0]?.[1]) as (ctx: unknown, next: () => Promise<void>) => Promise<void>;
+      return defined(bot.hears.mock.calls[1]?.[1]) as (ctx: unknown, next: () => Promise<void>) => Promise<void>;
     }
 
     function makeButtonContext(text: string) {

@@ -71,7 +71,7 @@ export async function handleAgentSelect(ctx: Context, deps: AgentSelectDeps): Pr
     const state = deps.keyboardManager.getState();
     const variantName =
       state?.variantName ?? formatVariantForButton(currentModel.variant || "default");
-    const keyboard = createMainKeyboard(
+    const keyboard = deps.keyboardManager.getKeyboard() ?? createMainKeyboard(
       agentName,
       currentModel,
       contextInfo ?? undefined,

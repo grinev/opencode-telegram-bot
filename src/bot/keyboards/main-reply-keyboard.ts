@@ -43,6 +43,7 @@ export function createMainKeyboard(
   contextInfo?: ContextInfo,
   variantName?: string,
   queuedPromptLabels: string[] = [],
+  goalLabels: string[] = [],
 ): Keyboard {
   const keyboard = new Keyboard();
   const agentText = getAgentButtonLabel(currentAgent);
@@ -61,6 +62,13 @@ export function createMainKeyboard(
   // Queued prompts sit above the fixed grid, one per row
   for (const label of queuedPromptLabels) {
     keyboard.text(label).row();
+  }
+
+  if (goalLabels.length > 0) {
+    for (const label of goalLabels) {
+      keyboard.text(label);
+    }
+    keyboard.row();
   }
 
   // Row 1: agent and context buttons

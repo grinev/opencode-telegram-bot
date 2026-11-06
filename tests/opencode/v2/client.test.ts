@@ -244,6 +244,99 @@ describe("opencode/v2/client", () => {
     });
   });
 
+  it.each(["Fix tests", "resume"])(
+    "commits the selected agent/model/variant before goal %s without changing command input",
+    async (text) => {
+      const client = createClient() as unknown as V2ClientExtension;
+      const result = await client.goal.command({
+        sessionID: "ses-1",
+        text,
+        agent: "plan",
+        model: { providerID: "selected", modelID: "chosen" },
+        variant: "high",
+      });
+      expect(result).toEqual({ data: true, error: undefined });
+      expect(fake.client.session.switchAgent).toHaveBeenCalledExactlyOnceWith({
+        sessionID: "ses-1",
+        agent: "plan",
+      });
+      expect(fake.client.session.switchModel).toHaveBeenCalledExactlyOnceWith({
+        sessionID: "ses-1",
+        model: { providerID: "selected", id: "chosen", variant: "high" },
+      });
+      expect(fake.client.session.command).toHaveBeenCalledExactlyOnceWith({
+        sessionID: "ses-1",
+        name: "goal",
+        text,
+        delivery: "queue",
+      });
+      expect(fake.client.session.switchAgent.mock.invocationCallOrder[0]!).toBeLessThan(
+        fake.client.session.switchModel.mock.invocationCallOrder[0]!,
+      );
+      expect(fake.client.session.switchModel.mock.invocationCallOrder[0]!).toBeLessThan(
+        fake.client.session.command.mock.invocationCallOrder[0]!,
+      );
+      expect(fake.client.session.prompt).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, "default"])(
+    "uses ordinary selection semantics for goal variant %s",
+    async (variant) => {
+      const client = createClient() as unknown as V2ClientExtension;
+      await client.goal.command({
+        sessionID: "ses-1",
+        text: "Fix tests",
+        model: { providerID: "p2", modelID: "m2" },
+        ...(variant ? { variant } : {}),
+      });
+      expect(fake.client.session.switchModel).toHaveBeenCalledExactlyOnceWith({
+        sessionID: "ses-1",
+        model: { providerID: "p2", id: "m2", ...(variant ? { variant } : {}) },
+      });
+    },
+  );
+
+  it.each(["pause", "clear"])("does not switch selection for goal %s", async (text) => {
+    const client = createClient() as unknown as V2ClientExtension;
+    await client.goal.command({ sessionID: "ses-1", text });
+    expect(fake.client.session.get).not.toHaveBeenCalled();
+    expect(fake.client.session.switchModel).not.toHaveBeenCalled();
+    expect(fake.client.session.switchAgent).not.toHaveBeenCalled();
+    expect(fake.client.session.command).toHaveBeenCalledExactlyOnceWith({
+      sessionID: "ses-1",
+      name: "goal",
+      text,
+      delivery: "queue",
+    });
+  });
+
+  it.each(["switchAgent", "switchModel"] as const)(
+    "does not dispatch goal or call it unsupported after %s fails",
+    async (method) => {
+      const client = createClient() as unknown as V2ClientExtension;
+      const error = Object.assign(new Error("UnexpectedStatus: 500"), { name: "ClientError" });
+      fake.client.session[method].mockRejectedValue(error);
+      const result = await client.goal.command({
+        sessionID: "ses-1",
+        text: "Fix tests",
+        agent: "plan",
+        model: { providerID: "p2", modelID: "m2" },
+      });
+      expect(result.error).toEqual({ name: "GoalSelectionError", cause: error });
+      expect(fake.client.session.command).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still reports an actual absent goal command as unsupported", async () => {
+    fake.client.session.command.mockRejectedValue(
+      Object.assign(new Error("Command not found: goal"), { name: "CommandNotFoundError" }),
+    );
+    const client = createClient() as unknown as V2ClientExtension;
+    const result = await client.goal.command({ sessionID: "ses-1", text: "resume" });
+    expect(result.error).toMatchObject({ name: "GoalUnsupportedError" });
+  });
+
   it("sends a prompt with the requested delivery and returns the inbox id it waits under", async () => {
     fake.client.session.prompt.mockResolvedValue({ id: "msg-inbox-1" });
     const client = createClient() as unknown as V2ClientExtension;

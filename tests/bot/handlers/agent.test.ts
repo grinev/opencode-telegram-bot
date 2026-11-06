@@ -61,6 +61,7 @@ import { defined } from "../../helpers/defined.js";
 function createDeps() {
   return createTestAppContainer({
     keyboardManager: {
+      getKeyboard: vi.fn(),
       initialize: mocked.keyboardInitializeMock,
       updateAgent: mocked.keyboardUpdateAgentMock,
       updateModel: mocked.keyboardUpdateModelMock,

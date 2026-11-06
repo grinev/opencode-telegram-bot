@@ -185,7 +185,10 @@ export async function interactionGuardMiddleware(
   );
 
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery({ text: message }).catch(() => {});
+    await ctx.answerCallbackQuery({
+      text: message,
+      ...(ctx.callbackQuery.data?.startsWith("goal:delete:") ? { show_alert: true } : {}),
+    }).catch(() => {});
     return;
   }
 

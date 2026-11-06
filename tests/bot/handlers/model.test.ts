@@ -85,6 +85,7 @@ function createDeps() {
       clear: mocked.interactionManagerClearMock,
     } as never,
     keyboardManager: {
+      getKeyboard: vi.fn(),
       initialize: mocked.keyboardInitializeMock,
       updateModel: mocked.keyboardUpdateModelMock,
       updateAgent: mocked.keyboardUpdateAgentMock,
