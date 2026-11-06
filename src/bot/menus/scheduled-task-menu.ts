@@ -22,10 +22,7 @@ function truncateText(text: string, maxLength: number): string {
 }
 
 function formatTaskButtonLabel(task: ScheduledTask): string {
-  const state =
-    task.kind === "cron"
-      ? `[${t(task.enabled === false ? "task.disabled" : "task.enabled")}] `
-      : "";
+  const state = task.kind === "cron" && task.enabled === false ? "💤 " : "⏰ ";
   const prefix = `${state}[${formatTaskListBadge(task)}]`;
   const prompt = task.prompt.replace(/\s+/g, " ").trim();
   return truncateText(`${prefix} ${prompt}`, MAX_INLINE_BUTTON_LABEL_LENGTH);

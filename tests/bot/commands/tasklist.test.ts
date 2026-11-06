@@ -155,6 +155,31 @@ describe("bot/commands/tasklist", () => {
     });
   });
 
+  it.each([
+    { name: "enabled cron", overrides: { enabled: true }, expected: "⏰ [hourly]" },
+    { name: "legacy cron", overrides: {}, expected: "⏰ [hourly]" },
+    { name: "disabled cron", overrides: { enabled: false }, expected: "💤 [hourly]" },
+    {
+      name: "once",
+      overrides: { kind: "once", runAt: "2099-03-20T12:00:00.000Z" },
+      expected: "⏰ [20 Mar 2099 12:00]",
+    },
+  ])("shows the correct list prefix for a $name task", async ({ overrides, expected }) => {
+    mocked.listScheduledTasksMock.mockReturnValue([createTask("task-1", overrides)]);
+
+    const ctx = createCommandContext();
+    await taskListCommand(ctx as never, createDeps());
+
+    const [, options] = defined((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]) as [
+      string,
+      { reply_markup: { inline_keyboard: Array<Array<{ text: string; callback_data?: string }>> } },
+    ];
+    expect(options.reply_markup.inline_keyboard[0]?.[0]).toMatchObject({
+      text: `${expected} Prompt for task-1`,
+      callback_data: "tasklist:open:task-1",
+    });
+  });
+
   it("opens task details without showing original schedule text", async () => {
     container.interactionManager.start({
       kind: "custom",
