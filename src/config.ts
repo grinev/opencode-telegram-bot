@@ -89,11 +89,50 @@ function getOptionalBooleanEnvVar(key: string, defaultValue: boolean): boolean {
 }
 
 export type OpencodeServerVersion = "v1" | "v2";
+export type OpencodeServerMode = "service" | "standalone";
 
 const DEFAULT_OPENCODE_API_URLS: Record<OpencodeServerVersion, string> = {
   v1: "http://localhost:4096",
   v2: "http://127.0.0.1:49374",
 };
+
+/**
+ * V1 ignores the mode. On V2, empty means the registered background server.
+ * A typo must not fall through to that path.
+ */
+export function resolveOpencodeServerMode(version: OpencodeServerVersion): OpencodeServerMode {
+  if (version !== "v2") {
+    return "service";
+  }
+
+  const raw = getEnvVar("OPENCODE_SERVER_MODE", false).trim().toLowerCase();
+  if (!raw || raw === "service") {
+    return "service";
+  }
+  if (raw === "standalone") {
+    return "standalone";
+  }
+
+  throw new Error(
+    "Invalid OPENCODE_SERVER_MODE. Expected service or standalone. " +
+      "Refusing to start, because an unknown value must not enable the V2 background server.",
+  );
+}
+
+/** Standalone never falls back to the V2 service port. */
+export function resolveOpencodeApiUrl(
+  version: OpencodeServerVersion,
+  mode: OpencodeServerMode,
+): string {
+  const fromEnv = getEnvVar("OPENCODE_API_URL", false).trim();
+  if (version === "v2" && mode === "standalone" && !fromEnv) {
+    throw new Error(
+      "OPENCODE_SERVER_MODE=standalone requires OPENCODE_API_URL. " +
+        "Refusing to default to the V2 service port.",
+    );
+  }
+  return fromEnv || DEFAULT_OPENCODE_API_URLS[version];
+}
 
 function getOptionalOpencodeServerVersionEnvVar(key: string): OpencodeServerVersion {
   const normalized = getEnvVar(key, false).trim().toLowerCase();
@@ -216,13 +255,14 @@ export function buildTelegramConfig(): {
 }
 
 const opencodeServerVersion = getOptionalOpencodeServerVersionEnvVar("OPENCODE_SERVER_VERSION");
+const opencodeServerMode = resolveOpencodeServerMode(opencodeServerVersion);
 
 export const config = {
   telegram: buildTelegramConfig(),
   opencode: {
     serverVersion: opencodeServerVersion,
-    apiUrl:
-      getEnvVar("OPENCODE_API_URL", false) || DEFAULT_OPENCODE_API_URLS[opencodeServerVersion],
+    serverMode: opencodeServerMode,
+    apiUrl: resolveOpencodeApiUrl(opencodeServerVersion, opencodeServerMode),
     username: getEnvVar("OPENCODE_SERVER_USERNAME", false) || "opencode",
     password: getEnvVar("OPENCODE_SERVER_PASSWORD", false),
     autoRestartEnabled: getOptionalBooleanEnvVar("OPENCODE_AUTO_RESTART_ENABLED", false),

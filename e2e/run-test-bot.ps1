@@ -33,6 +33,7 @@ $forwardPidFile = Join-Path $forwardDir "proxy.pid"
 $forwardPort = 8766
 $forwardProxyUrl = "${ForwardProxy}://127.0.0.1:$forwardPort"
 $opencodeStateHome = Join-Path $projectRoot ".tmp\e2e\opencode-state"
+$opencodePidFile = Join-Path $projectRoot ".tmp\e2e\opencode-server.pid"
 
 function Get-TestEnvValue([string]$name) {
     $line = Get-Content $sourceEnv | Where-Object { $_ -match "^\s*$name\s*=" } | Select-Object -Last 1
@@ -255,12 +256,19 @@ $previousServerVersion = $env:OPENCODE_SERVER_VERSION
 $previousServerPassword = $env:OPENCODE_SERVER_PASSWORD
 $previousStateHome = $env:XDG_STATE_HOME
 $previousConfigDir = $env:OPENCODE_CONFIG_DIR
+$previousServerMode = $env:OPENCODE_SERVER_MODE
+$previousStandPidFile = $env:OPENCODE_STAND_PID_FILE
 if ($opencodeBin) { $env:PATH = "$opencodeBin;$env:PATH" }
 if ($OpencodeVersion) { $env:OPENCODE_SERVER_VERSION = $OpencodeVersion }
+# Both versions record the spawned server so teardown can tell it from another
+# listener on the test port. The path is stand-internal, not a user setting.
+$env:OPENCODE_STAND_PID_FILE = $opencodePidFile
 if ($effectiveOpencodeVersion -eq "v2") {
     $env:OPENCODE_SERVER_PASSWORD = $opencodePassword
-    # V2 keeps one registered background server per user, recorded under XDG_STATE_HOME.
-    # A state home of the stand's own keeps its server from replacing the user's one.
+    # Standalone is what keeps this launch off the user's background service.
+    # A separate state home is not that guarantee; it only keeps registration
+    # files this process might still write out of the user's state dir.
+    $env:OPENCODE_SERVER_MODE = "standalone"
     $env:XDG_STATE_HOME = $opencodeStateHome
     # V2 reads OPENCODE_CONFIG_DIR instead of ~/.config/opencode, not on top of it: a
     # directory inherited from the caller would hide the user's config and its password.
@@ -282,6 +290,8 @@ try {
     Restore-EnvValue "OPENCODE_SERVER_PASSWORD" $previousServerPassword
     Restore-EnvValue "XDG_STATE_HOME" $previousStateHome
     Restore-EnvValue "OPENCODE_CONFIG_DIR" $previousConfigDir
+    Restore-EnvValue "OPENCODE_SERVER_MODE" $previousServerMode
+    Restore-EnvValue "OPENCODE_STAND_PID_FILE" $previousStandPidFile
     if ($FaultProxy) {
         Restore-EnvValue "TELEGRAM_API_ROOT" $previousApiRoot
     }

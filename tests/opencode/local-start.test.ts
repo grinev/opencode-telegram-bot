@@ -5,6 +5,7 @@ const mocked = vi.hoisted(() => ({
   findRegisteredMock: vi.fn(),
   readLocalVersionMock: vi.fn(),
   serverVersion: "v2" as "v1" | "v2",
+  serverMode: "service" as "service" | "standalone",
   loggerWarnMock: vi.fn(),
   loggerErrorMock: vi.fn(),
 }));
@@ -25,7 +26,12 @@ vi.mock("../../src/opencode/process.js", async (importOriginal) => ({
 
 vi.mock("../../src/config.js", () => ({
   config: {
-    opencode: { apiUrl: "http://127.0.0.1:4097" },
+    opencode: {
+      apiUrl: "http://127.0.0.1:4097",
+      get serverMode() {
+        return mocked.serverMode;
+      },
+    },
   },
 }));
 
@@ -81,6 +87,7 @@ describe("opencode/local-start", () => {
     __resetServerHealthStateForTests();
     __resetOpencodeServerTargetForTests();
     mocked.serverVersion = "v2";
+    mocked.serverMode = "service";
     mocked.probeMock.mockReset();
     mocked.probeMock.mockResolvedValue({ kind: "none" });
     mocked.findRegisteredMock.mockReset();
@@ -139,6 +146,33 @@ describe("opencode/local-start", () => {
     expect(errorMessage()).toContain("OPENCODE_SERVER_VERSION=v2");
     expect(errorMessage()).toContain("OpenCode 1.18.32 (API v1)");
     expect(mocked.findRegisteredMock).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt or refuse on a registered server in standalone mode", async () => {
+    mocked.serverMode = "standalone";
+    mocked.findRegisteredMock.mockResolvedValue(REGISTERED);
+    answerProbes(v2At(REGISTERED.url, "2.1.3"));
+
+    await expect(resolveUnavailableOpencodeServer(TARGET, "always")).resolves.toEqual({
+      kind: "start",
+    });
+    expect(mocked.findRegisteredMock).not.toHaveBeenCalled();
+    expect(isOnConfiguredOpencodeServer()).toBe(true);
+    expect(mocked.loggerErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("still refuses a configured server that rejects credentials in standalone mode", async () => {
+    mocked.serverMode = "standalone";
+    answerProbes((version) => (version === "v2" ? { kind: "unauthorized" } : { kind: "none" }));
+    mocked.findRegisteredMock.mockResolvedValue(REGISTERED);
+
+    await expect(resolveUnavailableOpencodeServer(TARGET, "always")).resolves.toEqual({
+      kind: "refuse",
+    });
+    expect(mocked.findRegisteredMock).not.toHaveBeenCalled();
+    expect(mocked.loggerWarnMock).toHaveBeenCalledWith(
+      expect.stringContaining("Authentication failed"),
+    );
   });
 
   it("connects to a registered V2 server on another port that answers with its credentials", async () => {

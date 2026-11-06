@@ -1,3 +1,4 @@
+import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 import {
   findRegisteredOpencodeServer,
@@ -56,7 +57,8 @@ async function findRegisteredServerOnAnotherPort(
   target: LocalOpencodeTarget,
   mode: ProblemReportMode,
 ): Promise<RegisteredServerLookup> {
-  if (opencodeServerVersion !== "v2") {
+  // Standalone must not discover, adopt, or refuse because of a registered server.
+  if (opencodeServerVersion !== "v2" || config.opencode.serverMode === "standalone") {
     return { kind: "none" };
   }
 

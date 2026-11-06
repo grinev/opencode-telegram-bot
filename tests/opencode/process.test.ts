@@ -5,12 +5,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 
 import {
+  clearStandServerPid,
   createOpencodeServeSpawnCommand,
   findUnixListeningPidInSs,
   findWindowsListeningPidInNetstat,
   getOpencodeApiVersion,
   parseOpencodeVersionOutput,
   readNpmShimTarget,
+  recordStandServerPid,
   resolvePosixOpencodeExecutable,
 } from "../../src/opencode/process.js";
 
@@ -302,10 +304,25 @@ describe("opencode/process", () => {
     }
   });
 
-  it("starts the registered background server for OpenCode V2", () => {
-    const command = createOpencodeServeSpawnCommand({ host: "127.0.0.1", port: 4097 }, "v2");
+  it("starts the registered background server for OpenCode V2 service mode", () => {
+    const command = createOpencodeServeSpawnCommand(
+      { host: "127.0.0.1", port: 4097 },
+      "v2",
+      "service",
+    );
 
     expect(command.args.slice(-4)).toEqual(["serve", "--service", "--port", "4097"]);
+  });
+
+  it("starts a plain server for OpenCode V2 standalone mode", () => {
+    const command = createOpencodeServeSpawnCommand(
+      { host: "127.0.0.1", port: 4097 },
+      "v2",
+      "standalone",
+    );
+
+    expect(command.args.slice(-3)).toEqual(["serve", "--port", "4097"]);
+    expect(command.args).not.toContain("--service");
   });
 
   it("reads the exe an npm shim runs", () => {
@@ -361,5 +378,30 @@ describe("opencode/process", () => {
     expect(getOpencodeApiVersion("2.0.16")).toBe("v2");
     expect(getOpencodeApiVersion("1.18.32")).toBe("v1");
     expect(getOpencodeApiVersion("0.15.0")).toBe("v1");
+  });
+
+  it("records and clears only the stand server pid the launcher asked for", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-telegram-bot-"));
+    const pidFile = path.join(tempRoot, "opencode-server.pid");
+    const previous = process.env.OPENCODE_STAND_PID_FILE;
+
+    try {
+      process.env.OPENCODE_STAND_PID_FILE = pidFile;
+      recordStandServerPid(4242);
+      expect(fs.readFileSync(pidFile, "utf8").trim()).toBe("4242");
+
+      clearStandServerPid(111);
+      expect(fs.existsSync(pidFile)).toBe(true);
+
+      clearStandServerPid(4242);
+      expect(fs.existsSync(pidFile)).toBe(false);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENCODE_STAND_PID_FILE;
+      } else {
+        process.env.OPENCODE_STAND_PID_FILE = previous;
+      }
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });

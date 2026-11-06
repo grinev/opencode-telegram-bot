@@ -3,8 +3,10 @@
 #
 # POSIX counterpart of stop-test-bot.ps1. Deliberately narrow: it only touches
 # processes that provably belong to the test setup.
-#   - OpenCode: whatever listens on the port from e2e/.env (OPENCODE_API_URL).
-#     Your working OpenCode on another port is never touched.
+#   - OpenCode: the pid recorded in .tmp/e2e/opencode-server.pid, and only when
+#     that pid is still the listener on the port from e2e/.env. No recorded pid,
+#     or a different listener on that port, is left alone. Your working OpenCode
+#     on another port is never touched.
 #   - Bot: node processes whose pid appears in a log file name inside
 #     .tmp/e2e/home/logs. A production bot started from the same dist/ writes to
 #     a different home, so it is not matched.
@@ -34,6 +36,7 @@ project_root="$(dirname "$script_dir")"
 test_home="$project_root/.tmp/e2e/home"
 logs_dir="$test_home/logs"
 source_env="$script_dir/.env"
+opencode_pid_file="$project_root/.tmp/e2e/opencode-server.pid"
 proxy_pid_file="$project_root/.tmp/e2e/fault-proxy/proxy.pid"
 forward_pid_file="$project_root/.tmp/e2e/forward-proxy/proxy.pid"
 
@@ -50,29 +53,46 @@ fi
 
 echo "OpenCode port from config: $port"
 
-find_listener() {
+# Every listener, not the first. lsof can list ::1 ahead of 127.0.0.1.
+listening_pids() {
   if command -v lsof >/dev/null 2>&1; then
-    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null
   elif command -v ss >/dev/null 2>&1; then
-    ss -ltnp 2>/dev/null | awk -v p=":$port\$" '$4 ~ p' | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n 1
+    ss -ltnp 2>/dev/null | awk -v p=":$port\$" '$4 ~ p' | sed -n 's/.*pid=\([0-9]*\).*/\1/p'
   fi
 }
 
-oc_pid="$(find_listener)"
-if [ -n "${oc_pid:-}" ]; then
-  echo "  stopping OpenCode: PID $oc_pid"
-  kill "$oc_pid" 2>/dev/null || true
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    kill -0 "$oc_pid" 2>/dev/null || break
-    sleep 0.3
-  done
-  if kill -0 "$oc_pid" 2>/dev/null; then
-    echo "  still alive, forcing"
-    kill -9 "$oc_pid" 2>/dev/null || true
-  fi
-  echo "  stopped"
+recorded_pid_is_listening() {
+  listening_pids | grep -qx "$1"
+}
+
+recorded_pid=""
+if [ -f "$opencode_pid_file" ]; then
+  recorded_pid="$(tr -d '[:space:]' < "$opencode_pid_file")"
+  case "$recorded_pid" in
+    ''|*[!0-9]*) recorded_pid="" ;;
+  esac
+fi
+
+if [ -z "$recorded_pid" ]; then
+  echo "  no recorded stand server pid; leaving port $port alone"
 else
-  echo "  nothing listening on $port"
+  if ! recorded_pid_is_listening "$recorded_pid"; then
+    echo "  recorded PID $recorded_pid is not listening on $port; leaving the port alone"
+  else
+    echo "  stopping OpenCode: PID $recorded_pid"
+    kill "$recorded_pid" 2>/dev/null || true
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      kill -0 "$recorded_pid" 2>/dev/null || break
+      sleep 0.3
+    done
+    if kill -0 "$recorded_pid" 2>/dev/null; then
+      echo "  still alive, forcing"
+      kill -9 "$recorded_pid" 2>/dev/null || true
+    fi
+    rm -f "$opencode_pid_file"
+    echo "  stopped"
+  fi
 fi
 
 # --- Test bot -------------------------------------------------------------
@@ -131,7 +151,7 @@ stop_test_proxy "$forward_pid_file" forward-proxy.mjs "forward proxy"
 
 sleep 0.5
 echo
-if [ -n "$(find_listener)" ]; then
+if [ -n "$(listening_pids)" ]; then
   echo "WARNING: port $port is still in use."
 else
   echo "Port $port is free."

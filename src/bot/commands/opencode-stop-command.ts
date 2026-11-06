@@ -2,6 +2,7 @@ import { CommandContext, Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { getActiveOpencodeServer } from "../../opencode/server-target.js";
 import {
+  clearStandServerPid,
   findServerPid,
   killServerProcess,
   resolveLocalOpencodeTarget,
@@ -103,6 +104,7 @@ export async function opencodeStopCommand(
       return;
     }
 
+    clearStandServerPid(pid);
     await releaseLocalStateAfterServerStop(deps);
 
     await editBotText({

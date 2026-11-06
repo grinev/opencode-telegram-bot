@@ -202,13 +202,13 @@ The bot works with both the classic OpenCode V1 (`opencode-ai`) and the new Open
 
 |             | V1                      | V2                                                                   |
 | ----------- | ----------------------- | -------------------------------------------------------------------- |
-| Server      | `opencode serve`        | background service (`opencode service start`) or `opencode serve`    |
-| Default URL | `http://localhost:4096` | `http://127.0.0.1:49374`                                             |
-| Password    | optional                | required: `opencode service get password`, or printed by `opencode serve` |
+| Server      | `opencode serve`        | background service (`opencode serve --service`) by default; `opencode serve` without `--service` when `OPENCODE_SERVER_MODE=standalone` |
+| Default URL | `http://localhost:4096` | `http://127.0.0.1:49374` (service). Standalone has no default: set `OPENCODE_API_URL` |
+| Password    | optional                | required: `opencode service get password`, or `OPENCODE_SERVER_PASSWORD` for a standalone server |
 
 Set `OPENCODE_API_URL` (host and port, no `/api` suffix) if the server runs elsewhere. Sessions are not shared between the versions. A wrong password or a server of the other version shows up as an error in the bot log.
 
-`/opencode_start` and auto-restart run `opencode serve --port <port>` on V1 and the V2 background server (`opencode serve --service --port <port>`) on V2, with the port taken from `OPENCODE_API_URL`. The bot refuses to start a server and logs the reason if the password is rejected, if the server or the local `opencode` is the other version, or if another V2 background server already runs on a different port. With both versions installed, the bot starts whichever one the `opencode` command runs.
+`/opencode_start` and auto-restart run `opencode serve --port <port>` on V1 and, on V2, the background server (`opencode serve --service --port <port>`) unless `OPENCODE_SERVER_MODE=standalone`. Standalone runs `opencode serve --port <port>` without `--service` on an explicit `OPENCODE_API_URL` and does not connect to a registered server on another port. The port is taken from `OPENCODE_API_URL`. The bot refuses to start a server and logs the reason if the password is rejected, if the server or the local `opencode` is the other version, or, in service mode, if another V2 background server already runs on a different port. An unknown mode, or standalone without `OPENCODE_API_URL`, refuses bot startup instead. With both versions installed, the bot starts whichever one the `opencode` command runs. V1 ignores `OPENCODE_SERVER_MODE`.
 
 ## Configuration
 
@@ -249,6 +249,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `TELEGRAM_PROXY_SECRET`                    | Shared secret sent as `X-Proxy-Secret` header on every Bot API request and file download (used with `TELEGRAM_API_ROOT`) | No | —                        |
 | `TELEGRAM_FORCE_IPV4`                      | Force IPv4 for direct Telegram API and file requests; useful when IPv6 DNS works but outbound IPv6 is broken           |    No    | `false`                  |
 | `OPENCODE_SERVER_VERSION`                  | OpenCode server API version: `v1` or `v2`; must match the server you run; set by the setup wizard                     |    No    | `v1`                     |
+| `OPENCODE_SERVER_MODE`                     | V2 only: `service` (default) or `standalone`. Standalone needs `OPENCODE_API_URL` and does not follow a registered server. V1 ignores it. An unknown value refuses startup |    No    | `service`                |
 | `OPENCODE_API_URL`                         | OpenCode server URL                                                                                                   |    No    | `http://localhost:4096` (V1), `http://127.0.0.1:49374` (V2) |
 | `OPENCODE_AUTO_RESTART_ENABLED`            | Automatically restart a local OpenCode server when health-checks fail                                                 |    No    | `false`                  |
 | `OPENCODE_MONITOR_INTERVAL_SEC`            | Health monitor interval in seconds when OpenCode auto-restart is enabled                                              |    No    | `300`                    |
