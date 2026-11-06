@@ -31,11 +31,6 @@ function getSettingsBackupFilePath(): string {
   return `${getSettingsFilePath()}.bak`;
 }
 
-// Lives next to the target file so the rename never crosses a volume boundary.
-function getSettingsTempFilePath(): string {
-  return `${getSettingsFilePath()}.tmp`;
-}
-
 // Set when settings were recovered from the backup: the target file still holds
 // the damaged content, so rotating it into the backup would destroy the only
 // good copy. Cleared by the first successful write.
@@ -84,10 +79,13 @@ async function readSettingsFile(): Promise<Settings> {
   }
 }
 
-async function writeSettingsFileAtomically(settings: Settings): Promise<void> {
+async function writeSettingsFileAtomically(
+  settings: Settings,
+  settingsFilePath: string,
+): Promise<void> {
   const fs = await import("fs/promises");
-  const settingsFilePath = getSettingsFilePath();
-  const tempFilePath = getSettingsTempFilePath();
+  // Keep the temporary file on the same volume as the captured destination.
+  const tempFilePath = `${settingsFilePath}.tmp`;
 
   await fs.mkdir(path.dirname(settingsFilePath), { recursive: true });
 
@@ -96,7 +94,7 @@ async function writeSettingsFileAtomically(settings: Settings): Promise<void> {
 
     if (!skipNextBackupRotation) {
       try {
-        await fs.rename(settingsFilePath, getSettingsBackupFilePath());
+        await fs.rename(settingsFilePath, `${settingsFilePath}.bak`);
       } catch (error) {
         // Nothing to back up on the very first write.
         if (!isFileNotFound(error)) {
@@ -118,13 +116,14 @@ async function writeSettingsFileAtomically(settings: Settings): Promise<void> {
 let settingsWriteQueue: Promise<void> = Promise.resolve();
 
 function writeSettingsFile(settings: Settings): Promise<void> {
+  const settingsFilePath = getSettingsFilePath();
   settingsWriteQueue = settingsWriteQueue
     .catch(() => {
       // Keep write queue alive after failed writes.
     })
     .then(async () => {
       try {
-        await writeSettingsFileAtomically(settings);
+        await writeSettingsFileAtomically(settings, settingsFilePath);
       } catch (err) {
         logger.error("[SettingsManager] Error writing settings file:", err);
       }
@@ -343,11 +342,12 @@ export function setScheduledTasks(tasks: ScheduledTask[]): Promise<void> {
 }
 
 export function setScheduledTasksConfirmed(tasks: ScheduledTask[]): Promise<void> {
+  const settingsFilePath = getSettingsFilePath();
   const write = settingsWriteQueue.then(async () => {
-    await writeSettingsFileAtomically({
-      ...currentSettings,
-      scheduledTasks: cloneScheduledTasks(tasks),
-    });
+    await writeSettingsFileAtomically(
+      { ...currentSettings, scheduledTasks: cloneScheduledTasks(tasks) },
+      settingsFilePath,
+    );
     currentSettings.scheduledTasks = cloneScheduledTasks(tasks);
   });
   settingsWriteQueue = write.catch((error: unknown) => {
@@ -369,7 +369,6 @@ export function setScheduledTaskSessionIgnores(
 
 export function __resetSettingsForTests(): void {
   currentSettings = {};
-  settingsWriteQueue = Promise.resolve();
   skipNextBackupRotation = false;
 }
 

@@ -1,6 +1,5 @@
-import os from "node:os";
-import path from "node:path";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
+import { createTestHome } from "../../helpers/test-environment.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
 import { setRuntimeMode } from "../../../src/runtime/mode.js";
@@ -60,7 +59,7 @@ describe("bot/services/event-subscription-service inbox after reconnect", () => 
     vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
     vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
     vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
-    vi.stubEnv("OPENCODE_TELEGRAM_HOME", await mkdtemp(path.join(os.tmpdir(), "inbox-reconnect-")));
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", await createTestHome("inbox-reconnect-"));
     tempHome = process.env.OPENCODE_TELEGRAM_HOME!;
     setRuntimeMode("installed");
 
@@ -89,6 +88,7 @@ describe("bot/services/event-subscription-service inbox after reconnect", () => 
     service?.cleanup("test_cleanup");
     service = null;
     const settingsStore = await import("../../../src/app/stores/settings-store.js");
+    await settingsStore.flushSettings();
     settingsStore.__resetSettingsForTests();
     vi.unstubAllEnvs();
     await rm(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });

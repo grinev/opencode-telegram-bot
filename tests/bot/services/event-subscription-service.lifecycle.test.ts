@@ -1,6 +1,5 @@
-import os from "node:os";
-import path from "node:path";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
+import { createTestHome } from "../../helpers/test-environment.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
 import type { Event } from "@opencode-ai/sdk/v2";
@@ -246,10 +245,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
     vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
     vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
     vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
-    vi.stubEnv(
-      "OPENCODE_TELEGRAM_HOME",
-      await mkdtemp(path.join(os.tmpdir(), "event-service-lifecycle-")),
-    );
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", await createTestHome("event-service-lifecycle-"));
     tempHome = process.env.OPENCODE_TELEGRAM_HOME!;
     setRuntimeMode("installed");
 
@@ -270,13 +266,11 @@ describe("bot/services/event-subscription-service lifecycle", () => {
 
   afterEach(async () => {
     vi.useRealTimers();
-    // Settings writes scheduled while timers were faked need a real tick to
-    // land before the temp home is removed.
-    await new Promise((resolve) => setTimeout(resolve, 20));
     activeService?.cleanup("test_cleanup");
     activeService = null;
 
     const settingsStore = await import("../../../src/app/stores/settings-store.js");
+    await settingsStore.flushSettings();
     settingsStore.__resetSettingsForTests();
     vi.unstubAllEnvs();
     await rm(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });

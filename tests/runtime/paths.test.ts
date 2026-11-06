@@ -1,7 +1,11 @@
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setRuntimeMode } from "../../src/runtime/mode.js";
-import { getRuntimePaths } from "../../src/runtime/paths.js";
+
+// Resolver contracts are read-only; application modules keep the isolation boundary.
+const { getRuntimePaths } = await vi.importActual<typeof import("../../src/runtime/paths.js")>(
+  "../../src/runtime/paths.js",
+);
 
 function setPlatform(platform: NodeJS.Platform): () => void {
   const originalPlatform = process.platform;

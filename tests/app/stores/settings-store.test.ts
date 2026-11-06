@@ -1,6 +1,6 @@
-import os from "node:os";
 import path from "node:path";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, readFile, rm, writeFile } from "node:fs/promises";
+import { createTestHome } from "../../helpers/test-environment.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { config } from "../../../src/config.js";
 import { setRuntimeMode } from "../../../src/runtime/mode.js";
@@ -22,6 +22,7 @@ import {
   setCompactOutputMode,
   setPromptQueueMode,
   setScheduledTasks,
+  setScheduledTasksConfirmed,
   setResponseStreamingMode,
   setSendDiffFileAttachments,
   setShowAssistantRunFooter,
@@ -34,15 +35,16 @@ describe("app/stores/settings-store", () => {
 
   beforeEach(async () => {
     delete process.env.INITIAL_SETTINGS_PRESET;
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "opencode-telegram-settings-store-"));
-    process.env.OPENCODE_TELEGRAM_HOME = tempHome;
+    tempHome = await createTestHome("opencode-telegram-settings-store-");
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
     setRuntimeMode("installed");
     __resetSettingsForTests();
   });
 
   afterEach(async () => {
-    delete process.env.OPENCODE_TELEGRAM_HOME;
+    await flushSettings();
     __resetSettingsForTests();
+    vi.unstubAllEnvs();
     await rm(tempHome, { recursive: true, force: true });
   });
 
@@ -60,6 +62,7 @@ describe("app/stores/settings-store", () => {
       await loadSettings();
 
       expect(getTtsMode()).toBe(expectedMode);
+      await flushSettings();
     },
   );
 
@@ -228,6 +231,7 @@ describe("app/stores/settings-store", () => {
     expect(store.getPinnedDashboardEnabled()).toBe(false);
     expect(store.getShowBackgroundSessionNotifications()).toBe(false);
 
+    await store.flushSettings();
     vi.unstubAllEnvs();
     vi.resetModules();
   });
@@ -246,6 +250,7 @@ describe("app/stores/settings-store", () => {
 
     expect(store.getShowAssistantRunFooter()).toBe(true);
 
+    await store.flushSettings();
     vi.unstubAllEnvs();
     vi.resetModules();
   });
@@ -264,6 +269,7 @@ describe("app/stores/settings-store", () => {
 
     expect(store.getShowBackgroundSessionNotifications()).toBe(true);
 
+    await store.flushSettings();
     vi.unstubAllEnvs();
     vi.resetModules();
   });
@@ -414,6 +420,7 @@ describe("app/stores/settings-store", () => {
 
     expect(store.getPromptQueueMode()).toBe("queue");
 
+    await store.flushSettings();
     vi.unstubAllEnvs();
     vi.resetModules();
   });
@@ -428,6 +435,7 @@ describe("app/stores/settings-store", () => {
 
     expect(store.getPromptQueueMode()).toBe("steer");
 
+    await store.flushSettings();
     vi.unstubAllEnvs();
     vi.resetModules();
   });
@@ -476,6 +484,68 @@ describe("app/stores/settings-store", () => {
     const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
     expect(settings.compactOutputMode).toBe(true);
     expect(settings.showThinkingContent).toBe(false);
+  });
+
+  it.each(["setter", "confirmed tasks"])(
+    "keeps a queued %s write in its original home after environment restoration and reset",
+    async (kind) => {
+      const otherHome = await createTestHome("opencode-settings-other-");
+      const sentinel = '{"currentAgent":"keep-me"}';
+      await writeFile(path.join(otherHome, "settings.json"), sentinel);
+      await writeFile(path.join(otherHome, "settings.json.bak"), sentinel);
+      try {
+        await loadSettings();
+        if (kind === "setter") {
+          setCompactOutputMode(true);
+        } else {
+          void setScheduledTasksConfirmed([]);
+        }
+        vi.stubEnv("OPENCODE_TELEGRAM_HOME", otherHome);
+        __resetSettingsForTests();
+        await flushSettings();
+
+        expect(await readFile(path.join(otherHome, "settings.json"), "utf8")).toBe(sentinel);
+        expect(await readFile(path.join(otherHome, "settings.json.bak"), "utf8")).toBe(sentinel);
+        await expect(access(path.join(otherHome, "settings.json.tmp"))).rejects.toThrow();
+        await expect(access(path.join(tempHome, "settings.json"))).resolves.toBeUndefined();
+      } finally {
+        await flushSettings();
+        await rm(otherHome, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("keeps backup rotation beside the primary when the environment changes during a write", async () => {
+    const otherHome = await createTestHome("opencode-settings-rotation-");
+    const original = '{"compactOutputMode":false}';
+    const sentinel = '{"currentAgent":"backup-must-stay"}';
+    await writeFile(path.join(tempHome, "settings.json"), original);
+    await writeFile(path.join(otherHome, "settings.json.bak"), sentinel);
+    const originalFs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+    vi.doMock("fs/promises", () => ({
+      ...originalFs,
+      writeFile: async (...args: Parameters<typeof originalFs.writeFile>) => {
+        await originalFs.writeFile(...args);
+        if (args[0] === path.join(tempHome, "settings.json.tmp")) {
+          vi.stubEnv("OPENCODE_TELEGRAM_HOME", otherHome);
+        }
+      },
+    }));
+    try {
+      await loadSettings();
+      setCompactOutputMode(true);
+      await flushSettings();
+      expect(process.env.OPENCODE_TELEGRAM_HOME).toBe(otherHome);
+      expect(await readFile(path.join(tempHome, "settings.json.bak"), "utf8")).toBe(original);
+      expect(await readFile(path.join(otherHome, "settings.json.bak"), "utf8")).toBe(sentinel);
+      expect(
+        JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf8")),
+      ).toMatchObject({ compactOutputMode: true });
+    } finally {
+      await flushSettings();
+      vi.doUnmock("fs/promises");
+      await rm(otherHome, { recursive: true, force: true });
+    }
   });
 
   describe("atomic writes and backup recovery", () => {

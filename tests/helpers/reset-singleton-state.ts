@@ -17,6 +17,7 @@ export async function resetSingletonState(): Promise<void> {
     configReloadModule,
     loggerModule,
     attachServiceModule,
+    settingsModule,
   ] = await Promise.all([
     import("../../src/opencode/events.js"),
     import("../../src/app/services/session-cache-service.js"),
@@ -35,6 +36,7 @@ export async function resetSingletonState(): Promise<void> {
     import("../../src/app/services/config-reload-service.js"),
     import("../../src/utils/logger.js"),
     import("../../src/app/services/attach-service.js"),
+    import("../../src/app/stores/settings-store.js"),
   ]);
 
   stopEventListening();
@@ -48,6 +50,16 @@ export async function resetSingletonState(): Promise<void> {
   __resetSessionDirectoryCacheForTests();
   __resetServerHealthStateForTests();
   __resetOpencodeServerTargetForTests();
+
+  if ("flushSettings" in settingsModule && typeof settingsModule.flushSettings === "function") {
+    await settingsModule.flushSettings();
+  }
+  if (
+    "__resetSettingsForTests" in settingsModule &&
+    typeof settingsModule.__resetSettingsForTests === "function"
+  ) {
+    settingsModule.__resetSettingsForTests();
+  }
 
   // Files that mock these modules may leave the reset out of the mock.
   if (

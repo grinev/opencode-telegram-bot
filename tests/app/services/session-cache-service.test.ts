@@ -1,9 +1,9 @@
-import os from "node:os";
 import path from "node:path";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
+import { createTestHome } from "../../helpers/test-environment.js";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { setRuntimeMode } from "../../../src/runtime/mode.js";
-import { loadSettings } from "../../../src/app/stores/settings-store.js";
+import { flushSettings, loadSettings } from "../../../src/app/stores/settings-store.js";
 import {
   __resetSessionDirectoryCacheForTests,
   getCachedSessionDirectories,
@@ -73,8 +73,8 @@ describe("session-cache-service", () => {
   let tempHome: string;
 
   beforeEach(async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "opencode-telegram-cache-"));
-    process.env.OPENCODE_TELEGRAM_HOME = tempHome;
+    tempHome = await createTestHome("opencode-telegram-cache-");
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
     setRuntimeMode("installed");
     await loadSettings();
     sessionListMock.mockReset();
@@ -85,7 +85,9 @@ describe("session-cache-service", () => {
   });
 
   afterEach(async () => {
-    delete process.env.OPENCODE_TELEGRAM_HOME;
+    await flushSettings();
+    __resetSessionDirectoryCacheForTests();
+    vi.unstubAllEnvs();
     await rm(tempHome, { recursive: true, force: true });
   });
 
