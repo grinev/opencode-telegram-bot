@@ -83,6 +83,7 @@ forward_pid_file="$forward_dir/proxy.pid"
 forward_port=8766
 forward_proxy_url="$forward_proxy://127.0.0.1:$forward_port"
 opencode_state_home="$project_root/.tmp/e2e/opencode-state"
+opencode_pid_file="$project_root/.tmp/e2e/opencode-server.pid"
 
 test_env_value() {
   grep -E "^[[:space:]]*$1[[:space:]]*=" "$source_env" | tail -n 1 |
@@ -194,10 +195,15 @@ export OPENCODE_TELEGRAM_HOME="$test_home"
 # exec below replaces this shell, so these reach the bot process only.
 [ -z "$opencode_bin" ] || export PATH="$opencode_bin:$PATH"
 [ -z "$opencode_version" ] || export OPENCODE_SERVER_VERSION="$opencode_version"
+# Both versions record the spawned server so teardown can tell it from another
+# listener on the test port. The path is stand-internal, not a user setting.
+export OPENCODE_STAND_PID_FILE="$opencode_pid_file"
 if [ "$effective_opencode_version" = "v2" ]; then
   export OPENCODE_SERVER_PASSWORD="$opencode_password"
-  # V2 keeps one registered background server per user, recorded under XDG_STATE_HOME.
-  # A state home of the stand's own keeps its server from replacing the user's one.
+  # Standalone is what keeps this launch off the user's background service.
+  # A separate state home is not that guarantee; it only keeps registration
+  # files this process might still write out of the user's state dir.
+  export OPENCODE_SERVER_MODE="standalone"
   export XDG_STATE_HOME="$opencode_state_home"
   # V2 reads OPENCODE_CONFIG_DIR instead of ~/.config/opencode, not on top of it: a
   # directory inherited from the caller would hide the user's config and its password.

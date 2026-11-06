@@ -5,10 +5,105 @@ async function loadConfigModule() {
   return import("../src/config.js");
 }
 
+async function loadOpencodeEnvResolvers() {
+  const module = await loadConfigModule();
+  return {
+    resolveOpencodeServerMode: module.resolveOpencodeServerMode,
+    resolveOpencodeApiUrl: module.resolveOpencodeApiUrl,
+  };
+}
+
 async function loadConfig() {
   const module = await loadConfigModule();
   return module.config;
 }
+
+beforeEach(() => {
+  vi.stubEnv("OPENCODE_SERVER_MODE", "");
+});
+
+describe("opencode server mode", () => {
+  beforeEach(() => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-telegram-token");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
+    vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
+    vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
+    vi.stubEnv("OPENCODE_SERVER_VERSION", "v2");
+    vi.stubEnv("OPENCODE_API_URL", "");
+    vi.stubEnv("OPENCODE_SERVER_MODE", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    delete process.env.OPENCODE_SERVER_MODE;
+    delete process.env.OPENCODE_SERVER_VERSION;
+    delete process.env.OPENCODE_API_URL;
+    delete process.env.OPENCODE_SERVER_PASSWORD;
+  });
+
+  it("treats an unset or empty V2 mode as service and keeps the default URL", async () => {
+    const config = await loadConfig();
+
+    expect(config.opencode.serverMode).toBe("service");
+    expect(config.opencode.apiUrl).toBe("http://127.0.0.1:49374");
+  });
+
+  it("treats whitespace-only mode as service", async () => {
+    vi.stubEnv("OPENCODE_SERVER_MODE", "   ");
+
+    const config = await loadConfig();
+
+    expect(config.opencode.serverMode).toBe("service");
+  });
+
+  it("accepts standalone when the URL is explicit", async () => {
+    vi.stubEnv("OPENCODE_SERVER_MODE", "Standalone");
+    vi.stubEnv("OPENCODE_API_URL", "http://127.0.0.1:4097");
+
+    const config = await loadConfig();
+
+    expect(config.opencode.serverMode).toBe("standalone");
+    expect(config.opencode.apiUrl).toBe("http://127.0.0.1:4097");
+  });
+
+  it("refuses standalone without an explicit URL and does not mention a password", async () => {
+    vi.stubEnv("OPENCODE_SERVER_PASSWORD", "secret-password");
+    const { resolveOpencodeApiUrl } = await loadOpencodeEnvResolvers();
+
+    expect(() => resolveOpencodeApiUrl("v2", "standalone")).toThrow(/OPENCODE_API_URL/);
+    try {
+      resolveOpencodeApiUrl("v2", "standalone");
+    } catch (error) {
+      expect(String(error)).not.toContain("secret-password");
+    }
+  });
+
+  it("refuses an unknown V2 mode instead of falling through to service", async () => {
+    vi.stubEnv("OPENCODE_SERVER_PASSWORD", "secret-password");
+    const { resolveOpencodeServerMode } = await loadOpencodeEnvResolvers();
+    vi.stubEnv("OPENCODE_SERVER_MODE", "banana");
+
+    expect(() => resolveOpencodeServerMode("v2")).toThrow(/OPENCODE_SERVER_MODE/);
+    try {
+      resolveOpencodeServerMode("v2");
+    } catch (error) {
+      const message = String(error);
+      expect(message).not.toContain("secret-password");
+      expect(message).not.toContain("banana");
+    }
+  });
+
+  it("ignores an unknown mode on V1 and keeps the V1 URL default", async () => {
+    vi.stubEnv("OPENCODE_SERVER_VERSION", "v1");
+    vi.stubEnv("OPENCODE_SERVER_MODE", "banana");
+
+    const config = await loadConfig();
+
+    expect(config.opencode.serverVersion).toBe("v1");
+    expect(config.opencode.serverMode).toBe("service");
+    expect(config.opencode.apiUrl).toBe("http://localhost:4096");
+  });
+});
 
 describe("config boolean env parsing", () => {
   beforeEach(() => {

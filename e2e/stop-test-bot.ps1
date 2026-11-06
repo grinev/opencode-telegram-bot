@@ -2,8 +2,10 @@
 #
 # Deliberately narrow: it only touches processes that provably belong to the
 # test setup.
-#   - OpenCode: whatever listens on the port from e2e/.env (OPENCODE_API_URL).
-#     Your working OpenCode on another port is never touched.
+#   - OpenCode: the pid recorded in .tmp/e2e/opencode-server.pid, and only when
+#     that pid is still the listener on the port from e2e/.env. No recorded pid,
+#     or a different listener on that port, is left alone. Your working OpenCode
+#     on another port is never touched.
 #   - Bot: node processes whose pid appears in a log file name inside
 #     .tmp/e2e/home/logs. A production bot started from the same dist/ writes to
 #     a different home, so it is not matched.
@@ -24,6 +26,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $testHome = Join-Path $projectRoot ".tmp\e2e\home"
 $logsDir = Join-Path $testHome "logs"
 $sourceEnv = Join-Path $PSScriptRoot ".env"
+$opencodePidFile = Join-Path $projectRoot ".tmp\e2e\opencode-server.pid"
 $proxyPidFile = Join-Path $projectRoot ".tmp\e2e\fault-proxy\proxy.pid"
 $forwardPidFile = Join-Path $projectRoot ".tmp\e2e\forward-proxy\proxy.pid"
 
@@ -39,19 +42,33 @@ if (Test-Path $sourceEnv) {
 
 Write-Host "OpenCode port from config: $port"
 
-$listener = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($listener) {
-    $ocPid = $listener.OwningProcess
-    $ocProc = Get-Process -Id $ocPid -ErrorAction SilentlyContinue
-    Write-Host "  stopping OpenCode: PID $ocPid ($($ocProc.ProcessName))"
-    try {
-        Stop-Process -Id $ocPid -Force -ErrorAction Stop
-        Write-Host "  stopped"
-    } catch {
-        Write-Warning "  failed to stop PID ${ocPid}: $($_.Exception.Message)"
+$recordedPid = 0
+if (Test-Path $opencodePidFile) {
+    $parsedPid = 0
+    if ([int]::TryParse((Get-Content $opencodePidFile -Raw).Trim(), [ref]$parsedPid) -and $parsedPid -gt 0) {
+        $recordedPid = $parsedPid
     }
+}
+
+if ($recordedPid -eq 0) {
+    Write-Host "  no recorded stand server pid; leaving port $port alone"
 } else {
-    Write-Host "  nothing listening on $port"
+    $listener = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+        Where-Object { $_.OwningProcess -eq $recordedPid } |
+        Select-Object -First 1
+    if (-not $listener) {
+        Write-Host "  recorded PID $recordedPid is not listening on $port; leaving the port alone"
+    } else {
+        $ocProc = Get-Process -Id $recordedPid -ErrorAction SilentlyContinue
+        Write-Host "  stopping OpenCode: PID $recordedPid ($($ocProc.ProcessName))"
+        try {
+            Stop-Process -Id $recordedPid -Force -ErrorAction Stop
+            Remove-Item $opencodePidFile -Force -ErrorAction SilentlyContinue
+            Write-Host "  stopped"
+        } catch {
+            Write-Warning "  failed to stop PID ${recordedPid}: $($_.Exception.Message)"
+        }
+    }
 }
 
 # --- Test bot -------------------------------------------------------------

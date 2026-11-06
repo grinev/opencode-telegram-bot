@@ -14,7 +14,9 @@ Cost is deliberately minimal: one short prompt, no tool calls.
 
 - The bot was started from a fresh build (`.\e2e\run-test-bot.ps1`, no
   `-SkipBuild`) and printed `Bot @... started!`.
-- OpenCode is up (`/opencode_start` if not).
+- OpenCode is up. If `/status` says the server is down, `/opencode_start` from
+  the chat brings the stand's server up on the test port. That start does not
+  replace the user's OpenCode server. Do not start `opencode serve` by hand.
 - The pinned dashboard shows the project under test and an allowed model.
 
 ## Steps

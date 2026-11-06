@@ -22,7 +22,8 @@ a human does first.
 | `probes.js` | DOM probes and confirmed Telegram Web selectors |
 | `scenarios/` | Regression scenarios the subagent runs before any feature check |
 | `.tmp/e2e/home/` | Runtime state: `settings.json`, `logs/` |
-| `.tmp/e2e/opencode-state/` | The stand's OpenCode V2 state: its background server registration |
+| `.tmp/e2e/opencode-state/` | The stand's OpenCode V2 state directory. Not what keeps the user's server safe |
+| `.tmp/e2e/opencode-server.pid` | Pid of the OpenCode server the stand started |
 | `.tmp/e2e/fault-proxy/` | Fault proxy call logs and pid file |
 | `.tmp/e2e/forward-proxy/` | Forward proxy connection logs and pid file |
 | `.tmp/e2e/browser-profile/` | Persistent Telegram Web login |
@@ -87,21 +88,27 @@ The stand runs OpenCode V2 by default (`OPENCODE_SERVER_VERSION=v2` in
 ./e2e/run-test-bot.sh --opencode-version v1      # macOS / Linux
 ```
 
-Both versions use the same test port and are started from the chat with
-`/opencode_start`. For the bot process only, the launcher:
+Both versions use the same test port and are started and stopped from the chat
+with `/opencode_start` and `/opencode_stop`, including a fixture restart. Do not
+start `opencode serve` by hand. For the bot process only, the launcher:
 
 - puts the chosen version's global npm `bin` first on PATH (`@opencode/cli` for
   V2, `opencode-ai` for V1), since both install an `opencode` command and the bot
   starts whichever comes first. Without that install it warns and leaves PATH as is;
-- on V2, sets `XDG_STATE_HOME=.tmp/e2e/opencode-state`. V2 keeps one registered
-  background server per user, recorded there; a registration of the stand's own
-  keeps `/opencode_start` on 4097 from replacing your server on 49374. The
-  sessions database stays the shared one in `~/.local/share/opencode`, as on V1;
-- on V2, gives the bot `OPENCODE_SERVER_PASSWORD` from
-  `~/.config/opencode/service.json`, the file the V2 background server takes its
-  password from, and clears `OPENCODE_CONFIG_DIR`, which V2 reads instead of
-  `~/.config/opencode` rather than on top of it. The launch is refused when that
-  file has no password: set one with `opencode service set password <value>`.
+- records the spawned server pid in `.tmp/e2e/opencode-server.pid` on both
+  versions, so teardown can tell the stand's server from another listener on
+  4097;
+- on V2, forces `OPENCODE_SERVER_MODE=standalone`. `/opencode_start` then runs
+  `opencode serve` without `--service` on the test URL and does not adopt a
+  registered server on another port. That is what leaves the user's background
+  service on 49374 alone. A separate state home does not make `--service` safe;
+- on V2, still sets `XDG_STATE_HOME=.tmp/e2e/opencode-state` and gives the bot
+  `OPENCODE_SERVER_PASSWORD` from `~/.config/opencode/service.json`, the saved
+  service password, which the standalone server reads from the environment. It
+  clears `OPENCODE_CONFIG_DIR`, which V2 reads instead of `~/.config/opencode`
+  rather than on top of it. The launch is refused when that file has no
+  password: set one with `opencode service set password <value>`. The sessions
+  database stays the shared one in `~/.local/share/opencode`, as on V1.
 
 `/status` names the running version. Sessions are not shared between the
 versions, so after a switch the bot may drop its saved session.
@@ -117,10 +124,12 @@ When done:
 ```
 
 The subagent runs this itself at the end of every session. It only stops what
-the test setup started: the OpenCode server on the configured test port, bot
-processes whose pid appears in a `.tmp/e2e/home/logs` file name, and the fault
-or forward proxy named in `.tmp/e2e/fault-proxy/proxy.pid` or
-`.tmp/e2e/forward-proxy/proxy.pid`.
+the test setup started: the OpenCode server whose pid is recorded in
+`.tmp/e2e/opencode-server.pid`, and only when that pid is still listening on
+the test port; bot processes whose pid appears in a `.tmp/e2e/home/logs` file
+name; and the fault or forward proxy named in `.tmp/e2e/fault-proxy/proxy.pid`
+or `.tmp/e2e/forward-proxy/proxy.pid`. A different listener on the test port is
+left alone.
 
 The `.sh` scripts need the executable bit once they are committed:
 `git update-index --chmod=+x e2e/run-test-bot.sh e2e/stop-test-bot.sh`

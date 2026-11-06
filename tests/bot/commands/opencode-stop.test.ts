@@ -6,6 +6,7 @@ const mocked = vi.hoisted(() => ({
   resolveLocalOpencodeTargetMock: vi.fn(),
   findServerPidMock: vi.fn(),
   killServerProcessMock: vi.fn(),
+  clearStandServerPidMock: vi.fn(),
   editBotTextMock: vi.fn(),
   loggerInfoMock: vi.fn(),
   loggerErrorMock: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("../../../src/opencode/process.js", () => ({
   resolveLocalOpencodeTarget: mocked.resolveLocalOpencodeTargetMock,
   findServerPid: mocked.findServerPidMock,
   killServerProcess: mocked.killServerProcessMock,
+  clearStandServerPid: mocked.clearStandServerPidMock,
 }));
 
 vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
@@ -108,6 +110,7 @@ describe("bot/commands/opencode-stop-command", () => {
     mocked.resolveLocalOpencodeTargetMock.mockReset();
     mocked.findServerPidMock.mockReset();
     mocked.killServerProcessMock.mockReset();
+    mocked.clearStandServerPidMock.mockReset();
     mocked.editBotTextMock.mockReset();
     mocked.loggerInfoMock.mockReset();
     mocked.loggerErrorMock.mockReset();
@@ -192,6 +195,7 @@ describe("bot/commands/opencode-stop-command", () => {
 
     expect(ctx.reply).toHaveBeenCalledWith(t("opencode_stop.stopping", { pid: 456 }));
     expect(mocked.killServerProcessMock).toHaveBeenCalledWith(456, 5000);
+    expect(mocked.clearStandServerPidMock).toHaveBeenCalledWith(456);
     expect(mocked.clearRuntimeStateMock).toHaveBeenCalledWith("opencode_stop");
     expect(mocked.clearAllForegroundMock).toHaveBeenCalledWith("opencode_stop");
     expect(promptQueue.size()).toBe(0);
@@ -282,6 +286,7 @@ describe("bot/commands/opencode-stop-command", () => {
 
     expect(mocked.clearRuntimeStateMock).not.toHaveBeenCalled();
     expect(mocked.clearAllForegroundMock).not.toHaveBeenCalled();
+    expect(mocked.clearStandServerPidMock).not.toHaveBeenCalled();
     expect(mocked.editBotTextMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         text: t("opencode_stop.stop_error", { error: t("common.unknown_error") }),

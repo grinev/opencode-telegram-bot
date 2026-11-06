@@ -1,14 +1,25 @@
 import { exec, execFile, spawn, type ChildProcess } from "node:child_process";
-import { accessSync, constants as fsConstants, existsSync, readFileSync, statSync } from "node:fs";
+import {
+  accessSync,
+  constants as fsConstants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
-import type { OpencodeServerVersion } from "../config.js";
+import { config, type OpencodeServerMode, type OpencodeServerVersion } from "../config.js";
 import { logger } from "../utils/logger.js";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 const DEFAULT_OPENCODE_PORT = 4096;
+/** Stand-only. Not a published setting: the e2e launcher sets it, production does not. */
+const STAND_SERVER_PID_ENV = "OPENCODE_STAND_PID_FILE";
 const PROCESS_EXIT_POLL_MS = 100;
 const VERSION_READ_TIMEOUT_MS = 10_000;
 
@@ -192,16 +203,56 @@ function createOpencodeCommand(args: string[]): OpencodeServeSpawnCommand {
 }
 
 /**
- * V1 runs a plain server; V2 runs the registered background server (`--service`) so a
- * regular V2 CLI connects to it. The port applies to this launch only.
+ * V1 and V2 standalone run a plain server. V2 service mode runs the registered
+ * background server (`--service`) so a regular V2 CLI connects to it. The port
+ * applies to this launch only. The child inherits the bot environment, which is
+ * how a standalone server receives OPENCODE_SERVER_PASSWORD.
  */
 export function createOpencodeServeSpawnCommand(
   target: LocalOpencodeTarget,
   version: OpencodeServerVersion,
+  mode: OpencodeServerMode = config.opencode.serverMode,
 ): OpencodeServeSpawnCommand {
   const port = target.port.toString();
-  const serveArgs = version === "v2" ? ["serve", "--service"] : ["serve"];
+  const serveArgs = version === "v2" && mode === "service" ? ["serve", "--service"] : ["serve"];
   return createOpencodeCommand([...serveArgs, "--port", port]);
+}
+
+function standServerPidFile(): string | null {
+  const pidFile = process.env[STAND_SERVER_PID_ENV]?.trim();
+  return pidFile || null;
+}
+
+/** Records the server this process just spawned, so stand teardown can tell it from a stranger on the same port. */
+export function recordStandServerPid(pid: number | undefined): void {
+  const pidFile = standServerPidFile();
+  if (!pidFile || !pid) {
+    return;
+  }
+
+  mkdirSync(path.dirname(pidFile), { recursive: true });
+  writeFileSync(pidFile, `${pid}\n`, "utf8");
+}
+
+/** Drops the record only when the stopped pid is the one the stand started. */
+export function clearStandServerPid(pid: number): void {
+  const pidFile = standServerPidFile();
+  if (!pidFile) {
+    return;
+  }
+
+  let recorded = "";
+  try {
+    recorded = readFileSync(pidFile, "utf8").trim();
+  } catch {
+    return;
+  }
+
+  if (recorded !== String(pid)) {
+    return;
+  }
+
+  rmSync(pidFile, { force: true });
 }
 
 export function parseOpencodeVersionOutput(stdout: string): string | null {
@@ -234,11 +285,13 @@ export function startLocalOpencodeServer(
 ): ChildProcess {
   const spawnCommand = createOpencodeServeSpawnCommand(target, version);
 
-  return spawn(spawnCommand.command, spawnCommand.args, {
+  const child = spawn(spawnCommand.command, spawnCommand.args, {
     detached: true,
     stdio: "ignore",
     windowsHide: spawnCommand.windowsHide,
   });
+  recordStandServerPid(child.pid);
+  return child;
 }
 
 function parsePid(value: string): number | null {
