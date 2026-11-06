@@ -1,7 +1,7 @@
-import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdir, readFile, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createTestHome } from "../../helpers/test-environment.js";
 import { setRuntimeMode } from "../../../src/runtime/mode.js";
 import {
   __resetSettingsForTests,
@@ -55,16 +55,17 @@ describe("app/stores/scheduled-task-store", () => {
   let tempHome: string;
 
   beforeEach(async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "opencode-telegram-task-store-"));
-    process.env.OPENCODE_TELEGRAM_HOME = tempHome;
+    tempHome = await createTestHome("opencode-telegram-task-store-");
+    vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
     setRuntimeMode("installed");
     __resetSettingsForTests();
     await loadSettings();
   });
 
   afterEach(async () => {
-    delete process.env.OPENCODE_TELEGRAM_HOME;
+    await flushSettings();
     __resetSettingsForTests();
+    vi.unstubAllEnvs();
     await rm(tempHome, { recursive: true, force: true });
   });
 

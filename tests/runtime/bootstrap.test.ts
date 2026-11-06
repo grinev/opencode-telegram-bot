@@ -1,6 +1,5 @@
 import fs from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -12,6 +11,7 @@ import {
 } from "../../src/runtime/bootstrap.js";
 import { t } from "../../src/i18n/index.js";
 import { setRuntimeMode } from "../../src/runtime/mode.js";
+import { createTestHome } from "../helpers/test-environment.js";
 
 const ENV_EXAMPLE_CONTENT = fs.readFileSync(path.resolve(process.cwd(), ".env.example"), "utf-8");
 
@@ -242,7 +242,7 @@ describe("runtime/bootstrap installed configuration", () => {
   let stdoutTtyDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "opencode-telegram-bootstrap-"));
+    tempHome = await createTestHome("opencode-telegram-bootstrap-");
     stdinTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
     stdoutTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
     Object.defineProperty(process.stdin, "isTTY", { configurable: true, value: false });
