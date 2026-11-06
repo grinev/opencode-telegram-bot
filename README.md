@@ -27,7 +27,7 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
 
 - **OpenCode V2 support** — works with the new OpenCode V2 as well as the classic V1; for setup details, see [Old and New OpenCode Versions](#old-and-new-opencode-versions)
 - **Remote coding** — send prompts to OpenCode from anywhere, receive complete results with code sent as files
-- **Session management** — create new sessions or continue existing ones, just like in the TUI
+- **Session management** — create new sessions or continue existing ones, search sessions by title or ID in `/sessions`, and find projects by name in `/projects`
 - **Track live session** — follow a live OpenCode CLI session; see [Track Existing Session](#track-existing-session)
 - **Background session notifications** — get short notifications when detached or non-current sessions in the current project/worktree reply, ask questions, or request permissions. Turn them off in `/settings` (default on); that silences the chat notices only and does not stop tracking or cancel a pending request
 - **Live status** — pinned message with current project/worktree, model, context usage, and changed files list, updated in real time
@@ -139,10 +139,10 @@ opencode-telegram config
 | `/new`            | Create a new session                                    |
 | `/abort`          | Abort the current task                                  |
 | `/detach`         | Detach from the current session without stopping it     |
-| `/sessions`       | Browse and switch between recent sessions               |
+| `/sessions`       | Browse, search by title or ID, and switch sessions        |
 | `/recent`         | Browse recent sessions across projects and worktrees, see their status and attach directly |
 | `/messages`       | Browse user messages, revert or fork from a previous state     |
-| `/projects`       | Switch between OpenCode projects                        |
+| `/projects`       | Browse, search by name, and switch OpenCode projects      |
 | `/worktree`       | Switch between existing git worktrees                   |
 | `/open`           | Add a project by browsing directories                   |
 | `/ls`             | List directory contents, then tap to open or download   |
@@ -251,6 +251,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `TELEGRAM_FORCE_IPV4`                      | Force IPv4 for direct Telegram API and file requests; useful when IPv6 DNS works but outbound IPv6 is broken           |    No    | `false`                  |
 | `OPENCODE_SERVER_VERSION`                  | OpenCode server API version: `v1` or `v2`; must match the server you run; set by the setup wizard                     |    No    | `v1`                     |
 | `OPENCODE_SERVER_MODE`                     | V2 only: `service` (default) or `standalone`. Standalone needs `OPENCODE_API_URL` and does not follow a registered server. V1 ignores it. An unknown value refuses startup |    No    | `service`                |
+| `OPENCODE_BIN_PATH`                        | Absolute executable path for OpenCode on Linux/macOS; takes precedence over PATH and standard install-directory discovery |    No    | —                        |
 | `OPENCODE_API_URL`                         | OpenCode server URL                                                                                                   |    No    | `http://localhost:4096` (V1), `http://127.0.0.1:49374` (V2) |
 | `OPENCODE_AUTO_RESTART_ENABLED`            | Automatically restart a local OpenCode server when health-checks fail                                                 |    No    | `false`                  |
 | `OPENCODE_MONITOR_INTERVAL_SEC`            | Health monitor interval in seconds when OpenCode auto-restart is enabled                                              |    No    | `300`                    |
