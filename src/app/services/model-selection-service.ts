@@ -10,6 +10,7 @@ import type {
   ProviderInfo,
 } from "../types/model.js";
 import path from "node:path";
+import { compareMiniMaxChoices, isOrdinaryMiniMaxChoice } from "./minimax-model-choices.js";
 
 interface OpenCodeModelState {
   favorite?: Array<{ providerID?: string; modelID?: string }>;
@@ -301,13 +302,24 @@ async function readModelCatalog(options?: {
       for (const provider of response.data.providers) {
         const providerModels: FavoriteModel[] = [];
 
-        for (const modelID of Object.keys(provider.models)) {
+        for (const [modelID, model] of Object.entries(provider.models)) {
+          // Availability still includes legacy IDs for saved selections and explicit requests.
           validModelKeys.add(getModelKey(provider.id, modelID));
-          allModels.push({ providerID: provider.id, modelID });
-          providerModels.push({ providerID: provider.id, modelID });
+          const choice = { providerID: provider.id, modelID };
+          if (
+            provider.source !== "custom" &&
+            model.capabilities?.output?.text !== false &&
+            !isOrdinaryMiniMaxChoice(choice)
+          ) {
+            continue;
+          }
+          allModels.push(choice);
+          providerModels.push(choice);
         }
 
-        providerModels.sort((a, b) => a.modelID.localeCompare(b.modelID));
+        providerModels.sort(
+          (a, b) => compareMiniMaxChoices(a, b) || a.modelID.localeCompare(b.modelID),
+        );
         modelsByProvider.set(provider.id, providerModels);
         if (providerModels.length === 0) {
           continue;
@@ -780,13 +792,11 @@ export async function searchModels(query: string): Promise<FavoriteModel[]> {
     .sort((a, b) => {
       const keyA = getModelKey(a.providerID, a.modelID).toLowerCase();
       const keyB = getModelKey(b.providerID, b.modelID).toLowerCase();
-      return keyA.localeCompare(keyB);
+      return compareMiniMaxChoices(a, b) || keyA.localeCompare(keyB);
     })
     .slice(0, SEARCH_RESULTS_LIMIT);
 
-  logger.debug(
-    `[ModelManager] Model search: query="${query}", results=${results.length}`,
-  );
+  logger.debug(`[ModelManager] Model search: query="${query}", results=${results.length}`);
 
   return results;
 }
