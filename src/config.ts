@@ -91,6 +91,28 @@ function getOptionalBooleanEnvVar(key: string, defaultValue: boolean): boolean {
   return defaultValue;
 }
 
+function getSecretEnvVar(key: string, required: boolean = true): string {
+  const fileEnvKey = `${key}_FILE`;
+  const configuredFilePath = process.env[fileEnvKey]?.trim();
+
+  if (!configuredFilePath) {
+    return getEnvVar(key, required);
+  }
+
+  try {
+    const secret = fs.readFileSync(configuredFilePath, "utf8").trim();
+    if (!secret) {
+      throw new Error(`${fileEnvKey} is empty: ${configuredFilePath}`);
+    }
+    return secret;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`${fileEnvKey} does not exist: ${configuredFilePath}`);
+    }
+    throw error;
+  }
+}
+
 function readOptionalSecret(envKey: string, fileEnvKey: string, defaultFilePath: string): string {
   const configuredFilePath = process.env[fileEnvKey]?.trim();
   const filePath = configuredFilePath || defaultFilePath;
@@ -315,7 +337,7 @@ export function buildTelegramConfig(): {
   }
 
   return {
-    token: getEnvVar("TELEGRAM_BOT_TOKEN"),
+    token: getSecretEnvVar("TELEGRAM_BOT_TOKEN"),
     allowedUserId: parseInt(getEnvVar("TELEGRAM_ALLOWED_USER_ID"), 10),
     proxyUrl,
     apiRoot,
@@ -335,7 +357,7 @@ export const config = {
     serverMode: opencodeServerMode,
     apiUrl: opencodeApiUrl,
     username: getEnvVar("OPENCODE_SERVER_USERNAME", false) || "opencode",
-    password: getEnvVar("OPENCODE_SERVER_PASSWORD", false),
+    password: getSecretEnvVar("OPENCODE_SERVER_PASSWORD", false),
     autoRestartEnabled: getOptionalBooleanEnvVar("OPENCODE_AUTO_RESTART_ENABLED", false),
     monitorIntervalSec: getOptionalPositiveIntEnvVar("OPENCODE_MONITOR_INTERVAL_SEC", 300),
     model: {

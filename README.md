@@ -243,7 +243,8 @@ Configuration can be provided through process environment variables or an `.env`
 
 | Variable                                   | Description                                                                                                           | Required | Default                  |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | :------: | ------------------------ |
-| `TELEGRAM_BOT_TOKEN`                       | Bot token from @BotFather                                                                                             |   Yes    | —                        |
+| `TELEGRAM_BOT_TOKEN`                       | Bot token from @BotFather; ignored when `TELEGRAM_BOT_TOKEN_FILE` is set                                             |   Yes    | —                        |
+| `TELEGRAM_BOT_TOKEN_FILE`                  | File containing the Telegram bot token; takes precedence over `TELEGRAM_BOT_TOKEN`                                   |   No    | —                        |
 | `TELEGRAM_ALLOWED_USER_ID`                 | Your numeric Telegram user ID                                                                                         |   Yes    | —                        |
 | `TELEGRAM_PROXY_URL`                       | SOCKS or HTTP(S) forward proxy for Telegram Bot API calls and file downloads                                         |    No    | —                        |
 | `TELEGRAM_API_ROOT`                        | Custom Telegram Bot API root URL (e.g. nginx reverse-proxying `api.telegram.org`); applied to API calls and file downloads | No | `https://api.telegram.org` |
@@ -256,7 +257,8 @@ Configuration can be provided through process environment variables or an `.env`
 | `OPENCODE_AUTO_RESTART_ENABLED`            | Automatically restart a local OpenCode server when health-checks fail                                                 |    No    | `false`                  |
 | `OPENCODE_MONITOR_INTERVAL_SEC`            | Health monitor interval in seconds when OpenCode auto-restart is enabled                                              |    No    | `300`                    |
 | `OPENCODE_SERVER_USERNAME`                 | Server auth username                                                                                                  |    No    | `opencode`               |
-| `OPENCODE_SERVER_PASSWORD`                 | Server auth password (needed for V2, see [Old and New OpenCode Versions](#old-and-new-opencode-versions))                                   |    No    | —                        |
+| `OPENCODE_SERVER_PASSWORD`                 | Server auth password (needed for V2, see [Old and New OpenCode Versions](#old-and-new-opencode-versions)); ignored when `OPENCODE_SERVER_PASSWORD_FILE` is set | No | — |
+| `OPENCODE_SERVER_PASSWORD_FILE`            | File containing the OpenCode server password; takes precedence over `OPENCODE_SERVER_PASSWORD`                       |    No    | —                        |
 | `OPENCODE_MODEL_PROVIDER`                  | Default model provider                                                                                                |   Yes    | `opencode`               |
 | `OPENCODE_MODEL_ID`                        | Default model ID                                                                                                      |   Yes    | `big-pickle`             |
 | `BOT_LOCALE`                               | Bot UI language (supported locale code, e.g. `en`, `ar`, `de`, `es`, `fr`, `id`, `it`, `ko`, `pt`, `ru`, `tr`, `zh`)  |    No    | `en`                     |
@@ -294,7 +296,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `LOG_RETENTION`                            | Number of log files to keep: launch files in `sources`, daily files in `installed`                                    |    No    | `10`                     |
 | `BOT_HEALTH_PORT`                          | Port of the internal health endpoint (`/health`, `/health/live`, `/health/ready`) on `127.0.0.1`; `0` disables it      |    No    | off; `3100` in Docker    |
 
-> **Keep your `.env` file private.** It contains your bot token. Never commit it to version control.
+> **Keep your `.env` file private.** It may contain your bot token and server password. For Docker or Swarm deployments, prefer mounting these values as secret files with `TELEGRAM_BOT_TOKEN_FILE` and `OPENCODE_SERVER_PASSWORD_FILE`. Never commit secrets to version control.
 
 Logs are written to `./logs` when running from sources and to the runtime config directory `logs/` folder in `installed` mode. Log rotation depends on runtime mode: `sources` creates one file per bot launch, while `installed` appends to one file per day. Old log files are removed according to `LOG_RETENTION`.
 

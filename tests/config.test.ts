@@ -1,3 +1,6 @@
+import os from "node:os";
+import path from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 async function loadConfigModule() {
@@ -16,6 +19,19 @@ async function loadOpencodeEnvResolvers() {
 async function loadConfig() {
   const module = await loadConfigModule();
   return module.config;
+}
+
+async function createSecretFile(content: string): Promise<{
+  filePath: string;
+  cleanup: () => Promise<void>;
+}> {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-config-"));
+  const filePath = path.join(directory, "secret");
+  await writeFile(filePath, content, "utf8");
+  return {
+    filePath,
+    cleanup: () => rm(directory, { recursive: true, force: true }),
+  };
 }
 
 beforeEach(() => {
@@ -529,6 +545,60 @@ describe("config telegram reverse-proxy", () => {
     const buildTelegramConfig = await loadBuilder();
 
     expect(() => buildTelegramConfig()).toThrow(/TELEGRAM_PROXY_SECRET requires TELEGRAM_API_ROOT/);
+  });
+});
+
+describe("config secret files", () => {
+  beforeEach(() => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "environment-token");
+    vi.stubEnv("TELEGRAM_ALLOWED_USER_ID", "123456789");
+    vi.stubEnv("OPENCODE_MODEL_PROVIDER", "test-provider");
+    vi.stubEnv("OPENCODE_MODEL_ID", "test-model");
+    delete process.env.TELEGRAM_BOT_TOKEN_FILE;
+    delete process.env.OPENCODE_SERVER_PASSWORD_FILE;
+  });
+
+  it("loads the Telegram token from a file with precedence over the environment", async () => {
+    const secret = await createSecretFile("file-token\n");
+    try {
+      vi.stubEnv("TELEGRAM_BOT_TOKEN_FILE", secret.filePath);
+      const buildTelegramConfig = await (await import("../src/config.js")).buildTelegramConfig;
+
+      expect(buildTelegramConfig().token).toBe("file-token");
+    } finally {
+      await secret.cleanup();
+    }
+  });
+
+  it("loads the OpenCode password from a file", async () => {
+    const secret = await createSecretFile("server-password\n");
+    try {
+      vi.stubEnv("OPENCODE_SERVER_PASSWORD_FILE", secret.filePath);
+      const config = await loadConfig();
+
+      expect(config.opencode.password).toBe("server-password");
+    } finally {
+      await secret.cleanup();
+    }
+  });
+
+  it("rejects a configured secret file that does not exist", async () => {
+    const buildTelegramConfig = await (await import("../src/config.js")).buildTelegramConfig;
+    vi.stubEnv("TELEGRAM_BOT_TOKEN_FILE", path.join(os.tmpdir(), "missing-opencode-secret"));
+
+    expect(() => buildTelegramConfig()).toThrow(/TELEGRAM_BOT_TOKEN_FILE does not exist/);
+  });
+
+  it("rejects an empty configured secret file", async () => {
+    const secret = await createSecretFile(" \n");
+    try {
+      const buildTelegramConfig = await (await import("../src/config.js")).buildTelegramConfig;
+      vi.stubEnv("TELEGRAM_BOT_TOKEN_FILE", secret.filePath);
+
+      expect(() => buildTelegramConfig()).toThrow(/TELEGRAM_BOT_TOKEN_FILE is empty/);
+    } finally {
+      await secret.cleanup();
+    }
   });
 });
 
