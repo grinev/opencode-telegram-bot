@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import fs from "node:fs";
 import { getRuntimePaths } from "./runtime/paths.js";
 import { isContainerRuntime } from "./runtime/container.js";
 import { BOT_HEALTH_PORT_ENV, resolveHealthPort } from "./runtime/health-port.js";
@@ -6,6 +7,8 @@ import { normalizeLocale, type Locale } from "./i18n/index.js";
 
 const runtimePaths = getRuntimePaths();
 dotenv.config({ path: runtimePaths.envFilePath, quiet: true });
+
+const DEFAULT_GATEWAY_SECRET_FILE = "/run/secrets/gateway_shared_secret";
 
 export type MessageFormatMode = "raw" | "markdown";
 export type TtsProvider = "openai" | "google" | "elevenlabs" | "edge";
@@ -86,6 +89,73 @@ function getOptionalBooleanEnvVar(key: string, defaultValue: boolean): boolean {
   }
 
   return defaultValue;
+}
+
+function readOptionalSecret(envKey: string, fileEnvKey: string, defaultFilePath: string): string {
+  const configuredFilePath = process.env[fileEnvKey]?.trim();
+  const filePath = configuredFilePath || defaultFilePath;
+
+  try {
+    const secret = fs.readFileSync(filePath, "utf8").trim();
+    if (secret) {
+      return secret;
+    }
+    if (configuredFilePath) {
+      throw new Error(`${fileEnvKey} is empty: ${configuredFilePath}`);
+    }
+  } catch (error) {
+    if (configuredFilePath || (error as NodeJS.ErrnoException).code !== "ENOENT") {
+      if (configuredFilePath && (error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`${fileEnvKey} does not exist: ${configuredFilePath}`);
+      }
+      throw error;
+    }
+  }
+
+  return getEnvVar(envKey, false).trim();
+}
+
+function normalizeGatewayUrl(value: string, fallback: string): string {
+  const raw = value.trim() || fallback;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error();
+    }
+    return raw.replace(/\/+$/, "");
+  } catch {
+    throw new Error("GATEWAY_API_URL must be a valid HTTP or HTTPS URL");
+  }
+}
+
+export function buildGatewayConfig(opencodeApiUrl: string): {
+  enabled: boolean;
+  apiUrl: string;
+  sharedSecret: string;
+  monitorEnabled: boolean;
+  monitorIntervalSec: number;
+  alertCooldownSec: number;
+  wakeDurationThresholdMs: number;
+  requestTimeoutMs: number;
+} {
+  const sharedSecret = readOptionalSecret(
+    "GATEWAY_SHARED_SECRET",
+    "GATEWAY_SHARED_SECRET_FILE",
+    DEFAULT_GATEWAY_SECRET_FILE,
+  );
+  return {
+    enabled: sharedSecret.length > 0,
+    apiUrl: normalizeGatewayUrl(getEnvVar("GATEWAY_API_URL", false), opencodeApiUrl),
+    sharedSecret,
+    monitorEnabled: getOptionalBooleanEnvVar("GATEWAY_MONITOR_ENABLED", false),
+    monitorIntervalSec: getOptionalPositiveIntEnvVar("GATEWAY_MONITOR_INTERVAL_SEC", 60),
+    alertCooldownSec: getOptionalPositiveIntEnvVar("GATEWAY_ALERT_COOLDOWN_SEC", 300),
+    wakeDurationThresholdMs: getOptionalPositiveIntEnvVar(
+      "GATEWAY_WAKE_DURATION_THRESHOLD_MS",
+      120_000,
+    ),
+    requestTimeoutMs: getOptionalPositiveIntEnvVar("GATEWAY_REQUEST_TIMEOUT_MS", 10_000),
+  };
 }
 
 export type OpencodeServerVersion = "v1" | "v2";
@@ -256,13 +326,14 @@ export function buildTelegramConfig(): {
 
 const opencodeServerVersion = getOptionalOpencodeServerVersionEnvVar("OPENCODE_SERVER_VERSION");
 const opencodeServerMode = resolveOpencodeServerMode(opencodeServerVersion);
+const opencodeApiUrl = resolveOpencodeApiUrl(opencodeServerVersion, opencodeServerMode);
 
 export const config = {
   telegram: buildTelegramConfig(),
   opencode: {
     serverVersion: opencodeServerVersion,
     serverMode: opencodeServerMode,
-    apiUrl: resolveOpencodeApiUrl(opencodeServerVersion, opencodeServerMode),
+    apiUrl: opencodeApiUrl,
     username: getEnvVar("OPENCODE_SERVER_USERNAME", false) || "opencode",
     password: getEnvVar("OPENCODE_SERVER_PASSWORD", false),
     autoRestartEnabled: getOptionalBooleanEnvVar("OPENCODE_AUTO_RESTART_ENABLED", false),
@@ -272,6 +343,7 @@ export const config = {
       modelId: getEnvVar("OPENCODE_MODEL_ID", true), // Required
     },
   },
+  gateway: buildGatewayConfig(opencodeApiUrl),
   server: {
     logLevel: getEnvVar("LOG_LEVEL", false) || "info",
   },

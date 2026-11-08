@@ -1,4 +1,4 @@
-import { projectSearchFallback, type I18nDictionary } from "./en.js";
+import { gatewayFallback, projectSearchFallback, type I18nDictionary } from "./en.js";
 
 /**
  * Indonesian localization for OpenCode Telegram Bot.
@@ -9,6 +9,7 @@ import { projectSearchFallback, type I18nDictionary } from "./en.js";
  */
 export const id: I18nDictionary = {
   ...projectSearchFallback,
+  ...gatewayFallback,
   "cmd.description.recent": "Sesi terbaru di semua proyek",
   "recent.heading": "Sesi terbaru di semua proyek (segarkan dengan /recent):",
   "recent.empty": "📭 Tidak ada sesi di semua proyek.",

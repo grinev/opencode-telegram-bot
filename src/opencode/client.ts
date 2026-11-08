@@ -22,7 +22,18 @@ const authHeaders = (
   server: OpencodeServerTarget = getActiveOpencodeServer(),
 ): Record<string, string> | undefined => {
   const auth = getAuth(server);
-  return auth ? { Authorization: auth } : undefined;
+  const gatewaySecret =
+    config.gateway?.sharedSecret && server.url === config.gateway.apiUrl
+      ? config.gateway.sharedSecret
+      : undefined;
+  if (!auth && !gatewaySecret) {
+    return undefined;
+  }
+
+  return {
+    ...(auth ? { Authorization: auth } : {}),
+    ...(gatewaySecret ? { "X-Gateway-Secret": gatewaySecret } : {}),
+  };
 };
 
 /** The API version the bot was configured for; there is no detection or switching. */

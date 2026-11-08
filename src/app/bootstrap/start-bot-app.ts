@@ -22,6 +22,7 @@ import { flushLogger, getLogFilePath, initializeLogger, logger } from "../../uti
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { getTelegramRetryAfterMs } from "../../utils/telegram-rate-limit-retry.js";
 import { createAppContainer } from "./app-container.js";
+import { formatGatewayAlert } from "../../gateway/monitor-service.js";
 
 const SHUTDOWN_TIMEOUT_MS = 5000;
 const SETTINGS_FLUSH_TIMEOUT_MS = 1000;
@@ -211,7 +212,7 @@ export async function startBotApp(): Promise<void> {
   await reconcileStoredModelSelection();
   const container = createAppContainer();
   registerOpenCodeReadyRefreshHandler(container);
-  const { healthServer, opencodeAutoRestartService, scheduledTaskRuntime } = container;
+  const { healthServer, opencodeAutoRestartService, scheduledTaskRuntime, gatewayMonitor } = container;
   await healthServer.start(config.health.port, version);
   const localCommandRegistry = await LocalCommandRegistry.load({
     directoryPath: runtimePaths.localCommandsDirPath,
@@ -222,6 +223,9 @@ export async function startBotApp(): Promise<void> {
     bot,
     createScheduledTaskDeliverySender(bot.api, config.telegram.allowedUserId),
   );
+  gatewayMonitor.start(async (alert) => {
+    await bot.api.sendMessage(config.telegram.allowedUserId, formatGatewayAlert(alert));
+  });
   safeBackgroundTask({
     taskName: "app.opencodeStartup",
     task: async () => {

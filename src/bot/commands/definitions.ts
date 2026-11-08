@@ -25,6 +25,9 @@ interface BotCommandI18nDefinition {
  */
 const COMMAND_DEFINITIONS: BotCommandI18nDefinition[] = [
   { command: "status", descriptionKey: "cmd.description.status" },
+  { command: "wake", descriptionKey: "cmd.description.wake" },
+  { command: "monitor", descriptionKey: "cmd.description.monitor" },
+  { command: "alerts", descriptionKey: "cmd.description.alerts" },
   { command: "new", descriptionKey: "cmd.description.new" },
   { command: "abort", descriptionKey: "cmd.description.stop" },
   { command: "detach", descriptionKey: "cmd.description.detach" },

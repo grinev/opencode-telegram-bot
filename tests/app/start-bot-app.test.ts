@@ -16,6 +16,8 @@ const mocked = vi.hoisted(() => ({
   flushSettingsMock: vi.fn(),
   scheduledTaskInitializeMock: vi.fn(),
   scheduledTaskShutdownMock: vi.fn(),
+  gatewayMonitorStartMock: vi.fn(),
+  gatewayMonitorStopMock: vi.fn(),
   reconcileStoredModelSelectionMock: vi.fn(),
   startModelCatalogWarmupMock: vi.fn(),
   clearServiceStateFileMock: vi.fn(),
@@ -55,6 +57,10 @@ const container = vi.hoisted(() => ({
   scheduledTaskRuntime: {
     initialize: mocked.scheduledTaskInitializeMock,
     shutdown: mocked.scheduledTaskShutdownMock,
+  },
+  gatewayMonitor: {
+    start: mocked.gatewayMonitorStartMock,
+    stop: mocked.gatewayMonitorStopMock,
   },
 }));
 

@@ -13,8 +13,30 @@ import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.j
 import { t } from "../../i18n/index.js";
 import { sendBotText } from "../messages/telegram-text.js";
 import { getBotVersion } from "../../runtime/bot-version.js";
+import type { GatewayStatusResponse } from "../../gateway/types.js";
 
-export type StatusCommandDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager">;
+export type StatusCommandDeps = Pick<
+  AppContainer,
+  "keyboardManager" | "pinnedMessageManager" | "gatewayClient"
+>;
+
+function formatGatewayStatus(status: GatewayStatusResponse): string {
+  const ready = t("gateway.status.ready");
+  const notReady = t("gateway.status.not_ready");
+  const unreachable = t("gateway.status.unreachable");
+  let message = `\n${t("gateway.status.header")}\n`;
+  message += `${t("gateway.status.gateway", { status: status.status })}\n`;
+  message += `${t("gateway.status.target", {
+    status: status.target.reachable ? ready : unreachable,
+  })}\n`;
+  message += `${t("gateway.status.opencode", {
+    status: status.opencode.healthy ? ready : notReady,
+  })}\n`;
+  if (status.opencode.version) {
+    message += `${t("gateway.status.version", { version: status.opencode.version })}\n`;
+  }
+  return message;
+}
 
 export async function statusCommand(ctx: CommandContext<Context>, deps: StatusCommandDeps) {
   try {
@@ -29,6 +51,16 @@ export async function statusCommand(ctx: CommandContext<Context>, deps: StatusCo
     message += `${t("status.line.bot_version", { version: botVersion })}\n`;
     if (health.version) {
       message += `${t("status.line.version", { version: health.version })}\n`;
+    }
+
+    if (deps.gatewayClient.isConfigured()) {
+      try {
+        message += formatGatewayStatus(await deps.gatewayClient.getStatus());
+      } catch {
+        message += `\n${t("gateway.status.header")}\n${t("gateway.status.gateway", {
+          status: t("gateway.status.unreachable"),
+        })}\n`;
+      }
     }
 
     // Add agent information

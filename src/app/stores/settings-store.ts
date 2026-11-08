@@ -9,6 +9,12 @@ import type {
   ScheduledTaskSessionIgnoreInfo,
   Settings,
 } from "../types/settings.js";
+import type {
+  GatewayAlert,
+  GatewayMonitorCheckName,
+  GatewayMonitorCheckState,
+  GatewayMonitoringState,
+} from "../../gateway/types.js";
 import { config } from "../../config.js";
 import { getRuntimePaths } from "../../runtime/paths.js";
 import { logger } from "../../utils/logger.js";
@@ -21,6 +27,54 @@ function cloneScheduledTaskSessionIgnores(
   ignores: ScheduledTaskSessionIgnoreInfo[] | undefined,
 ): ScheduledTaskSessionIgnoreInfo[] | undefined {
   return ignores?.map((ignore) => ({ ...ignore }));
+}
+
+const GATEWAY_CHECK_NAMES: readonly GatewayMonitorCheckName[] = [
+  "gateway",
+  "target",
+  "opencode",
+  "wake",
+];
+
+function cloneGatewayMonitoringState(
+  state: GatewayMonitoringState | undefined,
+): GatewayMonitoringState | undefined {
+  if (!state) {
+    return undefined;
+  }
+
+  const checks: Partial<Record<GatewayMonitorCheckName, GatewayMonitorCheckState>> = {};
+  for (const name of GATEWAY_CHECK_NAMES) {
+    const check = state.checks[name];
+    if (!check || (check.healthy !== null && typeof check.healthy !== "boolean")) {
+      continue;
+    }
+    checks[name] = {
+      healthy: check.healthy,
+      message: check.message,
+      updatedAt: check.updatedAt,
+      ...(check.lastFailureAlertAt ? { lastFailureAlertAt: check.lastFailureAlertAt } : {}),
+    };
+  }
+
+  const alerts: GatewayAlert[] = Array.isArray(state.alerts)
+    ? state.alerts
+        .filter(
+          (alert) =>
+            (alert.kind === "failure" || alert.kind === "recovery") &&
+            GATEWAY_CHECK_NAMES.includes(alert.check) &&
+            typeof alert.message === "string" &&
+            typeof alert.createdAt === "string",
+        )
+        .slice(-50)
+        .map((alert) => ({ ...alert }))
+    : [];
+
+  return {
+    ...(state.lastRunAt ? { lastRunAt: state.lastRunAt } : {}),
+    checks,
+    alerts,
+  };
 }
 
 function getSettingsFilePath(): string {
@@ -367,6 +421,15 @@ export function setScheduledTaskSessionIgnores(
   return writeSettingsFile(currentSettings);
 }
 
+export function getGatewayMonitoringState(): GatewayMonitoringState | undefined {
+  return cloneGatewayMonitoringState(currentSettings.gatewayMonitoring);
+}
+
+export function setGatewayMonitoringState(state: GatewayMonitoringState): Promise<void> {
+  currentSettings.gatewayMonitoring = cloneGatewayMonitoringState(state);
+  return writeSettingsFile(currentSettings);
+}
+
 export function __resetSettingsForTests(): void {
   currentSettings = {};
   skipNextBackupRotation = false;
@@ -489,6 +552,7 @@ export async function loadSettings(): Promise<void> {
   currentSettings.scheduledTasks = cloneScheduledTasks(loadedSettings.scheduledTasks) ?? [];
   currentSettings.scheduledTaskSessionIgnores =
     cloneScheduledTaskSessionIgnores(loadedSettings.scheduledTaskSessionIgnores) ?? [];
+  currentSettings.gatewayMonitoring = cloneGatewayMonitoringState(loadedSettings.gatewayMonitoring);
 
   applyInitialSettingsPreset(config.bot.initialSettingsPreset);
 

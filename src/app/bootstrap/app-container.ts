@@ -25,6 +25,8 @@ import { GoalService } from "../services/goal-service.js";
 import { HealthServer } from "../services/health-server-service.js";
 import { formatDashboardGoalLine } from "../formatters/goal-text.js";
 import { ScheduledTaskRuntime } from "../services/scheduled-task-runtime-service.js";
+import { GatewayClient } from "../../gateway/client.js";
+import { GatewayMonitor } from "../../gateway/monitor-service.js";
 
 const HEARTBEAT_INTERVAL_MS = 5000;
 const HEARTBEAT_LOG_EVERY_TICKS = 6;
@@ -44,6 +46,8 @@ export interface AppContainer {
   readonly foregroundSessionState: ForegroundSessionState;
   readonly goalManager: GoalManager;
   readonly goalService: GoalService;
+  readonly gatewayClient: GatewayClient;
+  readonly gatewayMonitor: GatewayMonitor;
   readonly healthServer: HealthServer;
   readonly interactionManager: InteractionManager;
   readonly keyboardManager: KeyboardManager;
@@ -100,6 +104,8 @@ export function createAppContainer(): AppContainer {
   const interactionManager = new InteractionManager();
   const opencodeReadyLifecycle = new OpencodeReadyLifecycle();
   const summaryAggregator = new SummaryAggregator();
+  const gatewayClient = new GatewayClient();
+  const gatewayMonitor = new GatewayMonitor(gatewayClient);
 
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let unsubscribeReadyRestore: (() => void) | null = null;
@@ -124,6 +130,8 @@ export function createAppContainer(): AppContainer {
     foregroundSessionState,
     goalManager,
     goalService,
+    gatewayClient,
+    gatewayMonitor,
     healthServer: new HealthServer(),
     interactionManager,
     keyboardManager: new KeyboardManager(goalManager),
@@ -170,6 +178,7 @@ export function createAppContainer(): AppContainer {
       stopModelCatalogWait();
       eventSubscriptionService.cleanup(reason);
       stopHeartbeat();
+      gatewayMonitor.stop();
     },
   };
 

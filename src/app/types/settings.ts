@@ -2,6 +2,7 @@ import type { ModelInfo } from "./model.js";
 import type { ProjectInfo } from "./project.js";
 import type { SessionDirectoryCacheInfo, SessionInfo } from "./session.js";
 import type { ScheduledTask } from "./scheduled-task.js";
+import type { GatewayMonitoringState } from "../../gateway/types.js";
 
 export type ResponseStreamingMode = "edit" | "draft";
 
@@ -32,4 +33,5 @@ export interface Settings {
   sessionDirectoryCache?: SessionDirectoryCacheInfo | undefined;
   scheduledTasks?: ScheduledTask[] | undefined;
   scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[] | undefined;
+  gatewayMonitoring?: GatewayMonitoringState | undefined;
 }

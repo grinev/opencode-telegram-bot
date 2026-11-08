@@ -1,7 +1,8 @@
-import { projectSearchFallback, type I18nDictionary } from "./en.js";
+import { gatewayFallback, projectSearchFallback, type I18nDictionary } from "./en.js";
 
 export const es: I18nDictionary = {
   ...projectSearchFallback,
+  ...gatewayFallback,
   "cmd.description.recent": "Sesiones recientes de todos los proyectos",
   "recent.heading": "Sesiones recientes de todos los proyectos (actualiza con /recent):",
   "recent.empty": "📭 No hay sesiones en los proyectos.",

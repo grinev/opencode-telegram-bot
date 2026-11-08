@@ -1,4 +1,4 @@
-import { projectSearchFallback, type I18nDictionary } from "./en.js";
+import { gatewayFallback, projectSearchFallback, type I18nDictionary } from "./en.js";
 
 /**
  * Arabic localization for OpenCode Telegram Bot.
@@ -9,6 +9,7 @@ import { projectSearchFallback, type I18nDictionary } from "./en.js";
  */
 export const ar: I18nDictionary = {
   ...projectSearchFallback,
+  ...gatewayFallback,
   "cmd.description.recent": "الجلسات الأخيرة عبر المشاريع",
   "recent.heading": "الجلسات الأخيرة عبر المشاريع (للتحديث: /recent):",
   "recent.empty": "📭 لا توجد جلسات في المشاريع.",

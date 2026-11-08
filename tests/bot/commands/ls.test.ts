@@ -19,6 +19,13 @@ const mocked = vi.hoisted(() => ({
 
 vi.mock("node:fs", () => ({
   existsSync: () => false,
+  default: {
+    readFileSync: () => {
+      const error = new Error("missing") as NodeJS.ErrnoException;
+      error.code = "ENOENT";
+      throw error;
+    },
+  },
   promises: {
     readdir: mocked.readdirMock,
     stat: mocked.statMock,

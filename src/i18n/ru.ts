@@ -1,6 +1,7 @@
-import type { I18nDictionary } from "./en.js";
+import { gatewayFallback, type I18nDictionary } from "./en.js";
 
 export const ru: I18nDictionary = {
+  ...gatewayFallback,
   "cmd.description.recent": "Последние сессии всех проектов",
   "recent.heading": "Последние сессии всех проектов (обновить: /recent):",
   "recent.empty": "📭 Сессий в проектах нет.",
