@@ -1,0 +1,76 @@
+kind: pipeline
+type: docker
+name: default
+
+trigger:
+  branch:
+    - main
+  event:
+    - push
+    - pull_request
+
+steps:
+  - name: bot-quality
+    image: node:22-bookworm-slim
+    commands:
+      - npm ci
+      - npm run lint
+      - npm run typecheck
+      - npm run build
+      - npm test
+
+  - name: gateway-quality
+    image: node:22-bookworm-slim
+    commands:
+      - cd gateway
+      - npm ci
+      - npm run build
+      - npm test
+
+  - name: publish-bot-image
+    image: plugins/docker
+    depends_on:
+      - bot-quality
+      - gateway-quality
+    when:
+      branch:
+        - main
+      event:
+        - push
+    settings:
+      context: .
+      dockerfile: Dockerfile
+      registry:
+        from_secret: registry_host
+      repo:
+        from_secret: registry_bot_image
+      username:
+        from_secret: registry_username
+      password:
+        from_secret: registry_password
+      tags:
+        - latest
+
+  - name: publish-gateway-image
+    image: plugins/docker
+    depends_on:
+      - bot-quality
+      - gateway-quality
+    when:
+      branch:
+        - main
+      event:
+        - push
+    settings:
+      context: gateway
+      dockerfile: Dockerfile
+      registry:
+        from_secret: registry_host
+      repo:
+        from_secret: registry_gateway_image
+      username:
+        from_secret: registry_username
+      password:
+        from_secret: registry_password
+      tags:
+        - latest
