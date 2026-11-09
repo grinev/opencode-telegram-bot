@@ -89,6 +89,20 @@ describe("sanitizeInboxFilename", () => {
     expect(sanitized.length).toBeLessThanOrEqual(120);
     expect(sanitized.endsWith(".zip")).toBe(true);
   });
+
+  it("limits non-ASCII names by bytes so Linux filesystems accept them", () => {
+    const sanitized = sanitizeInboxFilename(`${"漢".repeat(117)}.zip`);
+
+    expect(Buffer.byteLength(sanitized, "utf8")).toBeLessThanOrEqual(200);
+    expect(sanitized.endsWith(".zip")).toBe(true);
+  });
+
+  it("prefixes Windows device names that cannot be created as files", () => {
+    expect(sanitizeInboxFilename("CON")).toBe("_CON");
+    expect(sanitizeInboxFilename("nul.txt")).toBe("_nul.txt");
+    expect(sanitizeInboxFilename("com1.tar.gz")).toBe("_com1.tar.gz");
+    expect(sanitizeInboxFilename("console.zip")).toBe("console.zip");
+  });
 });
 
 describe("resolveInboxDir", () => {

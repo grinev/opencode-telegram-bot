@@ -10,7 +10,11 @@ import { logger } from "../../utils/logger.js";
 const INBOX_DIR_MODE = 0o700;
 const INBOX_FILE_MODE = 0o600;
 const MAX_FILENAME_LENGTH = 120;
+// Linux filesystems cap a single filename at 255 bytes, while Windows counts
+// UTF-16 units: limit both so a long non-ASCII name still saves everywhere.
+const MAX_FILENAME_BYTES = 200;
 const FALLBACK_FILENAME = "file";
+const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface StoredFile {
@@ -55,13 +59,53 @@ export function sanitizeInboxFilename(rawName: string): string {
     .trim();
 
   const name = cleaned || FALLBACK_FILENAME;
-  if (name.length <= MAX_FILENAME_LENGTH) {
+  // Device names such as CON or NUL cannot be created as files on Windows.
+  const safeName = WINDOWS_RESERVED_NAME.test(name) ? `_${name}` : name;
+  return truncateFilename(safeName);
+}
+
+function limitFilenameBytes(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) {
+    return value;
+  }
+
+  let result = "";
+  let bytes = 0;
+  for (const char of value) {
+    const charBytes = Buffer.byteLength(char, "utf8");
+    if (bytes + charBytes > maxBytes) {
+      break;
+    }
+    result += char;
+    bytes += charBytes;
+  }
+  return result;
+}
+
+function truncateFilename(name: string): string {
+  if (
+    name.length <= MAX_FILENAME_LENGTH &&
+    Buffer.byteLength(name, "utf8") <= MAX_FILENAME_BYTES
+  ) {
     return name;
   }
 
   const extension = path.extname(name);
-  const stem = name.slice(0, Math.max(1, MAX_FILENAME_LENGTH - extension.length));
-  return `${stem}${extension}`;
+  const extensionBytes = Buffer.byteLength(extension, "utf8");
+  const keepExtension = extension.length > 0 && extensionBytes < MAX_FILENAME_BYTES - 1;
+
+  if (!keepExtension) {
+    return (
+      limitFilenameBytes(name.slice(0, MAX_FILENAME_LENGTH), MAX_FILENAME_BYTES) ||
+      FALLBACK_FILENAME
+    );
+  }
+
+  const stem = name.slice(0, name.length - extension.length);
+  const stemLengthBudget = Math.max(1, MAX_FILENAME_LENGTH - extension.length);
+  const stemBytesBudget = Math.max(1, MAX_FILENAME_BYTES - extensionBytes);
+  const limitedStem = limitFilenameBytes(stem.slice(0, stemLengthBudget), stemBytesBudget);
+  return `${limitedStem || FALLBACK_FILENAME}${extension}`;
 }
 
 function createUploadDirName(): string {
