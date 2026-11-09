@@ -178,8 +178,8 @@ describe("pruneInbox", () => {
 
   it("removes uploads older than the retention window and keeps fresh ones", async () => {
     const inboxDir = await createTempDir();
-    const oldDir = path.join(inboxDir, "old-upload");
-    const freshDir = path.join(inboxDir, "fresh-upload");
+    const oldDir = path.join(inboxDir, "1700000000000-abcdef12");
+    const freshDir = path.join(inboxDir, "1700000000000-12345678");
     await mkdir(oldDir);
     await mkdir(freshDir);
     await writeFile(path.join(oldDir, "old.zip"), "old");
@@ -187,24 +187,43 @@ describe("pruneInbox", () => {
 
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     await utimes(oldDir, tenDaysAgo, tenDaysAgo);
+    await utimes(freshDir, new Date(), new Date());
 
     const removed = await pruneInbox(inboxDir);
 
     expect(removed).toBe(1);
-    expect(await readdir(inboxDir)).toEqual(["fresh-upload"]);
+    expect(await readdir(inboxDir)).toEqual(["1700000000000-12345678"]);
+  });
+
+  it("leaves entries the bot did not create alone in a shared inbox", async () => {
+    const inboxDir = await createTempDir();
+    const unrelatedDir = path.join(inboxDir, "someone-elses-data");
+    const unrelatedFile = path.join(inboxDir, "notes.txt");
+    await mkdir(unrelatedDir);
+    await writeFile(path.join(unrelatedDir, "keep.bin"), "keep");
+    await writeFile(unrelatedFile, "keep");
+
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    await utimes(unrelatedDir, tenDaysAgo, tenDaysAgo);
+    await utimes(unrelatedFile, tenDaysAgo, tenDaysAgo);
+
+    const removed = await pruneInbox(inboxDir);
+
+    expect(removed).toBe(0);
+    expect((await readdir(inboxDir)).sort()).toEqual(["notes.txt", "someone-elses-data"]);
   });
 
   it("keeps files when retention is disabled", async () => {
     mockConfig.files.inboxRetentionDays = 0;
     const inboxDir = await createTempDir();
-    const oldDir = path.join(inboxDir, "old-upload");
+    const oldDir = path.join(inboxDir, "1700000000000-fedcba98");
     await mkdir(oldDir);
     await writeFile(path.join(oldDir, "old.zip"), "old");
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     await utimes(oldDir, tenDaysAgo, tenDaysAgo);
 
     await expect(pruneInbox(inboxDir)).resolves.toBe(0);
-    expect(await readdir(inboxDir)).toEqual(["old-upload"]);
+    expect(await readdir(inboxDir)).toEqual(["1700000000000-fedcba98"]);
   });
 });
 

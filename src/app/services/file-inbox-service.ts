@@ -15,6 +15,8 @@ const MAX_FILENAME_LENGTH = 120;
 const MAX_FILENAME_BYTES = 200;
 const FALLBACK_FILENAME = "file";
 const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+/** Upload directories created by `createUploadDirName`. */
+const UPLOAD_DIR_NAME = /^\d{13}-[0-9a-f]{8}$/;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface StoredFile {
@@ -168,6 +170,12 @@ export async function pruneInbox(
 
   let removed = 0;
   for (const entry of entries) {
+    // Only sweep our own upload directories: the inbox may be a shared folder
+    // that also holds files the bot did not create.
+    if (!entry.isDirectory() || !UPLOAD_DIR_NAME.test(entry.name)) {
+      continue;
+    }
+
     const entryPath = path.join(inboxDir, entry.name);
     try {
       const info = await stat(entryPath);

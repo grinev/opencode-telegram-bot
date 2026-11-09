@@ -454,7 +454,7 @@ Telegram documents that cannot be passed to the model — `.zip`, `.sqlite`, `.b
 
 - Files are written to `FILE_INBOX_DIR` (`<bot home>/inbox` by default). Each upload gets its own directory, so the original filename is kept; directories are created with mode `700` and files with `600` on Linux and macOS.
 - The prompt marks the path as a local file, never as a native model attachment.
-- Saved uploads older than `FILE_INBOX_RETENTION_DAYS` (default `7`; `0` keeps them) are removed the next time a file is saved.
+- Saved uploads older than `FILE_INBOX_RETENTION_DAYS` (default `7`; `0` keeps them) are removed the next time a file is saved. Only directories the bot created are pruned, so other files in a shared inbox are left alone.
 - The Telegram Bot API does not allow bots to download files larger than 20 MB, so such uploads are rejected with a notice and nothing is sent to OpenCode.
 - Albums are handled the same way: supported items are attached natively and unsupported ones are saved locally in the same prompt.
 
