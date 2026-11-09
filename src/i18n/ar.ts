@@ -125,14 +125,12 @@ export const ar: I18nDictionary = {
   "bot.files_downloading": "⏳ جارٍ تنزيل الملفات...",
   "bot.file_too_large": "⚠️ حجم الملف أكبر من الحد المسموح ({maxSizeMb}MB)",
   "bot.file_download_error": "🔴 تعذر تنزيل الملف",
-  "bot.file_type_unsupported":
-    "⚠️ نوع الملف غير مدعوم. أرسل صورة أو مستندًا (PDF، DOCX، PPTX) أو ملفًا نصيًا أو برمجيًا.",
+  "bot.file_save_error": "🔴 تعذّر حفظ الملف محليًا، لذا لن يتمكن الوكيل من قراءته.",
   "bot.rich_message_media_skipped": "⚠️ تم تخطي {count} من أجزاء الوسائط غير المدعومة.",
   "bot.message_type_unsupported": "⚠️ نوع الرسالة هذا غير مدعوم.",
   "bot.media_group_not_processed":
     "⚠️ تعذر معالجة ملف أو أكثر في هذه المجموعة. لم يتم إرسال أي ملف إلى OpenCode.",
   "bot.media_group_download_error": "🔴 تعذر تنزيل أحد الملفات. لم يتم إرسال أي ملف إلى OpenCode.",
-  "bot.model_no_pdf": "⚠️ النموذج الحالي لا يدعم ملفات PDF. سيتم إرسال النص فقط.",
   "bot.document_extraction_error": "🔴 فشل استخراج نص المستند.",
   "bot.text_file_too_large": "⚠️ حجم الملف النصي أكبر من الحد المسموح ({maxSizeKb}KB)",
 

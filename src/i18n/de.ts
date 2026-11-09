@@ -129,8 +129,8 @@ export const de: I18nDictionary = {
   "bot.files_downloading": "⏳ Lade Dateien herunter...",
   "bot.file_too_large": "⚠️ Datei ist zu groß (max. {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 Datei konnte nicht heruntergeladen werden",
-  "bot.file_type_unsupported":
-    "⚠️ Dieser Dateityp wird nicht unterstützt. Sende ein Bild, Dokument (PDF, DOCX, PPTX) oder eine Text-/Code-Datei.",
+  "bot.file_save_error":
+    "🔴 Datei konnte nicht lokal gespeichert werden, der Agent kann sie nicht lesen.",
   "bot.rich_message_media_skipped":
     "⚠️ {count} nicht unterstützte Medienteile wurden übersprungen.",
   "bot.message_type_unsupported": "⚠️ Dieser Nachrichtentyp wird nicht unterstützt.",
@@ -138,7 +138,6 @@ export const de: I18nDictionary = {
     "⚠️ Eine oder mehrere Dateien in diesem Album können nicht verarbeitet werden. Es wurde nichts an OpenCode gesendet.",
   "bot.media_group_download_error":
     "🔴 Eine der Dateien konnte nicht heruntergeladen werden. Es wurde nichts an OpenCode gesendet.",
-  "bot.model_no_pdf": "⚠️ Das aktuelle Modell unterstützt keine PDF-Eingabe. Sende nur Text.",
   "bot.document_extraction_error": "🔴 Dokumenttext konnte nicht extrahiert werden.",
   "bot.text_file_too_large": "⚠️ Textdatei ist zu groß (max. {maxSizeKb}KB)",
 

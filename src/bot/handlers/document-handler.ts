@@ -7,7 +7,13 @@ import {
   toDataUri,
   isTextMimeType,
   isFileSizeAllowed,
+  MAX_FILE_SIZE_BYTES,
 } from "../../app/services/file-download-service.js";
+import {
+  buildLocalFileSection,
+  saveTelegramFile,
+  type StoredFile,
+} from "../../app/services/file-inbox-service.js";
 import { isDocExtractorConfigured, extractDocument } from "../../app/services/document-extractor-service.js";
 import { getModelCapabilities, supportsInput } from "../../app/services/model-capabilities-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
@@ -27,6 +33,7 @@ export interface DocumentHandlerDeps extends ProcessPromptDeps {
     api: Context["api"],
     fileId: string,
   ) => Promise<{ buffer: Buffer; filePath: string }>;
+  saveFile?: (buffer: Buffer, filename: string) => Promise<StoredFile>;
   getModelCapabilities?: (
     providerId: string,
     modelId: string,
@@ -69,6 +76,7 @@ export async function handleDocumentMessage(
   deps: DocumentHandlerDeps,
 ): Promise<void> {
   const downloadFile = deps.downloadFile ?? downloadTelegramFile;
+  const saveFile = deps.saveFile ?? saveTelegramFile;
   const getCapabilities = deps.getModelCapabilities ?? getModelCapabilities;
   const getStored = deps.getStoredModel ?? getStoredModel;
   const processPrompt = deps.processPrompt ?? processUserPrompt;
@@ -104,6 +112,47 @@ export async function handleDocumentMessage(
       return;
     }
     await processPrompt(ctx, input, deps);
+  };
+
+  /**
+   * Stores a document the model cannot ingest and hands its local path to the
+   * agent. The file is downloaded as-is: no parsing or conversion happens here.
+   */
+  const saveAndSubmit = async (downloaded?: { buffer: Buffer }): Promise<void> => {
+    if (doc.file_size && doc.file_size > MAX_FILE_SIZE_BYTES) {
+      const maxSizeMb = String(MAX_FILE_SIZE_BYTES / (1024 * 1024));
+      logger.warn(
+        `[Document] File exceeds the Telegram Bot API download limit: ${filename} (${doc.file_size} bytes)`,
+      );
+      await ctx.reply(t("bot.file_too_large", { maxSizeMb }));
+      return;
+    }
+
+    let buffer: Buffer;
+    if (downloaded) {
+      buffer = downloaded.buffer;
+    } else {
+      await ctx.reply(t("bot.file_downloading"));
+      if (await rejectQueuedMediaBeforePreparation(ctx, 0)) {
+        return;
+      }
+      buffer = (await downloadFile(ctx.api, doc.file_id)).buffer;
+    }
+
+    let stored: StoredFile;
+    try {
+      stored = await saveFile(buffer, filename);
+    } catch (err) {
+      logger.error(`[Document] Failed to save ${filename} to local storage:`, err);
+      await ctx.reply(t("bot.file_save_error"));
+      if (caption.trim().length > 0) {
+        await submitPrompt(caption);
+      }
+      return;
+    }
+
+    logger.info(`[Document] Saved ${filename} locally for the agent: ${stored.filePath}`);
+    await submitPrompt(`${buildLocalFileSection(stored)}\n\n${caption}`);
   };
 
   try {
@@ -212,23 +261,23 @@ export async function handleDocumentMessage(
               `[Document] Sending extracted document text from ${filename} (${result.text.length} chars) as prompt`,
             );
             await submitPrompt(promptWithFile, [], doc.file_size);
+            return;
           } catch (extractErr) {
             const errMsg = extractErr instanceof Error ? extractErr.message : String(extractErr);
             logger.error(`[Document] Document extraction failed: ${errMsg}`);
             await ctx.reply(t("bot.document_extraction_error"));
-            if (caption.trim().length > 0) {
-              await submitPrompt(caption);
-            }
-          }
-        } else {
-          logger.warn(
-            `[Document] Model doesn't support PDF input and DOC_EXTRACTOR_URL is not configured`,
-          );
-          await ctx.reply(t("bot.model_no_pdf"));
-          if (caption.trim().length > 0) {
-            await submitPrompt(caption);
+            logger.warn(
+              `[Document] Saving ${filename} locally after extraction failure so the agent can read it`,
+            );
+            await saveAndSubmit(downloadedFile);
+            return;
           }
         }
+
+        logger.warn(
+          `[Document] Model doesn't support PDF input and DOC_EXTRACTOR_URL is not configured; saving ${filename} locally`,
+        );
+        await saveAndSubmit();
         return;
       }
 
@@ -255,8 +304,10 @@ export async function handleDocumentMessage(
       return;
     }
 
-    logger.warn(`[Document] Unsupported document MIME type: ${mimeType}, filename=${filename}`);
-    await ctx.reply(t("bot.file_type_unsupported"));
+    logger.warn(
+      `[Document] Unsupported document MIME type: ${mimeType}, filename=${filename}; saving locally`,
+    );
+    await saveAndSubmit();
   } catch (err) {
     logger.error("[Document] Error handling document message:", err);
     await ctx.reply(t("bot.file_download_error"));

@@ -131,15 +131,13 @@ export const ko: I18nDictionary = {
   "bot.files_downloading": "⏳ 파일들을 다운로드하는 중...",
   "bot.file_too_large": "⚠️ 파일이 너무 큽니다 (최대 {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 파일 다운로드에 실패했습니다",
-  "bot.file_type_unsupported":
-    "⚠️ 지원되지 않는 파일 형식입니다. 이미지, 문서(PDF, DOCX, PPTX) 또는 텍스트/코드 파일을 보내 주세요.",
+  "bot.file_save_error": "🔴 파일을 로컬에 저장하지 못했습니다. 에이전트가 파일을 읽을 수 없습니다.",
   "bot.rich_message_media_skipped": "⚠️ 지원되지 않는 미디어 {count}개를 건너뛰었습니다.",
   "bot.message_type_unsupported": "⚠️ 지원되지 않는 메시지 형식입니다.",
   "bot.media_group_not_processed":
     "⚠️ 이 앨범의 일부 파일은 처리할 수 없습니다. OpenCode에 아무것도 전송되지 않았습니다.",
   "bot.media_group_download_error":
     "🔴 파일 중 하나를 다운로드하지 못했습니다. OpenCode에 아무것도 전송되지 않았습니다.",
-  "bot.model_no_pdf": "⚠️ 현재 모델은 PDF 입력을 지원하지 않습니다. 텍스트만 전송합니다.",
   "bot.document_extraction_error": "🔴 문서 텍스트 추출에 실패했습니다.",
   "bot.text_file_too_large": "⚠️ 텍스트 파일이 너무 큽니다 (최대 {maxSizeKb}KB)",
 

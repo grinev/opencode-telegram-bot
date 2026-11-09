@@ -9,8 +9,14 @@ import {
   downloadTelegramFile,
   isFileSizeAllowed,
   isTextMimeType,
+  MAX_FILE_SIZE_BYTES,
   toDataUri,
 } from "../../app/services/file-download-service.js";
+import {
+  buildLocalFileSection,
+  saveTelegramFile,
+  type StoredFile,
+} from "../../app/services/file-inbox-service.js";
 import { processUserPrompt, type ProcessPromptDeps } from "./prompt.js";
 import type { ArrivalTicket } from "../../app/managers/prompt-handover-manager.js";
 import { createIncomingPrompt, type IncomingPrompt } from "../../app/types/prompt.js";
@@ -53,12 +59,21 @@ type ValidMediaGroupItem =
       fileId: string;
       mime: string;
       filename: string;
+      fileSize?: number | undefined;
     }
   | {
       kind: "text";
       ctx: Context;
       fileId: string;
       filename: string;
+    }
+  | {
+      /** A document the model cannot ingest: saved locally and passed by path. */
+      kind: "stored";
+      ctx: Context;
+      fileId: string;
+      filename: string;
+      fileSize?: number | undefined;
     };
 
 interface MediaGroupBatch {
@@ -76,11 +91,20 @@ interface MediaGroupValidationError {
   reason: string;
 }
 
+/** A locally stored album item could not be written to the inbox directory. */
+class MediaGroupSaveError extends Error {
+  constructor(cause: unknown) {
+    super("Failed to save a media group file locally", { cause });
+    this.name = "MediaGroupSaveError";
+  }
+}
+
 export interface MediaGroupHandlerDeps extends ProcessPromptDeps {
   downloadFile?: (
     api: Context["api"],
     fileId: string,
   ) => Promise<{ buffer: Buffer; filePath: string }>;
+  saveFile?: (buffer: Buffer, filename: string) => Promise<StoredFile>;
   getModelCapabilities?: (
     providerId: string,
     modelId: string,
@@ -228,18 +252,13 @@ export class MediaGroupAttachmentHandler {
         return;
       }
 
-      const mediaBytes = items.reduce<number | undefined>((total, item) => {
-        if (total === undefined) {
-          return undefined;
+      // Only media held in the bot's memory counts: text becomes prompt text and
+      // locally stored documents are already on disk.
+      const mediaBytes = validationResult.items.reduce<number | undefined>((total, item) => {
+        if (total === undefined || item.kind !== "file") {
+          return total;
         }
-        if (item.kind === "photo") {
-          const size = item.photos[item.photos.length - 1]?.file_size;
-          return size === undefined ? undefined : total + size;
-        }
-        if (item.kind === "document") {
-          return item.document.file_size === undefined ? undefined : total + item.document.file_size;
-        }
-        return total;
+        return item.fileSize === undefined ? undefined : total + item.fileSize;
       }, 0);
       if (await rejectQueuedMediaBeforePreparation(replyCtx, mediaBytes)) {
         return;
@@ -272,6 +291,11 @@ export class MediaGroupAttachmentHandler {
       }
       await processPrompt(replyCtx, createIncomingPrompt(promptText, { fileParts }), this.deps);
     } catch (err) {
+      if (err instanceof MediaGroupSaveError) {
+        logger.error(`[MediaGroup] Failed to save an album file locally: key=${key}`, err);
+        await replyCtx.reply(t("bot.file_save_error"));
+        return;
+      }
       logger.error(`[MediaGroup] Failed to process media group: key=${key}`, err);
       await replyCtx.reply(t("bot.media_group_download_error"));
     }
@@ -281,7 +305,7 @@ export class MediaGroupAttachmentHandler {
     items: PendingMediaGroupItem[],
   ): Promise<ValidatedMediaGroup | MediaGroupValidationError> {
     const storedModel = (this.deps.getStoredModel ?? getStoredModel)();
-    const validItems: ValidMediaGroupItem[] = [];
+    let validItems: ValidMediaGroupItem[] = [];
     let needsImageSupport = false;
     let needsPdfSupport = false;
 
@@ -303,6 +327,7 @@ export class MediaGroupAttachmentHandler {
           fileId: largestPhoto.file_id,
           mime: "image/jpeg",
           filename: `photo-${item.messageId}.jpg`,
+          fileSize: largestPhoto.file_size,
         });
         continue;
       }
@@ -334,6 +359,7 @@ export class MediaGroupAttachmentHandler {
           fileId: document.file_id,
           mime: mimeType,
           filename,
+          fileSize: document.file_size,
         });
         continue;
       }
@@ -347,11 +373,24 @@ export class MediaGroupAttachmentHandler {
           fileId: document.file_id,
           mime: mimeType,
           filename,
+          fileSize: document.file_size,
         });
         continue;
       }
 
-      return { reason: `unsupported_document_mime:${mimeType || "unknown"}` };
+      if (document.file_size && document.file_size > MAX_FILE_SIZE_BYTES) {
+        return { reason: `document_too_large:${mimeType || "unknown"}` };
+      }
+
+      // Nothing in the album can be handed to the model natively: save the
+      // original bytes so the agent can inspect them by path.
+      validItems.push({
+        kind: "stored",
+        ctx: item.ctx,
+        fileId: document.file_id,
+        filename,
+        fileSize: document.file_size,
+      });
     }
 
     if (needsImageSupport || needsPdfSupport) {
@@ -363,7 +402,24 @@ export class MediaGroupAttachmentHandler {
       }
 
       if (needsPdfSupport && !supportsInput(capabilities, "pdf")) {
-        return { reason: `model_no_pdf:${storedModel.providerID}/${storedModel.modelID}` };
+        const converted: ValidMediaGroupItem[] = [];
+        for (const item of validItems) {
+          if (item.kind === "file" && item.mime === "application/pdf") {
+            if (item.fileSize && item.fileSize > MAX_FILE_SIZE_BYTES) {
+              return { reason: "document_too_large:application/pdf" };
+            }
+            converted.push({
+              kind: "stored",
+              ctx: item.ctx,
+              fileId: item.fileId,
+              filename: item.filename,
+              fileSize: item.fileSize,
+            });
+            continue;
+          }
+          converted.push(item);
+        }
+        validItems = converted;
       }
     }
 
@@ -375,6 +431,7 @@ export class MediaGroupAttachmentHandler {
     originalItems: PendingMediaGroupItem[],
   ): Promise<{ promptText: string; fileParts: FilePartInput[] }> {
     const downloadFile = this.deps.downloadFile ?? downloadTelegramFile;
+    const saveFile = this.deps.saveFile ?? saveTelegramFile;
     const textSections: string[] = [];
     const fileParts: FilePartInput[] = [];
 
@@ -386,6 +443,21 @@ export class MediaGroupAttachmentHandler {
         textSections.push(
           `--- Content of ${item.filename} ---\n${textContent}\n--- End of file ---`,
         );
+        continue;
+      }
+
+      if (item.kind === "stored") {
+        let stored: StoredFile;
+        try {
+          stored = await saveFile(downloadedFile.buffer, item.filename);
+        } catch (err) {
+          logger.error(`[MediaGroup] Failed to save ${item.filename} locally:`, err);
+          throw new MediaGroupSaveError(err);
+        }
+        logger.info(
+          `[MediaGroup] Saved ${item.filename} locally for the agent: ${stored.filePath}`,
+        );
+        textSections.push(buildLocalFileSection(stored));
         continue;
       }
 

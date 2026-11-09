@@ -13,6 +13,7 @@ import {
   type MediaGroupHandlerDeps,
 } from "../../../src/bot/handlers/media-group-handler.js";
 import { t } from "../../../src/i18n/index.js";
+import { MAX_FILE_SIZE_BYTES } from "../../../src/app/services/file-download-service.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { MAX_QUEUED_MEDIA_BYTES } from "../../../src/app/managers/prompt-queue-manager.js";
 import * as settingsStore from "../../../src/app/stores/settings-store.js";
@@ -109,12 +110,17 @@ function createDeps(overrides: Partial<MediaGroupHandlerDeps> = {}): {
   deps: MediaGroupHandlerDeps;
   processPromptMock: ReturnType<typeof vi.fn>;
   downloadMock: ReturnType<typeof vi.fn>;
+  saveFileMock: ReturnType<typeof vi.fn>;
   getCapabilitiesMock: ReturnType<typeof vi.fn>;
 } {
   const processPromptMock = vi.fn().mockResolvedValue(true);
   const downloadMock = vi.fn(async (_api: Context["api"], fileId: string) => ({
     buffer: Buffer.from(`content:${fileId}`),
     filePath: `documents/${fileId}`,
+  }));
+  const saveFileMock = vi.fn(async (_buffer: Buffer, filename: string) => ({
+    filePath: `/bot/inbox/1-abc/${filename}`,
+    filename,
   }));
   const getCapabilitiesMock = vi.fn().mockResolvedValue({
     input: { image: true, pdf: true },
@@ -125,6 +131,7 @@ function createDeps(overrides: Partial<MediaGroupHandlerDeps> = {}): {
     bot: {} as MediaGroupHandlerDeps["bot"],
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
     downloadFile: downloadMock,
+    saveFile: saveFileMock,
     getModelCapabilities: getCapabilitiesMock,
     getStoredModel: vi.fn(() => ({ providerID: "test-provider", modelID: "test-model" })),
     processPrompt: (ctx, input, promptDeps) =>
@@ -133,7 +140,7 @@ function createDeps(overrides: Partial<MediaGroupHandlerDeps> = {}): {
   };
   initializePromptQueueDispatch(deps);
 
-  return { deps, processPromptMock, downloadMock, getCapabilitiesMock };
+  return { deps, processPromptMock, downloadMock, saveFileMock, getCapabilitiesMock };
 }
 
 async function addToHandler(handler: MediaGroupAttachmentHandler, ctx: Context): Promise<void> {
@@ -183,25 +190,20 @@ describe("bot/handlers/media-group", () => {
     expect(flushPendingPromptMock).toHaveBeenCalledWith(777);
     expect(first.replyMock).toHaveBeenCalledWith(t("bot.files_downloading"));
     expect(processPromptMock).toHaveBeenCalledTimes(1);
-    expect(processPromptMock).toHaveBeenCalledWith(
-      first.ctx,
-      "What is on these images?",
-      deps,
-      [
-        expect.objectContaining({
-          type: "file",
-          mime: "image/png",
-          filename: "first.png",
-          url: expect.stringMatching(/^data:image\/png;base64,/),
-        }),
-        expect.objectContaining({
-          type: "file",
-          mime: "image/png",
-          filename: "second.png",
-          url: expect.stringMatching(/^data:image\/png;base64,/),
-        }),
-      ],
-    );
+    expect(processPromptMock).toHaveBeenCalledWith(first.ctx, "What is on these images?", deps, [
+      expect.objectContaining({
+        type: "file",
+        mime: "image/png",
+        filename: "first.png",
+        url: expect.stringMatching(/^data:image\/png;base64,/),
+      }),
+      expect.objectContaining({
+        type: "file",
+        mime: "image/png",
+        filename: "second.png",
+        url: expect.stringMatching(/^data:image\/png;base64,/),
+      }),
+    ]);
   });
 
   it("queues an album as one item while the agent is busy", async () => {
@@ -286,15 +288,10 @@ describe("bot/handlers/media-group", () => {
 
     expect(downloadMock).toHaveBeenCalledWith(first.ctx.api, "large-1");
     expect(downloadMock).toHaveBeenCalledWith(second.ctx.api, "large-2");
-    expect(processPromptMock).toHaveBeenCalledWith(
-      first.ctx,
-      "Compare these photos",
-      deps,
-      [
-        expect.objectContaining({ mime: "image/jpeg", filename: "photo-20.jpg" }),
-        expect.objectContaining({ mime: "image/jpeg", filename: "photo-21.jpg" }),
-      ],
-    );
+    expect(processPromptMock).toHaveBeenCalledWith(first.ctx, "Compare these photos", deps, [
+      expect.objectContaining({ mime: "image/jpeg", filename: "photo-20.jpg" }),
+      expect.objectContaining({ mime: "image/jpeg", filename: "photo-21.jpg" }),
+    ]);
   });
 
   it("combines image, PDF, and text documents into one prompt", async () => {
@@ -366,7 +363,7 @@ describe("bot/handlers/media-group", () => {
     );
   });
 
-  it("rejects the whole media group when any file is unsupported", async () => {
+  it("saves unsupported documents in an album locally", async () => {
     const image = createDocumentContext({
       messageId: 50,
       fileId: "image-file",
@@ -378,16 +375,125 @@ describe("bot/handlers/media-group", () => {
       fileId: "archive-file",
       filename: "archive.zip",
       mimeType: "application/zip",
+      caption: "Look inside the archive",
     });
-    const { deps, processPromptMock, downloadMock } = createDeps();
+    const { deps, processPromptMock, downloadMock, saveFileMock } = createDeps();
     const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
 
     await addToHandler(handler, image.ctx);
     await addToHandler(handler, archive.ctx);
     await handler.flushAll();
 
-    expect(image.replyMock).toHaveBeenCalledWith(t("bot.media_group_not_processed"));
+    expect(image.replyMock).toHaveBeenCalledWith(t("bot.files_downloading"));
+    expect(downloadMock).toHaveBeenCalledWith(archive.ctx.api, "archive-file");
+    expect(saveFileMock).toHaveBeenCalledWith(Buffer.from("content:archive-file"), "archive.zip");
+    expect(processPromptMock).toHaveBeenCalledWith(
+      image.ctx,
+      expect.stringContaining("/bot/inbox/1-abc/archive.zip"),
+      deps,
+      [expect.objectContaining({ filename: "screen.png" })],
+    );
+    expect(processPromptMock).toHaveBeenCalledWith(
+      image.ctx,
+      expect.stringContaining("Look inside the archive"),
+      deps,
+      expect.any(Array),
+    );
+  });
+
+  it("saves PDFs in an album locally when the model lacks PDF support", async () => {
+    const image = createDocumentContext({
+      messageId: 55,
+      fileId: "image-file",
+      filename: "screen.png",
+      mimeType: "image/png",
+    });
+    const pdf = createDocumentContext({
+      messageId: 56,
+      fileId: "pdf-file",
+      filename: "spec.pdf",
+      mimeType: "application/pdf",
+      caption: "Compare these",
+    });
+    const { deps, processPromptMock, saveFileMock } = createDeps({
+      getModelCapabilities: vi.fn().mockResolvedValue({ input: { image: true, pdf: false } }),
+    });
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+    await addToHandler(handler, image.ctx);
+    await addToHandler(handler, pdf.ctx);
+    await handler.flushAll();
+
+    expect(saveFileMock).toHaveBeenCalledWith(Buffer.from("content:pdf-file"), "spec.pdf");
+    expect(processPromptMock).toHaveBeenCalledWith(
+      image.ctx,
+      expect.stringContaining("/bot/inbox/1-abc/spec.pdf"),
+      deps,
+      [expect.objectContaining({ filename: "screen.png" })],
+    );
+  });
+
+  it("does not count locally saved documents against the queued media limit", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
+    container.foregroundSessionState.markBusy("session-1", "/repo");
+    const archive = createDocumentContext({
+      messageId: 22,
+      fileId: "archive-file",
+      filename: "archive.zip",
+      mimeType: "application/zip",
+      fileSize: MAX_QUEUED_MEDIA_BYTES,
+      caption: "Check the archive",
+    });
+    const { deps, processPromptMock } = createDeps();
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+    await addToHandler(handler, archive.ctx);
+    await handler.flushAll();
+
+    expect(processPromptMock).not.toHaveBeenCalled();
+    expect(promptQueue.size()).toBe(1);
+    expect(promptQueue.list()[0]).toEqual(
+      expect.objectContaining({ displayText: "Check the archive" }),
+    );
+    expect(promptQueue.mediaSize()).toBe(0);
+  });
+
+  it("reports a local save failure clearly and sends nothing", async () => {
+    const archive = createDocumentContext({
+      messageId: 59,
+      fileId: "archive-file",
+      filename: "archive.zip",
+      mimeType: "application/zip",
+    });
+    const { deps, processPromptMock } = createDeps({
+      saveFile: vi.fn().mockRejectedValue(new Error("EACCES: permission denied")),
+    });
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+    await addToHandler(handler, archive.ctx);
+    await handler.flushAll();
+
+    expect(archive.replyMock).toHaveBeenCalledWith(t("bot.file_save_error"));
+    expect(processPromptMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects the whole media group when a document exceeds the Telegram download limit", async () => {
+    const archive = createDocumentContext({
+      messageId: 58,
+      fileId: "archive-file",
+      filename: "huge.zip",
+      mimeType: "application/zip",
+      fileSize: MAX_FILE_SIZE_BYTES + 1,
+    });
+    const { deps, processPromptMock, downloadMock, saveFileMock } = createDeps();
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+    await addToHandler(handler, archive.ctx);
+    await handler.flushAll();
+
+    expect(archive.replyMock).toHaveBeenCalledWith(t("bot.media_group_not_processed"));
     expect(downloadMock).not.toHaveBeenCalled();
+    expect(saveFileMock).not.toHaveBeenCalled();
     expect(processPromptMock).not.toHaveBeenCalled();
   });
 

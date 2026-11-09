@@ -125,15 +125,13 @@ export const tr: I18nDictionary = {
   "bot.files_downloading": "⏳ Dosyalar indiriliyor...",
   "bot.file_too_large": "⚠️ Dosya çok büyük (en fazla {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 Dosya indirilemedi",
-  "bot.file_type_unsupported":
-    "⚠️ Bu dosya türü desteklenmiyor. Bir görsel, belge (PDF, DOCX, PPTX) veya metin/kod dosyası gönderin.",
+  "bot.file_save_error": "🔴 Dosya yerel olarak kaydedilemedi, ajan dosyayı okuyamayacak.",
   "bot.rich_message_media_skipped": "⚠️ Desteklenmeyen {count} medya parçası atlandı.",
   "bot.message_type_unsupported": "⚠️ Bu mesaj türü desteklenmiyor.",
   "bot.media_group_not_processed":
     "⚠️ Bu albümdeki bir veya daha fazla dosya işlenemiyor. OpenCode'a hiçbir şey gönderilmedi.",
   "bot.media_group_download_error":
     "🔴 Dosyalardan biri indirilemedi. OpenCode'a hiçbir şey gönderilmedi.",
-  "bot.model_no_pdf": "⚠️ Geçerli model PDF girdisini desteklemiyor. Yalnızca metin gönderiliyor.",
   "bot.document_extraction_error": "🔴 Belge metni çıkarılamadı.",
   "bot.text_file_too_large": "⚠️ Metin dosyası çok büyük (en fazla {maxSizeKb}KB)",
 

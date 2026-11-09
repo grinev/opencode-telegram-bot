@@ -15,6 +15,10 @@ services:
       - .env
     volumes:
       - opencode-bot-data:/app/data
+      # Documents the model cannot ingest are saved under /app/data/inbox,
+      # inside the container. Bind-mount a directory the OpenCode server can read
+      # and set FILE_INBOX_DIR to the path OpenCode sees:
+      # - ./inbox:/app/data/inbox
     logging:
       driver: "json-file"
       options:

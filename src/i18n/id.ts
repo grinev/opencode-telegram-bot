@@ -131,15 +131,13 @@ export const id: I18nDictionary = {
   "bot.files_downloading": "⏳ Mengunduh file...",
   "bot.file_too_large": "⚠️ File terlalu besar (maks {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 Gagal mengunduh file",
-  "bot.file_type_unsupported":
-    "⚠️ Jenis file ini tidak didukung. Kirim gambar, dokumen (PDF, DOCX, PPTX), atau file teks/kode.",
+  "bot.file_save_error": "🔴 Gagal menyimpan file secara lokal, agen tidak dapat membacanya.",
   "bot.rich_message_media_skipped": "⚠️ Melewati {count} bagian media yang tidak didukung.",
   "bot.message_type_unsupported": "⚠️ Jenis pesan ini tidak didukung.",
   "bot.media_group_not_processed":
     "⚠️ Ada file di album ini yang tidak bisa diproses. Tidak ada yang dikirim ke OpenCode.",
   "bot.media_group_download_error":
     "🔴 Gagal mengunduh salah satu file. Tidak ada yang dikirim ke OpenCode.",
-  "bot.model_no_pdf": "⚠️ Model saat ini tidak mendukung input PDF. Mengirim teks saja.",
   "bot.document_extraction_error": "🔴 Gagal mengekstrak teks dokumen.",
   "bot.text_file_too_large": "⚠️ File teks terlalu besar (maks {maxSizeKb}KB)",
 

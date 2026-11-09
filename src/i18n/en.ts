@@ -122,15 +122,13 @@ export const en = {
   "bot.files_downloading": "⏳ Downloading files...",
   "bot.file_too_large": "⚠️ File is too large (max {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 Failed to download file",
-  "bot.file_type_unsupported":
-    "⚠️ This file type is not supported. Send an image, document (PDF, DOCX, PPTX), or text/code file.",
+  "bot.file_save_error": "🔴 Failed to save the file locally, so the agent cannot read it.",
   "bot.rich_message_media_skipped": "⚠️ Skipped {count} unsupported media part(s).",
   "bot.message_type_unsupported": "⚠️ This message type is not supported.",
   "bot.media_group_not_processed":
     "⚠️ One or more files in this album cannot be processed. Nothing was sent to OpenCode.",
   "bot.media_group_download_error":
     "🔴 Failed to download one of the files. Nothing was sent to OpenCode.",
-  "bot.model_no_pdf": "⚠️ Current model doesn't support PDF input. Sending text only.",
   "bot.document_extraction_error": "🔴 Failed to extract document text.",
   "bot.text_file_too_large": "⚠️ Text file is too large (max {maxSizeKb}KB)",
 

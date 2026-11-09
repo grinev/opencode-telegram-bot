@@ -121,8 +121,8 @@ export const ru: I18nDictionary = {
   "bot.files_downloading": "⏳ Скачиваю файлы...",
   "bot.file_too_large": "⚠️ Файл слишком большой (макс. {maxSizeMb}МБ)",
   "bot.file_download_error": "🔴 Не удалось скачать файл",
-  "bot.file_type_unsupported":
-    "⚠️ Этот тип файла не поддерживается. Отправьте изображение, документ (PDF, DOCX, PPTX) или текстовый/кодовый файл.",
+  "bot.file_save_error":
+    "🔴 Не удалось сохранить файл локально, агент не сможет его прочитать.",
   "bot.rich_message_media_skipped":
     "⚠️ Пропущено неподдерживаемых медиафрагментов: {count}.",
   "bot.message_type_unsupported": "⚠️ Этот тип сообщения не поддерживается.",
@@ -130,7 +130,6 @@ export const ru: I18nDictionary = {
     "⚠️ Один или несколько файлов в альбоме нельзя обработать. В OpenCode ничего не отправлено.",
   "bot.media_group_download_error":
     "🔴 Не удалось скачать один из файлов. В OpenCode ничего не отправлено.",
-  "bot.model_no_pdf": "⚠️ Текущая модель не поддерживает PDF. Отправляю только текст.",
   "bot.document_extraction_error": "🔴 Не удалось извлечь текст из документа.",
   "bot.text_file_too_large": "⚠️ Текстовый файл слишком большой (макс. {maxSizeKb}КБ)",
 
