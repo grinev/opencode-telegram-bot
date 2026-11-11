@@ -111,8 +111,7 @@ export const fr: I18nDictionary = {
     "🔁 {message}\n\nLe fournisseur renvoie la même erreur à chaque nouvelle tentative. Utilisez /abort pour arrêter.",
   "bot.external_user_input": "Entrée utilisateur externe",
   "background.session_fallback": "session {id}",
-  "background.assistant_response":
-    "🔔 L'assistant a répondu dans une session en arrière-plan : {session}",
+  "background.assistant_response": "🔔 Réponse d'une autre session :\n[{project}] {session}",
   "background.question_asked": "❓ Une session en arrière-plan attend une réponse : {session}",
   "background.permission_asked":
     "🔐 Une session en arrière-plan a demandé des autorisations : {session}",

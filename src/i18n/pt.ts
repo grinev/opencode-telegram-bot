@@ -110,8 +110,7 @@ export const pt: I18nDictionary = {
     "🔁 {message}\n\nO provedor continua retornando o mesmo erro nas novas tentativas. Use /abort para abortar.",
   "bot.external_user_input": "Entrada externa do usuário",
   "background.session_fallback": "sessão {id}",
-  "background.assistant_response":
-    "🔔 O assistente respondeu em uma sessão em segundo plano: {session}",
+  "background.assistant_response": "🔔 Resposta de outra sessão:\n[{project}] {session}",
   "background.question_asked": "❓ Uma sessão em segundo plano precisa de uma resposta: {session}",
   "background.permission_asked": "🔐 Uma sessão em segundo plano solicitou permissões: {session}",
   "background.open_session_button": "Abrir sessão",

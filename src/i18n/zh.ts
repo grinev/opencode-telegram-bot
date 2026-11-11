@@ -99,7 +99,7 @@ export const zh: I18nDictionary = {
   "bot.session_retry": "🔁 {message}\n\n提供方在重复重试时持续返回同一错误。使用 /abort 可停止。",
   "bot.external_user_input": "外部用户输入",
   "background.session_fallback": "会话 {id}",
-  "background.assistant_response": "🔔 助手已在后台会话中回复：{session}",
+  "background.assistant_response": "🔔 来自另一个会话的回复：\n[{project}] {session}",
   "background.question_asked": "❓ 后台会话需要回答：{session}",
   "background.permission_asked": "🔐 后台会话请求了权限：{session}",
   "background.open_session_button": "打开会话",

@@ -13,10 +13,24 @@ const mocked = vi.hoisted(() => ({
   subscribeToEvents: vi.fn(),
   stopEventListening: vi.fn(),
   reconcileBusyState: vi.fn(),
+  fetchSessionTitle: vi.fn(),
+  loadRecentSessionDirectories: vi.fn(),
   reconciliationStreamer: {
     current: null as { hasActiveStream(sessionId: string): boolean } | null,
   },
 }));
+
+vi.mock("../../../src/app/services/session-service.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../../src/app/services/session-service.js")>();
+  return { ...actual, fetchSessionTitle: mocked.fetchSessionTitle };
+});
+
+vi.mock("../../../src/app/services/recent-sessions-service.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../../src/app/services/recent-sessions-service.js")>();
+  return { ...actual, loadRecentSessionDirectories: mocked.loadRecentSessionDirectories };
+});
 
 vi.mock("../../../src/opencode/events.js", () => ({
   subscribeToEvents: mocked.subscribeToEvents,
@@ -252,6 +266,10 @@ describe("bot/services/event-subscription-service lifecycle", () => {
     mocked.subscribeToEvents.mockReset();
     mocked.stopEventListening.mockReset();
     mocked.reconcileBusyState.mockReset();
+    mocked.fetchSessionTitle.mockReset();
+    mocked.fetchSessionTitle.mockImplementation(async (session: { title: string }) => session.title);
+    mocked.loadRecentSessionDirectories.mockReset();
+    mocked.loadRecentSessionDirectories.mockResolvedValue(["D:/repo"]);
     mocked.subscribeToEvents.mockResolvedValue(undefined);
     mocked.reconciliationStreamer.current = null;
 
@@ -937,11 +955,11 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       await vi.waitFor(() => {
         expect(api.sendMessage).toHaveBeenCalledTimes(1);
       });
-      expect(defined(api.sendMessage.mock.calls[0]?.[1])).toContain("Background work");
+      expect(defined(api.sendMessage.mock.calls[0]?.[1])).toContain("[repo] Background work");
       expect(defined(api.sendMessage.mock.calls[0])[2]).toHaveProperty("reply_markup");
     });
 
-    it("labels an untitled background session by its shortened id", async () => {
+    it("labels an untitled background session as a new session, never by its id", async () => {
       const { api } = await setupService();
       const dispatch = getEventDispatcher();
 
@@ -961,8 +979,10 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       await vi.waitFor(() => {
         expect(api.sendMessage).toHaveBeenCalledTimes(1);
       });
-      expect(defined(api.sendMessage.mock.calls[0]?.[1])).toContain("bg-sessi");
-      expect(defined(api.sendMessage.mock.calls[0]?.[1])).not.toContain("bg-session-123456");
+      expect(defined(api.sendMessage.mock.calls[0]?.[1])).toContain(
+        "[repo] new session",
+      );
+      expect(defined(api.sendMessage.mock.calls[0]?.[1])).not.toContain("bg-session");
     });
   });
 

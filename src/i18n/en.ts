@@ -108,7 +108,7 @@ export const en = {
     "🔁 {message}\n\nProvider keeps returning the same error on repeated retries. Use /abort to abort.",
   "bot.external_user_input": "External user input",
   "background.session_fallback": "session {id}",
-  "background.assistant_response": "🔔 Assistant replied in background session: {session}",
+  "background.assistant_response": "🔔 Reply from another session:\n[{project}] {session}",
   "background.question_asked": "❓ Background session needs an answer: {session}",
   "background.permission_asked": "🔐 Background session requested permissions: {session}",
   "background.open_session_button": "Open session",

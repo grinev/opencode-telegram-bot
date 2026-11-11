@@ -111,8 +111,7 @@ export const es: I18nDictionary = {
     "🔁 {message}\n\nEl proveedor devuelve el mismo error en intentos repetidos. Usa /abort para detenerlo.",
   "bot.external_user_input": "Entrada externa del usuario",
   "background.session_fallback": "sesión {id}",
-  "background.assistant_response":
-    "🔔 El asistente respondió en una sesión en segundo plano: {session}",
+  "background.assistant_response": "🔔 Respuesta de otra sesión:\n[{project}] {session}",
   "background.question_asked": "❓ Una sesión en segundo plano necesita una respuesta: {session}",
   "background.permission_asked": "🔐 Una sesión en segundo plano solicitó permisos: {session}",
   "background.open_session_button": "Abrir sesión",
