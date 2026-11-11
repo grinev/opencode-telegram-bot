@@ -3,8 +3,9 @@ import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentSession } from "../stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 import { checkFolderPresence, collectFromPresentFolders } from "./folder-presence-service.js";
+import { loadUnreadReplySessionIds } from "./session-reply-read-service.js";
 
-export type RecentStatus = "question" | "permission" | "running" | "idle";
+export type RecentStatus = "question" | "permission" | "running" | "unread" | "idle";
 type RecentSessionInfo = Pick<GlobalSession, "id" | "directory" | "title" | "time">;
 export type RecentSession = { session: RecentSessionInfo; status: RecentStatus };
 
@@ -68,6 +69,10 @@ export async function loadRecentSessions(limit: number): Promise<RecentSession[]
   }
 
   const statuses = new Map<string, RecentStatus>();
+  // Reply checks run alongside the per-folder lookups: one round trip either way.
+  const unreadPass = loadUnreadReplySessionIds(
+    sessions.map((session) => ({ id: session.id, directory: session.directory })),
+  );
   await Promise.all([...byDirectory].map(async ([directory, group]) => {
     const [statusResult, questionResult, permissionResult] = await Promise.all([
       opencodeClient.session.status({ directory }),
@@ -102,5 +107,13 @@ export async function loadRecentSessions(limit: number): Promise<RecentSession[]
           : run === "busy" || run === "retry" ? "running" : "idle");
     }
   }));
+  // A session that is busy, waiting on an answer or a permission keeps its own symbol; the unread
+  // mark only takes the place of ordinary idle.
+  const unread = await unreadPass;
+  for (const sessionId of unread) {
+    if (statuses.get(sessionId) === "idle") {
+      statuses.set(sessionId, "unread");
+    }
+  }
   return sessions.map((session) => ({ session, status: statuses.get(session.id) ?? "idle" }));
 }

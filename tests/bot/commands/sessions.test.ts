@@ -74,6 +74,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
   getCurrentSession: vi.fn(() => mocked.currentSession),
+  getSessionReplyReadState: vi.fn(() => undefined),
 }));
 
 vi.mock("../../../src/app/services/session-service.js", () => ({

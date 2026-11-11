@@ -7,7 +7,7 @@ import { formatSessionTitle } from "../../app/formatters/session-title-formatter
 
 export const RECENT_CALLBACK_PREFIX = "recent:";
 const GLYPHS: Record<RecentStatus, string> = {
-  running: "⏳", idle: "○", question: "❓", permission: "🔐",
+  running: "⏳", idle: "○", question: "❓", permission: "🔐", unread: "🔔",
 };
 
 function shortenProject(name: string): string {
@@ -77,7 +77,7 @@ export function buildRecentMenu(rows: RecentSession[]): { text: string; keyboard
     keyboard.text(`${prefix}${trimmed}`, `${RECENT_CALLBACK_PREFIX}${index}`).row();
   });
   return {
-    text: [t("recent.heading"), "", `⏳ ${t("recent.running")} · ○ ${t("recent.idle")} · ❓ ${t("recent.question")} · 🔐 ${t("recent.permission")}`].join("\n"),
+    text: [t("recent.heading"), "", `⏳ ${t("recent.running")} · ○ ${t("recent.idle")} · 🔔 ${t("recent.status.unread")} · ❓ ${t("recent.question")} · 🔐 ${t("recent.permission")}`].join("\n"),
     keyboard,
   };
 }

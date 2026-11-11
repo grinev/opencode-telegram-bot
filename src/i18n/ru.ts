@@ -6,6 +6,7 @@ export const ru: I18nDictionary = {
   "recent.empty": "📭 Сессий в проектах нет.",
   "recent.running": "выполняется",
   "recent.idle": "ожидает",
+  "recent.status.unread": "непрочитанный ответ",
   "recent.question": "ждёт ответа",
   "recent.permission": "ждёт разрешения",
   "cmd.description.status": "Статус сервера и сессии",

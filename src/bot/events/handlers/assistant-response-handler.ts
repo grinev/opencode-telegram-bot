@@ -9,6 +9,7 @@ import { promptQueue, type QueuedPrompt } from "../../../app/managers/prompt-que
 import { promptHandover } from "../../../app/managers/prompt-handover-manager.js";
 import { buildExternalUserInputNotification } from "../../../app/services/external-user-input-service.js";
 import { getCurrentSession } from "../../../app/services/session-service.js";
+import { markSessionReplyRead } from "../../../app/services/session-reply-read-service.js";
 import { sendBotText } from "../../messages/telegram-text.js";
 import { closeForegroundRun } from "./run-close.js";
 import { finalizeAssistantResponse } from "../../streaming/finalize-assistant-response.js";
@@ -469,6 +470,11 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
           );
         } else if (!compactCardClosed && runtime.compactProgressStreamer.isHolding(sessionId)) {
           runtime.compactProgressStreamer.releaseHold(sessionId);
+        }
+
+        // The reply reached the chat live, so its session carries no unread mark for it.
+        if (completionInfo.completedAt !== undefined) {
+          markSessionReplyRead(sessionId, completionInfo.completedAt);
         }
 
         await sendTtsResponseForSession({

@@ -7,6 +7,7 @@ export const tr: I18nDictionary = {
   "recent.empty": "📭 Projelerde oturum bulunamadı.",
   "recent.running": "çalışıyor",
   "recent.idle": "boşta",
+  "recent.status.unread": "okunmamış yanıt",
   "recent.question": "yanıt bekliyor",
   "recent.permission": "izin bekliyor",
   "cmd.description.status": "Sunucu ve oturum durumu",

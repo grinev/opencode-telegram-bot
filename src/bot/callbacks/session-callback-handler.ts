@@ -10,6 +10,7 @@ import { getStoredModel, selectModel } from "../../app/services/model-selection-
 import type { ModelInfo } from "../../app/types/model.js";
 import type { BackgroundSessionTrackerSnapshot } from "../../app/managers/background-session-manager.js";
 import { setCurrentSession } from "../../app/services/session-service.js";
+import { markSessionReplyRead } from "../../app/services/session-reply-read-service.js";
 import { applySessionSettings } from "../../app/services/session-settings-service.js";
 import type { SessionInfo } from "../../app/types/session.js";
 import type { ProjectInfo } from "../../app/types/project.js";
@@ -258,8 +259,10 @@ type SessionMessageLike = {
   info: {
     role?: string;
     summary?: boolean;
+    error?: unknown;
     time?: {
       created?: number;
+      completed?: number | undefined;
     };
   };
   parts: Array<{ type: string; text?: string }>;
@@ -855,6 +858,12 @@ async function sendSessionPickTranscript(
     await sendRenderedBotPart({ api, chatId, part, options: AGENT_TEXT_LINK_PREVIEW_OPTIONS });
   }
 
+  // The reply is in the chat now: its session stops carrying the unread mark. A send that threw
+  // above leaves the mark where it was, and so does a reply that has not finished yet.
+  if (reply.completed !== undefined) {
+    markSessionReplyRead(sessionId, reply.completed);
+  }
+
   // A message sent after the shown reply started is still waiting for its own reply: show it
   // too, so the picked session does not look like the message never went through.
   const pendingPrompt = messages ? findPendingUserPrompt(messages, reply.created) : null;
@@ -867,7 +876,7 @@ async function sendSessionPickTranscript(
 async function loadLatestAssistantResponse(
   sessionId: string,
   directory: string,
-): Promise<string | null> {
+): Promise<{ text: string; shownAt: number | null } | null> {
   try {
     const { data: messages, error } = await opencodeClient.session.messages({
       sessionID: sessionId,
@@ -883,6 +892,8 @@ async function loadLatestAssistantResponse(
     const latestResponse = (messages as SessionMessageLike[]).reduce<{
       text: string;
       created: number;
+      completedAt?: number | undefined;
+      errored: boolean;
     } | null>((latest, message) => {
       if (message.info.role !== "assistant" || message.info.summary) {
         return latest;
@@ -895,13 +906,27 @@ async function loadLatestAssistantResponse(
 
       const created = message.info.time?.created ?? 0;
       if (!latest || created >= latest.created) {
-        return { text, created };
+        return {
+          text,
+          created,
+          completedAt: message.info.time?.completed,
+          errored: Boolean(message.info.error),
+        };
       }
 
       return latest;
     }, null);
 
-    return latestResponse?.text ?? null;
+    if (!latestResponse) {
+      return null;
+    }
+
+    // Only a finished, successful reply is the reply a mark is about. One that failed or is still
+    // streaming is shown as it is, and clears nothing.
+    return {
+      text: latestResponse.text,
+      shownAt: latestResponse.errored ? null : latestResponse.completedAt ?? null,
+    };
   } catch (err) {
     logger.error("[Sessions] Error loading latest assistant response:", err);
     return null;
@@ -914,12 +939,12 @@ async function sendLatestAssistantResponse(
   sessionId: string,
   directory: string,
 ): Promise<void> {
-  const responseText = await loadLatestAssistantResponse(sessionId, directory);
-  if (!responseText) {
+  const response = await loadLatestAssistantResponse(sessionId, directory);
+  if (!response) {
     return;
   }
 
-  const parts = renderAssistantFinalPartsSafe(responseText);
+  const parts = renderAssistantFinalPartsSafe(response.text);
   for (const part of parts) {
     await sendRenderedBotPart({
       api,
@@ -927,5 +952,11 @@ async function sendLatestAssistantResponse(
       part,
       options: AGENT_TEXT_LINK_PREVIEW_OPTIONS,
     });
+  }
+
+  // The notification showed the reply itself, so the session stops carrying its mark; a failed
+  // send threw above and leaves the mark standing.
+  if (response.shownAt !== null) {
+    markSessionReplyRead(sessionId, response.shownAt);
   }
 }

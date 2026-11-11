@@ -4,6 +4,7 @@ export const en = {
   "recent.empty": "📭 No sessions found across projects.",
   "recent.running": "running",
   "recent.idle": "idle",
+  "recent.status.unread": "unread reply",
   "recent.question": "awaiting an answer",
   "recent.permission": "awaiting permission",
   "cmd.description.status": "Server and session status",

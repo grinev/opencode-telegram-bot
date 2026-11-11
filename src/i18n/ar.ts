@@ -14,6 +14,7 @@ export const ar: I18nDictionary = {
   "recent.empty": "📭 لا توجد جلسات في المشاريع.",
   "recent.running": "قيد التشغيل",
   "recent.idle": "خامل",
+  "recent.status.unread": "رد غير مقروء",
   "recent.question": "بانتظار الإجابة",
   "recent.permission": "بانتظار الإذن",
   "cmd.description.status": "عرض حالة الخادم والجلسة",

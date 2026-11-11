@@ -14,6 +14,7 @@ export const ko: I18nDictionary = {
   "recent.empty": "📭 프로젝트에 세션이 없습니다.",
   "recent.running": "실행 중",
   "recent.idle": "대기 중",
+  "recent.status.unread": "읽지 않은 답변",
   "recent.question": "답변 대기 중",
   "recent.permission": "권한 승인 대기 중",
   "cmd.description.status": "서버 및 세션 상태",

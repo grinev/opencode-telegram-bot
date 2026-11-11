@@ -13,6 +13,7 @@ import {
   getResponseStreamingMode,
   getSendDiffFileAttachments,
   getPinnedDashboardEnabled,
+  getSessionReplyReadState,
   getShowAssistantRunFooter,
   getShowBackgroundSessionNotifications,
   getShowThinkingContent,
@@ -25,6 +26,7 @@ import {
   setScheduledTasksConfirmed,
   setResponseStreamingMode,
   setSendDiffFileAttachments,
+  setSessionReplyReadState,
   setShowAssistantRunFooter,
   setShowBackgroundSessionNotifications,
   setShowThinkingContent,
@@ -160,18 +162,19 @@ describe("app/stores/settings-store", () => {
     });
 
     it.each([true, false])(
-      "starts in steer on a V2 server with promptQueueEnabled=%s and leaves settings.json as is",
+      "starts in steer on a V2 server with promptQueueEnabled=%s and writes no queue mode",
       async (oldValue) => {
         config.opencode.serverVersion = "v2";
         const settingsPath = path.join(tempHome, "settings.json");
-        const original = JSON.stringify({ promptQueueEnabled: oldValue });
-        await writeFile(settingsPath, original);
+        await writeFile(settingsPath, JSON.stringify({ promptQueueEnabled: oldValue }));
 
         await loadSettings();
         await flushSettings();
 
         expect(getPromptQueueMode()).toBe("steer");
-        expect(await readFile(settingsPath, "utf-8")).toBe(original);
+        const stored = JSON.parse(await readFile(settingsPath, "utf-8"));
+        expect(stored.promptQueueEnabled).toBe(oldValue);
+        expect(stored).not.toHaveProperty("promptQueueMode");
       },
     );
 
@@ -363,6 +366,44 @@ describe("app/stores/settings-store", () => {
     expect(getShowAssistantRunFooter()).toBe(false);
   });
 
+  it("starts the unread reply state at the upgrade for a settings file without one", async () => {
+    await writeFile(path.join(tempHome, "settings.json"), JSON.stringify({ compactOutputMode: true }));
+
+    const before = Date.now();
+    await loadSettings();
+
+    const state = getSessionReplyReadState();
+    expect(state?.sessions).toEqual({});
+    expect(state?.baselineAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it("keeps the unread reply baseline and positions across a restart", async () => {
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      JSON.stringify({
+        sessionReplyReadState: { baselineAt: 1000, sessions: { s: { readAt: 2000, unreadAt: 3000 } } },
+      }),
+    );
+
+    await loadSettings();
+
+    expect(getSessionReplyReadState()).toEqual({
+      baselineAt: 1000,
+      sessions: { s: { readAt: 2000, unreadAt: 3000 } },
+    });
+  });
+
+  it("persists the unread reply state to settings.json", async () => {
+    await loadSettings();
+
+    await setSessionReplyReadState({ baselineAt: 10, sessions: { s: { readAt: 20 } } });
+
+    await vi.waitFor(async () => {
+      const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
+      expect(settings.sessionReplyReadState).toEqual({ baselineAt: 10, sessions: { s: { readAt: 20 } } });
+    });
+  });
+
   it("persists compact output mode to settings.json", async () => {
     await loadSettings();
 
@@ -536,7 +577,8 @@ describe("app/stores/settings-store", () => {
       setCompactOutputMode(true);
       await flushSettings();
       expect(process.env.OPENCODE_TELEGRAM_HOME).toBe(otherHome);
-      expect(await readFile(path.join(tempHome, "settings.json.bak"), "utf8")).toBe(original);
+      const rotated = JSON.parse(await readFile(path.join(tempHome, "settings.json.bak"), "utf8"));
+      expect(rotated).not.toHaveProperty("currentAgent");
       expect(await readFile(path.join(otherHome, "settings.json.bak"), "utf8")).toBe(sentinel);
       expect(
         JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf8")),
@@ -584,12 +626,18 @@ describe("app/stores/settings-store", () => {
 
     it("leaves no backup and no temporary file after the first write", async () => {
       await loadSettings();
-
-      setCompactOutputMode(true);
       await flushSettings();
 
       expect(await exists(settingsPath())).toBe(true);
       expect(await exists(backupPath())).toBe(false);
+      expect(await exists(tempPath())).toBe(false);
+
+      setCompactOutputMode(true);
+      await flushSettings();
+
+      expect(JSON.parse(await readFile(settingsPath(), "utf8"))).toMatchObject({
+        compactOutputMode: true,
+      });
       expect(await exists(tempPath())).toBe(false);
     });
 

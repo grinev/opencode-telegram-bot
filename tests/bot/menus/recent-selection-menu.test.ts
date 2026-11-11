@@ -63,6 +63,12 @@ describe("recent session buttons", () => {
     expect(labels.every((label) => [...label].length <= 64)).toBe(true);
   });
 
+  it("shows an unread reply with its own symbol in the buttons and the legend", () => {
+    const { keyboard, text } = buildRecentMenu([row("u", "/repo", "unread")]);
+    expect(keyboard.inline_keyboard.flat()[0]?.text).toContain("🔔 [repo]");
+    expect(text).toContain(`🔔 ${t("recent.status.unread")}`);
+  });
+
   it("shows a session OpenCode has not named yet as a new session", () => {
     const { keyboard } = buildRecentMenu([
       { session: { id: "a", directory: "/repo", title: "" } as RecentSession["session"], status: "idle" },
