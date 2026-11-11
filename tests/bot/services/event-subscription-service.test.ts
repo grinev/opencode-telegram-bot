@@ -301,7 +301,15 @@ function emitTaskTool(
   } as unknown as Event);
 }
 
-function emitTodoTool(summaryAggregator: { processEvent(event: Event): void }): void {
+function emitTodoTool(
+  summaryAggregator: { processEvent(event: Event): void },
+  options: {
+    status?: "pending" | "running" | "completed";
+    todos?: Array<{ content: string; status: string }>;
+  } = {},
+): void {
+  const { status = "running", todos } = options;
+  const input = todos ? { todos } : {};
   summaryAggregator.processEvent({
     type: "message.part.updated",
     properties: {
@@ -312,7 +320,15 @@ function emitTodoTool(summaryAggregator: { processEvent(event: Event): void }): 
         type: "tool",
         callID: "call-todo",
         tool: "todowrite",
-        state: { status: "running", input: {}, metadata: {} },
+        state:
+          status === "pending"
+            ? { status, input, raw: "" }
+            : {
+                status,
+                input,
+                metadata: {},
+                time: { start: Date.now(), ...(status === "completed" ? { end: Date.now() } : {}) },
+              },
       },
     },
   } as unknown as Event);
@@ -679,6 +695,39 @@ describe("bot/services/event-subscription-service", () => {
 
       expect(String(api.sendMessage.mock.calls[0]?.[1])).toContain("sleep 60");
       expect(String(api.sendMessage.mock.calls[1]?.[1])).toContain("todowrite");
+    });
+
+    it("draws a running todo call's checklist from the arguments it carries", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitTodoTool(summaryAggregator, {
+        todos: [
+          { content: "Read the README", status: "completed" },
+          { content: "Write a summary", status: "in_progress" },
+          { content: "Ship it", status: "pending" },
+        ],
+      });
+      await flushPendingDispatch();
+
+      const text = collectSentTexts(api).join("\n");
+      expect(text).toContain("⏳ 📝 todowrite (3)");
+      expect(text).toContain("✅ Read the README");
+      expect(text).toContain("🔄 Write a summary");
+      expect(text).toContain("🔲 Ship it");
+    });
+
+    it("draws nothing for a todo call whose arguments are still being composed", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      useTrackerFakeTimers();
+
+      emitTodoTool(summaryAggregator, {
+        status: "pending",
+        todos: [{ content: "Read the README", status: "pending" }],
+      });
+      await flushPendingDispatch();
+
+      expect(collectSentTexts(api)).toEqual([]);
     });
 
     it("flushes a running tool line above its permission prompt", async () => {

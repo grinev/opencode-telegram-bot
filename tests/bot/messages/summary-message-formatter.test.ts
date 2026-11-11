@@ -156,6 +156,102 @@ describe("bot/messages/summary-message-formatter", () => {
     expect(text).toBe("📝 todowrite (3)\n\n✅ Done item\n🔄 In progress item\n🔲 Pending item");
   });
 
+  it("shows a running todowrite call's list from its arguments", () => {
+    const text = formatToolInfo({
+      sessionId: "s1",
+      messageId: "m1b",
+      callId: "c1b",
+      tool: "todowrite",
+      state: { status: "running" } as never,
+      input: {
+        todos: [
+          { id: "1", content: "Done item", status: "completed" },
+          { id: "2", content: "Malformed item" },
+          { id: "3", content: "Pending item", status: "pending" },
+        ],
+      },
+    });
+
+    expect(text).toBe("📝 todowrite (2)\n\n✅ Done item\n🔲 Pending item");
+  });
+
+  it("keeps a running todowrite call on the list it is running on", () => {
+    const text = formatToolInfo({
+      sessionId: "s1",
+      messageId: "m1d",
+      callId: "c1d",
+      tool: "todowrite",
+      state: { status: "running" } as never,
+      input: { todos: [{ id: "1", content: "Running on this", status: "in_progress" }] },
+      metadata: { todos: [{ id: "1", content: "Something else", status: "pending" }] },
+    });
+
+    expect(text).toBe("📝 todowrite (1)\n\n🔄 Running on this");
+  });
+
+  it("prefers a finished todowrite call's result over its arguments", () => {
+    const text = formatToolInfo({
+      sessionId: "s1",
+      messageId: "m1c",
+      callId: "c1c",
+      tool: "todowrite",
+      state: { status: "completed" } as never,
+      input: { todos: [{ id: "1", content: "Asked for", status: "pending" }] },
+      metadata: { todos: [{ id: "1", content: "Stored", status: "completed" }] },
+    });
+
+    expect(text).toBe("📝 todowrite (1)\n\n✅ Stored");
+  });
+
+  it("keeps a finished todowrite call off its arguments when no result list came", () => {
+    const finished = ["completed", "error"] as const;
+
+    for (const status of finished) {
+      const text = formatToolInfo({
+        sessionId: "s1",
+        messageId: `m1-${status}`,
+        callId: `c1-${status}`,
+        tool: "todowrite",
+        state: { status } as never,
+        input: { todos: [{ id: "1", content: "Asked for", status: "pending" }] },
+        metadata: {},
+      });
+
+      expect(text).toBe("📝 todowrite");
+    }
+  });
+
+  it("shows a known empty todo list as a count without items", () => {
+    const text = formatToolInfo({
+      sessionId: "s1",
+      messageId: "m1e",
+      callId: "c1e",
+      tool: "todowrite",
+      state: { status: "running" } as never,
+      input: { todos: [] },
+    });
+
+    expect(text).toBe("📝 todowrite (0)");
+  });
+
+  it("shortens a running todowrite list to one compact line", () => {
+    const activity = formatCompactToolActivity({
+      sessionId: "s1",
+      messageId: "m1f",
+      callId: "c1f",
+      tool: "todowrite",
+      state: { status: "running" } as never,
+      input: {
+        todos: [
+          { id: "1", content: "Read the README", status: "completed" },
+          { id: "2", content: "Write a summary", status: "pending" },
+        ],
+      },
+    });
+
+    expect(activity).toBe("📝 todowrite (2) ✅ Read the README 🔲 Write a summary");
+  });
+
   it("formats write/edit tool details with line counters", () => {
     const writeText = formatToolInfo({
       sessionId: "s1",
