@@ -29,7 +29,7 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
 - **Remote coding** — send prompts to OpenCode from anywhere, receive complete results with code sent as files
 - **Session management** — create new sessions or continue existing ones, search sessions by title or ID in `/sessions`, and find projects by name in `/projects`
 - **Track live session** — follow a live OpenCode CLI session; see [Track Existing Session](#track-existing-session)
-- **Background session notifications** — get short notifications when detached or non-current sessions in the current project/worktree reply, ask questions, or request permissions. Turn them off in `/settings` (default on); that silences the chat notices only and does not stop tracking or cancel a pending request
+- **Background session notifications** — get short notifications when detached or non-current sessions in the current project/worktree reply, ask questions, or request permissions. Turn them off in `/settings` (default on); that silences the chat notices only and does not stop tracking or cancel a pending request. The button on a notification opens its session in that session's own project and worktree, even after you switched to another one
 - **Live status** — pinned message with current project/worktree, model, context usage, and changed files list, updated in real time
 - **Model switching** — pick models from OpenCode favorites and recent history directly in the chat (favorites are shown first), or browse all models by provider
 - **Agent modes** — switch between Plan and Build modes on the fly
