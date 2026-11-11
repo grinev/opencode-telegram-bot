@@ -112,8 +112,7 @@ export const it: I18nDictionary = {
     "🔁 {message}\n\nIl provider restituisce sempre lo stesso errore dopo ripetuti tentativi. Usa /abort per annullare.",
   "bot.external_user_input": "Input utente esterno",
   "background.session_fallback": "sessione {id}",
-  "background.assistant_response":
-    "🔔 L'assistente ha risposto nella sessione in background: {session}",
+  "background.assistant_response": "🔔 Risposta da un'altra sessione:\n[{project}] {session}",
   "background.question_asked":
     "❓ La sessione in background richiede una risposta: {session}",
   "background.permission_asked":

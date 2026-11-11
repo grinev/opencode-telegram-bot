@@ -111,7 +111,7 @@ export const ar: I18nDictionary = {
     "🔁 {message}\n\nاستمر مزوّد الخدمة في إرجاع الخطأ نفسه بعد عدة محاولات. استخدم /abort لإيقاف المهمة.",
   "bot.external_user_input": "رسالة واردة من واجهة أخرى",
   "background.session_fallback": "الجلسة {id}",
-  "background.assistant_response": "🔔 وصل رد جديد من جلسة تعمل في الخلفية: {session}",
+  "background.assistant_response": "🔔 رد من جلسة أخرى:\n[{project}] {session}",
   "background.question_asked": "❓ توجد جلسة في الخلفية تنتظر إجابتك: {session}",
   "background.permission_asked": "🔐 توجد جلسة في الخلفية تطلب صلاحية: {session}",
   "background.open_session_button": "فتح الجلسة",

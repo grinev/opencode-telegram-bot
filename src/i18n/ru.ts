@@ -106,7 +106,7 @@ export const ru: I18nDictionary = {
     "🔁 {message}\n\nПровайдер возвращает одну и ту же ошибку при повторных запросах. Используйте /abort для остановки.",
   "bot.external_user_input": "Внешний ввод пользователя",
   "background.session_fallback": "сессия {id}",
-  "background.assistant_response": "🔔 В фоновой сессии пришёл ответ ассистента: {session}",
+  "background.assistant_response": "🔔 Ответ из другой сессии:\n[{project}] {session}",
   "background.question_asked": "❓ В фоновой сессии нужен ответ: {session}",
   "background.permission_asked": "🔐 В фоновой сессии запрошены права: {session}",
   "background.open_session_button": "Открыть сессию",

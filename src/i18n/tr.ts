@@ -108,7 +108,7 @@ export const tr: I18nDictionary = {
     "🔁 {message}\n\nSağlayıcı tekrarlanan denemelerde aynı hatayı döndürmeye devam ediyor. Durdurmak için /abort kullanın.",
   "bot.external_user_input": "Harici kullanıcı girdisi",
   "background.session_fallback": "oturum {id}",
-  "background.assistant_response": "🔔 Asistan arka plan oturumunda yanıt verdi: {session}",
+  "background.assistant_response": "🔔 Başka bir oturumdan yanıt:\n[{project}] {session}",
   "background.question_asked": "❓ Arka plan oturumu bir yanıt bekliyor: {session}",
   "background.permission_asked": "🔐 Arka plan oturumu izin istedi: {session}",
   "background.open_session_button": "Oturumu aç",

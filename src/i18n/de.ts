@@ -111,8 +111,7 @@ export const de: I18nDictionary = {
     "🔁 {message}\n\nDer Provider liefert bei wiederholten Versuchen immer wieder denselben Fehler. Mit /abort abbrechen.",
   "bot.external_user_input": "Externe Benutzereingabe",
   "background.session_fallback": "Sitzung {id}",
-  "background.assistant_response":
-    "🔔 Assistent hat in einer Hintergrundsitzung geantwortet: {session}",
+  "background.assistant_response": "🔔 Antwort aus einer anderen Sitzung:\n[{project}] {session}",
   "background.question_asked": "❓ Hintergrundsitzung benötigt eine Antwort: {session}",
   "background.permission_asked": "🔐 Hintergrundsitzung hat Berechtigungen angefordert: {session}",
   "background.open_session_button": "Sitzung öffnen",

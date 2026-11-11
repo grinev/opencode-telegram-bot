@@ -69,8 +69,72 @@ describe("BackgroundSessionTracker", () => {
       kind: "assistant_response",
       sessionId: "session-2",
       sessionTitle: "Background Task",
+      sessionDirectory: undefined,
       messageId: "message-1",
     });
+  });
+
+  it("carries the session's own directory into the notification", async () => {
+    const tracker = new BackgroundSessionTracker();
+    const onNotification = vi.fn();
+    tracker.setOnNotification(onNotification);
+    tracker.setDirectory("D:/repo-a");
+
+    tracker.processEvent(
+      event({
+        type: "session.updated",
+        properties: {
+          info: { id: "session-2", title: "Background Task", directory: "D:/worktrees/feature-x" },
+        },
+      }),
+      "session-1",
+    );
+    tracker.processEvent(
+      event({
+        type: "message.updated",
+        properties: {
+          info: { id: "message-1", sessionID: "session-2", role: "assistant", time: { completed: 1 } },
+        },
+      }),
+      "session-1",
+    );
+    tracker.processEvent(
+      event({ type: "session.idle", properties: { sessionID: "session-2" } }),
+      "session-1",
+    );
+
+    await flushNotifications();
+
+    expect(onNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionDirectory: "D:/worktrees/feature-x" }),
+    );
+  });
+
+  it("uses the tracked project directory when a session event carries none", async () => {
+    const tracker = new BackgroundSessionTracker();
+    const onNotification = vi.fn();
+    tracker.setOnNotification(onNotification);
+    tracker.setDirectory("D:/repo-a");
+
+    tracker.processEvent(
+      event({
+        type: "message.updated",
+        properties: {
+          info: { id: "message-1", sessionID: "session-2", role: "assistant", time: { completed: 1 } },
+        },
+      }),
+      "session-1",
+    );
+    tracker.processEvent(
+      event({ type: "session.idle", properties: { sessionID: "session-2" } }),
+      "session-1",
+    );
+
+    await flushNotifications();
+
+    expect(onNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionDirectory: "D:/repo-a" }),
+    );
   });
 
   it("does not notify for the current session", async () => {
@@ -177,12 +241,14 @@ describe("BackgroundSessionTracker", () => {
       kind: "question_asked",
       sessionId: "session-2",
       sessionTitle: undefined,
+      sessionDirectory: undefined,
       requestId: "question-1",
     });
     expect(onNotification).toHaveBeenCalledWith({
       kind: "permission_asked",
       sessionId: "session-2",
       sessionTitle: undefined,
+      sessionDirectory: undefined,
       requestId: "permission-1",
     });
   });
@@ -371,8 +437,52 @@ describe("BackgroundSessionTracker", () => {
       kind: "assistant_response",
       sessionId: "session-2",
       sessionTitle: undefined,
+      sessionDirectory: "D:/repo-a",
       messageId: "message-1",
     });
+  });
+
+  it("restores the remembered session directories with a snapshot", async () => {
+    const tracker = new BackgroundSessionTracker();
+    const onNotification = vi.fn();
+    tracker.setOnNotification(onNotification);
+    tracker.setDirectory("D:/repo-a");
+    tracker.processEvent(
+      event({
+        type: "session.updated",
+        properties: {
+          info: { id: "session-2", title: "Background Task", directory: "D:/worktrees/feature-x" },
+        },
+      }),
+      "session-1",
+    );
+    tracker.processEvent(
+      event({
+        type: "message.updated",
+        properties: {
+          info: { id: "message-1", sessionID: "session-2", role: "assistant", time: { completed: 1 } },
+        },
+      }),
+      "session-1",
+    );
+    const snapshot = tracker.snapshot();
+
+    tracker.setDirectory("D:/repo-b");
+    tracker.setDirectory("D:/repo-a");
+    tracker.restore(snapshot);
+    tracker.processEvent(
+      event({ type: "session.idle", properties: { sessionID: "session-2" } }),
+      "session-1",
+    );
+
+    await flushNotifications();
+
+    expect(onNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionDirectory: "D:/worktrees/feature-x",
+        sessionTitle: "Background Task",
+      }),
+    );
   });
 
   it("drops a snapshot taken in another directory", async () => {

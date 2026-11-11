@@ -115,7 +115,7 @@ export const id: I18nDictionary = {
     "🔁 {message}\n\nProvider terus mengembalikan kesalahan yang sama meski diulang berkali-kali. Gunakan /abort untuk menghentikan.",
   "bot.external_user_input": "Input pengguna eksternal",
   "background.session_fallback": "sesi {id}",
-  "background.assistant_response": "🔔 Asisten membalas di sesi latar belakang: {session}",
+  "background.assistant_response": "🔔 Balasan dari sesi lain:\n[{project}] {session}",
   "background.question_asked": "❓ Sesi latar belakang membutuhkan jawaban: {session}",
   "background.permission_asked": "🔐 Sesi latar belakang meminta izin: {session}",
   "background.open_session_button": "Buka sesi",

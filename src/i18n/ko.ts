@@ -117,7 +117,7 @@ export const ko: I18nDictionary = {
     "🔁 {message}\n\n재시도할 때마다 동일한 오류가 반복됩니다. /abort로 중단하세요.",
   "bot.external_user_input": "외부 사용자 입력",
   "background.session_fallback": "세션 {id}",
-  "background.assistant_response": "🔔 백그라운드 세션에서 답변이 도착했습니다: {session}",
+  "background.assistant_response": "🔔 다른 세션의 답변:\n[{project}] {session}",
   "background.question_asked": "❓ 백그라운드 세션에서 답변이 필요합니다: {session}",
   "background.permission_asked": "🔐 백그라운드 세션에서 권한을 요청했습니다: {session}",
   "background.open_session_button": "세션 열기",

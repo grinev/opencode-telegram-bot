@@ -10,6 +10,7 @@ export interface BackgroundSessionNotification {
   kind: BackgroundSessionNotificationKind;
   sessionId: string;
   sessionTitle?: string | undefined;
+  sessionDirectory?: string | undefined;
   requestId?: string | undefined;
   messageId?: string | undefined;
 }
@@ -24,6 +25,7 @@ interface PendingAssistantResponse {
 export interface BackgroundSessionTrackerSnapshot {
   directory: string | null;
   sessionTitles: ReadonlyMap<string, string>;
+  sessionDirectories: ReadonlyMap<string, string>;
   childSessionIds: ReadonlySet<string>;
   completedAssistantMessageIds: ReadonlySet<string>;
   pendingAssistantResponsesBySessionId: ReadonlyMap<string, PendingAssistantResponse>;
@@ -35,6 +37,7 @@ class BackgroundSessionTracker {
   private directory: string | null = null;
   private onNotification: NotificationCallback | null = null;
   private sessionTitles = new Map<string, string>();
+  private sessionDirectories = new Map<string, string>();
   private childSessionIds = new Set<string>();
   private completedAssistantMessageIds = new Set<string>();
   private pendingAssistantResponsesBySessionId = new Map<string, PendingAssistantResponse>();
@@ -54,6 +57,7 @@ class BackgroundSessionTracker {
     return {
       directory: this.directory,
       sessionTitles: new Map(this.sessionTitles),
+      sessionDirectories: new Map(this.sessionDirectories),
       childSessionIds: new Set(this.childSessionIds),
       completedAssistantMessageIds: new Set(this.completedAssistantMessageIds),
       pendingAssistantResponsesBySessionId: new Map(this.pendingAssistantResponsesBySessionId),
@@ -72,6 +76,7 @@ class BackgroundSessionTracker {
     }
 
     this.sessionTitles = new Map(state.sessionTitles);
+    this.sessionDirectories = new Map(state.sessionDirectories);
     this.childSessionIds = new Set(state.childSessionIds);
     this.completedAssistantMessageIds = new Set(state.completedAssistantMessageIds);
     this.pendingAssistantResponsesBySessionId = new Map(state.pendingAssistantResponsesBySessionId);
@@ -86,6 +91,7 @@ class BackgroundSessionTracker {
   clear(): void {
     this.directory = null;
     this.sessionTitles.clear();
+    this.sessionDirectories.clear();
     this.childSessionIds.clear();
     this.completedAssistantMessageIds.clear();
     this.pendingAssistantResponsesBySessionId.clear();
@@ -125,6 +131,11 @@ class BackgroundSessionTracker {
     const title = info.title?.trim();
     if (title) {
       this.sessionTitles.set(info.id, title);
+    }
+
+    const directory = info.directory?.trim();
+    if (directory) {
+      this.sessionDirectories.set(info.id, directory);
     }
 
     if (info.parentID) {
@@ -177,6 +188,7 @@ class BackgroundSessionTracker {
       kind: "assistant_response",
       sessionId,
       sessionTitle: this.sessionTitles.get(sessionId),
+      sessionDirectory: this.sessionDirectory(sessionId),
       messageId: pendingResponse.messageId,
     });
   }
@@ -206,8 +218,14 @@ class BackgroundSessionTracker {
       kind,
       sessionId,
       sessionTitle: this.sessionTitles.get(sessionId),
+      sessionDirectory: this.sessionDirectory(sessionId),
       requestId: id,
     });
+  }
+
+  /** The session's own folder, or the one being tracked when its event carried none. */
+  private sessionDirectory(sessionId: string): string | undefined {
+    return this.sessionDirectories.get(sessionId) ?? this.directory ?? undefined;
   }
 
   private shouldIgnoreSession(sessionId: string, currentSessionId: string | null): boolean {

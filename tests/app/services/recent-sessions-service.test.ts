@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadRecentSessions } from "../../../src/app/services/recent-sessions-service.js";
+import {
+  loadRecentSessionDirectories,
+  loadRecentSessions,
+} from "../../../src/app/services/recent-sessions-service.js";
 
 const mocked = vi.hoisted(() => ({
   list: vi.fn(), get: vi.fn(), status: vi.fn(), questions: vi.fn(), permissions: vi.fn(),
@@ -173,5 +176,23 @@ describe("cross-project recent session snapshot", () => {
     mocked.list.mockResolvedValue({ data: undefined, error });
 
     await expect(loadRecentSessions(10)).rejects.toBe(error);
+  });
+
+  it("lists the folders the recent menu would show without asking for their statuses", async () => {
+    mocked.missing = new Set(["/gone"]);
+    mocked.list.mockResolvedValue({
+      data: [
+        session("a", "/one", 4),
+        session("b", "/two", 3),
+        session("c", "/one", 2),
+        session("g", "/gone", 1),
+      ],
+      error: null,
+    });
+
+    await expect(loadRecentSessionDirectories(3)).resolves.toEqual(["/one", "/two"]);
+    expect(mocked.status).not.toHaveBeenCalled();
+    expect(mocked.questions).not.toHaveBeenCalled();
+    expect(mocked.permissions).not.toHaveBeenCalled();
   });
 });
