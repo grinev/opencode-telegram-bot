@@ -4,9 +4,7 @@ import { getCurrentSession } from "../stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 
 export type BackgroundSessionNotificationKind =
-  | "assistant_response"
-  | "question_asked"
-  | "permission_asked";
+  "assistant_response" | "question_asked" | "permission_asked";
 
 export interface BackgroundSessionNotification {
   kind: BackgroundSessionNotificationKind;
@@ -20,6 +18,17 @@ type NotificationCallback = (notification: BackgroundSessionNotification) => voi
 
 interface PendingAssistantResponse {
   messageId: string;
+}
+
+/** Everything a project switch wipes, taken so a failed open can put it back. */
+export interface BackgroundSessionTrackerSnapshot {
+  directory: string | null;
+  sessionTitles: ReadonlyMap<string, string>;
+  childSessionIds: ReadonlySet<string>;
+  completedAssistantMessageIds: ReadonlySet<string>;
+  pendingAssistantResponsesBySessionId: ReadonlyMap<string, PendingAssistantResponse>;
+  questionRequestIds: ReadonlySet<string>;
+  permissionRequestIds: ReadonlySet<string>;
 }
 
 class BackgroundSessionTracker {
@@ -39,6 +48,35 @@ class BackgroundSessionTracker {
 
     this.clear();
     this.directory = directory;
+  }
+
+  snapshot(): BackgroundSessionTrackerSnapshot {
+    return {
+      directory: this.directory,
+      sessionTitles: new Map(this.sessionTitles),
+      childSessionIds: new Set(this.childSessionIds),
+      completedAssistantMessageIds: new Set(this.completedAssistantMessageIds),
+      pendingAssistantResponsesBySessionId: new Map(this.pendingAssistantResponsesBySessionId),
+      questionRequestIds: new Set(this.questionRequestIds),
+      permissionRequestIds: new Set(this.permissionRequestIds),
+    };
+  }
+
+  /** Puts back a snapshot taken in the current directory; one from another project is dropped. */
+  restore(state: BackgroundSessionTrackerSnapshot): void {
+    if (state.directory !== this.directory) {
+      logger.warn(
+        `[BackgroundSessionTracker] Skipped a snapshot taken for ${state.directory ?? "no directory"} while tracking ${this.directory ?? "none"}`,
+      );
+      return;
+    }
+
+    this.sessionTitles = new Map(state.sessionTitles);
+    this.childSessionIds = new Set(state.childSessionIds);
+    this.completedAssistantMessageIds = new Set(state.completedAssistantMessageIds);
+    this.pendingAssistantResponsesBySessionId = new Map(state.pendingAssistantResponsesBySessionId);
+    this.questionRequestIds = new Set(state.questionRequestIds);
+    this.permissionRequestIds = new Set(state.permissionRequestIds);
   }
 
   setOnNotification(callback: NotificationCallback): void {

@@ -323,4 +323,91 @@ describe("BackgroundSessionTracker", () => {
 
     expect(onNotification).toHaveBeenCalledTimes(2);
   });
+
+  it("puts back the pending notices a project switch wiped", async () => {
+    const tracker = new BackgroundSessionTracker();
+    const onNotification = vi.fn();
+    tracker.setOnNotification(onNotification);
+    tracker.setDirectory("D:/repo-a");
+    tracker.processEvent(
+      event({
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-1",
+            sessionID: "session-2",
+            role: "assistant",
+            time: { completed: 123 },
+          },
+        },
+      }),
+      "session-1",
+    );
+    const snapshot = tracker.snapshot();
+
+    tracker.setDirectory("D:/repo-b");
+    tracker.setDirectory("D:/repo-a");
+    tracker.processEvent(
+      event({
+        type: "session.idle",
+        properties: { sessionID: "session-2" },
+      }),
+      "session-1",
+    );
+    await flushNotifications();
+    expect(onNotification).not.toHaveBeenCalled();
+
+    tracker.restore(snapshot);
+    tracker.processEvent(
+      event({
+        type: "session.idle",
+        properties: { sessionID: "session-2" },
+      }),
+      "session-1",
+    );
+    await flushNotifications();
+
+    expect(onNotification).toHaveBeenCalledWith({
+      kind: "assistant_response",
+      sessionId: "session-2",
+      sessionTitle: undefined,
+      messageId: "message-1",
+    });
+  });
+
+  it("drops a snapshot taken in another directory", async () => {
+    const tracker = new BackgroundSessionTracker();
+    const onNotification = vi.fn();
+    tracker.setOnNotification(onNotification);
+    tracker.setDirectory("D:/repo-a");
+    tracker.processEvent(
+      event({
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-1",
+            sessionID: "session-2",
+            role: "assistant",
+            time: { completed: 123 },
+          },
+        },
+      }),
+      "session-1",
+    );
+    const snapshot = tracker.snapshot();
+
+    tracker.setDirectory("D:/repo-b");
+    tracker.restore(snapshot);
+    tracker.processEvent(
+      event({
+        type: "session.idle",
+        properties: { sessionID: "session-2" },
+      }),
+      "session-1",
+    );
+
+    await flushNotifications();
+
+    expect(onNotification).not.toHaveBeenCalled();
+  });
 });

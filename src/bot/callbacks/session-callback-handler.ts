@@ -1,12 +1,22 @@
 import type { Bot, Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { resolveProjectAgent } from "../../app/services/agent-selection-service.js";
-import { getStoredModel } from "../../app/services/model-selection-service.js";
+import {
+  getStoredAgent,
+  resolveProjectAgent,
+  selectAgent,
+} from "../../app/services/agent-selection-service.js";
+import { getStoredModel, selectModel } from "../../app/services/model-selection-service.js";
+import type { ModelInfo } from "../../app/types/model.js";
+import type { BackgroundSessionTrackerSnapshot } from "../../app/managers/background-session-manager.js";
 import { setCurrentSession } from "../../app/services/session-service.js";
 import { applySessionSettings } from "../../app/services/session-settings-service.js";
 import type { SessionInfo } from "../../app/types/session.js";
-import { getCurrentProject } from "../../app/stores/settings-store.js";
+import type { ProjectInfo } from "../../app/types/project.js";
+import { getCurrentProject, getCurrentSession } from "../../app/stores/settings-store.js";
+import { switchToProject } from "../../app/services/project-switch-service.js";
+import { normalizePathKey } from "../../app/services/worktree-service.js";
+import { createProjectSwitchPresentation } from "../services/project-switch-presentation.js";
 import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
@@ -59,6 +69,10 @@ export type SessionSelectDeps = Pick<
 > & {
   bot: Bot<Context>;
 };
+
+/** The managers a project switch needs on top of the ones a session selection needs. */
+export type BackgroundSessionOpenDeps = SessionSelectDeps &
+  Pick<AppContainer, "backgroundSessionTracker" | "goalManager" | "resetAggregator">;
 
 type SessionSearchDeps = Pick<AppContainer, "interactionManager">;
 
@@ -424,9 +438,70 @@ function shouldBlockBackgroundSessionOpen(deps: SessionSelectDeps): boolean {
   return activeInteraction !== null && activeInteraction.kind !== "inline";
 }
 
+const BACKGROUND_PROJECT_SWITCH_REASON = "background_session_project_switched";
+const BACKGROUND_OPEN_ROLLBACK_REASON = "background_session_open_rollback";
+
+/** What the selection looked like before a notification moved it to another project. */
+interface BackgroundOpenRollback {
+  project: ProjectInfo;
+  session: SessionInfo | undefined;
+  agent: string;
+  model: ModelInfo;
+  tracker: BackgroundSessionTrackerSnapshot;
+}
+
+/**
+ * The session a notification points at, read the way the selection reads it — in the selected
+ * project's directory — so the answer carries the session's real directory and project. A session
+ * the server does not return is an error rather than a reason to open it in the selected project.
+ */
+async function readNotifiedSession(sessionId: string, directory: string) {
+  const { data, error } = await opencodeClient.session.get({ sessionID: sessionId, directory });
+  if (error || !data) {
+    throw error || new Error(`Session ${sessionId} was not returned for ${directory}`);
+  }
+  return data;
+}
+
+/** The project a session belongs to, recorded the way the recent-sessions menu records it. */
+function projectOfSession(session: { projectID: string; directory: string }): ProjectInfo {
+  return { id: session.projectID, worktree: session.directory, name: session.directory };
+}
+
+/**
+ * Puts back what a failed open changed: the project, the agent and model the open pulled from its
+ * session, the background tracking state the switch wiped and the session itself. A rollback that
+ * fails leaves its trace in the log only — the user still gets the selection error.
+ */
+async function restoreSelectionAfterFailedOpen(
+  ctx: Context,
+  deps: BackgroundSessionOpenDeps,
+  previous: BackgroundOpenRollback,
+): Promise<void> {
+  try {
+    selectAgent(previous.agent);
+    selectModel(previous.model);
+    await switchToProject(ctx, previous.project, BACKGROUND_OPEN_ROLLBACK_REASON, {
+      ...deps,
+      presentation: createProjectSwitchPresentation(deps),
+    });
+    deps.backgroundSessionTracker.restore(previous.tracker);
+    if (!previous.session || !ctx.chat) {
+      return;
+    }
+    setCurrentSession(previous.session);
+    await attachToSession({ ...deps, chatId: ctx.chat.id, session: previous.session });
+  } catch (error) {
+    logger.error(
+      "[Sessions] Failed to restore the selection after a failed background open:",
+      error,
+    );
+  }
+}
+
 export async function handleBackgroundSessionOpen(
   ctx: Context,
-  deps: SessionSelectDeps,
+  deps: BackgroundSessionOpenDeps,
 ): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data) {
@@ -450,7 +525,34 @@ export async function handleBackgroundSessionOpen(
     return true;
   }
 
+  const previousProject = getCurrentProject();
+  const previousSession = getCurrentSession();
+  // An old notification outlives the project it was sent from: its session, not the selected
+  // project, decides where the prompt runs, so the selection is moved to that project first.
+  let rollback: BackgroundOpenRollback | null = null;
+
   try {
+    if (previousProject) {
+      const notified = await readNotifiedSession(payload.sessionId, previousProject.worktree);
+      if (normalizePathKey(notified.directory) !== normalizePathKey(previousProject.worktree)) {
+        logger.info(
+          `[Sessions] Background session ${payload.sessionId} belongs to ${notified.directory}; switching from ${previousProject.worktree}`,
+        );
+        // The switch can fail halfway, after the project is written, so the rollback is armed first.
+        rollback = {
+          project: previousProject,
+          session: previousSession,
+          agent: getStoredAgent(),
+          model: { ...getStoredModel() },
+          tracker: deps.backgroundSessionTracker.snapshot(),
+        };
+        await switchToProject(ctx, projectOfSession(notified), BACKGROUND_PROJECT_SWITCH_REASON, {
+          ...deps,
+          presentation: createProjectSwitchPresentation(deps),
+        });
+      }
+    }
+
     await selectSessionById(ctx, deps, payload.sessionId, {
       source: "background_notification",
       deleteCallbackMessage: false,
@@ -460,6 +562,9 @@ export async function handleBackgroundSessionOpen(
     });
   } catch (error) {
     logger.error("[Sessions] Error selecting background session:", error);
+    if (rollback) {
+      await restoreSelectionAfterFailedOpen(ctx, deps, rollback);
+    }
     await ctx
       .answerCallbackQuery({ text: t("sessions.select_error"), show_alert: true })
       .catch(() => {});

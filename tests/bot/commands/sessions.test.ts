@@ -44,8 +44,17 @@ const mocked = vi.hoisted(() => ({
   })),
   keyboardGetContextInfoMock: vi.fn(() => null),
   resolveProjectAgentMock: vi.fn(async () => "build"),
+  getStoredAgentMock: vi.fn(() => "build"),
+  selectAgentMock: vi.fn(),
+  selectModelMock: vi.fn(),
   attachToSessionMock: vi.fn(),
   ensureEventSubscriptionMock: vi.fn(),
+  switchToProjectMock: vi.fn(
+    async (_ctx: unknown, project: { id: string; worktree: string; name?: string }) => {
+      mocked.currentProject = project;
+      return { inline_keyboard: [] };
+    },
+  ),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -73,10 +82,13 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
 
 vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   resolveProjectAgent: mocked.resolveProjectAgentMock,
+  getStoredAgent: mocked.getStoredAgentMock,
+  selectAgent: mocked.selectAgentMock,
 }));
 
 vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: mocked.getStoredModelMock,
+  selectModel: mocked.selectModelMock,
 }));
 
 vi.mock("../../../src/app/services/session-settings-service.js", () => ({
@@ -85,6 +97,10 @@ vi.mock("../../../src/app/services/session-settings-service.js", () => ({
 
 vi.mock("../../../src/app/services/attach-service.js", () => ({
   attachToSession: mocked.attachToSessionMock,
+}));
+
+vi.mock("../../../src/app/services/project-switch-service.js", () => ({
+  switchToProject: mocked.switchToProjectMock,
 }));
 
 vi.mock("../../../src/utils/safe-background-task.js", () => ({
@@ -253,6 +269,9 @@ describe("bot/commands/sessions", () => {
     mocked.pinnedOnModelChangeMock.mockResolvedValue(undefined);
     mocked.resolveProjectAgentMock.mockReset();
     mocked.resolveProjectAgentMock.mockResolvedValue("build");
+    mocked.getStoredAgentMock.mockClear();
+    mocked.selectAgentMock.mockReset();
+    mocked.selectModelMock.mockReset();
     mocked.attachToSessionMock.mockReset();
     mocked.attachToSessionMock.mockResolvedValue({
       busy: false,
@@ -261,6 +280,7 @@ describe("bot/commands/sessions", () => {
       restoredPermissions: 0,
     });
     mocked.ensureEventSubscriptionMock.mockReset();
+    mocked.switchToProjectMock.mockClear();
     safeBackgroundTaskMock.mockReset();
   });
 
@@ -1152,7 +1172,7 @@ describe("bot/commands/sessions", () => {
 
   it("pulls the settings when a background session notification is opened", async () => {
     const session = createSession(0);
-    mocked.sessionGetMock.mockResolvedValueOnce({ data: session, error: null });
+    mocked.sessionGetMock.mockResolvedValue({ data: session, error: null });
 
     const handled = await handleBackgroundSessionOpen(
       createCallbackContext("background-session:session-1", 456),
@@ -1196,7 +1216,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("selects a background session without an active sessions menu", async () => {
-    mocked.sessionGetMock.mockResolvedValueOnce({
+    mocked.sessionGetMock.mockResolvedValue({
       data: createSession(0),
       error: null,
     });
@@ -1239,7 +1259,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("sends the full latest assistant response after opening an assistant background notification", async () => {
-    mocked.sessionGetMock.mockResolvedValueOnce({
+    mocked.sessionGetMock.mockResolvedValue({
       data: createSession(0),
       error: null,
     });
@@ -1291,7 +1311,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("does not send preview or latest assistant response for background question notifications", async () => {
-    mocked.sessionGetMock.mockResolvedValueOnce({
+    mocked.sessionGetMock.mockResolvedValue({
       data: createSession(0),
       error: null,
     });
@@ -1304,8 +1324,157 @@ describe("bot/commands/sessions", () => {
     expect(safeBackgroundTaskMock).not.toHaveBeenCalled();
   });
 
+  it("switches to the project of the notification session when another project is selected", async () => {
+    mocked.currentProject = { id: "project-b", worktree: "/repo-b" };
+    mocked.sessionGetMock.mockResolvedValue({
+      data: { ...createSession(0), directory: "/repo-a", projectID: "project-a" },
+      error: null,
+    });
+
+    const ctx = createCallbackContext("background-session:a:session-1", 456);
+    const handled = await handleBackgroundSessionOpen(ctx, createDeps());
+
+    expect(handled).toBe(true);
+    expect(mocked.switchToProjectMock).toHaveBeenCalledWith(
+      ctx,
+      { id: "project-a", worktree: "/repo-a", name: "/repo-a" },
+      "background_session_project_switched",
+      expect.objectContaining({ ensureEventSubscription: mocked.ensureEventSubscriptionMock }),
+    );
+    expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith({
+      id: "session-1",
+      title: "Session 1",
+      directory: "/repo-a",
+    });
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: { id: "session-1", title: "Session 1", directory: "/repo-a" },
+        ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+      }),
+    );
+  });
+
+  it("selects the linked worktree a notification session lives in, not the repository root", async () => {
+    mocked.currentProject = { id: "project-b", worktree: "/repo-b" };
+    mocked.sessionGetMock.mockResolvedValue({
+      data: { ...createSession(0), directory: "/repo/.worktrees/feature", projectID: "project-a" },
+      error: null,
+    });
+
+    const handled = await handleBackgroundSessionOpen(
+      createCallbackContext("background-session:q:session-1", 456),
+      createDeps(),
+    );
+
+    expect(handled).toBe(true);
+    expect(mocked.switchToProjectMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      { id: "project-a", worktree: "/repo/.worktrees/feature", name: "/repo/.worktrees/feature" },
+      "background_session_project_switched",
+      expect.objectContaining({}),
+    );
+    expect(mocked.attachToSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ directory: "/repo/.worktrees/feature" }),
+      }),
+    );
+  });
+
+  it("keeps the project when the notification session belongs to the selected one", async () => {
+    mocked.sessionGetMock.mockResolvedValue({ data: createSession(0), error: null });
+
+    const handled = await handleBackgroundSessionOpen(
+      createCallbackContext("background-session:a:session-1", 456),
+      createDeps(),
+    );
+
+    expect(handled).toBe(true);
+    expect(mocked.switchToProjectMock).not.toHaveBeenCalled();
+    expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith({
+      id: "session-1",
+      title: "Session 1",
+      directory: "/repo",
+    });
+  });
+
+  it("leaves the project and the session alone when the notification session cannot be read", async () => {
+    mocked.currentProject = { id: "project-b", worktree: "/repo-b" };
+    mocked.currentSession = { id: "session-b", title: "Session B", directory: "/repo-b" };
+    mocked.sessionGetMock.mockResolvedValue({ data: null, error: new Error("not found") });
+
+    const ctx = createCallbackContext("background-session:a:session-1", 456);
+    const handled = await handleBackgroundSessionOpen(ctx, createDeps());
+
+    expect(handled).toBe(true);
+    expect(mocked.switchToProjectMock).not.toHaveBeenCalled();
+    expect(mocked.setCurrentSessionMock).not.toHaveBeenCalled();
+    expect(ctx.editMessageReplyMarkup).not.toHaveBeenCalled();
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("sessions.select_error"),
+      show_alert: true,
+    });
+  });
+
+  it("restores the previous project, session and settings when the open fails after switching", async () => {
+    mocked.currentProject = { id: "project-b", worktree: "/repo-b" };
+    mocked.currentSession = { id: "session-b", title: "Session B", directory: "/repo-b" };
+    mocked.sessionGetMock.mockResolvedValue({
+      data: { ...createSession(0), directory: "/repo-a", projectID: "project-a" },
+      error: null,
+    });
+    mocked.attachToSessionMock.mockRejectedValueOnce(new Error("follow failed"));
+    const restoreTracker = vi.spyOn(container.backgroundSessionTracker, "restore");
+
+    const ctx = createCallbackContext("background-session:a:session-1", 456);
+    const handled = await handleBackgroundSessionOpen(ctx, createDeps());
+
+    expect(handled).toBe(true);
+    expect(mocked.switchToProjectMock.mock.calls[1]?.[1]).toEqual({
+      id: "project-b",
+      worktree: "/repo-b",
+    });
+    expect(mocked.selectAgentMock).toHaveBeenCalledWith("build");
+    expect(mocked.selectModelMock).toHaveBeenCalledWith({
+      providerID: "opencode-go",
+      modelID: "deepseek-v4-flash",
+      variant: "default",
+    });
+    expect(restoreTracker).toHaveBeenCalledOnce();
+    expect(mocked.setCurrentSessionMock).toHaveBeenLastCalledWith({
+      id: "session-b",
+      title: "Session B",
+      directory: "/repo-b",
+    });
+    expect(mocked.attachToSessionMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        session: { id: "session-b", title: "Session B", directory: "/repo-b" },
+      }),
+    );
+    expect(ctx.editMessageReplyMarkup).not.toHaveBeenCalled();
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("sessions.select_error"),
+      show_alert: true,
+    });
+  });
+
+  it("keeps the select-project-first hint when no project is selected", async () => {
+    mocked.currentProject = null;
+
+    const ctx = createCallbackContext("background-session:a:session-1", 456);
+    const handled = await handleBackgroundSessionOpen(ctx, createDeps());
+
+    expect(handled).toBe(true);
+    expect(mocked.sessionGetMock).not.toHaveBeenCalled();
+    expect(mocked.switchToProjectMock).not.toHaveBeenCalled();
+    expect(mocked.setCurrentSessionMock).not.toHaveBeenCalled();
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("sessions.select_project_first"),
+      show_alert: true,
+    });
+  });
+
   it("keeps background session button usable when another inline menu is active", async () => {
-    mocked.sessionGetMock.mockResolvedValueOnce({
+    mocked.sessionGetMock.mockResolvedValue({
       data: createSession(0),
       error: null,
     });
@@ -1335,7 +1504,7 @@ describe("bot/commands/sessions", () => {
   });
 
   it("keeps successful background selection when removing the button fails", async () => {
-    mocked.sessionGetMock.mockResolvedValueOnce({
+    mocked.sessionGetMock.mockResolvedValue({
       data: createSession(0),
       error: null,
     });

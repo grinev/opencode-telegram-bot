@@ -16,7 +16,7 @@ interface ParsedGitWorktreeEntry {
   branch: string | null;
 }
 
-function normalizePathKey(value: string): string {
+export function normalizePathKey(value: string): string {
   const normalized = path.resolve(value).replace(/[\\/]+$/, "");
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
