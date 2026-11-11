@@ -12,6 +12,21 @@ export interface ScheduledTaskSessionIgnoreInfo {
   createdAt: string;
 }
 
+/** Where one session's displayed replies stand, by the completion time of its latest reply. */
+export interface SessionReplyReadPosition {
+  /** The completion time of the latest reply shown to the chat. */
+  readAt?: number | undefined;
+  /** The completion time of the latest reply known to be unread, kept while a check fails. */
+  unreadAt?: number | undefined;
+}
+
+/** The unread-reply marks of the `/recent` list, kept across restarts. */
+export interface SessionReplyReadState {
+  /** Replies completed before this moment read as already shown. */
+  baselineAt: number;
+  sessions: Record<string, SessionReplyReadPosition>;
+}
+
 export interface Settings {
   currentProject?: ProjectInfo | undefined;
   currentSession?: SessionInfo | undefined;
@@ -32,4 +47,5 @@ export interface Settings {
   sessionDirectoryCache?: SessionDirectoryCacheInfo | undefined;
   scheduledTasks?: ScheduledTask[] | undefined;
   scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[] | undefined;
+  sessionReplyReadState?: SessionReplyReadState | undefined;
 }

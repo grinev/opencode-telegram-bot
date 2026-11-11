@@ -7,6 +7,7 @@ export const zh: I18nDictionary = {
   "recent.empty": "📭 所有项目中都没有会话。",
   "recent.running": "运行中",
   "recent.idle": "空闲",
+  "recent.status.unread": "未读回复",
   "recent.question": "等待回答",
   "recent.permission": "等待授权",
   "cmd.description.status": "服务器和会话状态",

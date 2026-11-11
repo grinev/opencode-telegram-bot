@@ -140,7 +140,7 @@ opencode-telegram config
 | `/abort`          | Abort the current task                                  |
 | `/detach`         | Detach from the current session without stopping it     |
 | `/sessions`       | Browse, search by title or ID, and switch sessions        |
-| `/recent`         | Browse recent sessions across projects and worktrees, see their status and attach directly |
+| `/recent`         | Browse recent sessions across projects and worktrees, see their status — including a 🔔 for a reply not shown in the chat yet — and attach directly |
 | `/messages`       | Browse user messages, revert or fork from a previous state     |
 | `/projects`       | Browse, search by name, and switch OpenCode projects      |
 | `/worktree`       | Switch between existing git worktrees                   |

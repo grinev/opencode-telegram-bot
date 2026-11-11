@@ -7,7 +7,7 @@ import {
 const mocked = vi.hoisted(() => ({
   list: vi.fn(), get: vi.fn(), status: vi.fn(), questions: vi.fn(), permissions: vi.fn(),
   attached: null as { id: string; directory: string } | null, warn: vi.fn(),
-  fileList: vi.fn(), missing: new Set<string>(),
+  fileList: vi.fn(), missing: new Set<string>(), unread: vi.fn(),
 }));
 vi.mock("../../../src/opencode/client.js", () => ({ opencodeServerVersion: "v2", opencodeV2Client: { file: { list: mocked.fileList } }, opencodeClient: {
   experimental: { session: { list: mocked.list } },
@@ -15,6 +15,7 @@ vi.mock("../../../src/opencode/client.js", () => ({ opencodeServerVersion: "v2",
   question: { list: mocked.questions }, permission: { list: mocked.permissions },
 } }));
 vi.mock("../../../src/app/stores/settings-store.js", () => ({ getCurrentSession: () => mocked.attached }));
+vi.mock("../../../src/app/services/session-reply-read-service.js", () => ({ loadUnreadReplySessionIds: mocked.unread }));
 vi.mock("../../../src/utils/logger.js", () => ({ logger: { debug: vi.fn(), info: vi.fn(), warn: mocked.warn, error: vi.fn() } }));
 
 const session = (id: string, directory: string, updated: number) => ({
@@ -26,6 +27,7 @@ describe("cross-project recent session snapshot", () => {
     mocked.attached = null;
     mocked.list.mockReset(); mocked.get.mockReset(); mocked.status.mockReset();
     mocked.questions.mockReset(); mocked.permissions.mockReset(); mocked.warn.mockReset();
+    mocked.unread.mockReset().mockResolvedValue(new Set<string>());
     mocked.questions.mockResolvedValue({ data: [], error: null });
     mocked.permissions.mockResolvedValue({ data: [], error: null });
     mocked.status.mockResolvedValue({ data: {}, error: null });
@@ -178,6 +180,35 @@ describe("cross-project recent session snapshot", () => {
     await expect(loadRecentSessions(10)).rejects.toBe(error);
   });
 
+  it("shows the bell only where the session is ordinary idle", async () => {
+    mocked.list.mockResolvedValue({ data: [session("read", "/one", 4), session("unread", "/one", 3)], error: null });
+    mocked.unread.mockResolvedValue(new Set(["unread"]));
+
+    const rows = await loadRecentSessions(10);
+
+    expect(rows.map(({ session, status }) => [session.id, status])).toEqual([
+      ["read", "idle"], ["unread", "unread"],
+    ]);
+    expect(mocked.unread).toHaveBeenCalledWith([
+      { id: "read", directory: "/one" }, { id: "unread", directory: "/one" },
+    ]);
+  });
+
+  it("keeps running, question and permission above the bell", async () => {
+    mocked.list.mockResolvedValue({
+      data: [session("q", "/one", 4), session("p", "/one", 3), session("run", "/one", 2), session("bell", "/one", 1)],
+      error: null,
+    });
+    mocked.status.mockResolvedValue({ data: { run: { type: "busy" } }, error: null });
+    mocked.questions.mockResolvedValue({ data: [{ sessionID: "q" }], error: null });
+    mocked.permissions.mockResolvedValue({ data: [{ sessionID: "p" }], error: null });
+    mocked.unread.mockResolvedValue(new Set(["q", "p", "run", "bell"]));
+
+    const rows = await loadRecentSessions(10);
+
+    expect(rows.map((row) => row.status)).toEqual(["question", "permission", "running", "unread"]);
+  });
+
   it("lists the folders the recent menu would show without asking for their statuses", async () => {
     mocked.missing = new Set(["/gone"]);
     mocked.list.mockResolvedValue({
@@ -194,5 +225,6 @@ describe("cross-project recent session snapshot", () => {
     expect(mocked.status).not.toHaveBeenCalled();
     expect(mocked.questions).not.toHaveBeenCalled();
     expect(mocked.permissions).not.toHaveBeenCalled();
+    expect(mocked.unread).not.toHaveBeenCalled();
   });
 });

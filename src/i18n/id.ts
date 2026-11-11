@@ -14,6 +14,7 @@ export const id: I18nDictionary = {
   "recent.empty": "📭 Tidak ada sesi di semua proyek.",
   "recent.running": "berjalan",
   "recent.idle": "diam",
+  "recent.status.unread": "balasan belum dibaca",
   "recent.question": "menunggu jawaban",
   "recent.permission": "menunggu izin",
   "cmd.description.status": "Status server dan sesi",

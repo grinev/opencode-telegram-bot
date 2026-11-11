@@ -7,6 +7,7 @@ import type {
   PromptQueueMode,
   ResponseStreamingMode,
   ScheduledTaskSessionIgnoreInfo,
+  SessionReplyReadState,
   Settings,
 } from "../types/settings.js";
 import { config } from "../../config.js";
@@ -21,6 +22,21 @@ function cloneScheduledTaskSessionIgnores(
   ignores: ScheduledTaskSessionIgnoreInfo[] | undefined,
 ): ScheduledTaskSessionIgnoreInfo[] | undefined {
   return ignores?.map((ignore) => ({ ...ignore }));
+}
+
+function cloneSessionReplyReadState(
+  state: SessionReplyReadState | undefined,
+): SessionReplyReadState | undefined {
+  if (!state) return undefined;
+  return {
+    baselineAt: state.baselineAt,
+    sessions: Object.fromEntries(
+      Object.entries(state.sessions ?? {}).map(([sessionId, position]) => [
+        sessionId,
+        { ...position },
+      ]),
+    ),
+  };
 }
 
 function getSettingsFilePath(): string {
@@ -367,6 +383,15 @@ export function setScheduledTaskSessionIgnores(
   return writeSettingsFile(currentSettings);
 }
 
+export function getSessionReplyReadState(): SessionReplyReadState | undefined {
+  return cloneSessionReplyReadState(currentSettings.sessionReplyReadState);
+}
+
+export function setSessionReplyReadState(state: SessionReplyReadState): Promise<void> {
+  currentSettings.sessionReplyReadState = cloneSessionReplyReadState(state);
+  return writeSettingsFile(currentSettings);
+}
+
 export function __resetSettingsForTests(): void {
   currentSettings = {};
   skipNextBackupRotation = false;
@@ -489,6 +514,17 @@ export async function loadSettings(): Promise<void> {
   currentSettings.scheduledTasks = cloneScheduledTasks(loadedSettings.scheduledTasks) ?? [];
   currentSettings.scheduledTaskSessionIgnores =
     cloneScheduledTaskSessionIgnores(loadedSettings.scheduledTaskSessionIgnores) ?? [];
+
+  // Everything finished before the feature arrived reads as already shown; only later replies
+  // are eligible for a mark.
+  if (
+    typeof loadedSettings.sessionReplyReadState?.baselineAt !== "number" ||
+    typeof loadedSettings.sessionReplyReadState.sessions !== "object" ||
+    loadedSettings.sessionReplyReadState.sessions === null
+  ) {
+    currentSettings.sessionReplyReadState = { baselineAt: Date.now(), sessions: {} };
+    requiresRewrite = true;
+  }
 
   applyInitialSettingsPreset(config.bot.initialSettingsPreset);
 

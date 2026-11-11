@@ -27,6 +27,8 @@ export interface EligibleReply {
   text: string;
   parentId: string | null;
   created: number;
+  /** When the reply finished, or undefined while it is still streaming. */
+  completed?: number | undefined;
 }
 
 function extractText(parts: SessionPickPart[]): string | null {
@@ -74,6 +76,7 @@ export function findEligibleReply(
         text,
         parentId: message.info.parentID ?? null,
         created,
+        completed: message.info.time?.completed,
       };
     }
   }

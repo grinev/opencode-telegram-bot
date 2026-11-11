@@ -7,6 +7,7 @@ export const de: I18nDictionary = {
   "recent.empty": "📭 Keine Sitzungen in den Projekten gefunden.",
   "recent.running": "läuft",
   "recent.idle": "inaktiv",
+  "recent.status.unread": "ungelesene Antwort",
   "recent.question": "wartet auf Antwort",
   "recent.permission": "wartet auf Berechtigung",
   "cmd.description.status": "Server- und Sitzungsstatus",
