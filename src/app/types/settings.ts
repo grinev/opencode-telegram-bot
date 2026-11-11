@@ -27,6 +27,14 @@ export interface SessionReplyReadState {
   sessions: Record<string, SessionReplyReadPosition>;
 }
 
+/** Where the last full todo snapshot sits in the chat, and what it counted. */
+export interface TodoSnapshotInfo {
+  chatId: number;
+  messageId: number;
+  done: number;
+  total: number;
+}
+
 export interface Settings {
   currentProject?: ProjectInfo | undefined;
   currentSession?: SessionInfo | undefined;
@@ -48,4 +56,5 @@ export interface Settings {
   scheduledTasks?: ScheduledTask[] | undefined;
   scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[] | undefined;
   sessionReplyReadState?: SessionReplyReadState | undefined;
+  lastTodoSnapshot?: TodoSnapshotInfo | undefined;
 }

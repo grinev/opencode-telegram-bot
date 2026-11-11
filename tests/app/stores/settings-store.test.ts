@@ -9,6 +9,7 @@ import {
   __resetSettingsForTests,
   flushSettings,
   getCompactOutputMode,
+  getLastTodoSnapshot,
   getPromptQueueMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
@@ -21,6 +22,7 @@ import {
   getTtsMode,
   loadSettings,
   setCompactOutputMode,
+  setLastTodoSnapshot,
   setPromptQueueMode,
   setScheduledTasks,
   setScheduledTasksConfirmed,
@@ -401,6 +403,41 @@ describe("app/stores/settings-store", () => {
     await vi.waitFor(async () => {
       const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
       expect(settings.sessionReplyReadState).toEqual({ baselineAt: 10, sessions: { s: { readAt: 20 } } });
+    });
+  });
+
+  it("has no tracked todo snapshot in a settings file without one", async () => {
+    await writeFile(path.join(tempHome, "settings.json"), JSON.stringify({ compactOutputMode: true }));
+
+    await loadSettings();
+
+    expect(getLastTodoSnapshot()).toBeUndefined();
+  });
+
+  it("keeps the tracked todo snapshot across a restart", async () => {
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      JSON.stringify({ lastTodoSnapshot: { chatId: 42, messageId: 77, done: 2, total: 5 } }),
+    );
+
+    await loadSettings();
+
+    expect(getLastTodoSnapshot()).toEqual({ chatId: 42, messageId: 77, done: 2, total: 5 });
+  });
+
+  it("persists the tracked todo snapshot to settings.json", async () => {
+    await loadSettings();
+
+    await setLastTodoSnapshot({ chatId: 42, messageId: 78, done: 1, total: 3 });
+
+    await vi.waitFor(async () => {
+      const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
+      expect(settings.lastTodoSnapshot).toEqual({
+        chatId: 42,
+        messageId: 78,
+        done: 1,
+        total: 3,
+      });
     });
   });
 

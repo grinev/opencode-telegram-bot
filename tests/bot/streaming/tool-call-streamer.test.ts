@@ -58,10 +58,10 @@ describe("bot/streaming/tool-call-streamer", () => {
     expect(editText).toHaveBeenCalledWith("s1", 10, "first\n\nsecond");
   });
 
-  it("keeps todo updates in a separate message stream", async () => {
+  it("sends a standalone message of its own and edits it by id", async () => {
     vi.useFakeTimers();
 
-    const sendText = vi.fn().mockResolvedValueOnce(10).mockResolvedValueOnce(11);
+    const sendText = vi.fn().mockResolvedValueOnce(10);
     const editText = vi.fn().mockResolvedValue(undefined);
     const deleteText = vi.fn().mockResolvedValue(undefined);
     const streamer = new ToolCallStreamer({
@@ -71,24 +71,110 @@ describe("bot/streaming/tool-call-streamer", () => {
       deleteText,
     });
 
-    streamer.append("s1", "regular tool");
-    await vi.waitFor(() => {
-      expect(sendText).toHaveBeenCalledTimes(1);
+    const messageId = await streamer.sendStandalone("s1", "  snapshot  ");
+
+    expect(messageId).toBe(10);
+    expect(sendText).toHaveBeenCalledWith("s1", "snapshot");
+    await streamer.editStandalone("s1", 10, "snapshot updated");
+    expect(editText).toHaveBeenCalledWith("s1", 10, "snapshot updated");
+  });
+
+  it("lets the tool lines already pending out before a standalone message", async () => {
+    vi.useFakeTimers();
+
+    const sendText = vi.fn().mockResolvedValueOnce(10).mockResolvedValueOnce(11);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 200,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
     });
 
-    streamer.append("s1", "todo tool", "todo");
-    await vi.waitFor(() => {
-      expect(sendText).toHaveBeenCalledTimes(2);
+    streamer.append("s1", "earlier tool line");
+    const sending = streamer.sendStandalone("s1", "snapshot");
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sendText).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(200);
+    await sending;
+
+    expect(sendText).toHaveBeenNthCalledWith(1, "s1", "earlier tool line");
+    expect(sendText).toHaveBeenNthCalledWith(2, "s1", "snapshot");
+  });
+
+  it("waits for the reply gate before a standalone message", async () => {
+    vi.useFakeTimers();
+
+    let openGate: () => void = () => {};
+    const sendText = vi.fn().mockResolvedValue(10);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 0,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
+      takeGate: () => () =>
+        new Promise<void>((resolve) => {
+          openGate = resolve;
+        }),
     });
 
-    streamer.append("s1", "regular tool update");
-    await vi.waitFor(() => {
-      expect(editText).toHaveBeenCalledTimes(1);
+    const sending = streamer.sendStandalone("s1", "snapshot");
+    await vi.advanceTimersByTimeAsync(50);
+    expect(sendText).not.toHaveBeenCalled();
+
+    openGate();
+    await sending;
+    expect(sendText).toHaveBeenCalledWith("s1", "snapshot");
+  });
+
+  it("sends no standalone message cancelled while it waited", async () => {
+    vi.useFakeTimers();
+
+    let openGate: () => void = () => {};
+    const sendText = vi.fn().mockResolvedValue(10);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 0,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
+      takeGate: () => () =>
+        new Promise<void>((resolve) => {
+          openGate = resolve;
+        }),
     });
 
-    expect(sendText).toHaveBeenNthCalledWith(1, "s1", "regular tool");
-    expect(sendText).toHaveBeenNthCalledWith(2, "s1", "todo tool");
-    expect(editText).toHaveBeenCalledWith("s1", 10, "regular tool\n\nregular tool update");
+    let wanted = true;
+    const sending = streamer.sendStandalone("s1", "snapshot", () => wanted);
+    await vi.advanceTimersByTimeAsync(50);
+    wanted = false;
+    openGate();
+
+    await expect(sending).resolves.toBeNull();
+    expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it("sends no standalone message cancelled while the queue waited", async () => {
+    vi.useFakeTimers();
+
+    const sendText = vi.fn().mockResolvedValue(10);
+    const streamer = new ToolCallStreamer({
+      throttleMs: 500,
+      sendText,
+      editText: vi.fn().mockResolvedValue(undefined),
+      deleteText: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await streamer.sendStandalone("s1", "first");
+
+    let wanted = true;
+    const second = streamer.sendStandalone("s1", "second", () => wanted);
+    await vi.advanceTimersByTimeAsync(10);
+    wanted = false;
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(second).resolves.toBeNull();
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenCalledWith("s1", "first");
   });
 
   it("keeps each subagent in an independently editable stream", async () => {
@@ -422,36 +508,6 @@ describe("bot/streaming/tool-call-streamer", () => {
     expect(sendText).toHaveBeenNthCalledWith(2, "s1", "💻 bash next");
   });
 
-  it("freezes every tool stream before waiting on the first stream's pending edit", async () => {
-    vi.useFakeTimers();
-    let resolveEdit: (() => void) | undefined;
-    let id = 1;
-    const sendText = vi.fn(async () => id++);
-    const editText = vi.fn((_sessionId: string, _messageId: number, _text: string) =>
-      new Promise<void>((resolve) => { resolveEdit = resolve; }),
-    );
-    const streamer = new ToolCallStreamer({
-      throttleMs: 0,
-      sendText,
-      editText,
-      deleteText: vi.fn().mockResolvedValue(undefined),
-    });
-
-    streamer.replaceByPrefix("s1", "⏳first", "⏳ first");
-    await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(1));
-    streamer.replaceByPrefix("s1", "⏳todo", "⏳ todo", "todo");
-    await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(2));
-    streamer.replaceByPrefix("s1", "⏳first", "⏳ first updated");
-    await vi.waitFor(() => expect(editText).toHaveBeenCalledTimes(1));
-
-    const breaking = streamer.breakSession("s1", "session_error");
-    streamer.replaceByPrefix("s1", "⏳todo", "todo finished", "todo");
-    resolveEdit?.();
-    await breaking;
-    expect(editText.mock.calls.some((call) => String(call[2]).includes("todo finished"))).toBe(false);
-    expect(sendText).toHaveBeenCalledTimes(2);
-  });
-
   it("ignores removal of a prefix that is not in the stream", async () => {
     vi.useFakeTimers();
 
@@ -554,7 +610,7 @@ describe("bot/streaming/tool-call-streamer", () => {
     });
 
     streamer.append("s1", "regular tool");
-    streamer.append("s1", "todo tool", "todo");
+    streamer.append("s1", "subagent card", "subagent:card");
 
     const flushPromise = streamer.flushSession("s1", "manual_flush");
     await vi.advanceTimersByTimeAsync(200);
@@ -562,7 +618,7 @@ describe("bot/streaming/tool-call-streamer", () => {
 
     expect(sendText).toHaveBeenCalledTimes(2);
     expect(sendText).toHaveBeenNthCalledWith(1, "s1", "regular tool");
-    expect(sendText).toHaveBeenNthCalledWith(2, "s1", "todo tool");
+    expect(sendText).toHaveBeenNthCalledWith(2, "s1", "subagent card");
   });
 
   it("cancels throttled tool sends when clearing all streams", async () => {
@@ -900,9 +956,9 @@ describe("bot/streaming/tool-call-streamer", () => {
       });
 
       streamer.append("s1", "default line");
-      streamer.append("s1", "todo line", "todo");
+      streamer.append("s1", "subagent card", "subagent:card");
       const broken = streamer.breakSession("s1", "test_break");
-      streamer.append("s1", "later todo line", "todo");
+      streamer.append("s1", "later subagent card", "subagent:card");
       await vi.waitFor(() => {
         expect(sendText).toHaveBeenCalledTimes(1);
       });
@@ -912,8 +968,8 @@ describe("bot/streaming/tool-call-streamer", () => {
       await vi.advanceTimersByTimeAsync(1000);
 
       const sentTexts = sendText.mock.calls.map((call) => call[1]);
-      expect(sentTexts).toContain("todo line");
-      expect(sentTexts).toContain("later todo line");
+      expect(sentTexts).toContain("subagent card");
+      expect(sentTexts).toContain("later subagent card");
     });
   });
 });

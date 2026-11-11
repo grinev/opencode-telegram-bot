@@ -4,9 +4,11 @@ import {
   formatSummaryWithMode,
 } from "../../../src/bot/messages/summary-message-formatter.js";
 import {
+  formatCollapsedTodoSnapshot,
   formatCompactToolActivity,
   formatRunningTaskLine,
   formatToolInfo,
+  getTodoSnapshot,
   prepareCodeFile,
 } from "../../../src/app/formatters/summary-formatter.js";
 import { resetRuntimeLocale, setRuntimeLocale } from "../../../src/i18n/index.js";
@@ -250,6 +252,60 @@ describe("bot/messages/summary-message-formatter", () => {
     });
 
     expect(activity).toBe("📝 todowrite (2) ✅ Read the README 🔲 Write a summary");
+  });
+
+  it("reads a todo call as a snapshot with the counts its collapsed form needs", () => {
+    const snapshot = getTodoSnapshot({
+      sessionId: "s1",
+      messageId: "m1g",
+      callId: "c1g",
+      tool: "todowrite",
+      state: { status: "running" } as never,
+      input: {
+        todos: [
+          { id: "1", content: "Read the README", status: "completed" },
+          { id: "2", content: "Write a summary", status: "in_progress" },
+          { id: "3", content: "Ship it", status: "pending" },
+        ],
+      },
+    });
+
+    expect(snapshot).toEqual({
+      text: "📝 todowrite (3)\n\n✅ Read the README\n🔄 Write a summary\n🔲 Ship it",
+      done: 1,
+      total: 3,
+    });
+  });
+
+  it("reads a known empty todo list as a zero snapshot", () => {
+    const snapshot = getTodoSnapshot({
+      sessionId: "s1",
+      messageId: "m1h",
+      callId: "c1h",
+      tool: "todowrite",
+      state: { status: "running" } as never,
+      input: { todos: [] },
+    });
+
+    expect(snapshot).toEqual({ text: "📝 todowrite (0)", done: 0, total: 0 });
+  });
+
+  it("has no snapshot for a todo call whose list is not known", () => {
+    const snapshot = getTodoSnapshot({
+      sessionId: "s1",
+      messageId: "m1i",
+      callId: "c1i",
+      tool: "todowrite",
+      state: { status: "running" } as never,
+      input: {},
+    });
+
+    expect(snapshot).toBeNull();
+  });
+
+  it("formats a collapsed snapshot as counts only", () => {
+    expect(formatCollapsedTodoSnapshot(2, 5)).toBe("📝 todowrite (2/5)");
+    expect(formatCollapsedTodoSnapshot(0, 0)).toBe("📝 todowrite (0/0)");
   });
 
   it("formats write/edit tool details with line counters", () => {

@@ -9,6 +9,7 @@ import type {
   ScheduledTaskSessionIgnoreInfo,
   SessionReplyReadState,
   Settings,
+  TodoSnapshotInfo,
 } from "../types/settings.js";
 import { config } from "../../config.js";
 import { getRuntimePaths } from "../../runtime/paths.js";
@@ -332,6 +333,16 @@ export function setPinnedMessageId(messageId: number): void {
 export function clearPinnedMessageId(): void {
   currentSettings.pinnedMessageId = undefined;
   void writeSettingsFile(currentSettings);
+}
+
+export function getLastTodoSnapshot(): TodoSnapshotInfo | undefined {
+  const info = currentSettings.lastTodoSnapshot;
+  return info ? { ...info } : undefined;
+}
+
+export function setLastTodoSnapshot(info: TodoSnapshotInfo): Promise<void> {
+  currentSettings.lastTodoSnapshot = { ...info };
+  return writeSettingsFile(currentSettings);
 }
 
 export function getSessionDirectoryCache(): SessionDirectoryCacheInfo | undefined {

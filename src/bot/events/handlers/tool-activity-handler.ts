@@ -5,10 +5,13 @@ import {
   type ToolInfo,
 } from "../../../app/managers/summary-aggregation-manager.js";
 import {
+  buildTodoSnapshot,
   formatCompactToolActivity,
   formatCompactToolInfo,
   formatRunningTaskLine,
   formatToolInfo,
+  getTodoSnapshot,
+  type TodoSnapshot,
 } from "../../../app/formatters/summary-formatter.js";
 import { renderSubagentCard } from "../../../app/formatters/subagent-formatter.js";
 import { countToolCall } from "../../../app/formatters/compact-summary-formatter.js";
@@ -46,16 +49,50 @@ function getLiveToolPrefix(callId: string): string {
   return `${RUNNING_ICON}${callId}`;
 }
 
-function getToolStreamKey(tool: string): ToolStreamKey {
-  if (tool === "todowrite") {
-    return "todo";
-  }
-
-  return "default";
-}
-
 function getSubagentStreamKey(cardId: string): ToolStreamKey {
   return `subagent:${cardId}`;
+}
+
+/**
+ * The line a tool call draws: a todo call's snapshot text with its counts, anything else the
+ * ordinary tool line. A todo call whose list is not known yet has no line at all.
+ */
+function getToolLine(toolInfo: ToolInfo): { text: string; todo?: TodoSnapshot } | null {
+  if (toolInfo.tool === "todowrite") {
+    const snapshot = getTodoSnapshot(toolInfo);
+    return snapshot ? { text: snapshot.text, todo: snapshot } : null;
+  }
+
+  const message = formatToolInfo(toolInfo);
+  return message ? { text: message } : null;
+}
+
+/** A todo snapshot goes to its own message at the bottom; every other line to the tool stream. */
+function replaceToolLine(
+  deps: EventHandlerBase,
+  toolInfo: ToolInfo,
+  text: string,
+  todo: TodoSnapshot | undefined,
+): void {
+  if (todo) {
+    const destination = deps.policy.getDestination(toolInfo.sessionId);
+    if (!destination) {
+      return;
+    }
+
+    deps.runtime.todoSnapshots.track(toolInfo.sessionId, toolInfo.callId, destination.chatId, {
+      text,
+      done: todo.done,
+      total: todo.total,
+    });
+    return;
+  }
+
+  deps.runtime.toolCallStreamer.replaceByPrefix(
+    toolInfo.sessionId,
+    getLiveToolPrefix(toolInfo.callId),
+    text,
+  );
 }
 
 function formatElapsed(tick: Pick<RunningToolTick, "elapsedMs" | "isFinal">): string {
@@ -126,34 +163,44 @@ function syncCompactToolActivity(
   runtime.compactProgressStreamer.updateActivity(sessionId, text);
 }
 
+/** A todo call cut short has no result list: finish the list it was running on. */
+function getInterruptedTodoLine(
+  deps: EventHandlerBase,
+  toolInfo: ToolInfo,
+): { text: string; todo?: TodoSnapshot } | null {
+  if (toolInfo.tool !== "todowrite") {
+    return null;
+  }
+
+  const running = deps.runtime.getRunningToolInfo(toolInfo.sessionId, toolInfo.callId);
+  const snapshot = buildTodoSnapshot(running?.input?.todos);
+  return snapshot ? { text: snapshot.text, todo: snapshot } : null;
+}
+
 function finalizeLiveToolLine(
-  runtime: SessionRuntimeState,
+  deps: EventHandlerBase,
   toolInfo: ToolInfo,
   durationMs?: number,
 ): void {
-  const livePrefix = getLiveToolPrefix(toolInfo.callId);
-  const streamKey = getToolStreamKey(toolInfo.tool);
-  const message = formatToolInfo(toolInfo);
-  if (!message) {
+  const line = getToolLine(toolInfo) ?? getInterruptedTodoLine(deps, toolInfo);
+  if (!line) {
     return;
   }
 
-  runtime.toolCallStreamer.replaceByPrefix(
-    toolInfo.sessionId,
-    livePrefix,
-    durationMs === undefined ? message : appendDuration(message, formatDuration(durationMs)),
-    streamKey,
+  replaceToolLine(
+    deps,
+    toolInfo,
+    durationMs === undefined
+      ? line.text
+      : appendDuration(line.text, formatDuration(durationMs)),
+    line.todo,
   );
 }
 
 /** A finished background line no longer needs its message kept past the turn. */
 function unpinLiveToolLine(runtime: SessionRuntimeState, toolInfo: ToolInfo): void {
   if (isBackgroundTool(toolInfo)) {
-    runtime.toolCallStreamer.unpinEntry(
-      toolInfo.sessionId,
-      getLiveToolPrefix(toolInfo.callId),
-      getToolStreamKey(toolInfo.tool),
-    );
+    runtime.toolCallStreamer.unpinEntry(toolInfo.sessionId, getLiveToolPrefix(toolInfo.callId));
   }
 }
 
@@ -190,7 +237,8 @@ async function renderSubagentCards(
   }
 }
 
-function handleRunningToolTick({ runtime, policy }: EventHandlerBase, tick: RunningToolTick): void {
+function handleRunningToolTick(deps: EventHandlerBase, tick: RunningToolTick): void {
+  const { runtime, policy } = deps;
   if (!policy.isForegroundSession(tick.sessionId)) {
     // The user moved to another session: what ran in the background here stays as it was.
     runtime.stopBackgroundOperations("session_not_current", tick.sessionId);
@@ -232,16 +280,16 @@ function handleRunningToolTick({ runtime, policy }: EventHandlerBase, tick: Runn
     return;
   }
 
-  const message = formatToolInfo(toolInfo);
-  if (!message) {
+  const line = getToolLine(toolInfo);
+  if (!line) {
     return;
   }
 
-  runtime.toolCallStreamer.replaceByPrefix(
-    tick.sessionId,
-    getLiveToolPrefix(tick.callId),
-    `${RUNNING_ICON} ${appendDuration(message, elapsed)}`,
-    getToolStreamKey(toolInfo.tool),
+  replaceToolLine(
+    deps,
+    toolInfo,
+    `${RUNNING_ICON} ${appendDuration(line.text, elapsed)}`,
+    line.todo,
   );
 }
 
@@ -318,7 +366,7 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
         const durationMs = runtime.runningToolTracker.release(callId);
 
         if (!compactMode && status === "error") {
-          finalizeLiveToolLine(runtime, toolInfo, durationMs);
+          finalizeLiveToolLine(deps, toolInfo, durationMs);
           unpinLiveToolLine(runtime, toolInfo);
         }
 
@@ -336,18 +384,17 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       if (composing) {
         // Nothing to draw yet: the bare tool name would flash before its command.
       } else if (!compactMode) {
-        const message = formatToolInfo(toolInfo);
-        if (message) {
+        const line = getToolLine(toolInfo);
+        if (line) {
           const tick = runtime.runningToolTracker.displayTick(callId);
-          const streamKey = getToolStreamKey(toolInfo.tool);
-          runtime.toolCallStreamer.replaceByPrefix(
-            sessionId,
-            getLiveToolPrefix(callId),
-            `${RUNNING_ICON} ${tick ? appendDuration(message, formatElapsed(tick)) : message}`,
-            streamKey,
+          replaceToolLine(
+            deps,
+            toolInfo,
+            `${RUNNING_ICON} ${tick ? appendDuration(line.text, formatElapsed(tick)) : line.text}`,
+            line.todo,
           );
-          if (background) {
-            runtime.toolCallStreamer.pinEntry(sessionId, getLiveToolPrefix(callId), streamKey);
+          if (background && !line.todo) {
+            runtime.toolCallStreamer.pinEntry(sessionId, getLiveToolPrefix(callId));
           }
         }
       } else if (background) {
@@ -434,17 +481,17 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
     }
 
     try {
-      const message = formatToolInfo(toolInfo);
-      if (message) {
+      const line = getToolLine(toolInfo);
+      if (line) {
         const durationMs = runtime.takeCompletedToolDuration(toolInfo.sessionId, toolInfo.callId);
         // A patch lists one line per file: the duration stays on the line that was running
         const withDuration =
           toolInfo.tool === "apply_patch" ? appendDurationToFirstLine : appendDuration;
-        runtime.toolCallStreamer.replaceByPrefix(
-          toolInfo.sessionId,
-          getLiveToolPrefix(toolInfo.callId),
-          durationMs === undefined ? message : withDuration(message, formatDuration(durationMs)),
-          getToolStreamKey(toolInfo.tool),
+        replaceToolLine(
+          deps,
+          toolInfo,
+          durationMs === undefined ? line.text : withDuration(line.text, formatDuration(durationMs)),
+          line.todo,
         );
         unpinLiveToolLine(runtime, toolInfo);
       }
@@ -501,7 +548,6 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       await runtime.letOutRepliesBeforeDocument(fileInfo.sessionId);
       const durationMs = runtime.takeCompletedToolDuration(fileInfo.sessionId, fileInfo.callId);
       const livePrefix = getLiveToolPrefix(fileInfo.callId);
-      const streamKey = getToolStreamKey(fileInfo.tool);
       // A file whose document was too big keeps its line where the running line was
       const textLines = fileInfo.files.flatMap(({ fileData, line }) =>
         !fileData && line ? [line] : [],
@@ -515,11 +561,10 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
           firstFileIsText && durationMs !== undefined
             ? appendDurationToFirstLine(text, formatDuration(durationMs))
             : text,
-          streamKey,
         );
         unpinLiveToolLine(runtime, fileInfo);
       } else {
-        runtime.toolCallStreamer.removeByPrefix(fileInfo.sessionId, livePrefix, streamKey, true);
+        runtime.toolCallStreamer.removeByPrefix(fileInfo.sessionId, livePrefix, undefined, true);
       }
       runtime.toolCallStreamer.beginDocumentBoundary(fileInfo.sessionId);
       await runtime.toolCallStreamer.flushSession(fileInfo.sessionId, "tool_file_boundary");

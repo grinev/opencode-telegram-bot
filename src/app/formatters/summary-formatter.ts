@@ -149,6 +149,11 @@ function getTodoItems(
   const source = finished
     ? toolInfo.metadata?.todos
     : (toolInfo.input?.todos ?? toolInfo.metadata?.todos);
+  return toTodoItems(source);
+}
+
+/** The list behind a `todos` value, with everything that is not an item left out. */
+function toTodoItems(source: unknown): Array<{ content: string; status: string }> | undefined {
   if (source === undefined) {
     return undefined;
   }
@@ -186,6 +191,50 @@ function formatTodos(todos: Array<{ content: string; status: string }>): string 
   }
 
   return result;
+}
+
+/** A `todowrite` call as the chat shows it: its heading and item lines, and its counts. */
+export interface TodoSnapshot {
+  text: string;
+  done: number;
+  total: number;
+}
+
+/**
+ * The snapshot a `todowrite` call carries: nothing until its list is known, then the same heading
+ * and item lines an ordinary tool line shows, with the counts its collapsed form needs.
+ */
+export function getTodoSnapshot(toolInfo: ToolInfo): TodoSnapshot | null {
+  if (toolInfo.tool !== "todowrite") {
+    return null;
+  }
+
+  return buildTodoSnapshot(getTodoItems(toolInfo, isFinishedCall(toolInfo)));
+}
+
+/** A snapshot for an already read list, with the same heading, markers, limits and counts. */
+export function buildTodoSnapshot(source: unknown): TodoSnapshot | null {
+  const todos = toTodoItems(source);
+  if (!todos) {
+    return null;
+  }
+
+  return {
+    text: formatTodoSnapshotText(todos),
+    done: todos.filter((todo) => todo.status === "completed").length,
+    total: todos.length,
+  };
+}
+
+/** The collapsed form of a snapshot: counts only, no item lines and no duration. */
+export function formatCollapsedTodoSnapshot(done: number, total: number): string {
+  return `${getToolIcon("todowrite")} todowrite (${done}/${total})`;
+}
+
+function formatTodoSnapshotText(todos: Array<{ content: string; status: string }>): string {
+  const heading = `${getToolIcon("todowrite")} todowrite (${todos.length})`;
+  const todosList = formatTodos(todos);
+  return todosList ? `${heading}\n\n${todosList}` : heading;
 }
 
 function formatDiffLineInfo(filediff: {
@@ -321,12 +370,9 @@ export function formatToolInfo(toolInfo: ToolInfo): string | null {
   );
 
   if (tool === "todowrite") {
-    const todos = getTodoItems(toolInfo, isFinishedCall(toolInfo));
-    if (todos) {
-      const toolIcon = getToolIcon(tool);
-      const todosList = formatTodos(todos);
-      const heading = `${toolIcon} ${tool} (${todos.length})`;
-      return todosList ? `${heading}\n\n${todosList}` : heading;
+    const snapshot = getTodoSnapshot(toolInfo);
+    if (snapshot) {
+      return snapshot.text;
     }
   }
 

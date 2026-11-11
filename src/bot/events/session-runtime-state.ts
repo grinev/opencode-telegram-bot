@@ -10,9 +10,11 @@ import {
   getResponseStreamingMode,
   type ResponseStreamingMode,
 } from "../../app/stores/settings-store.js";
+import * as settingsStore from "../../app/stores/settings-store.js";
 import type { ThinkingSection } from "../messages/thinking-rendering.js";
 import { ResponseStreamer, type StreamingMessagePayload } from "../streaming/response-streamer.js";
 import { ToolCallStreamer } from "../streaming/tool-call-streamer.js";
+import { TodoSnapshotManager } from "../streaming/todo-snapshot-manager.js";
 import { RunningToolTracker, type RunningToolTick } from "../streaming/running-tool-tracker.js";
 import { CompactProgressStreamer } from "../streaming/compact-progress-streamer.js";
 import { getSessionStreamThrottleMs } from "../streaming/stream-throttle.js";
@@ -85,6 +87,7 @@ export class SessionRuntimeState {
   readonly assistantDraftStreamer: ResponseStreamer;
   readonly thinkingStreamer: ResponseStreamer;
   readonly toolCallStreamer: ToolCallStreamer;
+  readonly todoSnapshots: TodoSnapshotManager;
   readonly toolMessageBatcher: ToolMessageBatcher;
   readonly compactProgressStreamer: CompactProgressStreamer;
   readonly runningToolTracker: RunningToolTracker;
@@ -214,6 +217,17 @@ export class SessionRuntimeState {
           this.requireForegroundDestination(sessionId, "Tool stream", "delete"),
           messageId,
         ),
+    });
+
+    this.todoSnapshots = new TodoSnapshotManager({
+      sendText: (sessionId, text, shouldSend) =>
+        this.toolCallStreamer.sendStandalone(sessionId, text, shouldSend),
+      editText: (sessionId, messageId, text) =>
+        this.toolCallStreamer.editStandalone(sessionId, messageId, text),
+      // Asked when a snapshot needs it: the record outlives this runtime, but nothing reads it
+      // until the first todo snapshot of the run.
+      getStoredSnapshot: () => settingsStore.getLastTodoSnapshot(),
+      storeSnapshot: (info) => settingsStore.setLastTodoSnapshot(info),
     });
   }
 
@@ -661,6 +675,7 @@ export class SessionRuntimeState {
 
   /** Drops everything one session holds; other sessions keep running. */
   clearSession(sessionId: string, reason: string): void {
+    this.todoSnapshots.cancelPending(sessionId);
     this.clearAssistantResponseSession(sessionId, reason);
     this.thinkingStreamer.clearSession(sessionId, reason);
     deleteSessionKeys(this.thinkingSections, sessionId);
@@ -673,6 +688,7 @@ export class SessionRuntimeState {
 
   /** Drops all output of all sessions; queued completion work is kept. */
   clearAllOutput(reason: string): void {
+    this.todoSnapshots.cancelPending();
     this.toolMessageBatcher.clearAll(reason);
     this.toolCallStreamer.clearAll(reason);
     this.assistantStreamModes.clear();
