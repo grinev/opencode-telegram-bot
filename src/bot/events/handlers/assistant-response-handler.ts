@@ -428,6 +428,9 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
           await runtime.compactProgressStreamer.flushPending(sessionId);
         }
 
+        // A snapshot that came before this final text belongs above it, not below.
+        await runtime.todoSnapshots.flush(sessionId);
+
         await finalizeAssistantResponse({
           sessionId,
           messageId,

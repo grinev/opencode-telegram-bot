@@ -83,6 +83,7 @@ async function showOrQueueQuestion(
   await Promise.all([
     runtime.toolMessageBatcher.flushSession(sessionId, "question_asked"),
     runtime.toolCallStreamer.flushSession(sessionId, "question_asked"),
+    runtime.todoSnapshots.flush(sessionId),
   ]);
   await keepAssistantDraftsBeforePrompt(deps, followedSessionId);
   await runtime.letOutReplies(followedSessionId);
@@ -179,6 +180,7 @@ async function presentPermission(
   await Promise.all([
     runtime.toolMessageBatcher.flushSession(sessionId, "permission_asked"),
     runtime.toolCallStreamer.flushSession(sessionId, "permission_asked"),
+    runtime.todoSnapshots.flush(sessionId),
   ]);
   await keepAssistantDraftsBeforePrompt(deps, followedSessionId);
   await runtime.letOutReplies(followedSessionId);

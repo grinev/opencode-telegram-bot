@@ -8,7 +8,7 @@ const TELEGRAM_MESSAGE_SAFE_LENGTH = 4000;
 const DEFAULT_STREAM_KEY = "default";
 const SUBAGENT_STREAM_KEY_PREFIX = "subagent:";
 
-export type ToolStreamKey = "default" | "todo" | `subagent:${string}`;
+export type ToolStreamKey = "default" | `subagent:${string}`;
 
 interface ToolCallStreamerOptions {
   throttleMs: StreamThrottleMs;
@@ -295,6 +295,59 @@ export class ToolCallStreamer {
         await this.enqueueTask(state, () => this.syncState(state, reason));
       }),
     );
+  }
+
+  /**
+   * Sends one message of its own through the session's queue, after everything already on its
+   * way to the chat. No stream state is kept for it: whoever asked edits it by its id.
+   */
+  async sendStandalone(
+    sessionId: string,
+    text: string,
+    shouldSend?: () => boolean,
+  ): Promise<number | null> {
+    const normalizedText = text.trim();
+    if (!sessionId || !normalizedText) {
+      throw new Error("A standalone message needs a session and text");
+    }
+
+    await this.waitForDocumentBoundary(sessionId);
+    await this.flushSession(sessionId, "standalone_send");
+    await this.takeGate?.(sessionId)?.();
+    // A document that opened while this message waited keeps its place above it.
+    await this.waitForDocumentBoundary(sessionId);
+
+    // The wait may have outlived whoever asked for this message.
+    if (shouldSend && !shouldSend()) {
+      return null;
+    }
+
+    return this.enqueueTelegramOperation(sessionId, async () => {
+      // The queue's own wait may have outlived it as well.
+      if (shouldSend && !shouldSend()) {
+        return null;
+      }
+
+      return this.sendText(sessionId, normalizedText);
+    });
+  }
+
+  /** Edits one message by its id through the same queue, without stream state. */
+  editStandalone(sessionId: string, telegramMessageId: number, text: string): Promise<void> {
+    const normalizedText = text.trim();
+    if (!sessionId || !normalizedText) {
+      return Promise.resolve();
+    }
+
+    return this.enqueueTelegramOperation(sessionId, () =>
+      this.editText(sessionId, telegramMessageId, normalizedText),
+    );
+  }
+
+  private async waitForDocumentBoundary(sessionId: string): Promise<void> {
+    while (this.documentBoundaries.has(sessionId)) {
+      await this.documentBoundaries.get(sessionId)?.done;
+    }
   }
 
   async breakSession(sessionId: string, reason: string): Promise<void> {
