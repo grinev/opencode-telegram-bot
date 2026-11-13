@@ -540,7 +540,10 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       return;
     }
 
-    if (!getSendDiffFileAttachments()) {
+    const hasPhoto = fileInfo.files.some(({ fileData }) => fileData?.image === true);
+    // A tool-result photo is the tool's output, not a diff attachment: the
+    // diff-attachment toggle does not hide it.
+    if (!hasPhoto && !getSendDiffFileAttachments()) {
       return;
     }
 

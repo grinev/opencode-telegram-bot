@@ -518,6 +518,8 @@ export interface CodeFileData {
   buffer: Buffer;
   filename: string;
   caption: string;
+  /** Send as a photo (tool-result image) instead of a document. */
+  image?: boolean;
 }
 
 function formatDiff(diff: string): string {
@@ -591,4 +593,39 @@ export function prepareCodeFile(
   const filename = `${operation}_${basename}.txt`;
 
   return { buffer, filename, caption: "" };
+}
+
+/**
+ * Decodes the tool-result images a completed call left in its metadata
+ * (`metadata.images`, put there by the V2 translator) into photo payloads.
+ */
+export function prepareToolImages(
+  metadata: { [key: string]: unknown } | undefined,
+): CodeFileData[] {
+  const images = Array.isArray(metadata?.images) ? metadata.images : [];
+  const files: CodeFileData[] = [];
+
+  for (const image of images) {
+    if (!isRecord(image) || typeof image.uri !== "string" || typeof image.mime !== "string") {
+      continue;
+    }
+    if (!image.mime.startsWith("image/")) {
+      continue;
+    }
+
+    const comma = image.uri.indexOf(",");
+    const buffer = Buffer.from(comma >= 0 ? image.uri.slice(comma + 1) : "", "base64");
+    if (buffer.length === 0) {
+      continue;
+    }
+
+    // Telegram sorts photos by extension, and the tool may name the image by path.
+    const name = typeof image.name === "string" ? path.basename(image.name) : "";
+    const extension = image.mime.split("/")[1]?.split(";")[0] || "png";
+    const filename = name || `image.${extension}`;
+
+    files.push({ buffer, filename, caption: filename, image: true });
+  }
+
+  return files;
 }

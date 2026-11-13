@@ -9,6 +9,7 @@ import {
   toV1ToolMetadata,
   toV1ToolName,
   toV2PromptInput,
+  toolContentImages,
 } from "../../../src/opencode/v2/mappers.js";
 
 function createForm(fields: FormInfo["fields"]): FormInfo {
@@ -21,6 +22,19 @@ describe("opencode/v2/mappers", () => {
     expect(toV1ToolName("subagent")).toBe("task");
     expect(toV1ToolName("patch")).toBe("apply_patch");
     expect(toV1ToolName("read")).toBe("read");
+  });
+
+  it("picks inline image file items out of a finished tool's content", () => {
+    expect(
+      toolContentImages([
+        { type: "text", text: "read image" },
+        { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "a.png" },
+        { type: "file", uri: "file:///tmp/b.pdf", mime: "application/pdf" },
+        { type: "file", uri: "https://example.com/c.png", mime: "image/png" },
+      ]),
+    ).toEqual([{ uri: "data:image/png;base64,AAAA", mime: "image/png", name: "a.png" }]);
+    expect(toolContentImages(undefined)).toEqual([]);
+    expect(toolContentImages([{ type: "text", text: "no files" }])).toEqual([]);
   });
 
   it("adds the V1 input fields while keeping the V2 ones", () => {

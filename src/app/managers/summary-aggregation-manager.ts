@@ -6,6 +6,7 @@ import {
   getPatchFileChanges,
   normalizePathForDisplay,
   prepareCodeFile,
+  prepareToolImages,
 } from "../formatters/summary-formatter.js";
 import type { Question, QuestionSettledOutcome } from "../types/question.js";
 import type { PermissionReply, PermissionRequest } from "../types/permission.js";
@@ -2282,6 +2283,10 @@ export class SummaryAggregator {
           this.processedToolStates.add(completedKey);
 
           const preparedFiles = this.prepareToolFiles(part.tool, input, title, state.metadata);
+          // Images the tool returned ride the file lane out as Telegram photos.
+          for (const fileData of prepareToolImages(state.metadata)) {
+            preparedFiles.push({ fileData, fileChange: null });
+          }
           const hasFileAttachment = preparedFiles.some((file) => file.fileData);
 
           const toolData: ToolInfo = {
