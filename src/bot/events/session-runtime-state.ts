@@ -150,6 +150,14 @@ export class SessionRuntimeState {
         }
 
         const keyboard = getReplyKeyboard();
+        if (fileData.image) {
+          await this.delivery.sendPhoto(destination, fileData, {
+            disable_notification: true,
+            ...(keyboard ? { reply_markup: keyboard } : {}),
+          });
+          return;
+        }
+
         await this.delivery.sendDocument(destination, fileData, {
           disable_notification: true,
           ...(keyboard ? { reply_markup: keyboard } : {}),

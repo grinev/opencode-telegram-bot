@@ -14,6 +14,7 @@ import type { TelegramRenderedPart } from "../render/types.js";
 type TelegramApi = Bot<Context>["api"];
 type SendMessageOptions = Parameters<TelegramApi["sendMessage"]>[2];
 type SendDocumentOptions = Parameters<TelegramApi["sendDocument"]>[2];
+type SendPhotoOptions = Parameters<TelegramApi["sendPhoto"]>[2];
 type RenderedSendOptions = Parameters<typeof sendRenderedBotPart>[0]["options"];
 type RenderedEditOptions = Parameters<typeof editRenderedBotPart>[0]["options"];
 type DraftCompleteOptions = Parameters<typeof completeDraftPart>[0]["options"];
@@ -88,6 +89,31 @@ export class TelegramEventDelivery {
 
       throw error;
     });
+  }
+
+  async sendPhoto(
+    destination: TelegramDestination,
+    fileData: CodeFileData,
+    options?: SendPhotoOptions,
+  ): Promise<void> {
+    logger.debug(`[Bot] Sending photo: ${fileData.filename} (${fileData.buffer.length} bytes)`);
+
+    try {
+      await destination.api.sendPhoto(
+        destination.chatId,
+        new InputFile(fileData.buffer, fileData.filename),
+        {
+          caption: fileData.caption,
+          ...options,
+        },
+      );
+    } catch (error) {
+      // Telegram refuses formats and sizes sendDocument still carries.
+      logger.warn(
+        `[Bot] sendPhoto failed for ${fileData.filename}, sending as document: ${getLowerCaseErrorMessage(error)}`,
+      );
+      await this.sendDocument(destination, fileData);
+    }
   }
 
   async sendDocument(

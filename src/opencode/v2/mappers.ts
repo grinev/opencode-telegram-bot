@@ -140,6 +140,55 @@ export function toolContentText(
     .join("\n");
 }
 
+/** An image a finished tool returned (e.g. the Read tool on a picture). */
+export interface ToolImageAttachment {
+  uri: string;
+  mime: string;
+  name?: string;
+}
+
+/**
+ * Picks the image file items out of a finished tool's content. They reach the
+ * aggregator through the completed tool state's metadata so Telegram can send
+ * them as photos; everything else in the content is text the bot already shows.
+ */
+export function toolContentImages(
+  content:
+    | ReadonlyArray<
+        {
+          type: string;
+          mime?: string | null | undefined;
+          uri?: string | null | undefined;
+          name?: string | null | undefined;
+        }
+      >
+    | undefined,
+): ToolImageAttachment[] {
+  if (!content) {
+    return [];
+  }
+
+  const images: ToolImageAttachment[] = [];
+  for (const item of content) {
+    if (item.type !== "file") {
+      continue;
+    }
+    if (typeof item.mime !== "string" || !item.mime.startsWith("image/")) {
+      continue;
+    }
+    // Only inline payloads can travel in metadata; file URIs the user already has.
+    if (typeof item.uri !== "string" || !item.uri.startsWith("data:")) {
+      continue;
+    }
+    images.push({
+      uri: item.uri,
+      mime: item.mime,
+      ...(typeof item.name === "string" && item.name ? { name: item.name } : {}),
+    });
+  }
+  return images;
+}
+
 export function toV1ErrorPayload(
   error: SessionStructuredError | undefined,
 ): NonNullable<AssistantMessage["error"]> {
@@ -232,12 +281,16 @@ function toV1ToolState(
     return { status: "running", input, ...(metadata ? { metadata } : {}), time: { start } };
   }
   if (state.status === "completed") {
+    const images = toolContentImages(state.content);
     return {
       status: "completed",
       input,
       output: toolContentText(state.content),
       title: "",
-      metadata: metadata ?? {},
+      metadata: {
+        ...(metadata ?? {}),
+        ...(images.length > 0 ? { images } : {}),
+      },
       time: { start, end },
     };
   }

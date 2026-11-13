@@ -12,6 +12,7 @@ function createDestination() {
     editMessageText: vi.fn().mockResolvedValue(undefined),
     deleteMessage: vi.fn().mockResolvedValue(true),
     sendDocument: vi.fn().mockResolvedValue({ message_id: 11 }),
+    sendPhoto: vi.fn().mockResolvedValue({ message_id: 12 }),
   };
 
   return { api, destination: { api, chatId: 42 } as unknown as TelegramDestination };
@@ -33,6 +34,29 @@ describe("bot/events/telegram-event-delivery", () => {
 
     expect(messageId).toBe(10);
     expect(api.sendMessage).toHaveBeenCalledWith(42, "hello");
+  });
+
+  it("sends photo payloads with their caption and falls back to a document", async () => {
+    const { api, destination } = createDestination();
+    const delivery = new TelegramEventDelivery();
+    const fileData = {
+      buffer: Buffer.from("fake-png"),
+      filename: "shot.png",
+      caption: "shot.png",
+      image: true,
+    };
+
+    await delivery.sendPhoto(destination, fileData, { disable_notification: true });
+    expect(api.sendPhoto).toHaveBeenCalledTimes(1);
+    const [chatId, photo, options] = api.sendPhoto.mock.calls[0];
+    expect(chatId).toBe(42);
+    expect(photo).toBeInstanceOf(InputFile);
+    expect(options).toMatchObject({ caption: "shot.png", disable_notification: true });
+
+    api.sendPhoto.mockRejectedValueOnce(new Error("Bad Request: IMAGE_FILE_INVALID"));
+    await delivery.sendPhoto(destination, fileData);
+    expect(api.sendDocument).toHaveBeenCalledTimes(1);
+    expect(api.sendDocument.mock.calls[0][1]).toBeInstanceOf(InputFile);
   });
 
   it("tolerates an edit that changes nothing and a delete of a missing message", async () => {

@@ -2,6 +2,7 @@ import type { AssistantMessage, Event, Part, Session, ToolState } from "@opencod
 import type { FormInfo, OpenCodeEvent, SessionInboxItem } from "@opencode/client";
 import { isGoalInternalMetadata } from "./goal-message.js";
 import {
+  toolContentImages,
   toolContentText,
   toV1ErrorPayload,
   toV1Permission,
@@ -655,6 +656,7 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
           ...(data.metadata ?? {}),
         });
         const output = toolContentText(data.content);
+        const images = toolContentImages(data.content);
         tools.delete(data.id);
 
         // V2 reports a background command or subagent done as soon as it is launched; it
@@ -677,7 +679,7 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
             input: call.input,
             output,
             title: "",
-            metadata,
+            metadata: images.length > 0 ? { ...metadata, images } : metadata,
             time: { start: call.start, end: created },
           },
           call,
