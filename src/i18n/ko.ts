@@ -608,6 +608,13 @@ export const ko: I18nDictionary = {
   "tasklist.load_error": "🔴 예약 작업을 불러오지 못했습니다.",
 
   "commands.select": "OpenCode 명령어를 선택하세요:",
+  "commands.search.button": "🔍 검색",
+  "commands.search.prompt": "🔍 명령어 이름이나 설명을 입력하세요:",
+  "commands.search.results": "\"{query}\" 검색 결과:",
+  "commands.search.results_page": "\"{query}\" 검색 결과 ({page} 페이지):",
+  "commands.search.no_results": "\"{query}\"에 해당하는 명령어가 없습니다",
+  "commands.search.again": "↩ 다시 검색",
+  "commands.search.cancel": "❌ 취소",
   "commands.empty": "📭 이 프로젝트에서 사용 가능한 OpenCode 명령어가 없습니다.",
   "commands.fetch_error": "🔴 OpenCode 명령어를 불러오지 못했습니다.",
   "commands.no_description": "설명 없음",

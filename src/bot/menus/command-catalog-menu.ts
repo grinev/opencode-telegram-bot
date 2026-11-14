@@ -7,6 +7,8 @@ export const COMMANDS_CALLBACK_SELECT_PREFIX = `${COMMANDS_CALLBACK_PREFIX}selec
 const COMMANDS_CALLBACK_PAGE_PREFIX = `${COMMANDS_CALLBACK_PREFIX}page:`;
 export const COMMANDS_CALLBACK_CANCEL = `${COMMANDS_CALLBACK_PREFIX}cancel`;
 export const COMMANDS_CALLBACK_EXECUTE = `${COMMANDS_CALLBACK_PREFIX}execute`;
+export const COMMANDS_CALLBACK_SEARCH = `${COMMANDS_CALLBACK_PREFIX}search`;
+export const COMMANDS_SEARCH_QUERY_MAX_LENGTH = 100;
 
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 
@@ -120,8 +122,12 @@ export function buildCommandsListKeyboard(
   commands: CommandCatalogItem[],
   page: number,
   pageSize: number,
+  search = false,
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
+  if (!search) {
+    keyboard.text(t("commands.search.button"), COMMANDS_CALLBACK_SEARCH).row();
+  }
   const {
     page: normalizedPage,
     totalPages,
@@ -132,24 +138,77 @@ export function buildCommandsListKeyboard(
   commands.slice(startIndex, endIndex).forEach((command, index) => {
     const globalIndex = startIndex + index;
     keyboard
-      .text(formatCommandButtonLabel(command), `${COMMANDS_CALLBACK_SELECT_PREFIX}${globalIndex}`)
+      .text(
+        formatCommandButtonLabel(command),
+        search
+          ? `${COMMANDS_CALLBACK_SEARCH}:result:${globalIndex}`
+          : `${COMMANDS_CALLBACK_SELECT_PREFIX}${globalIndex}`,
+      )
       .row();
   });
 
   if (totalPages > 1) {
     if (normalizedPage > 0) {
-      keyboard.text(t("commands.button.prev_page"), buildCommandPageCallback(normalizedPage - 1));
+      keyboard.text(
+        t("commands.button.prev_page"),
+        search
+          ? `${COMMANDS_CALLBACK_SEARCH}:page:${normalizedPage - 1}`
+          : buildCommandPageCallback(normalizedPage - 1),
+      );
     }
 
     if (normalizedPage < totalPages - 1) {
-      keyboard.text(t("commands.button.next_page"), buildCommandPageCallback(normalizedPage + 1));
+      keyboard.text(
+        t("commands.button.next_page"),
+        search
+          ? `${COMMANDS_CALLBACK_SEARCH}:page:${normalizedPage + 1}`
+          : buildCommandPageCallback(normalizedPage + 1),
+      );
     }
 
     keyboard.row();
   }
 
-  keyboard.text(t("commands.button.cancel"), COMMANDS_CALLBACK_CANCEL);
+  if (!search) {
+    keyboard.text(t("commands.button.cancel"), COMMANDS_CALLBACK_CANCEL);
+  }
   return keyboard;
+}
+
+export function filterCommandsForSearch(
+  commands: CommandCatalogItem[],
+  query: string,
+): CommandCatalogItem[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  return commands.filter(
+    (command) =>
+      command.name.toLowerCase().includes(normalizedQuery) ||
+      command.description?.toLowerCase().includes(normalizedQuery),
+  );
+}
+
+export function buildCommandsSearchView(
+  commands: CommandCatalogItem[],
+  query: string,
+  page: number,
+  pageSize: number,
+) {
+  const { page: normalizedPage } = calculateCommandsPaginationRange(
+    commands.length,
+    page,
+    pageSize,
+  );
+  const keyboard = buildCommandsListKeyboard(commands, normalizedPage, pageSize, true);
+  keyboard
+    .text(t("commands.search.again"), `${COMMANDS_CALLBACK_SEARCH}:again`)
+    .text(t("commands.search.cancel"), `${COMMANDS_CALLBACK_SEARCH}:cancel`);
+  const text =
+    commands.length === 0
+      ? t("commands.search.no_results", { query })
+      : normalizedPage === 0
+        ? t("commands.search.results", { query })
+        : t("commands.search.results_page", { query, page: normalizedPage + 1 });
+  return { text, keyboard };
 }
 
 export function buildCommandsConfirmKeyboard(): InlineKeyboard {

@@ -554,6 +554,13 @@ export const zh: I18nDictionary = {
   "tasklist.load_error": "🔴 无法加载定时任务。",
 
   "commands.select": "请选择一个 OpenCode 命令：",
+  "commands.search.button": "🔍 搜索",
+  "commands.search.prompt": "🔍 请输入命令名称或描述：",
+  "commands.search.results": "“{query}”的搜索结果：",
+  "commands.search.results_page": "“{query}”的搜索结果（第 {page} 页）：",
+  "commands.search.no_results": "未找到与“{query}”匹配的命令",
+  "commands.search.again": "↩ 重新搜索",
+  "commands.search.cancel": "❌ 取消",
   "commands.empty": "📭 当前项目没有可用的 OpenCode 命令。",
   "commands.fetch_error": "🔴 加载 OpenCode 命令失败。",
   "commands.no_description": "无描述",

@@ -3,6 +3,7 @@ import type { Bot, Context } from "grammy";
 import { commandsCommand } from "../../../src/bot/commands/command-catalog-command.js";
 import {
   handleCommandsCallback,
+  handleCommandsSearchTextInput,
   type ExecuteCommandDeps,
 } from "../../../src/bot/callbacks/command-catalog-callback-handler.js";
 import { handleCommandTextArguments } from "../../../src/bot/handlers/text-message-handler.js";
@@ -10,12 +11,14 @@ import {
   calculateCommandsPaginationRange,
   formatCommandsSelectText,
   parseCommandPageCallback,
+  filterCommandsForSearch,
 } from "../../../src/bot/menus/command-catalog-menu.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { logger } from "../../../src/utils/logger.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import { startInteractionForTest } from "../../helpers/interaction.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -258,9 +261,10 @@ describe("bot/commands/commands", () => {
       string,
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
-    expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("commands:select:0");
-    expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("commands:select:1");
-    expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("commands:cancel");
+    expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("commands:search");
+    expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("commands:select:0");
+    expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("commands:select:1");
+    expect(options.reply_markup.inline_keyboard[3]?.[0]?.callback_data).toBe("commands:cancel");
 
     const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");
@@ -631,14 +635,15 @@ describe("bot/commands/commands", () => {
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string; text: string }>> } },
     ];
 
-    expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("commands:select:0");
-    expect(options.reply_markup.inline_keyboard[9]?.[0]?.callback_data).toBe("commands:select:9");
+    expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("commands:search");
+    expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("commands:select:0");
+    expect(options.reply_markup.inline_keyboard[10]?.[0]?.callback_data).toBe("commands:select:9");
 
-    const paginationRow = options.reply_markup.inline_keyboard[10];
+    const paginationRow = options.reply_markup.inline_keyboard[11];
     expect(paginationRow?.[0]?.callback_data).toBe("commands:page:1");
     expect(paginationRow?.[0]?.text).toBe(t("commands.button.next_page"));
 
-    expect(options.reply_markup.inline_keyboard[11]?.[0]?.callback_data).toBe("commands:cancel");
+    expect(options.reply_markup.inline_keyboard[12]?.[0]?.callback_data).toBe("commands:cancel");
   });
 
   it("filters out non-command sources from command list", async () => {
@@ -662,9 +667,10 @@ describe("bot/commands/commands", () => {
       { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string }>> } },
     ];
 
-    expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("commands:select:0");
-    expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("commands:select:1");
-    expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("commands:cancel");
+    expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("commands:search");
+    expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("commands:select:0");
+    expect(options.reply_markup.inline_keyboard[2]?.[0]?.callback_data).toBe("commands:select:1");
+    expect(options.reply_markup.inline_keyboard[3]?.[0]?.callback_data).toBe("commands:cancel");
 
     const state = container.interactionManager.getSnapshot();
     expect(state?.kind).toBe("custom");
@@ -709,14 +715,15 @@ describe("bot/commands/commands", () => {
     expect(text).toBe(t("commands.select_page", { page: 2 }));
 
     const inlineRows = options.reply_markup.inline_keyboard;
-    expect(inlineRows[0]?.[0]?.callback_data).toBe("commands:select:10");
-    expect(inlineRows[1]?.[0]?.callback_data).toBe("commands:select:11");
+    expect(inlineRows[0]?.[0]?.callback_data).toBe("commands:search");
+    expect(inlineRows[1]?.[0]?.callback_data).toBe("commands:select:10");
+    expect(inlineRows[2]?.[0]?.callback_data).toBe("commands:select:11");
 
-    const paginationRow = inlineRows[2];
+    const paginationRow = inlineRows[3];
     expect(paginationRow?.[0]?.callback_data).toBe("commands:page:0");
     expect(paginationRow?.[0]?.text).toBe(t("commands.button.prev_page"));
 
-    expect(inlineRows[3]?.[0]?.callback_data).toBe("commands:cancel");
+    expect(inlineRows[4]?.[0]?.callback_data).toBe("commands:cancel");
   });
 
   it("returns page-empty callback message when requested page has no commands", async () => {
@@ -780,6 +787,372 @@ describe("bot/commands/commands", () => {
     expect(state?.kind).toBe("custom");
     expect(state?.metadata.stage).toBe("confirm");
     expect(state?.metadata.commandName).toBe("cmd13");
+  });
+  describe("search", () => {
+    const catalog = Array.from({ length: 12 }, (_, index) => ({
+      name: `command-${index}`,
+      description: `Description ${index}`,
+      source: "command",
+    }));
+
+    beforeEach(() => {
+      mocked.commandListMock.mockResolvedValue({ data: catalog, error: null });
+    });
+
+    async function openSearch() {
+      await commandsCommand(createCommandContext(100) as never, createDeps());
+      const ctx = createCallbackContext("commands:search", 100);
+      await handleCommandsCallback(ctx, createDeps());
+      return ctx;
+    }
+
+    async function showResults(query = "command") {
+      await openSearch();
+      const ctx = createTextContext(query);
+      await handleCommandsSearchTextInput(ctx, createDeps());
+      return ctx;
+    }
+
+    it("deletes the list and waits for a query without allowed utility commands", async () => {
+      const ctx = await openSearch();
+      expect(ctx.deleteMessage).toHaveBeenCalledTimes(1);
+      expect(ctx.reply).toHaveBeenCalledWith(t("commands.search.prompt"));
+      expect(container.interactionManager.getSnapshot()).toMatchObject({
+        kind: "custom",
+        expectedInput: "text",
+        allowedCommands: [],
+        metadata: { flow: "commands-search", stage: "input" },
+      });
+    });
+
+    it("searches the fresh catalog by full fields while preserving query text and catalog order", async () => {
+      await openSearch();
+      mocked.commandListMock.mockResolvedValueOnce({
+        data: [
+          { name: "first", description: `${"x".repeat(90)} Needle`, source: "command" },
+          { name: "NEEDLE", source: "command" },
+          { name: "other", description: "not a match", source: "command" },
+          { name: "needle-skill", source: "skill" },
+          { name: "goal", description: "needle", source: "command" },
+        ],
+        error: null,
+      });
+      const ctx = createTextContext("  nEeDlE  ");
+      expect(await handleCommandsSearchTextInput(ctx, createDeps())).toBe(true);
+      expect(mocked.commandListMock).toHaveBeenCalledTimes(2);
+      expect(ctx.reply).toHaveBeenCalledWith(
+        t("commands.search.results", { query: "  nEeDlE  " }),
+        expect.objectContaining({ reply_markup: expect.anything() }),
+      );
+      expect(container.interactionManager.getSnapshot()).toMatchObject({
+        expectedInput: "callback",
+        allowedCommands: [],
+        metadata: {
+          stage: "results",
+          query: "  nEeDlE  ",
+          commands: [{ name: "first" }, { name: "NEEDLE" }],
+          messageId: 903,
+        },
+      });
+      expect(mocked.sessionCommandMock).not.toHaveBeenCalled();
+    });
+
+    it("reloads and paginates all matches with the existing page size", async () => {
+      await showResults();
+      const ctx = createCallbackContext("commands:search:page:1", 903);
+      const updated = [...catalog, { name: "command-new", description: "new", source: "command" }];
+      mocked.commandListMock.mockResolvedValueOnce({ data: updated, error: null });
+      await handleCommandsCallback(ctx, createDeps());
+      const [text, options] = vi.mocked(ctx.editMessageText).mock.calls[0]!;
+      expect(text).toBe(t("commands.search.results_page", { query: "command", page: 2 }));
+      expect(options?.reply_markup?.inline_keyboard).toEqual([
+        [expect.objectContaining({ callback_data: "commands:search:result:10" })],
+        [expect.objectContaining({ callback_data: "commands:search:result:11" })],
+        [expect.objectContaining({ callback_data: "commands:search:result:12" })],
+        [expect.objectContaining({ callback_data: "commands:search:page:0" })],
+        [
+          { text: t("commands.search.again"), callback_data: "commands:search:again" },
+          { text: t("commands.search.cancel"), callback_data: "commands:search:cancel" },
+        ],
+      ]);
+      expect(mocked.commandListMock).toHaveBeenCalledTimes(3);
+      expect(container.interactionManager.getSnapshot()?.metadata.commands).toHaveLength(13);
+    });
+
+    it("shows no results with only search again and cancel", async () => {
+      const ctx = await showResults("absent");
+      const [text, options] = vi.mocked(ctx.reply).mock.calls[0]!;
+      expect(text).toBe(t("commands.search.no_results", { query: "absent" }));
+      expect(options?.reply_markup).toMatchObject({
+        inline_keyboard: [
+          [
+            { text: t("commands.search.again"), callback_data: "commands:search:again" },
+            { text: t("commands.search.cancel"), callback_data: "commands:search:cancel" },
+          ],
+        ],
+      });
+    });
+
+    it("silently waits on whitespace and caps the query including the heading at 100 characters", async () => {
+      await openSearch();
+      const whitespace = createTextContext("   ");
+      const before = container.interactionManager.getSnapshot();
+      await handleCommandsSearchTextInput(whitespace, createDeps());
+      expect(whitespace.reply).not.toHaveBeenCalled();
+      expect(container.interactionManager.getSnapshot()).toEqual(before);
+      expect(mocked.commandListMock).toHaveBeenCalledTimes(1);
+      const ctx = createTextContext("a".repeat(110));
+      await handleCommandsSearchTextInput(ctx, createDeps());
+      expect(ctx.reply).toHaveBeenCalledWith(
+        t("commands.search.no_results", { query: "a".repeat(100) }),
+        expect.anything(),
+      );
+      expect(container.interactionManager.getSnapshot()?.metadata.query).toHaveLength(100);
+    });
+
+    it("starts a new query after deleting results and makes their buttons inactive", async () => {
+      await showResults();
+      const token = container.interactionManager.getSnapshot()?.metadata.token;
+      const ctx = createCallbackContext("commands:search:again", 903);
+      await handleCommandsCallback(ctx, createDeps());
+      expect(ctx.deleteMessage).toHaveBeenCalledTimes(1);
+      expect(ctx.reply).toHaveBeenCalledWith(t("commands.search.prompt"));
+      expect(container.interactionManager.getSnapshot()?.metadata.stage).toBe("input");
+      expect(container.interactionManager.getSnapshot()?.metadata.token).not.toBe(token);
+      const stale = createCallbackContext("commands:search:result:0", 903);
+      await handleCommandsCallback(stale, createDeps());
+      expect(stale.answerCallbackQuery).toHaveBeenCalledWith({
+        text: t("inline.inactive_callback"),
+        show_alert: true,
+      });
+    });
+
+    it("cancels without reopening the list", async () => {
+      await showResults();
+      const ctx = createCallbackContext("commands:search:cancel", 903);
+      await handleCommandsCallback(ctx, createDeps());
+      expect(container.interactionManager.getSnapshot()).toBeNull();
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("common.cancelled") });
+      expect(ctx.deleteMessage).toHaveBeenCalledTimes(1);
+      expect(ctx.reply).not.toHaveBeenCalled();
+    });
+
+    it("selects a result into the unchanged confirmation and accepts command arguments", async () => {
+      await showResults();
+      const ctx = createCallbackContext("commands:search:result:11", 903);
+      await handleCommandsCallback(ctx, createDeps());
+      expect(ctx.editMessageText).toHaveBeenCalledWith(
+        t("commands.confirm", { command: "/command-11" }),
+        expect.anything(),
+      );
+      expect(ctx.deleteMessage).not.toHaveBeenCalled();
+      expect(mocked.sessionCommandMock).not.toHaveBeenCalled();
+      expect(container.interactionManager.getSnapshot()).toMatchObject({
+        expectedInput: "mixed",
+        allowedCommands: expect.arrayContaining(["/help", "/status", "/abort"]),
+        metadata: { flow: "commands", stage: "confirm", commandName: "command-11", messageId: 903 },
+      });
+      await handleCommandTextArguments(createTextContext("some arguments"), createDeps());
+      await getScheduledBackgroundTask().task();
+      expect(mocked.sessionCommandMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "command-11",
+          arguments: "some arguments",
+        }),
+      );
+    });
+
+    it("clears the search on a catalog error after query entry", async () => {
+      await openSearch();
+      mocked.commandListMock.mockRejectedValueOnce(new Error("offline"));
+      const ctx = createTextContext("command");
+      await handleCommandsSearchTextInput(ctx, createDeps());
+      expect(ctx.reply).toHaveBeenCalledWith(t("commands.fetch_error"));
+      expect(container.interactionManager.getSnapshot()).toBeNull();
+      expect(ctx.deleteMessage).not.toHaveBeenCalled();
+    });
+
+    it("keeps results available when loading another page fails", async () => {
+      await showResults();
+      const before = container.interactionManager.getSnapshot();
+      mocked.commandListMock.mockRejectedValueOnce(new Error("offline"));
+      const ctx = createCallbackContext("commands:search:page:1", 903);
+      await handleCommandsCallback(ctx, createDeps());
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+        text: t("commands.page_load_error_callback"),
+      });
+      expect(ctx.editMessageText).not.toHaveBeenCalled();
+      expect(container.interactionManager.getSnapshot()).toEqual(before);
+    });
+
+    it.each(["question", "permission"] as const)(
+      "does not resume after a %s replaces results",
+      async (kind) => {
+        await showResults();
+        startInteractionForTest(container.interactionManager, { kind, expectedInput: "callback" });
+        const before = container.interactionManager.getSnapshot();
+        const ctx = createCallbackContext("commands:search:result:0", 903);
+        await handleCommandsCallback(ctx, createDeps());
+        expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+          text: t("inline.inactive_callback"),
+          show_alert: true,
+        });
+        expect(ctx.editMessageText).not.toHaveBeenCalled();
+        expect(ctx.deleteMessage).not.toHaveBeenCalled();
+        expect(container.interactionManager.getSnapshot()).toEqual(before);
+        container.interactionManager.clear("agent_request_ended");
+        expect(
+          await handleCommandsSearchTextInput(createTextContext("command"), createDeps()),
+        ).toBe(false);
+      },
+    );
+
+    it.each([
+      "load",
+      "send",
+      "page load",
+      "page edit",
+      "selection edit",
+      "start delete",
+      "again delete",
+    ])("does not overwrite a replacement interaction during %s", async (boundary) => {
+      const replace = () =>
+        startInteractionForTest(container.interactionManager, {
+          kind: "permission",
+          expectedInput: "callback",
+        });
+      if (boundary === "start delete") {
+        await commandsCommand(createCommandContext(100) as never, createDeps());
+        const ctx = createCallbackContext("commands:search", 100);
+        vi.mocked(ctx.deleteMessage).mockImplementationOnce(async () => {
+          replace();
+          return true;
+        });
+        await handleCommandsCallback(ctx, createDeps());
+        expect(ctx.reply).not.toHaveBeenCalled();
+      } else if (boundary === "load" || boundary === "send") {
+        await openSearch();
+        const ctx = createTextContext("command");
+        if (boundary === "load") {
+          mocked.commandListMock.mockImplementationOnce(async () => {
+            replace();
+            return { data: catalog, error: null };
+          });
+        } else {
+          vi.mocked(ctx.reply).mockImplementationOnce(async () => {
+            replace();
+            return { message_id: 903 } as never;
+          });
+        }
+        await handleCommandsSearchTextInput(ctx, createDeps());
+        if (boundary === "load") expect(ctx.reply).not.toHaveBeenCalled();
+      } else {
+        await showResults();
+        const data =
+          boundary === "selection edit"
+            ? "result:0"
+            : boundary === "again delete"
+              ? "again"
+              : "page:1";
+        const ctx = createCallbackContext(`commands:search:${data}`, 903);
+        if (boundary === "page load") {
+          mocked.commandListMock.mockImplementationOnce(async () => {
+            replace();
+            return { data: catalog, error: null };
+          });
+        } else if (boundary === "again delete") {
+          vi.mocked(ctx.deleteMessage).mockImplementationOnce(async () => {
+            replace();
+            return true;
+          });
+        } else {
+          vi.mocked(ctx.editMessageText).mockImplementationOnce(async () => {
+            replace();
+            return true as never;
+          });
+        }
+        await handleCommandsCallback(ctx, createDeps());
+        if (boundary === "page load") expect(ctx.editMessageText).not.toHaveBeenCalled();
+      }
+      expect(container.interactionManager.getSnapshot()?.kind).toBe("permission");
+    });
+
+    it.each(["search", "search:page:1", "search:result:0", "search:again", "search:cancel"])(
+      "blocks commands:%s while busy without changing the search",
+      async (suffix) => {
+        await showResults();
+        container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+        const before = container.interactionManager.getSnapshot();
+        const ctx = createCallbackContext(`commands:${suffix}`, 903);
+        await handleCommandsCallback(ctx, createDeps());
+        expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("bot.session_busy") });
+        expect(ctx.editMessageText).not.toHaveBeenCalled();
+        expect(ctx.deleteMessage).not.toHaveBeenCalled();
+        expect(container.interactionManager.getSnapshot()).toEqual(before);
+      },
+    );
+
+    it.each(["question", "permission"] as const)(
+      "preserves a replacement %s when Telegram rejects the result selection edit",
+      async (kind) => {
+        await showResults();
+        const ctx = createCallbackContext("commands:search:result:0", 903);
+        vi.mocked(ctx.editMessageText).mockImplementationOnce(async () => {
+          startInteractionForTest(container.interactionManager, { kind, expectedInput: "callback" });
+          throw new Error("Telegram edit failed");
+        });
+        await expect(handleCommandsCallback(ctx, createDeps())).resolves.toBe(true);
+        expect(container.interactionManager.getSnapshot()?.kind).toBe(kind);
+        expect(ctx.deleteMessage).not.toHaveBeenCalled();
+        expect(mocked.sessionCommandMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it("handles a rejected result selection edit locally when the search still owns the slot", async () => {
+      await showResults();
+      const ctx = createCallbackContext("commands:search:result:0", 903);
+      vi.mocked(ctx.editMessageText).mockRejectedValueOnce(new Error("Telegram edit failed"));
+      await expect(handleCommandsCallback(ctx, createDeps())).resolves.toBe(true);
+      expect(container.interactionManager.getSnapshot()).toBeNull();
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("callback.processing_error") });
+      expect(mocked.sessionCommandMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses /commands while busy without opening or loading the list", async () => {
+      container.foregroundSessionState.markBusy("session-1", "D:\\Projects\\Repo");
+      const ctx = createCommandContext(100);
+      await commandsCommand(ctx as never, createDeps());
+      expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
+      expect(mocked.commandListMock).not.toHaveBeenCalled();
+      expect(container.interactionManager.getSnapshot()).toBeNull();
+    });
+
+    it.each(["no project", "empty catalog", "catalog error"])(
+      "keeps the initial notice without Search for %s",
+      async (reason) => {
+        if (reason === "no project") mocked.currentProject = null;
+        if (reason === "empty catalog")
+          mocked.commandListMock.mockResolvedValueOnce({ data: [], error: null });
+        if (reason === "catalog error")
+          mocked.commandListMock.mockRejectedValueOnce(new Error("offline"));
+        const ctx = createCommandContext(100);
+        await commandsCommand(ctx as never, createDeps());
+        const key =
+          reason === "no project"
+            ? "bot.project_not_selected"
+            : reason === "empty catalog"
+              ? "commands.empty"
+              : "commands.fetch_error";
+        expect(ctx.reply).toHaveBeenCalledWith(t(key));
+        expect(container.interactionManager.getSnapshot()).toBeNull();
+      },
+    );
+  });
+});
+
+describe("commands search matching", () => {
+  it("does not search the no-description placeholder", () => {
+    expect(filterCommandsForSearch([{ name: "init" }], t("commands.no_description"))).toEqual([]);
   });
 });
 

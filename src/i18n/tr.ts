@@ -602,6 +602,13 @@ export const tr: I18nDictionary = {
   "tasklist.load_error": "🔴 Zamanlanmış görevler yüklenemedi.",
 
   "commands.select": "Bir OpenCode komutu seçin:",
+  "commands.search.button": "🔍 Ara",
+  "commands.search.prompt": "🔍 Komut adını veya açıklamasını girin:",
+  "commands.search.results": "\"{query}\" için arama sonuçları:",
+  "commands.search.results_page": "\"{query}\" için arama sonuçları (sayfa {page}):",
+  "commands.search.no_results": "\"{query}\" için komut bulunamadı",
+  "commands.search.again": "↩ Yeniden ara",
+  "commands.search.cancel": "❌ İptal",
   "commands.empty": "📭 Bu proje için kullanılabilir OpenCode komutu yok.",
   "commands.fetch_error": "🔴 OpenCode komutları yüklenemedi.",
   "commands.no_description": "Açıklama yok",

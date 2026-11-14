@@ -1,9 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const withdrawInboxPromptMock = vi.hoisted(() => vi.fn());
+const loadCommandCatalogMock = vi.hoisted(() => vi.fn());
+const queuePromptForMergingMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../../src/app/services/prompt-inbox-service.js", () => ({
   withdrawInboxPrompt: withdrawInboxPromptMock,
+}));
+
+vi.mock("../../../src/app/services/command-catalog-service.js", () => ({
+  loadCommandCatalog: loadCommandCatalogMock,
+}));
+
+vi.mock("../../../src/bot/handlers/message-merger.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/bot/handlers/message-merger.js")>()),
+  queuePromptForMerging: queuePromptForMergingMock,
 }));
 
 import { registerMessageRouter } from "../../../src/bot/routers/message-router.js";
@@ -13,6 +24,8 @@ import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
+import { setIncomingPrompt } from "../../../src/bot/handlers/rich-message-handler.js";
+import * as settingsStore from "../../../src/app/stores/settings-store.js";
 
 describe("bot/routers/message-router", () => {
   it("registers reply keyboard, media, and text routes", () => {
@@ -40,6 +53,54 @@ describe("bot/routers/message-router", () => {
       "message",
     ]);
   });
+
+  it.each(["command", "/help"])(
+    "routes commands-search input %s without sending a prompt",
+    async (text) => {
+      const bot = { on: vi.fn(), hears: vi.fn() };
+      const container = createTestAppContainer({ setTelegramContext: vi.fn() });
+      container.interactionManager.start({
+        kind: "custom",
+        expectedInput: "text",
+        allowedCommands: [],
+        metadata: { flow: "commands-search", stage: "input", token: Symbol("search") },
+      });
+      const project = vi.spyOn(settingsStore, "getCurrentProject").mockReturnValue({
+        id: "project-1",
+        worktree: "repo",
+      });
+      loadCommandCatalogMock.mockReset().mockResolvedValue([{ name: "command" }]);
+      queuePromptForMergingMock.mockReset();
+      registerMessageRouter(bot as never, { container });
+      const handler = bot.on.mock.calls
+        .filter(([event]) => event === "message:text")
+        .at(-1)?.[1] as (ctx: unknown) => Promise<void>;
+      const ctx = {
+        chat: { id: 42 },
+        message: { text },
+        reply: vi.fn().mockResolvedValue({ message_id: 900 }),
+      };
+      setIncomingPrompt(ctx as never, createIncomingPrompt(text));
+      try {
+        await handler(ctx);
+        if (text.startsWith("/")) {
+          expect(loadCommandCatalogMock).not.toHaveBeenCalled();
+          expect(ctx.reply).not.toHaveBeenCalled();
+          expect(container.interactionManager.getSnapshot()?.metadata.stage).toBe("input");
+        } else {
+          expect(loadCommandCatalogMock).toHaveBeenCalledWith("repo");
+          expect(ctx.reply).toHaveBeenCalledWith(
+            t("commands.search.results", { query: text }),
+            expect.anything(),
+          );
+          expect(container.interactionManager.getSnapshot()?.metadata.stage).toBe("results");
+        }
+        expect(queuePromptForMergingMock).not.toHaveBeenCalled();
+      } finally {
+        project.mockRestore();
+      }
+    },
+  );
 
   describe("queued prompt button handler", () => {
     function registerAndGetQueuedPromptHandler() {

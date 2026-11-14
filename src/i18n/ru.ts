@@ -617,6 +617,13 @@ export const ru: I18nDictionary = {
   "tasklist.load_error": "🔴 Не удалось загрузить задачи по расписанию.",
 
   "commands.select": "Выберите команду OpenCode:",
+  "commands.search.button": "🔍 Поиск",
+  "commands.search.prompt": "🔍 Введите название или описание команды:",
+  "commands.search.results": "Результаты поиска «{query}»:",
+  "commands.search.results_page": "Результаты поиска «{query}» (страница {page}):",
+  "commands.search.no_results": "Команды по запросу «{query}» не найдены",
+  "commands.search.again": "↩ Искать снова",
+  "commands.search.cancel": "❌ Отмена",
   "commands.empty": "📭 Для этого проекта нет доступных команд OpenCode.",
   "commands.fetch_error": "🔴 Не удалось загрузить список команд OpenCode.",
   "commands.no_description": "Без описания",

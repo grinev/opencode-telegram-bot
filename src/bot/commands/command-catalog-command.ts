@@ -5,15 +5,25 @@ import { loadCommandCatalog } from "../../app/services/command-catalog-service.j
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
+import { isForegroundBusy } from "../../app/services/run-control-service.js";
+import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { buildCommandsListKeyboard, formatCommandsSelectText } from "../menus/command-catalog-menu.js";
 
-export type CommandsCommandDeps = Pick<AppContainer, "interactionManager">;
+export type CommandsCommandDeps = Pick<
+  AppContainer,
+  "attachManager" | "foregroundSessionState" | "interactionManager"
+>;
 
 export async function commandsCommand(
   ctx: CommandContext<Context>,
   deps: CommandsCommandDeps,
 ): Promise<void> {
   try {
+    if (isForegroundBusy(deps)) {
+      await replyBusyBlocked(ctx);
+      return;
+    }
+
     const currentProject = getCurrentProject();
     if (!currentProject) {
       await ctx.reply(t("bot.project_not_selected"));
