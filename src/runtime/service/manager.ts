@@ -17,6 +17,8 @@ const execAsync = promisify(exec);
 const SERVICE_STATE_FILE_NAME = "bot-service.json";
 const PROCESS_EXIT_POLL_MS = 100;
 const DEFAULT_STOP_TIMEOUT_MS = 5000;
+// Process creation times are reported with second-level precision.
+const PROCESS_CREATION_TIME_TOLERANCE_MS = 1000;
 
 function sanitizeTimestampForFile(timestamp: string): string {
   return timestamp.replace(/:/g, "-").replace("T", "_");
@@ -216,7 +218,7 @@ export async function getBotServiceStatus(): Promise<BotServiceStatus> {
   if (
     processCreationTime &&
     !Number.isNaN(storedStartedAtMs) &&
-    processCreationTime.getTime() > storedStartedAtMs
+    processCreationTime.getTime() - storedStartedAtMs > PROCESS_CREATION_TIME_TOLERANCE_MS
   ) {
     logger.warn(
       `[Manager] Stale daemon state detected: PID=${service.pid} exists but was created ` +
