@@ -2,10 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueuedScheduledTaskDelivery } from "../../../src/app/types/scheduled-task.js";
 
 const mocked = vi.hoisted(() => ({
+  readImage: vi.fn(),
   bot: {
     messageFormatMode: "markdown" as "markdown" | "raw",
     scheduledTaskNotificationsSilent: false,
   },
+}));
+vi.mock("../../../src/app/services/assistant-image-service.js", () => ({
+  readAssistantImage: mocked.readImage,
 }));
 
 vi.mock("../../../src/config.js", async (importOriginal) => {
@@ -47,8 +51,44 @@ async function sendAndCollect(delivery: QueuedScheduledTaskDelivery) {
 
 describe("bot/messages/scheduled-task-delivery", () => {
   beforeEach(() => {
+    mocked.readImage
+      .mockReset()
+      .mockResolvedValue({ bytes: new Uint8Array([1]), filename: "a.png" });
     config.bot.messageFormatMode = "markdown";
     config.bot.scheduledTaskNotificationsSilent = false;
+  });
+
+  it("sends an image-only result with its literal task header inside the same rich message", async () => {
+    const sendRichMessage = vi.fn().mockResolvedValue({ message_id: 1 });
+    const sendMessage = vi.fn();
+    const sender = createScheduledTaskDeliverySender({ sendMessage, sendRichMessage }, 777);
+    await sender.send(
+      createDelivery({
+        notificationText: "Task **literal**",
+        resultText: "![](a.png)",
+        projectDirectory: "/remote/p",
+      }),
+    );
+    expect(
+      sendRichMessage.mock.calls[0]?.[1].blocks.map((block: { type: string }) => block.type),
+    ).toEqual(["paragraph", "photo"]);
+    expect(sendRichMessage.mock.calls[0]?.[1].blocks[0].text).toBe("Task **literal**");
+    expect(mocked.readImage).toHaveBeenCalledWith("/remote/p", "a.png");
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("consumes an ambiguously attempted rich result rather than asking the runtime queue to resend it", async () => {
+    const sendRichMessage = vi.fn().mockRejectedValue(new Error("connection reset"));
+    const sender = createScheduledTaskDeliverySender(
+      { sendMessage: vi.fn(), sendRichMessage },
+      777,
+    );
+    expect(
+      await sender.send(
+        createDelivery({ resultText: "![](a.png)", projectDirectory: "/remote/p" }),
+      ),
+    ).toBe(true);
+    expect(sendRichMessage).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the link preview on the reply and turns it off on the footer", async () => {

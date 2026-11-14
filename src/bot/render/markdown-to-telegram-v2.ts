@@ -53,6 +53,8 @@ function renderInlineNodes(nodes: InlineNode[]): string {
 
 function renderBlock(block: TelegramBlock): string {
   switch (block.type) {
+    case "image":
+      return escapeMarkdownV2(block.name);
     case "paragraph":
       return renderInlineNodes(block.inlines);
     case "heading": {

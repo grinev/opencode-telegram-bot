@@ -1,4 +1,5 @@
 import type { InlineNode, TelegramBlock, TelegramListItem } from "./types.js";
+import { t } from "../../i18n/index.js";
 
 export function extractInlinePlainText(nodes: InlineNode[]): string {
   let result = "";
@@ -76,6 +77,8 @@ function buildListItemText(
 
 export function toBlockPlainText(block: TelegramBlock): string {
   switch (block.type) {
+    case "image":
+      return t("assistant.image.unavailable", { name: block.name });
     case "paragraph":
     case "heading":
       return extractInlinePlainText(block.inlines);

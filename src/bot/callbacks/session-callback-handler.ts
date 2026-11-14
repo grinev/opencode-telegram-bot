@@ -407,7 +407,7 @@ export async function selectSessionById(
           ctx.api,
           chatId,
           session.id,
-          currentProject.worktree,
+          session.directory,
           pickMessages,
           pickBusy,
         );
@@ -416,8 +416,7 @@ export async function selectSessionById(
       if (options.postSelectAction === "latest_assistant_response") {
         safeBackgroundTask({
           taskName: "sessions.sendLatestAssistantResponse",
-          task: () =>
-            sendLatestAssistantResponse(ctx.api, chatId, session.id, currentProject.worktree),
+          task: () => sendLatestAssistantResponse(ctx.api, chatId, session.id, session.directory),
         });
       }
     }
@@ -852,7 +851,11 @@ async function sendSessionPickTranscript(
     return;
   }
 
-  const parts = renderAssistantFinalPartsSafe(reply.text);
+  const parts = renderAssistantFinalPartsSafe(
+    reply.text,
+    directory,
+    () => getCurrentSession()?.id === sessionId,
+  );
   for (const part of parts) {
     await waitForSessionPickSend();
     await sendRenderedBotPart({ api, chatId, part, options: AGENT_TEXT_LINK_PREVIEW_OPTIONS });
@@ -944,7 +947,11 @@ async function sendLatestAssistantResponse(
     return;
   }
 
-  const parts = renderAssistantFinalPartsSafe(response.text);
+  const parts = renderAssistantFinalPartsSafe(
+    response.text,
+    directory,
+    () => getCurrentSession()?.id === sessionId,
+  );
   for (const part of parts) {
     await sendRenderedBotPart({
       api,

@@ -57,6 +57,7 @@ function buildSuccessDelivery(
 ): QueuedScheduledTaskDelivery {
   return {
     taskId: task.id,
+    projectDirectory: task.projectWorktree,
     scheduleSummary: task.scheduleSummary,
     prompt: task.prompt,
     runAt,

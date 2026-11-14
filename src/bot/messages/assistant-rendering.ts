@@ -4,6 +4,7 @@ import { chunkPlainText, chunkTelegramRenderedBlocks } from "../render/chunker.j
 import { renderTelegramBlocks, renderTelegramParts, toRenderedBlocks } from "../render/pipeline.js";
 import type { TelegramRenderedBlock, TelegramRenderedPart } from "../render/types.js";
 import type { StreamingMessagePayload } from "../streaming/response-streamer.js";
+import { omitMarkdownImages } from "../render/block-parser.js";
 
 export function createPlainRenderedParts(text: string): TelegramRenderedPart[] {
   return chunkPlainText(text);
@@ -29,7 +30,11 @@ function renderAssistantBlocksSafe(text: string): TelegramRenderedBlock[] {
   }
 }
 
-export function renderAssistantFinalPartsSafe(text: string): TelegramRenderedPart[] {
+export function renderAssistantFinalPartsSafe(
+  text: string,
+  imageDirectory?: string,
+  canDeliver?: () => boolean,
+): TelegramRenderedPart[] {
   if (!text) {
     return [];
   }
@@ -47,7 +52,11 @@ export function renderAssistantFinalPartsSafe(text: string): TelegramRenderedPar
   }
 
   try {
-    const parts = renderTelegramParts(text);
+    const parts = renderTelegramParts(text, undefined, true).map((part) => ({
+      ...part,
+      ...(imageDirectory ? { imageDirectory } : {}),
+      ...(canDeliver ? { canDeliver } : {}),
+    }));
     logger.debug("[AssistantRender] Built final assistant parts in blocks mode", {
       formatMode,
       textLength: text.length,
@@ -85,6 +94,7 @@ function getStableStreamingBoundary(messageText: string): number {
  * until its block is finished.
  */
 export function buildStreamingBlocks(messageText: string): TelegramRenderedBlock[] {
+  messageText = omitMarkdownImages(messageText);
   const stableBoundary = getStableStreamingBoundary(messageText);
   const blocks: TelegramRenderedBlock[] = [];
 

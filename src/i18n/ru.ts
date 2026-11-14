@@ -1,6 +1,9 @@
 import type { I18nDictionary } from "./en.js";
 
 export const ru: I18nDictionary = {
+  "assistant.image.unavailable": "Изображение недоступно: {name}",
+  "assistant.image.unsupported": "Неподдерживаемый формат изображения: {name}",
+  "assistant.image.too_large": "Изображение превышает ограничения Telegram для фото: {name}",
   "cmd.description.recent": "Последние сессии всех проектов",
   "recent.heading": "Последние сессии всех проектов (обновить: /recent):",
   "recent.empty": "📭 Сессий в проектах нет.",

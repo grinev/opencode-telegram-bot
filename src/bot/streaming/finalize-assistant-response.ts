@@ -1,6 +1,8 @@
 import type { StreamingMessagePayload, ResponseStreamer } from "./response-streamer.js";
 import { logger } from "../../utils/logger.js";
 import type { TelegramRenderedPart } from "../render/types.js";
+import { hasDeferredImages } from "../messages/assistant-image-delivery.js";
+import { omitMarkdownImages } from "../render/block-parser.js";
 
 interface FinalizeAssistantResponseOptions {
   sessionId: string;
@@ -50,17 +52,26 @@ export async function finalizeAssistantResponse({
     ...silentReplyOptions,
   } as StreamingMessagePayload["sendOptions"];
 
-  const preparedStreamPayload = prepareStreamingPayload(messageText);
+  let preparedStreamPayload = prepareStreamingPayload(messageText);
+  const imageParts = preparedStreamPayload?.parts.some(hasDeferredImages)
+    ? renderFinalParts(messageText)
+    : undefined;
+  if (imageParts) preparedStreamPayload = prepareStreamingPayload(omitMarkdownImages(messageText));
   if (preparedStreamPayload) {
     preparedStreamPayload.sendOptions = streamSendOptions;
     preparedStreamPayload.editOptions = undefined;
   }
 
-  const result = notifyFirstFinalPart
+  const result = imageParts
     ? await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined, {
-        notifyFirstCompletePart: true,
+        notifyFirstCompletePart: notifyFirstFinalPart,
+        finalPayload: { parts: imageParts, sendOptions: streamSendOptions },
       })
-    : await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined);
+    : notifyFirstFinalPart
+      ? await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined, {
+          notifyFirstCompletePart: true,
+        })
+      : await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined);
 
   await flushPendingServiceMessages();
 
@@ -71,7 +82,7 @@ export async function finalizeAssistantResponse({
     return true;
   }
 
-  const parts = renderFinalParts(messageText);
+  const parts = imageParts ?? renderFinalParts(messageText);
 
   let notifyNextPart = notifyFirstFinalPart;
   for (const part of parts) {
