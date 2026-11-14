@@ -6,6 +6,7 @@
  */
 export const DEFAULT_MAX_PART_CHARS = 32000;
 export const DEFAULT_MAX_PART_BLOCKS = 480;
+export const DEFAULT_MAX_PART_MEDIA = 50;
 
 /** Budget for text that is delivered as a plain Telegram message. */
 export const PLAIN_MAX_PART_CHARS = 3800;

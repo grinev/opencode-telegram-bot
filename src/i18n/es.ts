@@ -1,6 +1,9 @@
 import { projectSearchFallback, type I18nDictionary } from "./en.js";
 
 export const es: I18nDictionary = {
+  "assistant.image.unavailable": "Imagen no disponible: {name}",
+  "assistant.image.unsupported": "Formato de imagen no compatible: {name}",
+  "assistant.image.too_large": "La imagen supera los límites de fotos de Telegram: {name}",
   ...projectSearchFallback,
   "cmd.description.recent": "Sesiones recientes de todos los proyectos",
   "recent.heading": "Sesiones recientes de todos los proyectos (actualiza con /recent):",

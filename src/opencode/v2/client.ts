@@ -485,6 +485,14 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
         }),
     },
     file: {
+      read: (params: { path: string; directory?: string }) =>
+        run(async () => ({
+          type: "binary" as const,
+          encoding: "base64" as const,
+          content: Buffer.from(
+            await client.file.read({ path: params.path, ...location(params.directory) }),
+          ).toString("base64"),
+        })),
       list: (params: { path: string }) =>
         run(async () =>
           (await client.file.list({ path: params.path })).data.map((entry) => entry.path),

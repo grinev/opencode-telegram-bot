@@ -49,6 +49,16 @@ async function loadAssistantRendering(mode: "raw" | "markdown") {
 }
 
 describe("bot/messages/assistant-rendering", () => {
+  it("omits images in the unstable streaming tail, but keeps a final image-only reply", async () => {
+    const { module } = await loadAssistantRendering("markdown");
+    expect(module.prepareAssistantStreamingPayload("![name](a.png)")).toBeNull();
+    const payload = module.prepareAssistantStreamingPayload("before ![name](a.png) after");
+    expect(JSON.stringify(payload)).not.toContain("![name]");
+    expect(module.renderAssistantFinalPartsSafe("![](a.png)", "/remote/project")[0]).toMatchObject({
+      imageDirectory: "/remote/project",
+      blocks: [{ type: "photo" }],
+    });
+  });
   it("uses plain parts only for assistant final delivery in raw mode", async () => {
     const { module, debug } = await loadAssistantRendering("raw");
 
@@ -124,7 +134,9 @@ describe("bot/messages/assistant-rendering", () => {
 
     const payload = module.prepareAssistantStreamingPayload("# still typing");
 
-    expect(defined(payload?.parts[0]).blocks).toEqual([{ type: "paragraph", text: "# still typing" }]);
+    expect(defined(payload?.parts[0]).blocks).toEqual([
+      { type: "paragraph", text: "# still typing" },
+    ]);
   });
 
   it("returns no payload for empty text", async () => {

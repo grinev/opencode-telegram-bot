@@ -31,6 +31,10 @@ export function renderTelegramBlocks(
 export function renderTelegramParts(
   markdown: string,
   options?: TelegramChunkerOptions,
+  images = false,
 ): TelegramRenderedPart[] {
-  return chunkTelegramRenderedBlocks(renderTelegramBlocks(markdown, options), options);
+  return chunkTelegramRenderedBlocks(
+    toRenderedBlocks(parseTelegramBlocks(markdown, images), options),
+    options,
+  );
 }

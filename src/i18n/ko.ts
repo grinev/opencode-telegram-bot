@@ -8,6 +8,9 @@ import { projectSearchFallback, type I18nDictionary } from "./en.js";
  * Keep this dictionary complete to avoid falling back to another locale.
  */
 export const ko: I18nDictionary = {
+  "assistant.image.unavailable": "이미지를 사용할 수 없습니다: {name}",
+  "assistant.image.unsupported": "지원되지 않는 이미지 형식: {name}",
+  "assistant.image.too_large": "이미지가 Telegram 사진 제한을 초과합니다: {name}",
   ...projectSearchFallback,
   "cmd.description.recent": "모든 프로젝트의 최근 세션",
   "recent.heading": "모든 프로젝트의 최근 세션 (/recent로 새로고침):",

@@ -1,9 +1,8 @@
 import type { InputRichMessageWithoutUpload, MessageEntity } from "grammy/types";
 
 /**
- * A rich block that carries no file upload. The bot never attaches media to
- * assistant output, and drafts only accept the upload-free variant, so this is
- * the block type used across the render layer.
+ * Serializable rich blocks. Final assistant photos carry deferred source
+ * descriptors; only the delivery boundary turns them into file uploads.
  */
 export type TelegramRichBlock = NonNullable<InputRichMessageWithoutUpload["blocks"]>[number];
 
@@ -19,6 +18,8 @@ export interface TelegramRenderedPart {
   blocks: TelegramRichBlock[];
   fallbackText: string;
   source: "blocks" | "plain";
+  imageDirectory?: string;
+  canDeliver?: () => boolean;
   /**
    * Entities for the plain representation. Reasoning is delivered as a text
    * message with a collapsed quote, which rich blocks cannot express; ignored
@@ -46,6 +47,7 @@ export interface TelegramListItem {
 }
 
 export type TelegramBlock =
+  | { type: "image"; path: string; name: string }
   | { type: "paragraph"; inlines: InlineNode[] }
   | { type: "heading"; level: number; inlines: InlineNode[] }
   | { type: "blockquote"; blocks: TelegramBlock[] }

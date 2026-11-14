@@ -1,9 +1,14 @@
 import { logger } from "../../utils/logger.js";
 import { toBlockPlainText } from "./block-plain-text.js";
-import { DEFAULT_MAX_PART_BLOCKS, DEFAULT_MAX_PART_CHARS } from "./limits.js";
+import {
+  DEFAULT_MAX_PART_BLOCKS,
+  DEFAULT_MAX_PART_CHARS,
+  DEFAULT_MAX_PART_MEDIA,
+} from "./limits.js";
 import {
   countRichBlocks,
   countRichChars,
+  countRichMedia,
   isTextRenderedList,
   textListMarker,
   toRichBlock,
@@ -14,20 +19,69 @@ import type { TableColumnAlign, TelegramBlock, TelegramListItem } from "./types.
 export interface BlockSplitLimits {
   maxChars: number;
   maxBlocks: number;
+  maxMedia?: number;
 }
 
 export function normalizeBlockSplitLimits(limits?: Partial<BlockSplitLimits>): BlockSplitLimits {
   return {
     maxChars: Math.max(1, Math.floor(limits?.maxChars ?? DEFAULT_MAX_PART_CHARS)),
     maxBlocks: Math.max(1, Math.floor(limits?.maxBlocks ?? DEFAULT_MAX_PART_BLOCKS)),
+    maxMedia: Math.max(
+      1,
+      Math.min(DEFAULT_MAX_PART_MEDIA, limits?.maxMedia ?? DEFAULT_MAX_PART_MEDIA),
+    ),
   };
 }
 
 function fitsLimits(block: TelegramBlock, limits: BlockSplitLimits): boolean {
   const richBlock = toRichBlock(block);
   return (
-    countRichChars(richBlock) <= limits.maxChars && countRichBlocks(richBlock) <= limits.maxBlocks
+    countRichChars(richBlock) <= limits.maxChars &&
+    countRichBlocks(richBlock) <= limits.maxBlocks &&
+    countRichMedia(richBlock) <= (limits.maxMedia ?? DEFAULT_MAX_PART_MEDIA)
   );
+}
+
+function groupMediaContent<T>(
+  items: T[],
+  build: (items: T[]) => TelegramBlock,
+  limits: BlockSplitLimits,
+): TelegramBlock[] {
+  const result: TelegramBlock[] = [];
+  let group: T[] = [];
+  for (const item of items) {
+    if (group.length && !fitsLimits(build([...group, item]), limits)) {
+      result.push(build(group));
+      group = [];
+    }
+    group.push(item);
+  }
+  if (group.length) result.push(build(group));
+  return result;
+}
+
+function splitMediaContent(block: TelegramBlock, limits: BlockSplitLimits): TelegramBlock[] {
+  const innerLimits = { ...limits, maxBlocks: Math.max(1, limits.maxBlocks - 2) };
+  if (block.type === "blockquote") {
+    const children = block.blocks.flatMap((inner) =>
+      splitOversizeTelegramBlock(inner, innerLimits),
+    );
+    return groupMediaContent(children, (blocks) => ({ type: "blockquote", blocks }), limits);
+  }
+  if (block.type === "list") {
+    const items = block.items.flatMap((item) => {
+      const children = item.blocks.flatMap((inner) =>
+        splitOversizeTelegramBlock(inner, innerLimits),
+      );
+      return groupMediaContent(
+        children,
+        (blocks) => ({ type: "blockquote", blocks }),
+        innerLimits,
+      ).map((piece) => ({ ...item, blocks: piece.type === "blockquote" ? piece.blocks : [piece] }));
+    });
+    return groupMediaContent(items, (items) => ({ ...block, items }), limits);
+  }
+  return [block];
 }
 
 /**
@@ -206,6 +260,12 @@ export function splitOversizeTelegramBlock(
 ): TelegramBlock[] {
   if (fitsLimits(block, limits)) {
     return [block];
+  }
+  if (
+    countRichMedia(toRichBlock(block)) > 0 &&
+    (block.type === "list" || block.type === "blockquote")
+  ) {
+    return splitMediaContent(block, limits);
   }
 
   logger.debug("[TelegramRender] Splitting oversize block", {

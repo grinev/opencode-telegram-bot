@@ -1,14 +1,22 @@
 import type { Api, RawApi } from "grammy";
 import { config } from "../../config.js";
-import type {
-  QueuedScheduledTaskDelivery,
-} from "../../app/types/scheduled-task.js";
+import type { QueuedScheduledTaskDelivery } from "../../app/types/scheduled-task.js";
 import type { ScheduledTaskDeliverySender } from "../../app/services/scheduled-task-runtime-service.js";
 import { formatSummaryWithMode } from "./summary-message-formatter.js";
 import { escapePlainTextForTelegramMarkdownV2 } from "../../utils/telegram-markdown.js";
-import { AGENT_TEXT_LINK_PREVIEW_OPTIONS, sendBotText } from "./telegram-text.js";
+import {
+  AGENT_TEXT_LINK_PREVIEW_OPTIONS,
+  sendBotText,
+  sendRenderedBotPart,
+} from "./telegram-text.js";
+import { hasMarkdownImages } from "../render/block-parser.js";
+import { toRenderedBlocks } from "../render/pipeline.js";
+import { chunkTelegramRenderedBlocks } from "../render/chunker.js";
+import { parseTelegramBlocks } from "../render/block-parser.js";
+import { logger } from "../../utils/logger.js";
+import { telegramOutageNoticeService } from "../../app/services/telegram-outage-notice-service.js";
 
-type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
+type SendMessageApi = Pick<Api<RawApi>, "sendMessage" | "sendRichMessage">;
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 
@@ -82,17 +90,52 @@ export function createScheduledTaskDeliverySender(
       const partOptions =
         "options" in resultDeliveryOptions ? resultDeliveryOptions.options : undefined;
 
-      for (const part of messageParts) {
-        await sendBotText({
-          api,
-          chatId,
-          text: part.text,
-          format,
-          options: part.carriesResult
-            ? { ...partOptions, ...AGENT_TEXT_LINK_PREVIEW_OPTIONS }
-            : partOptions,
-        });
-      }
+      if (
+        delivery.status === "success" &&
+        config.bot.messageFormatMode === "markdown" &&
+        delivery.resultText &&
+        hasMarkdownImages(delivery.resultText)
+      ) {
+        // Keep the task header literal, not interpreted as agent Markdown.
+        const blocks = toRenderedBlocks([
+          { type: "plain", text: delivery.notificationText },
+          ...parseTelegramBlocks(delivery.resultText, true),
+        ]);
+        const parts = chunkTelegramRenderedBlocks(blocks);
+        try {
+          for (const part of parts) {
+            await sendRenderedBotPart({
+              api,
+              chatId,
+              part: {
+                ...part,
+                ...(delivery.projectDirectory ? { imageDirectory: delivery.projectDirectory } : {}),
+              },
+              options: partOptions,
+            });
+          }
+        } catch (error) {
+          // The runtime queue must not replay a partially or ambiguously sent
+          // image result. The normal outage notice reports the lost reply.
+          logger.error("[ScheduledTaskDelivery] Image result delivery failed", {
+            taskId: delivery.taskId,
+            error,
+          });
+          telegramOutageNoticeService.markAssistantReplyUndelivered();
+          return true;
+        }
+      } else
+        for (const part of messageParts) {
+          await sendBotText({
+            api,
+            chatId,
+            text: part.text,
+            format,
+            options: part.carriesResult
+              ? { ...partOptions, ...AGENT_TEXT_LINK_PREVIEW_OPTIONS }
+              : partOptions,
+          });
+        }
 
       if (delivery.status === "success" && delivery.footerText) {
         await sendBotText({

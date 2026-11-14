@@ -27,7 +27,7 @@ const fake = vi.hoisted(() => ({
     permission: { request: { list: vi.fn() }, reply: vi.fn() },
     event: { subscribe: vi.fn() },
     location: { reload: vi.fn() },
-    file: { list: vi.fn() },
+    file: { list: vi.fn(), read: vi.fn() },
   },
 }));
 
@@ -85,6 +85,15 @@ function resetFakeClient(): void {
 }
 
 describe("opencode/v2/client", () => {
+  it("adapts remote V2 image bytes to the V1 binary file contract", async () => {
+    fake.client.file.read.mockResolvedValueOnce(new Uint8Array([0, 1, 255]));
+    const result = await createClient().file.read({ directory: "/remote/project", path: "a.png" });
+    expect(result.data).toEqual({ type: "binary", encoding: "base64", content: "AAH/" });
+    expect(fake.client.file.read).toHaveBeenCalledWith({
+      path: "a.png",
+      location: { directory: "/remote/project" },
+    });
+  });
   beforeEach(() => {
     resetFakeClient();
   });

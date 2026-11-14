@@ -1,6 +1,9 @@
 import { projectSearchFallback, type I18nDictionary } from "./en.js";
 
 export const zh: I18nDictionary = {
+  "assistant.image.unavailable": "图片不可用：{name}",
+  "assistant.image.unsupported": "不支持的图片格式：{name}",
+  "assistant.image.too_large": "图片超出 Telegram 照片限制：{name}",
   ...projectSearchFallback,
   "cmd.description.recent": "查看所有项目的最近会话",
   "recent.heading": "所有项目的最近会话（用 /recent 刷新）：",

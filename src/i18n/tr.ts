@@ -1,6 +1,9 @@
 import { projectSearchFallback, type I18nDictionary } from "./en.js";
 
 export const tr: I18nDictionary = {
+  "assistant.image.unavailable": "Görsel kullanılamıyor: {name}",
+  "assistant.image.unsupported": "Desteklenmeyen görsel biçimi: {name}",
+  "assistant.image.too_large": "Görsel Telegram fotoğraf sınırlarını aşıyor: {name}",
   ...projectSearchFallback,
   "cmd.description.recent": "Projelerdeki son oturumlar",
   "recent.heading": "Projelerdeki son oturumlar (/recent ile yenile):",

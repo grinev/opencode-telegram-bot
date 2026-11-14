@@ -17,14 +17,84 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { extractInlinePlainText as extractInlineNodeText } from "./block-plain-text.js";
 import { normalizeMarkdownForTelegramBlockParsing } from "./markdown-normalizer.js";
-import type {
-  InlineNode,
-  TableColumnAlign,
-  TelegramBlock,
-  TelegramListItem,
-} from "./types.js";
+import type { InlineNode, TableColumnAlign, TelegramBlock, TelegramListItem } from "./types.js";
 
 const markdownProcessor = unified().use(remarkParse).use(remarkGfm);
+
+interface ImageContext {
+  definitions: Map<string, string>;
+}
+
+type ImageBlock = Extract<TelegramBlock, { type: "image" }>;
+type ImagePiece = PhrasingContent[] | ImageBlock;
+
+function splitImageContent(nodes: PhrasingContent[], context: ImageContext): ImagePiece[] {
+  const pieces: ImagePiece[] = [];
+  let text: PhrasingContent[] = [];
+  const flush = (): void => {
+    if (text.length) pieces.push(text);
+    text = [];
+  };
+  for (const node of nodes) {
+    if (node.type === "image" || node.type === "imageReference") {
+      flush();
+      const path =
+        node.type === "image" ? node.url : (context.definitions.get(node.identifier) ?? "");
+      pieces.push({ type: "image", path, name: (node.alt || path).slice(0, 256) });
+    } else if ("children" in node) {
+      for (const piece of splitImageContent(node.children, context)) {
+        if (Array.isArray(piece)) {
+          text.push({ ...node, children: piece } as PhrasingContent);
+        } else {
+          flush();
+          pieces.push(piece);
+        }
+      }
+    } else {
+      text.push(node);
+    }
+  }
+  flush();
+  return pieces;
+}
+
+function parseImageText(node: Paragraph | Heading, context: ImageContext): TelegramBlock[] {
+  return splitImageContent(node.children, context).flatMap((piece) => {
+    if (!Array.isArray(piece)) return [piece];
+    const textNode = { ...node, children: piece };
+    return textNode.type === "heading"
+      ? parseHeadingBlock(textNode)
+      : parseParagraphBlock(textNode);
+  });
+}
+
+/** Remove only actual AST image nodes; code and unrelated text stay verbatim. */
+export function omitMarkdownImages(markdown: string): string {
+  const tree = markdownProcessor.parse(markdown) as Root;
+  const spans: Array<[number, number]> = [];
+  const visit = (node: {
+    type: string;
+    position?: Root["position"];
+    children?: unknown[];
+  }): void => {
+    if (node.type === "image" || node.type === "imageReference") {
+      const start = node.position?.start.offset;
+      const end = node.position?.end.offset;
+      if (start !== undefined && end !== undefined) spans.push([start, end]);
+    } else {
+      for (const child of node.children ?? []) visit(child as Parameters<typeof visit>[0]);
+    }
+  };
+  visit(tree);
+  for (const [start, end] of spans.reverse()) {
+    markdown = markdown.slice(0, start) + markdown.slice(end);
+  }
+  return markdown;
+}
+
+export function hasMarkdownImages(markdown: string): boolean {
+  return omitMarkdownImages(markdown) !== markdown;
+}
 
 /** Rich messages allow 16 nesting levels; deeper quotes and lists degrade to plain text. */
 const MAX_NESTING_DEPTH = 6;
@@ -364,12 +434,16 @@ function parseHeadingBlock(node: Heading): TelegramBlock[] {
   ];
 }
 
-function parseBlockquoteBlock(node: Blockquote, depth: number): TelegramBlock[] {
+function parseBlockquoteBlock(
+  node: Blockquote,
+  depth: number,
+  context?: ImageContext,
+): TelegramBlock[] {
   if (depth >= MAX_NESTING_DEPTH) {
     return createPlainBlock(extractBlockPlainText(node));
   }
 
-  const blocks = node.children.flatMap((child) => parseRootContent(child, depth + 1));
+  const blocks = node.children.flatMap((child) => parseRootContent(child, depth + 1, context));
   if (blocks.length === 0) {
     return [];
   }
@@ -377,19 +451,19 @@ function parseBlockquoteBlock(node: Blockquote, depth: number): TelegramBlock[] 
   return [{ type: "blockquote", blocks }];
 }
 
-function parseListItem(item: ListItem, depth: number): TelegramListItem {
+function parseListItem(item: ListItem, depth: number, context?: ImageContext): TelegramListItem {
   return {
-    blocks: item.children.flatMap((child) => parseRootContent(child, depth)),
+    blocks: item.children.flatMap((child) => parseRootContent(child, depth, context)),
     ...(typeof item.checked === "boolean" ? { checked: item.checked } : {}),
   };
 }
 
-function parseListBlock(node: List, depth: number): TelegramBlock[] {
+function parseListBlock(node: List, depth: number, context?: ImageContext): TelegramBlock[] {
   if (depth >= MAX_NESTING_DEPTH) {
     return createPlainBlock(extractBlockPlainText(node));
   }
 
-  const items = node.children.map((item) => parseListItem(item, depth + 1));
+  const items = node.children.map((item) => parseListItem(item, depth + 1, context));
   if (items.length === 0) {
     return [];
   }
@@ -420,20 +494,37 @@ function parseTableBlock(node: Table): TelegramBlock[] {
   return [{ type: "table", rows, ...(align ? { align } : {}) }];
 }
 
-function parseRootContent(node: RootContent, depth = 0): TelegramBlock[] {
+function parseRootContent(node: RootContent, depth = 0, context?: ImageContext): TelegramBlock[] {
   switch (node.type) {
     case "paragraph":
-      return parseParagraphBlock(node);
+      return context ? parseImageText(node, context) : parseParagraphBlock(node);
     case "heading":
-      return parseHeadingBlock(node);
+      return context ? parseImageText(node, context) : parseHeadingBlock(node);
     case "blockquote":
-      return parseBlockquoteBlock(node, depth);
+      return parseBlockquoteBlock(node, depth, context);
     case "list":
-      return parseListBlock(node, depth);
+      return parseListBlock(node, depth, context);
     case "code":
       return parseCodeBlock(node);
-    case "table":
-      return parseTableBlock(node);
+    case "table": {
+      if (!context) return parseTableBlock(node);
+      const images: ImageBlock[] = [];
+      const table = {
+        ...node,
+        children: node.children.map((row) => ({
+          ...row,
+          children: row.children.map((cell) => ({
+            ...cell,
+            children: splitImageContent(cell.children, context).flatMap((piece) => {
+              if (Array.isArray(piece)) return piece;
+              images.push(piece);
+              return [];
+            }),
+          })),
+        })),
+      };
+      return [...parseTableBlock(table), ...images];
+    }
     case "thematicBreak":
       return [{ type: "rule" }];
     default:
@@ -441,12 +532,21 @@ function parseRootContent(node: RootContent, depth = 0): TelegramBlock[] {
   }
 }
 
-export function parseTelegramBlocks(markdown: string): TelegramBlock[] {
+export function parseTelegramBlocks(markdown: string, images = false): TelegramBlock[] {
   const normalized = normalizeMarkdownForTelegramBlockParsing(markdown).trim();
   if (!normalized) {
     return [];
   }
 
   const tree = markdownProcessor.parse(normalized) as Root;
-  return tree.children.flatMap((node) => parseRootContent(node));
+  const context = images
+    ? {
+        definitions: new Map(
+          tree.children
+            .filter((node) => node.type === "definition")
+            .map((node) => [node.identifier, node.url]),
+        ),
+      }
+    : undefined;
+  return tree.children.flatMap((node) => parseRootContent(node, 0, context));
 }

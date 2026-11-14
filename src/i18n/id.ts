@@ -8,6 +8,9 @@ import { projectSearchFallback, type I18nDictionary } from "./en.js";
  * Keep this dictionary complete to avoid falling back to another locale.
  */
 export const id: I18nDictionary = {
+  "assistant.image.unavailable": "Gambar tidak tersedia: {name}",
+  "assistant.image.unsupported": "Format gambar tidak didukung: {name}",
+  "assistant.image.too_large": "Gambar melebihi batas foto Telegram: {name}",
   ...projectSearchFallback,
   "cmd.description.recent": "Sesi terbaru di semua proyek",
   "recent.heading": "Sesi terbaru di semua proyek (segarkan dengan /recent):",

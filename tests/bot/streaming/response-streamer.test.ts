@@ -25,6 +25,55 @@ function signature(part: TelegramRenderedPart) {
 }
 
 describe("bot/streaming/response-streamer", () => {
+  it("keeps final photo parts out of drafts and never replays an ambiguous partial completion", async () => {
+    const sendPart = vi.fn(async (part: TelegramRenderedPart) => ({
+      messageId: 1,
+      deliveredSignature: signature(part),
+    }));
+    const editPart = vi.fn();
+    const completePart = vi
+      .fn()
+      .mockResolvedValueOnce({ messageId: 2, deliveredSignature: "first" })
+      .mockRejectedValueOnce(new Error("ambiguous upload failure"));
+    const streamer = new ResponseStreamer({
+      throttleMs: 0,
+      sendPart,
+      editPart,
+      completePart,
+      deleteText: vi.fn(),
+    });
+    streamer.enqueue("s", "m", { parts: [plainPart("streaming")] });
+    await streamer.flushPending("s", "m");
+    const finalPayload = { parts: [richPart("photo one"), richPart("photo two")] };
+    await expect(streamer.complete("s", "m", undefined, { finalPayload })).rejects.toThrow(
+      "ambiguous upload",
+    );
+    expect(editPart).not.toHaveBeenCalled();
+    expect(completePart).toHaveBeenCalledTimes(2);
+    expect(await streamer.complete("s", "m")).toEqual({ streamed: false, telegramMessageIds: [] });
+    expect(completePart).toHaveBeenCalledTimes(2);
+  });
+
+  it("applies final edit photos once without streaming plain fallback on ambiguous failure", async () => {
+    const sendPart = vi.fn(async (part: TelegramRenderedPart) => ({
+      messageId: 1,
+      deliveredSignature: signature(part),
+    }));
+    const editPart = vi.fn().mockRejectedValue(new Error("connection lost"));
+    const streamer = new ResponseStreamer({
+      throttleMs: 0,
+      sendPart,
+      editPart,
+      deleteText: vi.fn(),
+    });
+    streamer.enqueue("s", "m", { parts: [plainPart("streaming")] });
+    await streamer.flushPending("s", "m");
+    await expect(
+      streamer.complete("s", "m", undefined, { finalPayload: { parts: [richPart("photo")] } }),
+    ).rejects.toThrow("connection lost");
+    expect(sendPart).toHaveBeenCalledTimes(1);
+    expect(editPart).toHaveBeenCalledTimes(1);
+  });
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -739,9 +788,14 @@ describe("bot/streaming/response-streamer", () => {
 
       expect(result.streamed).toBe(true);
       expect(completePart).toHaveBeenNthCalledWith(1, plainPart("part-1-final"), {}, "s1");
-      expect(completePart).toHaveBeenNthCalledWith(2, plainPart("part-2-final"), {
-        disable_notification: true,
-      }, "s1");
+      expect(completePart).toHaveBeenNthCalledWith(
+        2,
+        plainPart("part-2-final"),
+        {
+          disable_notification: true,
+        },
+        "s1",
+      );
     });
 
     it("keeps final draft parts silent by default", async () => {
@@ -779,9 +833,13 @@ describe("bot/streaming/response-streamer", () => {
       });
 
       expect(result.streamed).toBe(true);
-      expect(completePart).toHaveBeenCalledWith(plainPart("final"), {
-        disable_notification: true,
-      }, "s1");
+      expect(completePart).toHaveBeenCalledWith(
+        plainPart("final"),
+        {
+          disable_notification: true,
+        },
+        "s1",
+      );
     });
 
     it("returns streamed=false when completePart fails", async () => {

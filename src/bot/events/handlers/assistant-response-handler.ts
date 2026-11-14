@@ -25,6 +25,7 @@ import { deliverExternalUserInputNotification } from "../../messages/external-us
 import { telegramOutageNoticeService } from "../../../app/services/telegram-outage-notice-service.js";
 import { flushTelegramOutageNotices } from "../../telegram-outage-notices.js";
 import { getThinkingStreamId, type SessionRuntimeState } from "../session-runtime-state.js";
+import { hasMarkdownImages } from "../../render/block-parser.js";
 import type { StreamingMessagePayload } from "../../streaming/response-streamer.js";
 import {
   getReplyKeyboard,
@@ -183,7 +184,12 @@ export function keepAssistantDraftsBeforePrompt(
           // The prompt flushes tool output itself before showing up.
           flushPendingServiceMessages: async () => {},
           prepareStreamingPayload: prepareAssistantFinalStreamingPayload,
-          renderFinalParts: (partText) => renderAssistantFinalPartsSafe(partText),
+          renderFinalParts: (partText) =>
+            renderAssistantFinalPartsSafe(
+              partText,
+              getCurrentSession()?.id === sessionId ? getCurrentSession()?.directory : undefined,
+              () => policy.isForegroundSession(sessionId),
+            ),
           getReplyKeyboard: () => getReplyKeyboard(deps),
           sendRenderedPart: async (part, options) => {
             await runtime.delivery.sendRenderedPart(
@@ -203,7 +209,9 @@ export function keepAssistantDraftsBeforePrompt(
           );
         }
       } catch (error) {
-        runtime.markAssistantTextDelivered(sessionId, messageId, previousDeliveredText);
+        if (!hasMarkdownImages(text)) {
+          runtime.markAssistantTextDelivered(sessionId, messageId, previousDeliveredText);
+        }
         logger.error(
           `[Bot] Failed to keep assistant draft before a prompt: session=${sessionId}, message=${messageId}`,
           error,
@@ -454,7 +462,12 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
             ]).then(() => undefined);
           },
           prepareStreamingPayload: prepareAssistantFinalStreamingPayload,
-          renderFinalParts: (text) => renderAssistantFinalPartsSafe(text),
+          renderFinalParts: (text) =>
+            renderAssistantFinalPartsSafe(
+              text,
+              getCurrentSession()?.id === sessionId ? getCurrentSession()?.directory : undefined,
+              () => policy.isForegroundSession(sessionId),
+            ),
           getReplyKeyboard: () => getReplyKeyboard(deps),
           notifyFirstFinalPart: assistantResponseMode === "draft" && !getShowAssistantRunFooter(),
           sendRenderedPart: async (part, options) => {

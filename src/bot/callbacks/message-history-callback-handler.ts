@@ -3,7 +3,7 @@ import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
 import type { InteractionState } from "../../app/types/interaction.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { setCurrentSession } from "../../app/services/session-service.js";
+import { getCurrentSession, setCurrentSession } from "../../app/services/session-service.js";
 import { applySessionSettings } from "../../app/services/session-settings-service.js";
 import { getStoredAgent } from "../../app/services/agent-selection-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
@@ -19,10 +19,7 @@ import { cancelMenu } from "./feedback.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { renderAssistantFinalPartsSafe } from "../messages/assistant-rendering.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
-import {
-  AGENT_TEXT_LINK_PREVIEW_OPTIONS,
-  sendRenderedBotPart,
-} from "../messages/telegram-text.js";
+import { AGENT_TEXT_LINK_PREVIEW_OPTIONS, sendRenderedBotPart } from "../messages/telegram-text.js";
 import {
   buildMessageDetailKeyboard,
   buildMessagesListKeyboard,
@@ -190,7 +187,11 @@ async function sendLatestAssistantResponse(
     return;
   }
 
-  const parts = renderAssistantFinalPartsSafe(responseText);
+  const parts = renderAssistantFinalPartsSafe(
+    responseText,
+    directory,
+    () => getCurrentSession()?.id === sessionId,
+  );
   for (const part of parts) {
     await sendRenderedBotPart({
       api,

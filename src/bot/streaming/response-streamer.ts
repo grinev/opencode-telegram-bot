@@ -3,10 +3,7 @@ import { logger } from "../../utils/logger.js";
 import { chunkPlainText } from "../render/chunker.js";
 import { getTelegramRenderedPartSignature } from "../render/part-signature.js";
 import type { TelegramRenderedPart } from "../render/types.js";
-import {
-  resolveStreamThrottleMs,
-  type StreamThrottleMs,
-} from "./stream-throttle.js";
+import { resolveStreamThrottleMs, type StreamThrottleMs } from "./stream-throttle.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
 type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
@@ -28,6 +25,7 @@ export interface StreamCompleteResult {
 interface ResponseStreamerCompleteOptions {
   flushFinal?: boolean;
   notifyFirstCompletePart?: boolean;
+  finalPayload?: StreamingMessagePayload;
 }
 
 interface ResponseStreamerOptions {
@@ -74,6 +72,7 @@ function buildStateKey(sessionId: string, messageId: string): string {
 
 function clonePart(part: TelegramRenderedPart): TelegramRenderedPart {
   return {
+    ...part,
     blocks: [...part.blocks],
     fallbackText: part.fallbackText,
     source: part.source,
@@ -250,6 +249,37 @@ export class ResponseStreamer {
       this.cancelState(state);
       this.states.delete(state.key);
       return notStreamed;
+    }
+
+    if (options?.finalPayload) {
+      // Final photos are never flushed into a draft, degraded to plain by the
+      // streamer, or resent after a partially/ambiguously completed upload.
+      const finalPayload = options.finalPayload;
+      try {
+        if (this.completePart) {
+          const ids: number[] = [];
+          for (const [index, part] of finalPayload.parts.entries()) {
+            if (state.cancelled) return { streamed: true, telegramMessageIds: ids };
+            const sendOptions =
+              index === 0 && options.notifyFirstCompletePart
+                ? enableNotificationForOptions(finalPayload.sendOptions)
+                : finalPayload.sendOptions;
+            ids.push((await this.completePart(part, sendOptions, sessionId)).messageId);
+          }
+          return { streamed: true, telegramMessageIds: ids };
+        }
+        if (!state.cancelled) {
+          await this.syncMessages(
+            state,
+            finalPayload,
+            finalPayload.parts.map(getTelegramRenderedPartSignature),
+          );
+        }
+        return { streamed: true, telegramMessageIds: [...state.telegramMessageIds] };
+      } finally {
+        this.cancelState(state);
+        this.states.delete(state.key);
+      }
     }
 
     let synced = true;
@@ -457,9 +487,7 @@ export class ResponseStreamer {
       // Signatures must describe what actually goes out, otherwise the
       // "unchanged" checks below compare two different representations.
       const payload = state.plainOnly ? toPlainPayload(latestPayload) : latestPayload;
-      const targetSignatures = payload.parts.map((part) =>
-        getTelegramRenderedPartSignature(part),
-      );
+      const targetSignatures = payload.parts.map((part) => getTelegramRenderedPartSignature(part));
       const unchanged =
         targetSignatures.length === state.lastSentSignatures.length &&
         targetSignatures.every((signature, index) => signature === state.lastSentSignatures[index]);
@@ -578,7 +606,12 @@ export class ResponseStreamer {
           continue;
         }
 
-        const result = await this.editPart(currentMessageId, part, payload.editOptions, state.sessionId);
+        const result = await this.editPart(
+          currentMessageId,
+          part,
+          payload.editOptions,
+          state.sessionId,
+        );
         state.lastSentSignatures[index] = result.deliveredSignature;
         if (result.degradedToPlain) {
           this.markStreamPlainOnly(state, null, "transport_degraded_to_plain");

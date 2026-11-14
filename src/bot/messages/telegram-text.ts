@@ -10,8 +10,10 @@ import { chunkPlainText } from "../render/chunker.js";
 import { TELEGRAM_TEXT_MESSAGE_LIMIT } from "../render/limits.js";
 import { getTelegramRenderedPartSignature } from "../render/part-signature.js";
 import type { TelegramRenderedPart } from "../render/types.js";
+import { deliverAssistantImagePart, hasDeferredImages } from "./assistant-image-delivery.js";
 
-type SendMessageApi = Pick<Api<RawApi>, "sendMessage" | "sendRichMessage">;
+type SendMessageApi = Pick<Api<RawApi>, "sendMessage" | "sendRichMessage"> &
+  Partial<Pick<Api<RawApi>, "editMessageText">>;
 type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;
 type SendDraftApi = Pick<Api<RawApi>, "sendMessageDraft" | "sendRichMessageDraft">;
 
@@ -183,6 +185,26 @@ export async function sendRenderedBotPart({
     };
   }
 
+  if (hasDeferredImages(part)) {
+    const editMessageText = api.editMessageText?.bind(api);
+    const sentMessage = await deliverAssistantImagePart(
+      part,
+      (blocks) =>
+        api.sendRichMessage(
+          chatId,
+          { blocks },
+          stripLinkPreviewOptions(rawOptions) as TelegramSendRichOptions,
+        ),
+      editMessageText
+        ? (sent, blocks) => editMessageText(chatId, sent.message_id, { blocks })
+        : undefined,
+    );
+    return {
+      messageId: sentMessage.message_id,
+      deliveredSignature: getTelegramRenderedPartSignature(part),
+    };
+  }
+
   try {
     const sentMessage = await api.sendRichMessage(
       chatId,
@@ -252,6 +274,17 @@ export async function editRenderedBotPart({
     return {
       deliveredSignature: plainSignature(part.fallbackText, part.entities),
     };
+  }
+
+  if (hasDeferredImages(part)) {
+    await deliverAssistantImagePart(
+      part,
+      (blocks) =>
+        api.editMessageText(chatId, messageId, { blocks }, stripLinkPreviewOptions(rawOptions)),
+      (_sent, blocks) =>
+        api.editMessageText(chatId, messageId, { blocks }, stripLinkPreviewOptions(rawOptions)),
+    );
+    return { deliveredSignature: getTelegramRenderedPartSignature(part) };
   }
 
   try {
@@ -334,6 +367,9 @@ export async function completeDraftPart({
   part,
   options,
 }: CompleteDraftPartParams): Promise<RenderedPartSendResult> {
+  if (hasDeferredImages(part)) {
+    return sendRenderedBotPart({ api, chatId, part, options, allowPlainFallback: false });
+  }
   const rawOptions = stripRichFormattingOptions(options);
 
   logger.debug("[Bot] Completing draft with real message", {

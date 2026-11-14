@@ -1,5 +1,7 @@
 import type { RichBlockTableCell, RichText } from "grammy/types";
 import { buildAlignedTableText, toBlockPlainText } from "./block-plain-text.js";
+import { getImageDescriptor, imageDescriptorMedia } from "./image-descriptor.js";
+import { t } from "../../i18n/index.js";
 import type {
   InlineNode,
   TableColumnAlign,
@@ -243,6 +245,8 @@ function toTableBlock(rows: string[][], align?: TableColumnAlign[]): TelegramRic
 
 export function toRichBlock(block: TelegramBlock): TelegramRichBlock {
   switch (block.type) {
+    case "image":
+      return { type: "photo", photo: { type: "photo", media: imageDescriptorMedia(block) } };
     case "paragraph":
       return { type: "paragraph", text: toRichText(block.inlines) };
     case "heading":
@@ -261,7 +265,11 @@ export function toRichBlock(block: TelegramBlock): TelegramRichBlock {
             items: block.items.map((item) => ({ blocks: item.blocks.map(toRichBlock) })),
           };
     case "code":
-      return { type: "pre", text: block.text, ...(block.language ? { language: block.language } : {}) };
+      return {
+        type: "pre",
+        text: block.text,
+        ...(block.language ? { language: block.language } : {}),
+      };
     case "table":
       return block.rows.length > 0
         ? toTableBlock(block.rows, block.align)
@@ -275,6 +283,20 @@ export function toRichBlock(block: TelegramBlock): TelegramRichBlock {
       throw new Error(`Unsupported Telegram block: ${JSON.stringify(exhaustiveCheck)}`);
     }
   }
+}
+
+export function countRichMedia(block: TelegramRichBlock): number {
+  if (block.type === "photo") return 1;
+  if (block.type === "list") {
+    return block.items.reduce(
+      (sum, item) => sum + item.blocks.reduce((n, inner) => n + countRichMedia(inner), 0),
+      0,
+    );
+  }
+  if (block.type === "blockquote" || block.type === "details") {
+    return block.blocks.reduce((sum, inner) => sum + countRichMedia(inner), 0);
+  }
+  return 0;
 }
 
 export function createParagraphBlock(text: string): TelegramRichBlock {
@@ -352,6 +374,16 @@ export function countRichBlocks(block: TelegramRichBlock): number {
 /** Upper bound of the characters a block contributes to the per-message character limit. */
 export function countRichChars(block: TelegramRichBlock): number {
   switch (block.type) {
+    case "photo": {
+      const image = getImageDescriptor(block);
+      return image
+        ? Math.max(
+            ...(["unavailable", "unsupported", "too_large"] as const).map(
+              (reason) => t(`assistant.image.${reason}`, { name: image.name }).length,
+            ),
+          )
+        : 0;
+    }
     case "paragraph":
     case "heading":
     case "footer":

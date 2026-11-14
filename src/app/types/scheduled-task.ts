@@ -116,6 +116,7 @@ export interface ScheduledTaskExecutionResult {
 }
 
 export interface QueuedScheduledTaskDelivery {
+  projectDirectory?: string;
   taskId: string;
   scheduleSummary: string;
   prompt: string;

@@ -1,4 +1,7 @@
 export const en = {
+  "assistant.image.unavailable": "Image unavailable: {name}",
+  "assistant.image.unsupported": "Unsupported image format: {name}",
+  "assistant.image.too_large": "Image exceeds Telegram photo limits: {name}",
   "cmd.description.recent": "Recent sessions across projects",
   "recent.heading": "Recent sessions across projects (run /recent to refresh):",
   "recent.empty": "📭 No sessions found across projects.",
