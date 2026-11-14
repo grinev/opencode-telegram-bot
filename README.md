@@ -276,6 +276,8 @@ Configuration can be provided through process environment variables or an `.env`
 | `MESSAGE_MERGE_WINDOW_MS`                  | Merge Telegram-split long text messages into one prompt after this wait window (ms); `0` disables merging             |    No    | `1500`                   |
 | `INITIAL_SETTINGS_PRESET`                  | JSON object that seeds default `/settings` values on first run (keys not yet persisted); see [Runtime Settings](#runtime-settings) |    No    | `{}`                     |
 | `CODE_FILE_MAX_SIZE_KB`                    | Max file size (KB) to send as document                                                                                |    No    | `100`                    |
+| `FILE_INBOX_DIR`                           | Directory for documents the model cannot ingest: the original file is saved there and its absolute path is passed to the agent; must be readable by the OpenCode server | No | `<bot home>/inbox` |
+| `FILE_INBOX_RETENTION_DAYS`                | Delete locally saved uploads older than this many days; `0` keeps them forever                                         |    No    | `7`                      |
 | `STT_API_URL`                              | Whisper-compatible API base URL (enables voice/audio transcription)                                                   |    No    | —                        |
 | `STT_API_KEY`                              | API key for your STT provider                                                                                         |    No    | —                        |
 | `STT_MODEL`                                | STT model name passed to `/audio/transcriptions`                                                                      |    No    | `whisper-large-v3-turbo` |
@@ -444,7 +446,19 @@ The API contract is:
 - **Authorization:** `Bearer {DOC_EXTRACTOR_API_KEY}` (only sent when a key is configured)
 - **Response:** JSON `{ "text": "extracted content..." }`
 
-If the extractor is not configured and the model doesn't support documents, the bot replies with a notice and forwards only the caption text.
+If the extractor is not configured and the model doesn't support documents, the original file is saved locally instead (see below).
+
+### Unsupported Documents (Local Files)
+
+Telegram documents that cannot be passed to the model — `.zip`, `.sqlite`, `.bin`, or an office file the current model cannot ingest — are saved unchanged, and the agent gets an absolute path to the original file in the prompt. The bot does not parse, convert or extract anything from these files; the agent decides how to inspect them.
+
+- Files are written to `FILE_INBOX_DIR` (`<bot home>/inbox` by default). Each upload gets its own directory, so the original filename is kept; directories are created with mode `700` and files with `600` on Linux and macOS.
+- The prompt marks the path as a local file, never as a native model attachment.
+- Saved uploads older than `FILE_INBOX_RETENTION_DAYS` (default `7`; `0` keeps them) are removed the next time a file is saved. Only directories the bot created are pruned, so other files in a shared inbox are left alone.
+- The Telegram Bot API does not allow bots to download files larger than 20 MB, so such uploads are rejected with a notice and nothing is sent to OpenCode.
+- Albums are handled the same way: supported items are attached natively and unsupported ones are saved locally in the same prompt.
+
+If the bot and the OpenCode server do not share a filesystem (Docker, a remote server), mount the same directory into both and set `FILE_INBOX_DIR` to the path **as the OpenCode server sees it**. The bot cannot verify that the agent can read the path; when the directories are not shared, the agent reports back that the file is unavailable.
 
 ### Model Configuration
 
@@ -539,6 +553,7 @@ Runtime state (settings, logs, SQLite databases) is stored in a Docker named vol
 All configuration is provided through environment variables in the `.env` file. Compose also sets `OPENCODE_TELEGRAM_CONTAINER=1` so the bot can warn about commands that need the host filesystem or a local OpenCode process.
 
 - `OPENCODE_API_URL` — URL of the OpenCode server. On Linux with the default compose file this is `http://127.0.0.1:4096` via `network_mode: host`. The Desktop override sets `http://host.docker.internal:4096`.
+- `FILE_INBOX_DIR` — by default unsupported documents are saved to `/app/data/inbox` inside the container, a path OpenCode on the host cannot read. Bind-mount a host directory that the OpenCode server can read and set `FILE_INBOX_DIR` to it; see [Unsupported Documents](#unsupported-documents-local-files).
 - `BOT_HEALTH_PORT` — the image serves a health endpoint on `127.0.0.1:3100` by default, and its `HEALTHCHECK` probes `/health/live`: the container is `unhealthy` only when the bot itself does not answer, or when the endpoint could not start (for example, the port is taken on the host under `network_mode: host`; the log says why). OpenCode being down does not make the container unhealthy — `/health` reports it as `degraded` and `/health/ready` answers `503`. Set another port in `.env` if 3100 is taken, or `0` to turn the endpoint off (the healthcheck then always passes). The endpoint is reachable from the host's loopback with the Linux compose file and only from inside the container with the Desktop override.
 - **OpenCode V2 in Docker** — both compose files point to a V1 server on port 4096. For V2, set `OPENCODE_SERVER_VERSION=v2`, `OPENCODE_SERVER_PASSWORD` and `OPENCODE_API_URL` together: in `.env` on Linux (for example `http://127.0.0.1:49374`), and by changing the URL in `docker-compose.desktop.yml` on Docker Desktop to the host address the V2 server listens on.
 

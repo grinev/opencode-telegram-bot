@@ -236,6 +236,7 @@ Agent picker behavior:
 - [x] Image attachments support (send photos/screenshots from Telegram to OpenCode, including multiple files in one Telegram album)
 - [x] PDF attachments support (send documents from Telegram to OpenCode)
 - [x] Text file attachments support (send code/config/log files from Telegram to OpenCode)
+- [x] Unsupported document fallback: files the model cannot ingest are saved unchanged to a local inbox and passed to the agent by absolute path, with clear size/save failures and retention-based cleanup
 - [x] Voice/audio transcription via Whisper-compatible APIs (OpenAI/Groq/Together and compatible providers)
 - [x] Optional audio replies with `/settings` modes via OpenAI-compatible APIs
 - [x] Dynamic subagent activity display during task execution

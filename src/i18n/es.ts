@@ -129,8 +129,8 @@ export const es: I18nDictionary = {
   "bot.files_downloading": "⏳ Descargando archivos...",
   "bot.file_too_large": "⚠️ El archivo es demasiado grande (max {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 No se pudo descargar el archivo",
-  "bot.file_type_unsupported":
-    "⚠️ Este tipo de archivo no es compatible. Envía una imagen, documento (PDF, DOCX, PPTX) o archivo de texto/código.",
+  "bot.file_save_error":
+    "🔴 No se pudo guardar el archivo localmente, el agente no podrá leerlo.",
   "bot.rich_message_media_skipped":
     "⚠️ Se omitieron {count} elementos multimedia no compatibles.",
   "bot.message_type_unsupported": "⚠️ Este tipo de mensaje no es compatible.",
@@ -138,7 +138,6 @@ export const es: I18nDictionary = {
     "⚠️ Uno o más archivos de este álbum no se pueden procesar. No se envió nada a OpenCode.",
   "bot.media_group_download_error":
     "🔴 No se pudo descargar uno de los archivos. No se envió nada a OpenCode.",
-  "bot.model_no_pdf": "⚠️ El modelo actual no admite entrada PDF. Enviaré solo texto.",
   "bot.document_extraction_error": "🔴 No se pudo extraer el texto del documento.",
   "bot.text_file_too_large": "⚠️ El archivo de texto es demasiado grande (max {maxSizeKb}KB)",
 

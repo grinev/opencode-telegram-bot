@@ -31,6 +31,7 @@ opencode.json
 # Project specific
 logs/
 run/
+inbox/
 settings.json
 settings.json.bak
 settings.json.tmp

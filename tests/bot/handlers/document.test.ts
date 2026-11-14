@@ -12,6 +12,7 @@ import {
   handleDocumentMessage,
   type DocumentHandlerDeps,
 } from "../../../src/bot/handlers/document-handler.js";
+import { MAX_FILE_SIZE_BYTES } from "../../../src/app/services/file-download-service.js";
 
 vi.mock("../../../src/app/services/document-extractor-service.js", () => ({
   isDocExtractorConfigured: vi.fn(),
@@ -60,6 +61,7 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
   deps: DocumentHandlerDeps;
   processPromptMock: ReturnType<typeof vi.fn>;
   downloadMock: ReturnType<typeof vi.fn>;
+  saveFileMock: ReturnType<typeof vi.fn>;
   getCapabilitiesMock: ReturnType<typeof vi.fn>;
   getStoredModelMock: ReturnType<typeof vi.fn>;
 } {
@@ -68,6 +70,10 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
     buffer: Buffer.from("file content here"),
     filePath: "documents/test.txt",
   });
+  const saveFileMock = vi.fn(async (_buffer: Buffer, filename: string) => ({
+    filePath: `/bot/inbox/1-abc/${filename}`,
+    filename,
+  }));
   const getCapabilitiesMock = vi.fn().mockResolvedValue({
     input: { pdf: true, image: true },
   });
@@ -81,6 +87,7 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
     bot: {} as DocumentHandlerDeps["bot"],
     ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
     downloadFile: downloadMock,
+    saveFile: saveFileMock,
     getModelCapabilities: getCapabilitiesMock,
     getStoredModel: getStoredModelMock,
     processPrompt: (ctx, input, promptDeps) =>
@@ -91,7 +98,14 @@ function createDocumentDeps(overrides: Partial<DocumentHandlerDeps> = {}): {
   };
   initializePromptQueueDispatch(deps);
 
-  return { deps, processPromptMock, downloadMock, getCapabilitiesMock, getStoredModelMock };
+  return {
+    deps,
+    processPromptMock,
+    downloadMock,
+    saveFileMock,
+    getCapabilitiesMock,
+    getStoredModelMock,
+  };
 }
 
 let container: AppContainer;
@@ -317,7 +331,7 @@ describe("bot/handlers/document", () => {
       );
     });
 
-    it("shows error when model does not support PDF", async () => {
+    it("saves the PDF locally when the model does not support PDF", async () => {
       const { ctx, replyMock } = createDocumentContext({
         document: {
           file_id: "pdf-file-id",
@@ -327,7 +341,7 @@ describe("bot/handlers/document", () => {
           file_size: 5000,
         },
       });
-      const { deps, processPromptMock } = createDocumentDeps({
+      const { deps, processPromptMock, downloadMock, saveFileMock } = createDocumentDeps({
         getModelCapabilities: vi.fn().mockResolvedValue({
           input: { pdf: false },
         }),
@@ -335,11 +349,22 @@ describe("bot/handlers/document", () => {
 
       await handleDocumentMessage(ctx, deps);
 
-      expect(replyMock).toHaveBeenCalledWith(t("bot.model_no_pdf"));
-      expect(processPromptMock).not.toHaveBeenCalled();
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_downloading"));
+      expect(downloadMock).toHaveBeenCalled();
+      expect(saveFileMock).toHaveBeenCalledWith(Buffer.from("file content here"), "document.pdf");
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("/bot/inbox/1-abc/document.pdf"),
+        deps,
+      );
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("not a model attachment"),
+        deps,
+      );
     });
 
-    it("sends caption-only when model does not support PDF but caption exists", async () => {
+    it("keeps the caption when the PDF is saved locally", async () => {
       const { ctx } = createDocumentContext({
         document: {
           file_id: "pdf-file-id",
@@ -358,7 +383,11 @@ describe("bot/handlers/document", () => {
 
       await handleDocumentMessage(ctx, deps);
 
-      expect(processPromptMock).toHaveBeenCalledWith(ctx, "Summarize this document", deps);
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("Summarize this document"),
+        deps,
+      );
     });
   });
 
@@ -474,7 +503,7 @@ describe("bot/handlers/document", () => {
       },
     );
 
-    it("rejects octet-stream files without an image extension", async () => {
+    it("saves octet-stream files without an image extension locally", async () => {
       const { ctx, replyMock } = createDocumentContext({
         document: {
           file_id: "bin-file-id",
@@ -484,13 +513,17 @@ describe("bot/handlers/document", () => {
           file_size: 5000,
         },
       });
-      const { deps, processPromptMock, downloadMock } = createDocumentDeps();
+      const { deps, processPromptMock, saveFileMock } = createDocumentDeps();
 
       await handleDocumentMessage(ctx, deps);
 
-      expect(replyMock).toHaveBeenCalledWith(t("bot.file_type_unsupported"));
-      expect(downloadMock).not.toHaveBeenCalled();
-      expect(processPromptMock).not.toHaveBeenCalled();
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_downloading"));
+      expect(saveFileMock).toHaveBeenCalledWith(Buffer.from("file content here"), "firmware.bin");
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("/bot/inbox/1-abc/firmware.bin"),
+        deps,
+      );
     });
 
     it("routes a PDF named with an image extension by its PDF MIME type", async () => {
@@ -544,7 +577,8 @@ describe("bot/handlers/document", () => {
         }),
       });
 
-      const { extractDocument: extractDoc } = await import("../../../src/app/services/document-extractor-service.js");
+      const { extractDocument: extractDoc } =
+        await import("../../../src/app/services/document-extractor-service.js");
       vi.mocked(extractDoc).mockResolvedValue({ text: "Extracted PDF content" });
 
       await handleDocumentMessage(ctx, deps);
@@ -579,7 +613,8 @@ describe("bot/handlers/document", () => {
         }),
       });
 
-      const { extractDocument: extractDoc } = await import("../../../src/app/services/document-extractor-service.js");
+      const { extractDocument: extractDoc } =
+        await import("../../../src/app/services/document-extractor-service.js");
       vi.mocked(extractDoc).mockResolvedValue({ text: "DOCX content" });
 
       await handleDocumentMessage(ctx, deps);
@@ -596,7 +631,7 @@ describe("bot/handlers/document", () => {
       );
     });
 
-    it("shows extraction error and falls back to caption", async () => {
+    it("saves the document locally after extraction fails and keeps the caption", async () => {
       const { ctx, replyMock } = createDocumentContext({
         document: {
           file_id: "pdf-file-id",
@@ -607,22 +642,33 @@ describe("bot/handlers/document", () => {
         },
         caption: "Summarize this",
       });
-      const { deps, processPromptMock } = createDocumentDeps({
+      const { deps, processPromptMock, saveFileMock } = createDocumentDeps({
         getModelCapabilities: vi.fn().mockResolvedValue({
           input: { pdf: false },
         }),
       });
 
-      const { extractDocument: extractDoc } = await import("../../../src/app/services/document-extractor-service.js");
+      const { extractDocument: extractDoc } =
+        await import("../../../src/app/services/document-extractor-service.js");
       vi.mocked(extractDoc).mockRejectedValue(new Error("API unreachable"));
 
       await handleDocumentMessage(ctx, deps);
 
       expect(replyMock).toHaveBeenCalledWith(t("bot.document_extraction_error"));
-      expect(processPromptMock).toHaveBeenCalledWith(ctx, "Summarize this", deps);
+      expect(saveFileMock).toHaveBeenCalledWith(Buffer.from("file content here"), "document.pdf");
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("/bot/inbox/1-abc/document.pdf"),
+        deps,
+      );
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("Summarize this"),
+        deps,
+      );
     });
 
-    it("shows extraction error without fallback when no caption", async () => {
+    it("saves the document locally after extraction fails without a caption", async () => {
       const { ctx, replyMock } = createDocumentContext({
         document: {
           file_id: "pdf-file-id",
@@ -639,16 +685,22 @@ describe("bot/handlers/document", () => {
         }),
       });
 
-      const { extractDocument: extractDoc } = await import("../../../src/app/services/document-extractor-service.js");
+      const { extractDocument: extractDoc } =
+        await import("../../../src/app/services/document-extractor-service.js");
       vi.mocked(extractDoc).mockRejectedValue(new Error("API unreachable"));
 
       await handleDocumentMessage(ctx, deps);
 
       expect(replyMock).toHaveBeenCalledWith(t("bot.document_extraction_error"));
-      expect(processPromptMock).not.toHaveBeenCalled();
+      expect(processPromptMock).toHaveBeenCalledOnce();
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("/bot/inbox/1-abc/document.pdf"),
+        deps,
+      );
     });
 
-    it("shows model_no_pdf when extractor is not configured", async () => {
+    it("saves the document locally when the extractor is not configured", async () => {
       vi.mocked(isDocExtractorConfigured).mockReturnValue(false);
 
       const { ctx, replyMock } = createDocumentContext({
@@ -661,7 +713,7 @@ describe("bot/handlers/document", () => {
         },
         caption: "Summarize",
       });
-      const { deps, processPromptMock } = createDocumentDeps({
+      const { deps, processPromptMock, saveFileMock } = createDocumentDeps({
         getModelCapabilities: vi.fn().mockResolvedValue({
           input: { pdf: false },
         }),
@@ -669,13 +721,120 @@ describe("bot/handlers/document", () => {
 
       await handleDocumentMessage(ctx, deps);
 
-      expect(replyMock).toHaveBeenCalledWith(t("bot.model_no_pdf"));
-      expect(processPromptMock).toHaveBeenCalledWith(ctx, "Summarize", deps);
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_downloading"));
+      expect(saveFileMock).toHaveBeenCalledWith(Buffer.from("file content here"), "document.pdf");
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("/bot/inbox/1-abc/document.pdf"),
+        deps,
+      );
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("Summarize"),
+        deps,
+      );
     });
   });
 
   describe("unsupported file types", () => {
-    it("shows error for unsupported MIME types", async () => {
+    it("saves the file locally and hands its path to the agent", async () => {
+      const { ctx, replyMock } = createDocumentContext({
+        document: {
+          file_id: "zip-file-id",
+          file_unique_id: "zip-unique-id",
+          file_name: "archive.zip",
+          mime_type: "application/zip",
+          file_size: 5000,
+        },
+        caption: "Unpack this archive",
+      });
+      const { deps, processPromptMock, downloadMock, saveFileMock } = createDocumentDeps();
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_downloading"));
+      expect(downloadMock).toHaveBeenCalledWith(ctx.api, "zip-file-id");
+      expect(saveFileMock).toHaveBeenCalledWith(Buffer.from("file content here"), "archive.zip");
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("/bot/inbox/1-abc/archive.zip"),
+        deps,
+      );
+      expect(processPromptMock).toHaveBeenCalledWith(
+        ctx,
+        expect.stringContaining("Unpack this archive"),
+        deps,
+      );
+    });
+
+    it("queues a locally saved file without holding its bytes in memory", async () => {
+      vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
+      container.foregroundSessionState.markBusy("session-1", "/repo");
+      const { ctx } = createDocumentContext({
+        document: {
+          file_id: "zip-file-id",
+          file_unique_id: "zip-unique-id",
+          file_name: "archive.zip",
+          mime_type: "application/zip",
+          file_size: MAX_QUEUED_MEDIA_BYTES,
+        },
+        caption: "Check later",
+      });
+      const { deps, processPromptMock, saveFileMock } = createDocumentDeps();
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(saveFileMock).toHaveBeenCalledOnce();
+      expect(processPromptMock).not.toHaveBeenCalled();
+      expect(promptQueue.size()).toBe(1);
+      expect(promptQueue.list()[0]).toEqual(
+        expect.objectContaining({ displayText: "Check later", mediaBytes: 0 }),
+      );
+      expect(promptQueue.mediaSize()).toBe(0);
+    });
+
+    it("rejects a file above the Telegram Bot API download limit", async () => {
+      const { ctx, replyMock } = createDocumentContext({
+        document: {
+          file_id: "zip-file-id",
+          file_unique_id: "zip-unique-id",
+          file_name: "huge.zip",
+          mime_type: "application/zip",
+          file_size: MAX_FILE_SIZE_BYTES + 1,
+        },
+      });
+      const { deps, processPromptMock, downloadMock, saveFileMock } = createDocumentDeps();
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_too_large", { maxSizeMb: "20" }));
+      expect(downloadMock).not.toHaveBeenCalled();
+      expect(saveFileMock).not.toHaveBeenCalled();
+      expect(processPromptMock).not.toHaveBeenCalled();
+    });
+
+    it("reports a save failure and forwards the caption", async () => {
+      const { ctx, replyMock } = createDocumentContext({
+        document: {
+          file_id: "zip-file-id",
+          file_unique_id: "zip-unique-id",
+          file_name: "archive.zip",
+          mime_type: "application/zip",
+          file_size: 5000,
+        },
+        caption: "Check this",
+      });
+      const { deps, processPromptMock } = createDocumentDeps({
+        saveFile: vi.fn().mockRejectedValue(new Error("EACCES: permission denied")),
+      });
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_save_error"));
+      expect(processPromptMock).toHaveBeenCalledWith(ctx, "Check this", deps);
+    });
+
+    it("does not fall back to anything when the save fails without a caption", async () => {
       const { ctx, replyMock } = createDocumentContext({
         document: {
           file_id: "zip-file-id",
@@ -685,12 +844,13 @@ describe("bot/handlers/document", () => {
           file_size: 5000,
         },
       });
-      const { deps, processPromptMock, downloadMock } = createDocumentDeps();
+      const { deps, processPromptMock } = createDocumentDeps({
+        saveFile: vi.fn().mockRejectedValue(new Error("EACCES: permission denied")),
+      });
 
       await handleDocumentMessage(ctx, deps);
 
-      expect(replyMock).toHaveBeenCalledWith(t("bot.file_type_unsupported"));
-      expect(downloadMock).not.toHaveBeenCalled();
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_save_error"));
       expect(processPromptMock).not.toHaveBeenCalled();
     });
   });
@@ -705,6 +865,27 @@ describe("bot/handlers/document", () => {
       await handleDocumentMessage(ctx, deps);
 
       expect(replyMock).toHaveBeenCalledWith(t("bot.file_download_error"));
+    });
+
+    it("shows download error when an unsupported file cannot be downloaded", async () => {
+      const { ctx, replyMock } = createDocumentContext({
+        document: {
+          file_id: "zip-file-id",
+          file_unique_id: "zip-unique-id",
+          file_name: "archive.zip",
+          mime_type: "application/zip",
+          file_size: 5000,
+        },
+      });
+      const { deps, saveFileMock, processPromptMock } = createDocumentDeps({
+        downloadFile: vi.fn().mockRejectedValue(new Error("Network error")),
+      });
+
+      await handleDocumentMessage(ctx, deps);
+
+      expect(replyMock).toHaveBeenCalledWith(t("bot.file_download_error"));
+      expect(saveFileMock).not.toHaveBeenCalled();
+      expect(processPromptMock).not.toHaveBeenCalled();
     });
   });
 
