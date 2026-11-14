@@ -599,6 +599,13 @@ export const id: I18nDictionary = {
   "tasklist.load_error": "🔴 Gagal memuat tugas terjadwal.",
 
   "commands.select": "Pilih perintah OpenCode:",
+  "commands.search.button": "🔍 Cari",
+  "commands.search.prompt": "🔍 Masukkan nama atau deskripsi perintah:",
+  "commands.search.results": "Hasil pencarian untuk \"{query}\":",
+  "commands.search.results_page": "Hasil pencarian untuk \"{query}\" (halaman {page}):",
+  "commands.search.no_results": "Tidak ada perintah yang ditemukan untuk \"{query}\"",
+  "commands.search.again": "↩ Cari lagi",
+  "commands.search.cancel": "❌ Batal",
   "commands.empty": "📭 Tidak ada perintah OpenCode yang tersedia untuk proyek ini.",
   "commands.fetch_error": "🔴 Gagal memuat perintah OpenCode.",
   "commands.no_description": "Tanpa deskripsi",

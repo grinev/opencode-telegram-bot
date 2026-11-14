@@ -610,6 +610,13 @@ export const it: I18nDictionary = {
   "tasklist.load_error": "🔴 Caricamento delle attività pianificate non riuscito.",
 
   "commands.select": "Scegli un comando OpenCode:",
+  "commands.search.button": "🔍 Cerca",
+  "commands.search.prompt": "🔍 Inserisci il nome o la descrizione del comando:",
+  "commands.search.results": "Risultati di ricerca per «{query}»:",
+  "commands.search.results_page": "Risultati di ricerca per «{query}» (pagina {page}):",
+  "commands.search.no_results": "Nessun comando trovato per «{query}»",
+  "commands.search.again": "↩ Cerca di nuovo",
+  "commands.search.cancel": "❌ Annulla",
   "commands.empty": "📭 Nessun comando OpenCode disponibile per questo progetto.",
   "commands.fetch_error": "🔴 Caricamento dei comandi OpenCode non riuscito.",
   "commands.no_description": "Nessuna descrizione",

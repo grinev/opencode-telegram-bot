@@ -1,7 +1,13 @@
 import type { Bot, Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
-import type { CommandCatalogItem } from "../../app/services/command-catalog-service.js";
+import {
+  loadCommandCatalog,
+  type CommandCatalogItem,
+} from "../../app/services/command-catalog-service.js";
+import { getCurrentProject } from "../../app/stores/settings-store.js";
+import { isForegroundBusy } from "../../app/services/run-control-service.js";
+import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import {
   clearSession,
   getCurrentSession,
@@ -10,6 +16,7 @@ import {
 import type { SessionInfo } from "../../app/types/session.js";
 import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
 import type { InteractionState } from "../../app/types/interaction.js";
+import { DEFAULT_ALLOWED_INTERACTION_COMMANDS } from "../../app/managers/interaction-manager.js";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
@@ -27,10 +34,14 @@ import { opencodeClient } from "../../opencode/client.js";
 import {
   buildCommandsConfirmKeyboard,
   buildCommandsListKeyboard,
+  buildCommandsSearchView,
   calculateCommandsPaginationRange,
   COMMANDS_CALLBACK_CANCEL,
   COMMANDS_CALLBACK_EXECUTE,
   COMMANDS_CALLBACK_PREFIX,
+  COMMANDS_CALLBACK_SEARCH,
+  COMMANDS_SEARCH_QUERY_MAX_LENGTH,
+  filterCommandsForSearch,
   formatCommandsSelectText,
   formatExecutingCommandMessage,
   parseCommandPageCallback,
@@ -363,6 +374,10 @@ export async function handleCommandsCallback(
     return false;
   }
 
+  if (data === COMMANDS_CALLBACK_SEARCH || data.startsWith(`${COMMANDS_CALLBACK_SEARCH}:`)) {
+    return handleCommandsSearchCallback(ctx, deps);
+  }
+
   const metadata = parseCommandsMetadata(deps.interactionManager.getSnapshot());
   const callbackMessageId = getCallbackMessageId(ctx);
 
@@ -471,4 +486,186 @@ export async function handleCommandsCallback(
     await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     return true;
   }
+}
+
+type CommandsSearchDeps = Pick<AppContainer, "interactionManager">;
+
+function commandsSearchState(deps: CommandsSearchDeps): Record<string, unknown> | null {
+  const state = deps.interactionManager.getSnapshot();
+  return state?.kind === "custom" && state.metadata.flow === "commands-search"
+    ? state.metadata
+    : null;
+}
+
+function sameCommandsSearch(deps: CommandsSearchDeps, state: Record<string, unknown>): boolean {
+  const current = commandsSearchState(deps);
+  return !!current && current.token === state.token && current.stage === state.stage;
+}
+
+function startCommandsSearch(deps: CommandsSearchDeps): void {
+  deps.interactionManager.start({
+    kind: "custom",
+    expectedInput: "text",
+    allowedCommands: [],
+    metadata: { flow: "commands-search", stage: "input", token: Symbol("commands-search") },
+  });
+}
+
+export async function handleCommandsSearchTextInput(
+  ctx: Context,
+  deps: CommandsSearchDeps,
+): Promise<boolean> {
+  const state = commandsSearchState(deps);
+  if (!state || state.stage !== "input" || ctx.message?.text === undefined) return false;
+  const query = ctx.message.text.slice(0, COMMANDS_SEARCH_QUERY_MAX_LENGTH);
+  if (!query.trim()) return true;
+  try {
+    const project = getCurrentProject();
+    if (!project) throw new Error("Project no longer selected");
+    const commands = filterCommandsForSearch(await loadCommandCatalog(project.worktree), query);
+    if (!sameCommandsSearch(deps, state)) return true;
+    const view = buildCommandsSearchView(commands, query, 0, config.bot.commandsListLimit);
+    const sent = await ctx.reply(view.text, { reply_markup: view.keyboard });
+    if (!sameCommandsSearch(deps, state)) return true;
+    deps.interactionManager.transition({
+      expectedInput: "callback",
+      metadata: {
+        ...state,
+        stage: "results",
+        query,
+        commands,
+        projectDirectory: project.worktree,
+        messageId: sent.message_id,
+      },
+    });
+  } catch (error) {
+    logger.error("[Commands] Error searching commands:", error);
+    if (sameCommandsSearch(deps, state)) {
+      deps.interactionManager.clear("commands_search_error");
+      await ctx.reply(t("commands.fetch_error"));
+    }
+  }
+  return true;
+}
+
+async function handleCommandsSearchCallback(
+  ctx: Context,
+  deps: ExecuteCommandDeps,
+): Promise<boolean> {
+  const data = ctx.callbackQuery?.data;
+  if (isForegroundBusy(deps)) {
+    await replyBusyBlocked(ctx);
+    return true;
+  }
+  if (data === COMMANDS_CALLBACK_SEARCH) {
+    const metadata = parseCommandsMetadata(deps.interactionManager.getSnapshot());
+    if (metadata?.stage !== "list" || metadata.messageId !== getCallbackMessageId(ctx)) {
+      await ctx.answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true });
+      return true;
+    }
+    const initial = deps.interactionManager.getSnapshot();
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    const current = deps.interactionManager.getSnapshot();
+    if (
+      current?.metadata.flow !== "commands" ||
+      current.metadata.stage !== "list" ||
+      current.metadata.messageId !== initial?.metadata.messageId
+    )
+      return true;
+    startCommandsSearch(deps);
+    await ctx.reply(t("commands.search.prompt"));
+    return true;
+  }
+  const state = commandsSearchState(deps);
+  if (!state || state.stage !== "results" || state.messageId !== getCallbackMessageId(ctx)) {
+    await ctx.answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true });
+    return true;
+  }
+  if (data === `${COMMANDS_CALLBACK_SEARCH}:cancel`) {
+    deps.interactionManager.clear("commands_search_cancelled");
+    await cancelMenu(ctx);
+    return true;
+  }
+  if (data === `${COMMANDS_CALLBACK_SEARCH}:again`) {
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    if (!sameCommandsSearch(deps, state)) return true;
+    startCommandsSearch(deps);
+    await ctx.reply(t("commands.search.prompt"));
+    return true;
+  }
+  if (data?.startsWith(`${COMMANDS_CALLBACK_SEARCH}:page:`)) {
+    const raw = data.slice(`${COMMANDS_CALLBACK_SEARCH}:page:`.length);
+    if (!/^\d+$/.test(raw) || typeof state.query !== "string") return true;
+    try {
+      const project = getCurrentProject();
+      if (!project) throw new Error("Project no longer selected");
+      const commands = filterCommandsForSearch(
+        await loadCommandCatalog(project.worktree),
+        state.query,
+      );
+      if (!sameCommandsSearch(deps, state)) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        return true;
+      }
+      const view = buildCommandsSearchView(
+        commands,
+        state.query,
+        Number(raw),
+        config.bot.commandsListLimit,
+      );
+      await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+      if (!sameCommandsSearch(deps, state)) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        return true;
+      }
+      deps.interactionManager.transition({
+        expectedInput: "callback",
+        metadata: { ...state, commands, projectDirectory: project.worktree },
+      });
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error("[Commands] Error loading search page:", error);
+      await ctx.answerCallbackQuery({ text: t("commands.page_load_error_callback") });
+    }
+    return true;
+  }
+  if (data?.startsWith(`${COMMANDS_CALLBACK_SEARCH}:result:`)) {
+    const raw = data.slice(`${COMMANDS_CALLBACK_SEARCH}:result:`.length);
+    const commands = parseCommandItems(state.commands);
+    const selectedCommand = /^\d+$/.test(raw) ? commands?.[Number(raw)] : undefined;
+    if (!selectedCommand || typeof state.projectDirectory !== "string") {
+      await ctx.answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true });
+      return true;
+    }
+    try {
+      await ctx.answerCallbackQuery();
+      if (!sameCommandsSearch(deps, state)) return true;
+      await ctx.editMessageText(t("commands.confirm", { command: `/${selectedCommand.name}` }), {
+        reply_markup: buildCommandsConfirmKeyboard(),
+      });
+      if (!sameCommandsSearch(deps, state)) return true;
+      deps.interactionManager.transition({
+        expectedInput: "mixed",
+        allowedCommands: [...DEFAULT_ALLOWED_INTERACTION_COMMANDS],
+        metadata: {
+          flow: "commands",
+          stage: "confirm",
+          messageId: state.messageId,
+          projectDirectory: state.projectDirectory,
+          commandName: selectedCommand.name,
+        },
+      });
+    } catch (error) {
+      logger.error("[Commands] Error selecting search result:", error);
+      if (sameCommandsSearch(deps, state)) {
+        deps.interactionManager.clear("commands_search_select_error");
+        await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
+      } else {
+        await ctx.answerCallbackQuery().catch(() => {});
+      }
+    }
+  }
+  return true;
 }

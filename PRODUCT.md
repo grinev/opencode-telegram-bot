@@ -153,7 +153,7 @@ Current command set:
 - `/task` - create a scheduled task
 - `/tasklist` - browse and delete scheduled tasks, and enable or disable individual recurring tasks
 - `/rename` - rename current session
-- `/commands` - browse and run custom commands (plus built-ins like `init` and `review`); the server command `goal` is omitted
+- `/commands` - browse, search by name or description, and run custom commands (plus built-ins like `init` and `review`); the server command `goal` is omitted
 - `/skills` - browse and run OpenCode skills
 - `/opencode_start` - start local OpenCode server
 - `/opencode_stop` - stop local OpenCode server; available during an active request and kills the local process even if health is hung
@@ -175,7 +175,7 @@ Interaction routing rules:
 - Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills, messages)
 - Agent questions and permission requests are shown one after another: one arriving while another holds the slot waits, and waiting requests appear in the order they arrived; a new question from the session whose poll is on screen replaces it, one from another session (a parallel subagent) waits; `/abort`, `/detach` and `/opencode_stop` drop everything waiting
 - While an interaction is active, unrelated input is blocked with a contextual hint
-- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`, `/opencode_stop`; idle model, project and session searches block them
+- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`, `/opencode_stop`; idle model, project, session and command searches block them
 - Unknown slash commands return an explicit fallback message
 - Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/abort`, `/detach`, reset/cleanup)
 
@@ -224,6 +224,7 @@ Agent picker behavior:
 - [x] Live pinned session status in chat (project, model with variant in parentheses when set, context usage, changed files from OpenCode's session diff rather than a sum of each edit), with an opt-out in `/settings` that defaults to on. On OpenCode V2, when the session has a goal, a line after the title shows its status and a short objective; no goal means no line
 - [x] In-chat controls for model, agent, variant, and context
 - [x] Built-in and custom command catalog access (`/commands`)
+- [x] Search commands by full name or description in `/commands`, with paginated results and the existing execution confirmation
 - [x] Trusted local JSON commands from the persistent application home, executed without OpenCode or model tokens
 - [x] Skills catalog access (`/skills`)
 - [x] Scheduled task creation flow (`/task`), remembering the agent selected at creation and showing it (alongside the model) in the task confirmation and task details

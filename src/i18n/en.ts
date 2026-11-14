@@ -660,6 +660,13 @@ export const en = {
   "tasklist.load_error": "🔴 Failed to load scheduled tasks.",
 
   "commands.select": "Choose an OpenCode command:",
+  "commands.search.button": "🔍 Search",
+  "commands.search.prompt": "🔍 Enter command name or description:",
+  "commands.search.results": "Search results for \"{query}\":",
+  "commands.search.results_page": "Search results for \"{query}\" (page {page}):",
+  "commands.search.no_results": "No commands found for \"{query}\"",
+  "commands.search.again": "↩ Search again",
+  "commands.search.cancel": "❌ Cancel",
   "commands.empty": "📭 No OpenCode commands are available for this project.",
   "commands.fetch_error": "🔴 Failed to load OpenCode commands.",
   "commands.no_description": "No description",

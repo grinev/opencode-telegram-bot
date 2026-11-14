@@ -90,6 +90,74 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).not.toHaveBeenCalled();
   });
 
+  describe("commands search", () => {
+    function startSearch(stage: "input" | "results") {
+      deps.interactionManager.start({
+        kind: "custom",
+        expectedInput: stage === "input" ? "text" : "callback",
+        allowedCommands: [],
+        metadata: { flow: "commands-search", stage, token: Symbol("commands-search") },
+      });
+    }
+
+    it.each(["/help", "/status", "/abort", "/detach", "/opencode_stop", "/review"])(
+      "blocks %s as a command rather than treating it as an idle query",
+      async (command) => {
+        startSearch("input");
+        const before = deps.interactionManager.getSnapshot();
+        const ctx = createTextContext(command);
+        const next = vi.fn();
+        await interactionGuardMiddleware(ctx, next, deps);
+        expect(next).not.toHaveBeenCalled();
+        expect(ctx.reply).toHaveBeenCalled();
+        expect(deps.interactionManager.getSnapshot()).toEqual(before);
+      },
+    );
+
+    it("blocks results-stage text with the existing expected-callback hint", async () => {
+      startSearch("results");
+      const ctx = createTextContext("another query");
+      const next = vi.fn();
+      await interactionGuardMiddleware(ctx, next, deps);
+      expect(next).not.toHaveBeenCalled();
+      expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.expected_callback"));
+    });
+
+    it.each([
+      "query",
+      "commands:search",
+      "commands:search:page:1",
+      "commands:search:result:0",
+      "commands:search:again",
+      "commands:search:cancel",
+    ])("blocks %s during a run and keeps the search waiting", async (input) => {
+      startSearch(input === "query" ? "input" : "results");
+      deps.foregroundSessionState.markBusy("session-1", "repo");
+      const before = deps.interactionManager.getSnapshot();
+      const ctx = input === "query" ? createTextContext("command") : createCallbackContext(input);
+      const next = vi.fn();
+      await interactionGuardMiddleware(ctx, next, deps);
+      expect(next).not.toHaveBeenCalled();
+      if (input === "query") {
+        expect(ctx.reply).toHaveBeenCalledWith(t("bot.session_busy"));
+      } else {
+        expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("bot.session_busy") });
+      }
+      expect(deps.interactionManager.getSnapshot()).toEqual(before);
+    });
+
+    it.each(["/help", "/status", "/abort", "/detach", "/opencode_stop"])(
+      "retains availability of %s while a run starts during search",
+      async (command) => {
+        startSearch("input");
+        deps.foregroundSessionState.markBusy("session-1", "repo");
+        const next = vi.fn();
+        await interactionGuardMiddleware(createTextContext(command), next, deps);
+        expect(next).toHaveBeenCalledTimes(1);
+      },
+    );
+  });
+
   it("blocks text and replies when callback is expected", async () => {
     startInteractionForTest(deps.interactionManager, {
       kind: "inline",

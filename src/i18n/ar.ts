@@ -585,6 +585,13 @@ export const ar: I18nDictionary = {
   "tasklist.load_error": "🔴 تعذر تحميل المهام المجدولة.",
 
   "commands.select": "اختر أمرًا من OpenCode:",
+  "commands.search.button": "🔍 بحث",
+  "commands.search.prompt": "🔍 أدخل اسم الأمر أو وصفه:",
+  "commands.search.results": "نتائج البحث عن «{query}»:",
+  "commands.search.results_page": "نتائج البحث عن «{query}» (الصفحة {page}):",
+  "commands.search.no_results": "لم يتم العثور على أوامر تطابق «{query}»",
+  "commands.search.again": "↩ البحث مجددًا",
+  "commands.search.cancel": "❌ إلغاء",
   "commands.empty": "📭 لا توجد أوامر مخصصة لهذا المشروع.",
   "commands.fetch_error": "🔴 تعذر تحميل أوامر OpenCode.",
   "commands.no_description": "لا يوجد وصف",
