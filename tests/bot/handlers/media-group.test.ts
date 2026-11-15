@@ -2,10 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context, NextFunction } from "grammy";
 
 const flushPendingPromptMock = vi.hoisted(() => vi.fn());
+const serverVersion = vi.hoisted(() => ({ value: "v1" as "v1" | "v2" }));
 
 vi.mock("../../../src/bot/handlers/message-merger.js", () => ({
   flushPendingPrompt: flushPendingPromptMock,
   __resetMessageMergerForTests: vi.fn(),
+}));
+
+vi.mock("../../../src/opencode/client.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/opencode/client.js")>()),
+  get opencodeServerVersion() {
+    return serverVersion.value;
+  },
 }));
 
 import {
@@ -20,6 +28,8 @@ import * as settingsStore from "../../../src/app/stores/settings-store.js";
 import { initializePromptQueueDispatch } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
+import { config } from "../../../src/config.js";
 
 function createBaseContext(message: Record<string, unknown>): {
   ctx: Context;
@@ -160,6 +170,7 @@ describe("bot/handlers/media-group", () => {
     vi.restoreAllMocks();
     flushPendingPromptMock.mockClear();
     promptQueue.__resetForTests();
+    serverVersion.value = "v1";
   });
 
   afterEach(() => {
@@ -266,6 +277,287 @@ describe("bot/handlers/media-group", () => {
     expect(processPromptMock).not.toHaveBeenCalled();
     expect(promptQueue.mediaSize()).toBe(0);
   });
+
+  it.each([MAX_QUEUED_MEDIA_BYTES, MAX_QUEUED_MEDIA_BYTES - 512])(
+    "rejects a text album before preparation with %i bytes already queued",
+    async (heldBytes) => {
+      vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
+      container.foregroundSessionState.markBusy("session-1", "/repo");
+      expect(
+        promptQueue.add({ ...createIncomingPrompt("held"), mediaBytes: heldBytes }),
+      ).not.toBeNull();
+      const text = createDocumentContext({
+        messageId: 20,
+        fileId: "text-file",
+        filename: "notes.txt",
+        mimeType: "text/plain",
+        fileSize: 1024,
+      });
+      const { deps, downloadMock, saveFileMock, processPromptMock } = createDeps();
+      const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+      await addToHandler(handler, text.ctx);
+      await handler.flushAll();
+
+      expect(text.replyMock).toHaveBeenCalledWith(
+        t("queue.media_limit", { maxSizeMb: "20" }),
+        expect.any(Object),
+      );
+      expect(downloadMock).not.toHaveBeenCalled();
+      expect(saveFileMock).not.toHaveBeenCalled();
+      expect(processPromptMock).not.toHaveBeenCalled();
+      expect(promptQueue.size()).toBe(1);
+      expect(promptQueue.mediaSize()).toBe(heldBytes);
+    },
+  );
+
+  it("retains text album bytes at the exact remaining budget until removal", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
+    container.foregroundSessionState.markBusy("session-1", "/repo");
+    const heldBytes = MAX_QUEUED_MEDIA_BYTES - 2048;
+    expect(
+      promptQueue.add({ ...createIncomingPrompt("held"), mediaBytes: heldBytes }),
+    ).not.toBeNull();
+    const first = createDocumentContext({
+      messageId: 20,
+      fileId: "text-1",
+      filename: "first.txt",
+      mimeType: "text/plain",
+    });
+    const second = createDocumentContext({
+      messageId: 21,
+      fileId: "text-2",
+      filename: "second.txt",
+      mimeType: "text/plain",
+    });
+    const { deps, downloadMock, processPromptMock } = createDeps();
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+    await addToHandler(handler, first.ctx);
+    await addToHandler(handler, second.ctx);
+    await handler.flushAll();
+
+    expect(processPromptMock).not.toHaveBeenCalled();
+    expect(downloadMock).toHaveBeenCalledTimes(2);
+    expect(promptQueue.size()).toBe(2);
+    const album = promptQueue.list()[1];
+    expect(album?.mediaBytes).toBe(2048);
+    expect(promptQueue.mediaSize()).toBe(MAX_QUEUED_MEDIA_BYTES);
+    expect(promptQueue.canAcceptMedia(1)).toBe(false);
+    expect(promptQueue.removeById(album!.id)?.mediaBytes).toBe(2048);
+    expect(promptQueue.mediaSize()).toBe(heldBytes);
+    expect(promptQueue.canAcceptMedia(2048)).toBe(true);
+  });
+
+  it.each([false, true])(
+    "counts text and native bytes but not stored bytes in a mixed album (overflow=%s)",
+    async (overflow) => {
+      vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
+      container.foregroundSessionState.markBusy("session-1", "/repo");
+      const heldBytes = MAX_QUEUED_MEDIA_BYTES - 1536;
+      expect(
+        promptQueue.add({ ...createIncomingPrompt("held"), mediaBytes: heldBytes }),
+      ).not.toBeNull();
+      const archive = createDocumentContext({
+        messageId: 20,
+        fileId: "archive-file",
+        filename: "archive.zip",
+        mimeType: "application/zip",
+        fileSize: MAX_QUEUED_MEDIA_BYTES,
+      });
+      const image = createPhotoContext({
+        messageId: 21,
+        smallFileId: "small",
+        largeFileId: "large",
+        fileSize: 512,
+      });
+      const text = createDocumentContext({
+        messageId: 22,
+        fileId: "text-file",
+        filename: "notes.txt",
+        mimeType: "text/plain",
+        fileSize: overflow ? 1025 : 1024,
+      });
+      const { deps, downloadMock, saveFileMock, processPromptMock } = createDeps();
+      const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+      await addToHandler(handler, archive.ctx);
+      await addToHandler(handler, image.ctx);
+      await addToHandler(handler, text.ctx);
+      await handler.flushAll();
+
+      expect(processPromptMock).not.toHaveBeenCalled();
+      if (overflow) {
+        expect(archive.replyMock).toHaveBeenCalledWith(
+          t("queue.media_limit", { maxSizeMb: "20" }),
+          expect.any(Object),
+        );
+        expect(downloadMock).not.toHaveBeenCalled();
+        expect(saveFileMock).not.toHaveBeenCalled();
+        expect(promptQueue.size()).toBe(1);
+        expect(promptQueue.mediaSize()).toBe(heldBytes);
+      } else {
+        expect(downloadMock).toHaveBeenCalledTimes(3);
+        expect(saveFileMock).toHaveBeenCalledTimes(1);
+        expect(promptQueue.size()).toBe(2);
+        expect(promptQueue.list()[1]?.mediaBytes).toBe(1536);
+        expect(promptQueue.mediaSize()).toBe(MAX_QUEUED_MEDIA_BYTES);
+      }
+    },
+  );
+
+  it.each([undefined, NaN, -1, 0.5, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects an unreliable text size %s before downloading or saving the album",
+    async (fileSize) => {
+      vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
+      container.foregroundSessionState.markBusy("session-1", "/repo");
+      const text = createBaseContext({
+        message_id: 20,
+        document: {
+          file_id: "invalid-text",
+          file_unique_id: "invalid-text-unique",
+          file_name: "notes.txt",
+          mime_type: "text/plain",
+          file_size: fileSize,
+        },
+      });
+      const image = createPhotoContext({
+        messageId: 21,
+        smallFileId: "small",
+        largeFileId: "large",
+      });
+      const otherText = createDocumentContext({
+        messageId: 22,
+        fileId: "other-text",
+        filename: "other.txt",
+        mimeType: "text/plain",
+        fileSize: fileSize === 0.5 ? 0.5 : 1024,
+      });
+      const { deps, downloadMock, saveFileMock, processPromptMock } = createDeps();
+      const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+      await addToHandler(handler, text.ctx);
+      await addToHandler(handler, image.ctx);
+      await addToHandler(handler, otherText.ctx);
+      await handler.flushAll();
+
+      expect(text.replyMock).toHaveBeenCalledWith(
+        t("queue.media_limit", { maxSizeMb: "20" }),
+        expect.any(Object),
+      );
+      expect(downloadMock).not.toHaveBeenCalled();
+      expect(saveFileMock).not.toHaveBeenCalled();
+      expect(processPromptMock).not.toHaveBeenCalled();
+      expect(promptQueue.size()).toBe(0);
+      expect(promptQueue.mediaSize()).toBe(0);
+    },
+  );
+
+  it("accepts a zero-byte text album without consuming media budget", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
+    container.foregroundSessionState.markBusy("session-1", "/repo");
+    const text = createDocumentContext({
+      messageId: 20,
+      fileId: "empty-text",
+      filename: "empty.txt",
+      mimeType: "text/plain",
+      fileSize: 0,
+    });
+    const { deps, downloadMock } = createDeps();
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+    await addToHandler(handler, text.ctx);
+    await handler.flushAll();
+
+    expect(downloadMock).toHaveBeenCalledTimes(1);
+    expect(promptQueue.size()).toBe(1);
+    expect(promptQueue.mediaSize()).toBe(0);
+  });
+
+  it("preserves the individual text-file limit", async () => {
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
+    container.foregroundSessionState.markBusy("session-1", "/repo");
+    const text = createDocumentContext({
+      messageId: 20,
+      fileId: "large-text",
+      filename: "large.txt",
+      mimeType: "text/plain",
+      fileSize: config.files.maxFileSizeKb * 1024 + 1,
+    });
+    const { deps, downloadMock } = createDeps();
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+    await addToHandler(handler, text.ctx);
+    await handler.flushAll();
+
+    expect(text.replyMock).toHaveBeenCalledWith(t("bot.media_group_not_processed"));
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(promptQueue.size()).toBe(0);
+  });
+
+  it.each(["idle", "off"] as const)("preserves text-size validation when %s", async (mode) => {
+    vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue(mode === "off" ? "off" : "queue");
+    if (mode === "off") {
+      container.foregroundSessionState.markBusy("session-1", "/repo");
+    }
+    const text = createDocumentContext({
+      messageId: 20,
+      fileId: "invalid-text",
+      filename: "notes.txt",
+      mimeType: "text/plain",
+      fileSize: Infinity,
+    });
+    const { deps, downloadMock } = createDeps();
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+    await addToHandler(handler, text.ctx);
+    await handler.flushAll();
+
+    expect(text.replyMock).toHaveBeenCalledWith(t("bot.media_group_not_processed"));
+    expect(text.replyMock).not.toHaveBeenCalledWith(
+      t("queue.media_limit", { maxSizeMb: "20" }),
+      expect.any(Object),
+    );
+    expect(downloadMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["v1", Infinity],
+    ["v2", Infinity],
+    ["v2", Number.MAX_SAFE_INTEGER + 1],
+  ] as const)(
+    "preserves invalid text-size notice precedence with a full %s queue (size=%s)",
+    async (version, fileSize) => {
+      serverVersion.value = version;
+      vi.spyOn(settingsStore, "getPromptQueueMode").mockReturnValue("queue");
+      container.foregroundSessionState.markBusy("session-1", "/repo");
+      while (!promptQueue.isFull()) {
+        expect(promptQueue.add(createIncomingPrompt("held"))).not.toBeNull();
+      }
+      const text = createDocumentContext({
+        messageId: 20,
+        fileId: "invalid-text",
+        filename: "notes.txt",
+        mimeType: "text/plain",
+        fileSize,
+      });
+      const { deps, downloadMock } = createDeps();
+      const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+
+      await addToHandler(handler, text.ctx);
+      await handler.flushAll();
+
+      if (version === "v2") {
+        expect(text.replyMock).toHaveBeenCalledWith(t("bot.media_group_not_processed"));
+      } else {
+        expect(text.replyMock).toHaveBeenCalledWith(
+          t("queue.full", { max: "5" }),
+          expect.any(Object),
+        );
+      }
+      expect(downloadMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("uses the largest photo from each media group item", async () => {
     const first = createPhotoContext({
