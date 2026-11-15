@@ -35,13 +35,14 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
 - **Model switching** — pick models from OpenCode favorites and recent history directly in the chat (favorites are shown first), or browse all models by provider
 - **Agent modes** — switch between Plan and Build modes on the fly
 - **Subagent activity** — watch live subagent progress in chat, including the current task, agent, model (with variant when set), and active tool step
-- **Custom Commands** — run OpenCode custom commands (and built-ins like `init`/`review`) from an inline menu with confirmation
-- **Skills Catalog** — browse OpenCode skills from an inline menu and run them immediately or with arguments in the next message
+- **Custom Commands** — browse and search OpenCode custom commands (and built-ins like `init`/`review`) by name or description in `/commands`, then run them with confirmation
+- **Skills Catalog** — browse and search OpenCode skills by name or description in `/skills`, then run them immediately or with arguments in the next message
 - **Session goals (V2)** — `/goal` asks for the objective in a separate text message and confirms automatic work and token spending. Start and Continue use the selected agent, model and variant, including in a fresh session before any ordinary prompt. The bottom keyboard keeps its short objective and Pause, Continue or Delete below queued messages. Pause stops future continuations; `/abort` also interrupts the current turn. To create another goal, stop and delete the old one first
 - **Interactive Q&A** — answer agent questions and approve permissions via inline buttons
 - **Runtime settings** — use `/settings` to change runtime preferences; see [Runtime Settings](#runtime-settings)
 - **Voice prompts** — send voice/audio messages, transcribe them via a Whisper-compatible API, and optionally enable spoken replies in `/settings`
 - **File attachments** — send images, PDF documents, and text-based files to OpenCode, including multiple files in one Telegram album
+- **Images in replies** — project-relative Markdown images such as `![Chart](./chart.png)` appear as native photos inside the assistant's reply, including replay and scheduled results, on V1/V2 without shared storage
 - **Reply documents** — ordinary project-relative Markdown links such as `[Report](./report.pdf)` deliver files after the complete reply text, in link order, before the footer, including replay and scheduled results. Files are read through OpenCode on V1/V2, including Docker without shared storage. V2 and V1 binary files keep their original bytes; V1 text files contain the server's trimmed text, without leading/trailing whitespace or the final newline. Code, bare paths and external URLs do not attach files; `![alt](path)` remains a photo. `OUTGOING_DOCUMENT_MAX_SIZE_MB` limits these documents and `/ls` downloads independently of code/diff and incoming-file limits. Raw mode is unchanged
 - **Scheduled tasks** — schedule prompts to run later or on a recurring interval; see [Scheduled Tasks](#scheduled-tasks)
 - **Message queue** — messages sent while the agent is busy are held and sent one by one afterwards (Queue) or, on OpenCode V2, steered into the running task (Steer); each waiting message is a bottom-keyboard button you can tap to withdraw it; `/detach` leaves waiting messages to the session they were sent to
@@ -150,8 +151,8 @@ opencode-telegram config
 | `/ls`             | List directory contents, then tap to open or download   |
 | `/settings`       | Change bot settings                                     |
 | `/rename`         | Rename the current session                              |
-| `/commands`       | Browse and run custom commands                          |
-| `/skills`         | Browse and run OpenCode skills                          |
+| `/commands`       | Browse, search by name or description, and run custom commands |
+| `/skills`         | Browse, search by name or description, and run OpenCode skills |
 | `/mcps`           | Browse and toggle MCP servers                           |
 | `/task`           | Create a scheduled task                                 |
 | `/tasklist`       | Browse, delete and enable or disable recurring scheduled tasks |
