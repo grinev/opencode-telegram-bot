@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const withdrawInboxPromptMock = vi.hoisted(() => vi.fn());
 const loadCommandCatalogMock = vi.hoisted(() => vi.fn());
+const loadSkillsCatalogMock = vi.hoisted(() => vi.fn());
 const queuePromptForMergingMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../../src/app/services/prompt-inbox-service.js", () => ({
@@ -10,6 +11,10 @@ vi.mock("../../../src/app/services/prompt-inbox-service.js", () => ({
 
 vi.mock("../../../src/app/services/command-catalog-service.js", () => ({
   loadCommandCatalog: loadCommandCatalogMock,
+}));
+
+vi.mock("../../../src/app/services/skills-catalog-service.js", () => ({
+  loadSkillsCatalog: loadSkillsCatalogMock,
 }));
 
 vi.mock("../../../src/bot/handlers/message-merger.js", async (importOriginal) => ({
@@ -54,22 +59,29 @@ describe("bot/routers/message-router", () => {
     ]);
   });
 
-  it.each(["command", "/help"])(
-    "routes commands-search input %s without sending a prompt",
-    async (text) => {
+  it.each([
+    ["commands", "command"],
+    ["commands", "/help"],
+    ["skills", "skill"],
+    ["skills", "/help"],
+  ] as const)(
+    "routes %s-search input %s without sending a prompt",
+    async (catalog, text) => {
       const bot = { on: vi.fn(), hears: vi.fn() };
       const container = createTestAppContainer({ setTelegramContext: vi.fn() });
       container.interactionManager.start({
         kind: "custom",
         expectedInput: "text",
         allowedCommands: [],
-        metadata: { flow: "commands-search", stage: "input", token: Symbol("search") },
+        metadata: { flow: `${catalog}-search`, stage: "input", token: Symbol("search") },
       });
       const project = vi.spyOn(settingsStore, "getCurrentProject").mockReturnValue({
         id: "project-1",
         worktree: "repo",
       });
       loadCommandCatalogMock.mockReset().mockResolvedValue([{ name: "command" }]);
+      loadSkillsCatalogMock.mockReset().mockResolvedValue([{ name: "skill" }]);
+      const loadCatalogMock = catalog === "skills" ? loadSkillsCatalogMock : loadCommandCatalogMock;
       queuePromptForMergingMock.mockReset();
       registerMessageRouter(bot as never, { container });
       const handler = bot.on.mock.calls
@@ -85,12 +97,13 @@ describe("bot/routers/message-router", () => {
         await handler(ctx);
         if (text.startsWith("/")) {
           expect(loadCommandCatalogMock).not.toHaveBeenCalled();
+          expect(loadSkillsCatalogMock).not.toHaveBeenCalled();
           expect(ctx.reply).not.toHaveBeenCalled();
           expect(container.interactionManager.getSnapshot()?.metadata.stage).toBe("input");
         } else {
-          expect(loadCommandCatalogMock).toHaveBeenCalledWith("repo");
+          expect(loadCatalogMock).toHaveBeenCalledWith("repo");
           expect(ctx.reply).toHaveBeenCalledWith(
-            t("commands.search.results", { query: text }),
+            t(catalog === "skills" ? "skills.search.results" : "commands.search.results", { query: text }),
             expect.anything(),
           );
           expect(container.interactionManager.getSnapshot()?.metadata.stage).toBe("results");

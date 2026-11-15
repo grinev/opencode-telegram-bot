@@ -5,15 +5,25 @@ import { loadSkillsCatalog } from "../../app/services/skills-catalog-service.js"
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
+import { isForegroundBusy } from "../../app/services/run-control-service.js";
+import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { buildSkillsListKeyboard, formatSkillsSelectText } from "../menus/skills-catalog-menu.js";
 
-export type SkillsCommandDeps = Pick<AppContainer, "interactionManager">;
+export type SkillsCommandDeps = Pick<
+  AppContainer,
+  "attachManager" | "foregroundSessionState" | "interactionManager"
+>;
 
 export async function skillsCommand(
   ctx: CommandContext<Context>,
   deps: SkillsCommandDeps,
 ): Promise<void> {
   try {
+    if (isForegroundBusy(deps)) {
+      await replyBusyBlocked(ctx);
+      return;
+    }
+
     const currentProject = getCurrentProject();
     if (!currentProject) {
       await ctx.reply(t("bot.project_not_selected"));

@@ -7,6 +7,8 @@ export const SKILLS_CALLBACK_SELECT_PREFIX = `${SKILLS_CALLBACK_PREFIX}select:`;
 const SKILLS_CALLBACK_PAGE_PREFIX = `${SKILLS_CALLBACK_PREFIX}page:`;
 export const SKILLS_CALLBACK_CANCEL = `${SKILLS_CALLBACK_PREFIX}cancel`;
 export const SKILLS_CALLBACK_EXECUTE = `${SKILLS_CALLBACK_PREFIX}execute`;
+export const SKILLS_CALLBACK_SEARCH = `${SKILLS_CALLBACK_PREFIX}search`;
+export const SKILLS_SEARCH_QUERY_MAX_LENGTH = 100;
 
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 
@@ -117,8 +119,12 @@ export function buildSkillsListKeyboard(
   skills: SkillCatalogItem[],
   page: number,
   pageSize: number,
+  search = false,
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
+  if (!search) {
+    keyboard.text(t("skills.search.button"), SKILLS_CALLBACK_SEARCH).row();
+  }
   const {
     page: normalizedPage,
     totalPages,
@@ -128,23 +134,74 @@ export function buildSkillsListKeyboard(
 
   skills.slice(startIndex, endIndex).forEach((skill, index) => {
     const globalIndex = startIndex + index;
-    keyboard.text(formatSkillButtonLabel(skill), `${SKILLS_CALLBACK_SELECT_PREFIX}${globalIndex}`).row();
+    keyboard
+      .text(
+        formatSkillButtonLabel(skill),
+        search
+          ? `${SKILLS_CALLBACK_SEARCH}:result:${globalIndex}`
+          : `${SKILLS_CALLBACK_SELECT_PREFIX}${globalIndex}`,
+      )
+      .row();
   });
 
   if (totalPages > 1) {
     if (normalizedPage > 0) {
-      keyboard.text(t("skills.button.prev_page"), buildSkillPageCallback(normalizedPage - 1));
+      keyboard.text(
+        t("skills.button.prev_page"),
+        search
+          ? `${SKILLS_CALLBACK_SEARCH}:page:${normalizedPage - 1}`
+          : buildSkillPageCallback(normalizedPage - 1),
+      );
     }
 
     if (normalizedPage < totalPages - 1) {
-      keyboard.text(t("skills.button.next_page"), buildSkillPageCallback(normalizedPage + 1));
+      keyboard.text(
+        t("skills.button.next_page"),
+        search
+          ? `${SKILLS_CALLBACK_SEARCH}:page:${normalizedPage + 1}`
+          : buildSkillPageCallback(normalizedPage + 1),
+      );
     }
 
     keyboard.row();
   }
 
-  keyboard.text(t("skills.button.cancel"), SKILLS_CALLBACK_CANCEL);
+  if (!search) {
+    keyboard.text(t("skills.button.cancel"), SKILLS_CALLBACK_CANCEL);
+  }
   return keyboard;
+}
+
+export function filterSkillsForSearch(
+  skills: SkillCatalogItem[],
+  query: string,
+): SkillCatalogItem[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  return skills.filter(
+    (skill) =>
+      skill.name.toLowerCase().includes(normalizedQuery) ||
+      skill.description?.toLowerCase().includes(normalizedQuery),
+  );
+}
+
+export function buildSkillsSearchView(
+  skills: SkillCatalogItem[],
+  query: string,
+  page: number,
+  pageSize: number,
+) {
+  const { page: normalizedPage } = calculateSkillsPaginationRange(skills.length, page, pageSize);
+  const keyboard = buildSkillsListKeyboard(skills, normalizedPage, pageSize, true);
+  keyboard
+    .text(t("skills.search.again"), `${SKILLS_CALLBACK_SEARCH}:again`)
+    .text(t("skills.search.cancel"), `${SKILLS_CALLBACK_SEARCH}:cancel`);
+  const text =
+    skills.length === 0
+      ? t("skills.search.no_results", { query })
+      : normalizedPage === 0
+        ? t("skills.search.results", { query })
+        : t("skills.search.results_page", { query, page: normalizedPage + 1 });
+  return { text, keyboard };
 }
 
 export function buildSkillsConfirmKeyboard(): InlineKeyboard {

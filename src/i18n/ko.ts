@@ -647,6 +647,13 @@ export const ko: I18nDictionary = {
   "commands.download.error": "파일 다운로드에 실패했습니다.",
 
   "skills.select": "OpenCode 스킬을 선택하세요:",
+  "skills.search.button": "🔍 검색",
+  "skills.search.prompt": "🔍 스킬 이름이나 설명을 입력하세요:",
+  "skills.search.results": "\"{query}\" 검색 결과:",
+  "skills.search.results_page": "\"{query}\" 검색 결과 ({page} 페이지):",
+  "skills.search.no_results": "\"{query}\"에 해당하는 스킬이 없습니다",
+  "skills.search.again": "↩ 다시 검색",
+  "skills.search.cancel": "❌ 취소",
   "skills.empty": "📭 이 프로젝트에서 사용 가능한 OpenCode 스킬이 없습니다.",
   "skills.fetch_error": "🔴 OpenCode 스킬을 불러오지 못했습니다.",
   "skills.no_description": "설명 없음",

@@ -662,6 +662,13 @@ export const de: I18nDictionary = {
   "commands.download.error": "Datei konnte nicht heruntergeladen werden.",
 
   "skills.select": "Wähle einen OpenCode-Skill:",
+  "skills.search.button": "🔍 Suchen",
+  "skills.search.prompt": "🔍 Gib den Namen oder die Beschreibung des Skills ein:",
+  "skills.search.results": "Suchergebnisse für „{query}“:",
+  "skills.search.results_page": "Suchergebnisse für „{query}“ (Seite {page}):",
+  "skills.search.no_results": "Keine Skills für „{query}“ gefunden",
+  "skills.search.again": "↩ Erneut suchen",
+  "skills.search.cancel": "❌ Abbrechen",
   "skills.empty": "📭 Für dieses Projekt sind keine OpenCode-Skills verfügbar.",
   "skills.fetch_error": "🔴 OpenCode-Skills konnten nicht geladen werden.",
   "skills.no_description": "Keine Beschreibung",

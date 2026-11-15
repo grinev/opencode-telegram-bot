@@ -623,6 +623,13 @@ export const ar: I18nDictionary = {
   "commands.download.error": "تعذر تنزيل الملف.",
 
   "skills.select": "اختر مهارة من OpenCode:",
+  "skills.search.button": "🔍 بحث",
+  "skills.search.prompt": "🔍 أدخل اسم المهارة أو وصفها:",
+  "skills.search.results": "نتائج البحث عن «{query}»:",
+  "skills.search.results_page": "نتائج البحث عن «{query}» (الصفحة {page}):",
+  "skills.search.no_results": "لم يتم العثور على مهارات تطابق «{query}»",
+  "skills.search.again": "↩ البحث مجددًا",
+  "skills.search.cancel": "❌ إلغاء",
   "skills.empty": "📭 لا توجد مهارات متاحة لهذا المشروع.",
   "skills.fetch_error": "🔴 تعذر تحميل مهارات OpenCode.",
   "skills.no_description": "لا يوجد وصف",

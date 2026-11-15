@@ -638,6 +638,13 @@ export const id: I18nDictionary = {
   "commands.download.error": "Gagal mengunduh file.",
 
   "skills.select": "Pilih skill OpenCode:",
+  "skills.search.button": "🔍 Cari",
+  "skills.search.prompt": "🔍 Masukkan nama atau deskripsi skill:",
+  "skills.search.results": "Hasil pencarian untuk \"{query}\":",
+  "skills.search.results_page": "Hasil pencarian untuk \"{query}\" (halaman {page}):",
+  "skills.search.no_results": "Tidak ada skill yang ditemukan untuk \"{query}\"",
+  "skills.search.again": "↩ Cari lagi",
+  "skills.search.cancel": "❌ Batal",
   "skills.empty": "📭 Tidak ada skill OpenCode yang tersedia untuk proyek ini.",
   "skills.fetch_error": "🔴 Gagal memuat skill OpenCode.",
   "skills.no_description": "Tanpa deskripsi",

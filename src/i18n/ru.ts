@@ -658,6 +658,13 @@ export const ru: I18nDictionary = {
   "commands.download.error": "Не удалось скачать файл.",
 
   "skills.select": "Выберите скилл OpenCode:",
+  "skills.search.button": "🔍 Поиск",
+  "skills.search.prompt": "🔍 Введите название или описание скилла:",
+  "skills.search.results": "Результаты поиска «{query}»:",
+  "skills.search.results_page": "Результаты поиска «{query}» (страница {page}):",
+  "skills.search.no_results": "Скиллы по запросу «{query}» не найдены",
+  "skills.search.again": "↩ Искать снова",
+  "skills.search.cancel": "❌ Отмена",
   "skills.empty": "📭 Для этого проекта нет доступных скиллов OpenCode.",
   "skills.fetch_error": "🔴 Не удалось загрузить список скиллов OpenCode.",
   "skills.no_description": "Без описания",
