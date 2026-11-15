@@ -4,8 +4,7 @@ import path from "node:path";
 import { formatFileSize } from "../../app/services/file-download-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-
-const MAX_FILE_SIZE_MB = 50;
+import { config } from "../../config.js";
 
 function escapeHtml(text: string): string {
   return text
@@ -37,9 +36,12 @@ export async function sendDownloadedFile(
       return false;
     }
 
-    if (stat.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+    if (stat.size > config.files.outgoingDocumentMaxSizeMb * 1024 * 1024) {
       await ctx.reply(
-        `❌ ${t("commands.download.file_too_large")}: ${formatFileSize(stat.size)} (max: ${MAX_FILE_SIZE_MB}MB)`,
+        `❌ ${t("commands.download.file_too_large", {
+          size: formatFileSize(stat.size),
+          maxSizeMb: config.files.outgoingDocumentMaxSizeMb,
+        })}`,
       );
       return false;
     }

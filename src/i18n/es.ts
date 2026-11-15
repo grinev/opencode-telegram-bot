@@ -651,7 +651,10 @@ export const es: I18nDictionary = {
   "commands.download.downloading": "Descargando archivo...",
   "commands.download.not_found": "Archivo no encontrado",
   "commands.download.not_file": "La ruta no es un archivo",
-  "commands.download.file_too_large": "El archivo es demasiado grande",
+  "assistant.file.unavailable": "Archivo no disponible: {name}",
+  "assistant.file.too_large": "El archivo supera el límite de {maxSizeMb} MiB: {name}",
+  "commands.download.file_too_large":
+    "El archivo es demasiado grande: {size} (máximo: {maxSizeMb} MiB)",
   "commands.download.size": "Tamaño",
   "commands.download.modified": "Modificado",
   "commands.download.error": "No se pudo descargar el archivo.",

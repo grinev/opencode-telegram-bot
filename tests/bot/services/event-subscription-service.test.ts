@@ -14,6 +14,14 @@ const mocked = vi.hoisted(() => ({
   subscribeToEvents: vi.fn(),
   stopEventListening: vi.fn(),
   sendTtsResponseForSession: vi.fn(),
+  classifyDocuments: vi.fn(),
+  readDocument: vi.fn(),
+}));
+
+vi.mock("../../../src/app/services/assistant-document-service.js", async (original) => ({
+  ...(await original<typeof import("../../../src/app/services/assistant-document-service.js")>()),
+  classifyAssistantDocuments: mocked.classifyDocuments,
+  readAssistantDocument: mocked.readDocument,
 }));
 
 vi.mock("../../../src/bot/handlers/tts-response-handler.js", async (importOriginal) => ({
@@ -549,6 +557,8 @@ describe("bot/services/event-subscription-service", () => {
     mocked.subscribeToEvents.mockResolvedValue(undefined);
     mocked.sendTtsResponseForSession.mockReset();
     mocked.sendTtsResponseForSession.mockResolvedValue(false);
+    mocked.classifyDocuments.mockReset().mockResolvedValue(new Map());
+    mocked.readDocument.mockReset().mockResolvedValue({ bytes: Buffer.from("remote file") });
 
     const settingsStore = await import("../../../src/app/stores/settings-store.js");
     settingsStore.__resetSettingsForTests();
@@ -2539,6 +2549,59 @@ describe("bot/services/event-subscription-service", () => {
   });
 
   describe("draft text before a question or permission prompt", () => {
+    it.each(["draft", "edit"] as const)("does not retry a failed early file reply or upload its documents (%s)", async (mode) => {
+      const { api, summaryAggregator } = await setupService(false, { responseStreamingMode: mode });
+      api.sendMessage.mockImplementation(async (_chat: number, text: string) => {
+        if (text === "Report") throw new Error("connection reset");
+        return { message_id: 101 };
+      });
+      emitAssistantTextPart(summaryAggregator, "[Report](report.txt)");
+      emitQuestionAsked(summaryAggregator, "q-lost-documents");
+      await vi.waitFor(() => {
+        expect(api.sendMessage.mock.calls.some((call) => String(call[1]).includes("Which option for q-lost-documents?"))).toBe(true);
+      }, { timeout: 3000 });
+      const attempts = api.sendMessage.mock.calls.filter((call) => call[1] === "Report").length;
+      emitAssistantCompleted(summaryAggregator);
+      await vi.waitFor(() => expect(mocked.sendTtsResponseForSession).toHaveBeenCalledOnce());
+      expect(api.sendMessage.mock.calls.filter((call) => call[1] === "Report")).toHaveLength(attempts);
+      expect(mocked.readDocument).not.toHaveBeenCalled();
+      expect(api.sendDocument).not.toHaveBeenCalled();
+    });
+    it.each(["draft", "edit"] as const)("delivers linked files before a prompt once, not again on completion (%s)", async (mode) => {
+      const { api, summaryAggregator } = await setupService(false, { responseStreamingMode: mode });
+      emitAssistantTextPart(summaryAggregator, "[Report](report.txt)");
+      emitQuestionAsked(summaryAggregator, "q-documents");
+      await vi.waitFor(() => {
+        expect(api.sendMessage.mock.calls.some((call) => String(call[1]).includes("Which option for q-documents?"))).toBe(true);
+      }, { timeout: 3000 });
+      expect(api.sendDocument).toHaveBeenCalledTimes(1);
+      const questionIndex = api.sendMessage.mock.calls.findIndex((call) => String(call[1]).includes("Which option for q-documents?"));
+      expect(api.sendDocument.mock.invocationCallOrder[0]).toBeLessThan(api.sendMessage.mock.invocationCallOrder[questionIndex]!);
+      emitAssistantCompleted(summaryAggregator);
+      await vi.waitFor(() => expect(mocked.sendTtsResponseForSession).toHaveBeenCalledOnce());
+      expect(api.sendDocument).toHaveBeenCalledTimes(1);
+      expect(mocked.readDocument).toHaveBeenCalledWith("D:/repo", "report.txt", "unknown");
+    });
+
+    it("delivers a label-less file-only reply even without a streaming payload", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      emitAssistantTextPart(summaryAggregator, "[](only.bin)");
+      emitAssistantCompleted(summaryAggregator);
+      await vi.waitFor(() => expect(mocked.sendTtsResponseForSession).toHaveBeenCalledOnce());
+      expect(api.sendDocument).toHaveBeenCalledTimes(1);
+      expect(api.sendDocument.mock.calls[0]?.[2]).toMatchObject({ caption: "only.bin" });
+    });
+
+    it("holds later tool output below the reply document without a finalization deadlock", async () => {
+      const { api, summaryAggregator } = await setupService(false);
+      emitAssistantTextPart(summaryAggregator, "[Report](report.txt)");
+      emitWriteTool(summaryAggregator, "running");
+      emitAssistantCompleted(summaryAggregator);
+      await vi.waitFor(() => expect(mocked.sendTtsResponseForSession).toHaveBeenCalledOnce(), { timeout: 3000 });
+      await vi.waitFor(() => expect(api.sendMessage.mock.calls.some((call) => String(call[1]).includes("file.ts"))).toBe(true), { timeout: 3000 });
+      const toolIndex = api.sendMessage.mock.calls.findIndex((call) => String(call[1]).includes("file.ts"));
+      expect(api.sendDocument.mock.invocationCallOrder[0]).toBeLessThan(api.sendMessage.mock.invocationCallOrder[toolIndex]!);
+    });
     function sentMessageTexts(api: FakeBotApi): string[] {
       return api.sendMessage.mock.calls.map((call) => String(call[1]));
     }

@@ -2,6 +2,96 @@
 import { finalizeAssistantResponse } from "../../../src/bot/streaming/finalize-assistant-response.js";
 
 describe("bot/streaming/finalize-assistant-response", () => {
+  it.each([true, false])(
+    "keeps whole reply documents before later service output (streamed=%s)",
+    async (streamed) => {
+      const order: string[] = [];
+      const part = (text: string) => ({ blocks: [], fallbackText: text, source: "plain" as const });
+      let released = false;
+      await finalizeAssistantResponse({
+        sessionId: "s",
+        messageId: "m",
+        messageText: "reply",
+        responseStreamer: {
+          complete: vi.fn(async () => {
+            order.push("complete");
+            return { streamed, telegramMessageIds: [] };
+          }),
+        },
+        prepareStreamingPayload: () => ({ parts: [part("a"), part("b")] }),
+        renderFinalParts: () => [part("a"), part("b")],
+        getReplyKeyboard: () => undefined,
+        strictFinalPayload: true,
+        sendRenderedPart: async (value) => {
+          order.push(value.fallbackText);
+        },
+        afterTextAccepted: async () => {
+          order.push("documents");
+          released = true;
+        },
+        flushPendingServiceMessages: async () => {
+          expect(released).toBe(true);
+          order.push("services");
+        },
+      });
+      expect(order).toEqual(
+        streamed
+          ? ["complete", "documents", "services"]
+          : ["complete", "a", "b", "documents", "services"],
+      );
+    },
+  );
+
+  it("does not upload documents or resend text when a later text chunk fails", async () => {
+    const afterTextAccepted = vi.fn();
+    const sendRenderedPart = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("offline"));
+    const part = { blocks: [], fallbackText: "reply", source: "plain" as const };
+    await expect(
+      finalizeAssistantResponse({
+        sessionId: "s",
+        messageId: "m",
+        messageText: "reply",
+        responseStreamer: {
+          complete: vi.fn().mockResolvedValue({ streamed: false, telegramMessageIds: [] }),
+        },
+        prepareStreamingPayload: () => ({ parts: [part] }),
+        renderFinalParts: () => [part, part],
+        getReplyKeyboard: () => undefined,
+        strictFinalPayload: true,
+        sendRenderedPart,
+        afterTextAccepted,
+        flushPendingServiceMessages: vi.fn(),
+      }),
+    ).rejects.toThrow("offline");
+    expect(sendRenderedPart).toHaveBeenCalledTimes(2);
+    expect(afterTextAccepted).not.toHaveBeenCalled();
+  });
+
+  it("propagates strict streamed final-payload failure instead of falling back and uploading documents", async () => {
+    const afterTextAccepted = vi.fn();
+    const sendRenderedPart = vi.fn();
+    const part = { blocks: [], fallbackText: "reply", source: "plain" as const };
+    await expect(
+      finalizeAssistantResponse({
+        sessionId: "s",
+        messageId: "m",
+        messageText: "reply",
+        responseStreamer: { complete: vi.fn().mockRejectedValue(new Error("final chunk failed")) },
+        prepareStreamingPayload: () => ({ parts: [part] }),
+        renderFinalParts: () => [part],
+        getReplyKeyboard: () => undefined,
+        strictFinalPayload: true,
+        sendRenderedPart,
+        afterTextAccepted,
+        flushPendingServiceMessages: vi.fn(),
+      }),
+    ).rejects.toThrow("final chunk failed");
+    expect(sendRenderedPart).not.toHaveBeenCalled();
+    expect(afterTextAccepted).not.toHaveBeenCalled();
+  });
   it("completes the response stream and sends final text when streamer reports not streamed", async () => {
     const responseStreamer = {
       complete: vi.fn().mockResolvedValue({ streamed: false, telegramMessageIds: [] }),
@@ -27,9 +117,7 @@ describe("bot/streaming/finalize-assistant-response", () => {
       })),
       renderFinalParts: vi.fn(() => [
         {
-          blocks: [
-            { type: "paragraph" as const, text: { type: "bold" as const, text: "part 1" } },
-          ],
+          blocks: [{ type: "paragraph" as const, text: { type: "bold" as const, text: "part 1" } }],
           fallbackText: "part 1",
           source: "blocks" as const,
         },
@@ -171,4 +259,3 @@ describe("bot/streaming/finalize-assistant-response", () => {
     );
   });
 });
-

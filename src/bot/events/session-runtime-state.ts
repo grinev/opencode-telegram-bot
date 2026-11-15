@@ -59,7 +59,7 @@ interface RunningToolHooks {
 function isRunningBackgroundSubagent(subagent: SubagentInfo): boolean {
   return Boolean(
     outlivesParentTurn(subagent) &&
-      (subagent.status === "pending" || subagent.status === "running"),
+    (subagent.status === "pending" || subagent.status === "running"),
   );
 }
 
@@ -100,6 +100,11 @@ export class SessionRuntimeState {
   // message's full text.
   private readonly assistantLatestTexts = new Map<string, string>();
   private readonly assistantDeliveredTexts = new Map<string, string>();
+  private readonly assistantDocumentOccurrences = new Map<string, Map<string, number>>();
+  private readonly replyDocumentGates = new Map<
+    string,
+    { done: Promise<void>; release: () => void }
+  >();
   private readonly assistantCompletionsStarted = new Set<string>();
   // `edit` replies whose text has begun: output that starts after it goes below the reply.
   private readonly begunReplies = new Set<string>();
@@ -289,8 +294,9 @@ export class SessionRuntimeState {
     payload?: StreamingMessagePayload,
     options?: Parameters<ResponseStreamer["complete"]>[3],
   ) {
-    this.assistantStreamModes.set(sessionKey(sessionId, messageId), "draft");
-    return this.assistantDraftStreamer.complete(sessionId, messageId, payload, options);
+    const mode = this.getAssistantStreamMode(sessionId, messageId);
+    this.assistantStreamModes.set(sessionKey(sessionId, messageId), mode);
+    return this.getAssistantStreamer(mode).complete(sessionId, messageId, payload, options);
   }
 
   recordAssistantText(sessionId: string, messageId: string, text: string): void {
@@ -313,6 +319,56 @@ export class SessionRuntimeState {
     return previousText;
   }
 
+  /** Select each occurrence once across early delivery and final completion. */
+  takeAssistantDocuments<T extends { path: string; name: string }>(
+    sessionId: string,
+    messageId: string,
+    documents: T[],
+  ): T[] {
+    const key = sessionKey(sessionId, messageId);
+    const previous = this.assistantDocumentOccurrences.get(key) ?? new Map<string, number>();
+    const counts = new Map<string, number>();
+    const pending = documents.filter((document) => {
+      const occurrence = JSON.stringify([document.path, document.name]);
+      const count = (counts.get(occurrence) ?? 0) + 1;
+      counts.set(occurrence, count);
+      return count > (previous.get(occurrence) ?? 0);
+    });
+    for (const [occurrence, count] of counts)
+      previous.set(occurrence, Math.max(count, previous.get(occurrence) ?? 0));
+    this.assistantDocumentOccurrences.set(key, previous);
+    return pending;
+  }
+
+  clearAssistantDocuments(sessionId: string, messageId: string): void {
+    this.assistantDocumentOccurrences.delete(sessionKey(sessionId, messageId));
+  }
+
+  holdReplyDocuments(sessionId: string, messageId: string): void {
+    const key = sessionKey(sessionId, messageId);
+    if (this.replyDocumentGates.has(key)) return;
+    let release = () => {};
+    const done = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.replyDocumentGates.set(key, { done, release });
+  }
+
+  releaseReplyDocuments(sessionId: string, messageId: string): void {
+    const key = sessionKey(sessionId, messageId);
+    this.replyDocumentGates.get(key)?.release();
+    this.replyDocumentGates.delete(key);
+  }
+
+  async waitForReplyDocuments(sessionId: string, exceptMessageId?: string): Promise<void> {
+    const pending: Promise<void>[] = [];
+    for (const [key, gate] of this.replyDocumentGates) {
+      if (exceptMessageId && key === sessionKey(sessionId, exceptMessageId)) break;
+      if (key.startsWith(`${sessionId}:`)) pending.push(gate.done);
+    }
+    await Promise.all(pending);
+  }
+
   /** Draft-mode replies of a session with text that has not been sent yet. */
   getUndeliveredAssistantDrafts(sessionId: string): UndeliveredAssistantDraft[] {
     const sessionPrefix = `${sessionId}:`;
@@ -323,7 +379,8 @@ export class SessionRuntimeState {
       }
 
       const messageId = key.slice(sessionPrefix.length);
-      if (this.getAssistantStreamMode(sessionId, messageId) !== "draft") {
+      if (this.getAssistantStreamMode(sessionId, messageId) !== "draft" &&
+          !this.replyDocumentGates.has(key)) {
         continue;
       }
 
@@ -356,15 +413,21 @@ export class SessionRuntimeState {
   }
 
   clearAssistantResponse(sessionId: string, messageId: string, reason: string): void {
+    this.releaseReplyDocuments(sessionId, messageId);
+    this.clearAssistantDocuments(sessionId, messageId);
     this.deleteAssistantResponseRecords(sessionId, messageId);
     this.assistantEditStreamer.clearMessage(sessionId, messageId, reason);
     this.assistantDraftStreamer.clearMessage(sessionId, messageId, reason);
   }
 
   clearAssistantResponseSession(sessionId: string, reason: string): void {
+    for (const key of this.replyDocumentGates.keys())
+      if (key.startsWith(`${sessionId}:`))
+        this.releaseReplyDocuments(sessionId, key.slice(sessionId.length + 1));
     deleteSessionKeys(this.assistantStreamModes, sessionId);
     deleteSessionKeys(this.assistantLatestTexts, sessionId);
     deleteSessionKeys(this.assistantDeliveredTexts, sessionId);
+    deleteSessionKeys(this.assistantDocumentOccurrences, sessionId);
     for (const keys of [
       this.assistantCompletionsStarted,
       this.begunReplies,
@@ -436,7 +499,7 @@ export class SessionRuntimeState {
    * Taken when output enters its queue: letting it out sends the replies begun by
    * then that are not on screen yet, after the output that came before them.
    */
-  takeReplyGate(sessionId: string): ReplyGate | undefined {
+  takeReplyGate(sessionId: string, includeDocuments = true): ReplyGate | undefined {
     const sessionPrefix = `${sessionId}:`;
     const messageIds = Array.from(this.begunReplies)
       .filter((key) => key.startsWith(sessionPrefix))
@@ -447,17 +510,23 @@ export class SessionRuntimeState {
 
     const deferral = this.replyEnqueueDeferrals.get(sessionId);
     const cut = this.replyCuts.get(sessionId);
+    const documentGates = includeDocuments
+      ? [...this.replyDocumentGates]
+          .filter(([key]) => key.startsWith(`${sessionId}:`))
+          .map(([, gate]) => gate.done)
+      : [];
     return async () => {
       await deferral?.catch(() => undefined);
       await cut;
+      await Promise.all(documentGates);
       for (const messageId of messageIds) {
         await this.assistantEditStreamer.flushPending(sessionId, messageId);
       }
     };
   }
 
-  async letOutReplies(sessionId: string): Promise<void> {
-    await this.takeReplyGate(sessionId)?.();
+  async letOutReplies(sessionId: string, includeDocuments = true): Promise<void> {
+    await this.takeReplyGate(sessionId, includeDocuments)?.();
   }
 
   /**
@@ -694,6 +763,9 @@ export class SessionRuntimeState {
     this.assistantStreamModes.clear();
     this.assistantLatestTexts.clear();
     this.assistantDeliveredTexts.clear();
+    this.assistantDocumentOccurrences.clear();
+    for (const gate of this.replyDocumentGates.values()) gate.release();
+    this.replyDocumentGates.clear();
     this.begunReplies.clear();
     this.replyCuts.clear();
     this.replyEnqueueDeferrals.clear();

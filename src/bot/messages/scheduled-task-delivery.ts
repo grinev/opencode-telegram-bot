@@ -15,8 +15,12 @@ import { chunkTelegramRenderedBlocks } from "../render/chunker.js";
 import { parseTelegramBlocks } from "../render/block-parser.js";
 import { logger } from "../../utils/logger.js";
 import { telegramOutageNoticeService } from "../../app/services/telegram-outage-notice-service.js";
+import {
+  prepareAssistantDocuments,
+  deliverAssistantDocuments,
+} from "./assistant-document-delivery.js";
 
-type SendMessageApi = Pick<Api<RawApi>, "sendMessage" | "sendRichMessage">;
+type SendMessageApi = Pick<Api<RawApi>, "sendMessage" | "sendRichMessage" | "sendDocument">;
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 
@@ -30,7 +34,8 @@ function getScheduledTaskDeliveryFormat(): "raw" | "markdown_v2" {
   return config.bot.messageFormatMode === "markdown" ? "markdown_v2" : "raw";
 }
 
-function getSilentDeliveryOptions(): { options: { disable_notification: true } } | Record<string, never> {
+function getSilentDeliveryOptions():
+  { options: { disable_notification: true } } | Record<string, never> {
   return config.bot.scheduledTaskNotificationsSilent
     ? { options: { disable_notification: true } }
     : {};
@@ -76,12 +81,18 @@ export function createScheduledTaskDeliverySender(
 ): ScheduledTaskDeliverySender {
   return {
     async send(delivery) {
+      const prepared = await prepareAssistantDocuments(
+        delivery.status === "success" ? (delivery.resultText ?? "") : "",
+        delivery.projectDirectory,
+      );
+      const resultDelivery = { ...delivery, resultText: prepared.text };
       const messageParts =
         delivery.status === "success"
-          ? buildScheduledTaskSuccessMessageParts(delivery)
+          ? buildScheduledTaskSuccessMessageParts(resultDelivery)
           : [{ text: delivery.notificationText, carriesResult: false }];
       const format = delivery.status === "success" ? getScheduledTaskDeliveryFormat() : "raw";
-      const suppressResultNotification = delivery.status === "success" && Boolean(delivery.footerText);
+      const suppressResultNotification =
+        delivery.status === "success" && Boolean(delivery.footerText);
       const resultDeliveryOptions =
         suppressResultNotification && !config.bot.scheduledTaskNotificationsSilent
           ? { options: { disable_notification: true } }
@@ -94,12 +105,12 @@ export function createScheduledTaskDeliverySender(
         delivery.status === "success" &&
         config.bot.messageFormatMode === "markdown" &&
         delivery.resultText &&
-        hasMarkdownImages(delivery.resultText)
+        (hasMarkdownImages(delivery.resultText) || prepared.documents.length > 0)
       ) {
         // Keep the task header literal, not interpreted as agent Markdown.
         const blocks = toRenderedBlocks([
           { type: "plain", text: delivery.notificationText },
-          ...parseTelegramBlocks(delivery.resultText, true),
+          ...parseTelegramBlocks(prepared.text, true),
         ]);
         const parts = chunkTelegramRenderedBlocks(blocks);
         try {
@@ -136,6 +147,7 @@ export function createScheduledTaskDeliverySender(
               : partOptions,
           });
         }
+      await deliverAssistantDocuments(prepared, api, chatId, partOptions);
 
       if (delivery.status === "success" && delivery.footerText) {
         await sendBotText({

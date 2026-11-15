@@ -85,6 +85,17 @@ function resetFakeClient(): void {
 }
 
 describe("opencode/v2/client", () => {
+  it("preserves typed entries for documents without changing existing path-only listings", async () => {
+    const entries = [
+      { path: "/p/a.txt", type: "file" },
+      { path: "/p/src", type: "directory" },
+    ];
+    fake.client.file.list.mockResolvedValue({ data: entries });
+    const client = createClient() as unknown as V2ClientExtension;
+    expect((await client.file.entries({ path: "/p" })).data).toEqual(entries);
+    expect((await client.file.list({ path: "/p" })).data).toEqual(["/p/a.txt", "/p/src"]);
+    expect(fake.client.file.list).toHaveBeenCalledWith({ path: "/p" });
+  });
   it("adapts remote V2 image bytes to the V1 binary file contract", async () => {
     fake.client.file.read.mockResolvedValueOnce(new Uint8Array([0, 1, 255]));
     const result = await createClient().file.read({ directory: "/remote/project", path: "a.png" });

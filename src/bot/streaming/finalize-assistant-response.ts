@@ -14,6 +14,8 @@ interface FinalizeAssistantResponseOptions {
   renderFinalParts: (messageText: string) => TelegramRenderedPart[];
   getReplyKeyboard: () => unknown;
   notifyFirstFinalPart?: boolean;
+  afterTextAccepted?: () => Promise<void>;
+  strictFinalPayload?: boolean;
   sendRenderedPart: (
     part: TelegramRenderedPart,
     options:
@@ -35,6 +37,8 @@ export async function finalizeAssistantResponse({
   renderFinalParts,
   getReplyKeyboard,
   notifyFirstFinalPart = false,
+  afterTextAccepted,
+  strictFinalPayload = false,
   sendRenderedPart,
 }: FinalizeAssistantResponseOptions): Promise<boolean> {
   logger.debug(
@@ -53,9 +57,10 @@ export async function finalizeAssistantResponse({
   } as StreamingMessagePayload["sendOptions"];
 
   let preparedStreamPayload = prepareStreamingPayload(messageText);
-  const imageParts = preparedStreamPayload?.parts.some(hasDeferredImages)
-    ? renderFinalParts(messageText)
-    : undefined;
+  const imageParts =
+    strictFinalPayload || preparedStreamPayload?.parts.some(hasDeferredImages)
+      ? renderFinalParts(messageText)
+      : undefined;
   if (imageParts) preparedStreamPayload = prepareStreamingPayload(omitMarkdownImages(messageText));
   if (preparedStreamPayload) {
     preparedStreamPayload.sendOptions = streamSendOptions;
@@ -73,15 +78,16 @@ export async function finalizeAssistantResponse({
         })
       : await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined);
 
-  await flushPendingServiceMessages();
-
   if (result.streamed) {
+    await afterTextAccepted?.();
+    await flushPendingServiceMessages();
     logger.debug(
       `[FinalizeResponse] Finalized streamed assistant message in place: session=${sessionId}, message=${messageId}, telegramMessages=${result.telegramMessageIds.length}`,
     );
     return true;
   }
 
+  if (!strictFinalPayload) await flushPendingServiceMessages();
   const parts = imageParts ?? renderFinalParts(messageText);
 
   let notifyNextPart = notifyFirstFinalPart;
@@ -89,6 +95,8 @@ export async function finalizeAssistantResponse({
     await sendRenderedPart(part, notifyNextPart ? replyOptions : silentReplyOptions);
     notifyNextPart = false;
   }
+  await afterTextAccepted?.();
+  if (strictFinalPayload) await flushPendingServiceMessages();
 
   return false;
 }

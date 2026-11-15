@@ -18,6 +18,10 @@ import { logger } from "../../utils/logger.js";
 import { cancelMenu } from "./feedback.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { renderAssistantFinalPartsSafe } from "../messages/assistant-rendering.js";
+import {
+  prepareAssistantDocuments,
+  deliverAssistantDocuments,
+} from "../messages/assistant-document-delivery.js";
 import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { AGENT_TEXT_LINK_PREVIEW_OPTIONS, sendRenderedBotPart } from "../messages/telegram-text.js";
 import {
@@ -150,7 +154,11 @@ function parseMessagesMetadata(state: InteractionState | null): MessagesMetadata
 
   if (stage === "detail") {
     const selectedIndex = state.metadata.selectedIndex;
-    if (typeof selectedIndex !== "number" || !Number.isInteger(selectedIndex) || selectedIndex < 0) {
+    if (
+      typeof selectedIndex !== "number" ||
+      !Number.isInteger(selectedIndex) ||
+      selectedIndex < 0
+    ) {
       return null;
     }
 
@@ -182,13 +190,18 @@ async function sendLatestAssistantResponse(
   sessionId: string,
   directory: string,
 ): Promise<void> {
-  const responseText = await loadLatestAssistantResponse(sessionId, directory);
-  if (!responseText) {
+  const response = await loadLatestAssistantResponse(sessionId, directory);
+  if (!response) {
     return;
   }
 
+  const prepared = await prepareAssistantDocuments(
+    response.text,
+    directory,
+    () => getCurrentSession()?.id === sessionId,
+  );
   const parts = renderAssistantFinalPartsSafe(
-    responseText,
+    prepared.text,
     directory,
     () => getCurrentSession()?.id === sessionId,
   );
@@ -200,6 +213,7 @@ async function sendLatestAssistantResponse(
       options: AGENT_TEXT_LINK_PREVIEW_OPTIONS,
     });
   }
+  if (response.completed) await deliverAssistantDocuments(prepared, api, chatId, { disable_notification: true });
 }
 
 export async function handleMessagesCallback(
