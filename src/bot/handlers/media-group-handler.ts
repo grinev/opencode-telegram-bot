@@ -2,7 +2,11 @@ import type { Context, NextFunction } from "grammy";
 import type { FilePartInput, Model } from "@opencode-ai/sdk/v2";
 import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
-import { getModelCapabilities, supportsInput } from "../../app/services/model-capabilities-service.js";
+import { opencodeServerVersion } from "../../opencode/client.js";
+import {
+  getModelCapabilities,
+  supportsInput,
+} from "../../app/services/model-capabilities-service.js";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { logger } from "../../utils/logger.js";
 import {
@@ -66,6 +70,7 @@ type ValidMediaGroupItem =
       ctx: Context;
       fileId: string;
       filename: string;
+      fileSize?: number | undefined;
     }
   | {
       /** A document the model cannot ingest: saved locally and passed by path. */
@@ -243,6 +248,24 @@ export class MediaGroupAttachmentHandler {
         return;
       }
 
+      const hasUnreliableTextSize = items.some((item) => {
+        if (
+          item.kind !== "document" ||
+          !isTextMimeType(item.document.mime_type || "", item.document.file_name || "document")
+        ) {
+          return false;
+        }
+        const size = item.document.file_size;
+        return size === undefined || !Number.isSafeInteger(size) || size < 0;
+      });
+      if (
+        opencodeServerVersion === "v1" &&
+        hasUnreliableTextSize &&
+        (await rejectQueuedMediaBeforePreparation(replyCtx, undefined))
+      ) {
+        return;
+      }
+
       const validationResult = await this.validateItems(items);
       if ("reason" in validationResult) {
         logger.warn(
@@ -252,10 +275,9 @@ export class MediaGroupAttachmentHandler {
         return;
       }
 
-      // Only media held in the bot's memory counts: text becomes prompt text and
-      // locally stored documents are already on disk.
+      // Text and native attachments stay in memory; locally stored documents do not.
       const mediaBytes = validationResult.items.reduce<number | undefined>((total, item) => {
-        if (total === undefined || item.kind !== "file") {
+        if (total === undefined || item.kind === "stored") {
           return total;
         }
         return item.fileSize === undefined ? undefined : total + item.fileSize;
@@ -346,6 +368,7 @@ export class MediaGroupAttachmentHandler {
           ctx: item.ctx,
           fileId: document.file_id,
           filename,
+          fileSize: document.file_size,
         });
         continue;
       }
