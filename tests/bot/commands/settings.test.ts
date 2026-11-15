@@ -675,23 +675,41 @@ describe("bot/callbacks/settings-callback-handler", () => {
 });
 
 describe("pin session dashboard labels", () => {
-  it("uses the settled English and Russian labels and English in every other dictionary", () => {
+  it("uses the settled labels in each dictionary", () => {
     expect(en["settings.pin_session_dashboard.label"]).toBe("Pin session dashboard");
     expect(ru["settings.pin_session_dashboard.label"]).toBe("Закреплять дашборд сессии");
-    for (const dictionary of [ar, de, es, fr, itLocale, ko, pt, zh]) {
-      expect(dictionary["settings.pin_session_dashboard.label"]).toBe("Pin session dashboard");
+    for (const [dictionary, label] of [
+      [ar, "تثبيت لوحة معلومات الجلسة"],
+      [de, "Sitzungsdashboard anheften"],
+      [es, "Fijar el panel de la sesión"],
+      [fr, "Épingler le tableau de bord de la session"],
+      [itLocale, "Fissa il pannello della sessione"],
+      [ko, "세션 대시보드 고정"],
+      [pt, "Fixar o painel da sessão"],
+      [zh, "置顶会话仪表盘"],
+    ] as const) {
+      expect(dictionary["settings.pin_session_dashboard.label"]).toBe(label);
     }
   });
 });
 
 describe("background session notification labels", () => {
-  it("uses the settled English and Russian labels and English in every other dictionary", () => {
+  it("uses the settled labels in each dictionary", () => {
     expect(en["settings.background_notifications.label"]).toBe("Notifications from other sessions");
     expect(ru["settings.background_notifications.label"]).toBe("Уведомления из других сессий");
-    for (const dictionary of [ar, de, es, fr, id, itLocale, ko, pt, tr, zh]) {
-      expect(dictionary["settings.background_notifications.label"]).toBe(
-        "Notifications from other sessions",
-      );
+    for (const [dictionary, label] of [
+      [ar, "إشعارات من جلسات أخرى"],
+      [de, "Benachrichtigungen aus anderen Sitzungen"],
+      [es, "Notificaciones de otras sesiones"],
+      [fr, "Notifications des autres sessions"],
+      [id, "Notifikasi dari sesi lain"],
+      [itLocale, "Notifiche da altre sessioni"],
+      [ko, "다른 세션의 알림"],
+      [pt, "Notificações de outras sessões"],
+      [tr, "Diğer oturumlardan bildirimler"],
+      [zh, "其他会话的通知"],
+    ] as const) {
+      expect(dictionary["settings.background_notifications.label"]).toBe(label);
     }
   });
 });
