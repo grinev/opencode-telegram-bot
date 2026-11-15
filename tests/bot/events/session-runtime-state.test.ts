@@ -92,6 +92,37 @@ const EMPTY = {
 };
 
 describe("bot/events/session-runtime-state", () => {
+  it("counts repeated document occurrences once across early completion and clears them for replay", () => {
+    const state = createRuntime();
+    const document = { path: "a.txt", name: "a" };
+    expect(state.takeAssistantDocuments("s", "m", [document])).toEqual([document]);
+    expect(state.takeAssistantDocuments("s", "m", [document, document])).toEqual([document]);
+    expect(state.takeAssistantDocuments("s", "m", [document, document])).toEqual([]);
+    expect(state.takeAssistantDocuments("other", "m", [document])).toEqual([document]);
+    state.clearAssistantDocuments("s", "m");
+    expect(state.takeAssistantDocuments("s", "m", [document])).toEqual([document]);
+    state.reset("test");
+  });
+
+  it.each(["release", "clear-session", "clear-all"] as const)(
+    "releases held reply documents on %s without blocking its own completion",
+    async (operation) => {
+      const state = createRuntime();
+      state.markReplyBegun("s", "m");
+      state.holdReplyDocuments("s", "m");
+      const passed = vi.fn();
+      const gate = state.takeReplyGate("s");
+      const waiting = gate?.().then(passed);
+      await state.letOutReplies("s", false);
+      expect(passed).not.toHaveBeenCalled();
+      if (operation === "release") state.releaseReplyDocuments("s", "m");
+      else if (operation === "clear-session") state.clearAssistantResponseSession("s", "test");
+      else state.clearAllOutput("test");
+      await waiting;
+      expect(passed).toHaveBeenCalledOnce();
+      state.reset("test");
+    },
+  );
   let runtime: SessionRuntimeState;
 
   beforeEach(() => {

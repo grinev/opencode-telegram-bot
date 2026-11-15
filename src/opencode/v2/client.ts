@@ -73,6 +73,9 @@ export interface V2ClientExtension {
      * is loaded for the folder, so listing one that is gone registers nothing on the server.
      */
     list: (params: { path: string }) => Promise<Result<string[]>>;
+    entries: (params: {
+      path: string;
+    }) => Promise<Result<Array<{ path: string; type: "file" | "directory" }>>>;
   };
   goal: {
     /** `opencode.goal` get. `data` is the goal object, or null when the session has none. */
@@ -497,6 +500,13 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
         run(async () =>
           (await client.file.list({ path: params.path })).data.map((entry) => entry.path),
         ),
+      entries: (params: { path: string }) =>
+        run(async () =>
+          (await client.file.list({ path: params.path })).data.map((entry) => ({
+            path: entry.path,
+            type: entry.type,
+          })),
+        ),
     },
     experimental: {
       session: {
@@ -762,7 +772,9 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
           await applySelection(
             params.sessionID,
             params.agent,
-            params.model ? { providerID: params.model.providerID, id: params.model.modelID } : undefined,
+            params.model
+              ? { providerID: params.model.providerID, id: params.model.modelID }
+              : undefined,
             params.variant,
           );
         } catch (error) {

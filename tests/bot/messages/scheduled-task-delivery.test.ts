@@ -3,6 +3,8 @@ import type { QueuedScheduledTaskDelivery } from "../../../src/app/types/schedul
 
 const mocked = vi.hoisted(() => ({
   readImage: vi.fn(),
+  readDocument: vi.fn(),
+  classifyDocuments: vi.fn(),
   bot: {
     messageFormatMode: "markdown" as "markdown" | "raw",
     scheduledTaskNotificationsSilent: false,
@@ -10,6 +12,11 @@ const mocked = vi.hoisted(() => ({
 }));
 vi.mock("../../../src/app/services/assistant-image-service.js", () => ({
   readAssistantImage: mocked.readImage,
+}));
+vi.mock("../../../src/app/services/assistant-document-service.js", async (original) => ({
+  ...(await original<typeof import("../../../src/app/services/assistant-document-service.js")>()),
+  readAssistantDocument: mocked.readDocument,
+  classifyAssistantDocuments: mocked.classifyDocuments,
 }));
 
 vi.mock("../../../src/config.js", async (importOriginal) => {
@@ -51,6 +58,8 @@ async function sendAndCollect(delivery: QueuedScheduledTaskDelivery) {
 
 describe("bot/messages/scheduled-task-delivery", () => {
   beforeEach(() => {
+    mocked.readDocument.mockReset().mockResolvedValue({ bytes: Buffer.from("document") });
+    mocked.classifyDocuments.mockReset().mockResolvedValue(new Map());
     mocked.readImage
       .mockReset()
       .mockResolvedValue({ bytes: new Uint8Array([1]), filename: "a.png" });
@@ -58,10 +67,64 @@ describe("bot/messages/scheduled-task-delivery", () => {
     config.bot.scheduledTaskNotificationsSilent = false;
   });
 
+  it.each([false, true])(
+    "sends scheduled documents after the header and all text, before the footer (silent=%s)",
+    async (silent) => {
+      config.bot.scheduledTaskNotificationsSilent = silent;
+      const order: string[] = [];
+      const sendRichMessage = vi.fn(async () => {
+        order.push("text");
+        return { message_id: 1 };
+      });
+      const sendDocument = vi.fn(async () => {
+        order.push("document");
+        return { message_id: 2 };
+      });
+      const sendMessage = vi.fn(async () => {
+        order.push("footer");
+        return { message_id: 3 };
+      });
+      await createScheduledTaskDeliverySender(
+        { sendMessage, sendRichMessage, sendDocument } as never,
+        777,
+      ).send(
+        createDelivery({
+          resultText: "[report](report.bin)",
+          projectDirectory: "/p",
+          footerText: "Build",
+        }),
+      );
+      expect(order).toEqual(["text", "document", "footer"]);
+      expect((sendDocument.mock.calls[0] as unknown[] | undefined)?.[2]).toMatchObject({
+        disable_notification: true,
+        caption: "report",
+      });
+      expect(mocked.readDocument).toHaveBeenCalledWith("/p", "report.bin", "unknown");
+    },
+  );
+
+  it("does not send documents or replay accepted text after a result text failure", async () => {
+    const sendDocument = vi.fn();
+    const sendRichMessage = vi.fn().mockRejectedValue(new Error("connection reset"));
+    const sender = createScheduledTaskDeliverySender(
+      { sendMessage: vi.fn(), sendRichMessage, sendDocument },
+      777,
+    );
+    expect(
+      await sender.send(createDelivery({ resultText: "[a](a.txt)", projectDirectory: "/p" })),
+    ).toBe(true);
+    expect(sendRichMessage).toHaveBeenCalledTimes(1);
+    expect(sendDocument).not.toHaveBeenCalled();
+    expect(mocked.readDocument).not.toHaveBeenCalled();
+  });
+
   it("sends an image-only result with its literal task header inside the same rich message", async () => {
     const sendRichMessage = vi.fn().mockResolvedValue({ message_id: 1 });
     const sendMessage = vi.fn();
-    const sender = createScheduledTaskDeliverySender({ sendMessage, sendRichMessage }, 777);
+    const sender = createScheduledTaskDeliverySender(
+      { sendMessage, sendRichMessage, sendDocument: vi.fn() },
+      777,
+    );
     await sender.send(
       createDelivery({
         notificationText: "Task **literal**",
@@ -80,7 +143,7 @@ describe("bot/messages/scheduled-task-delivery", () => {
   it("consumes an ambiguously attempted rich result rather than asking the runtime queue to resend it", async () => {
     const sendRichMessage = vi.fn().mockRejectedValue(new Error("connection reset"));
     const sender = createScheduledTaskDeliverySender(
-      { sendMessage: vi.fn(), sendRichMessage },
+      { sendMessage: vi.fn(), sendRichMessage, sendDocument: vi.fn() },
       777,
     );
     expect(

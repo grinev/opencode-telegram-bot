@@ -305,6 +305,10 @@ export const config = {
   },
   files: {
     maxFileSizeKb: parseInt(getEnvVar("CODE_FILE_MAX_SIZE_KB", false) || "100", 10),
+    outgoingDocumentMaxSizeMb: Math.min(
+      getOptionalPositiveIntEnvVar("OUTGOING_DOCUMENT_MAX_SIZE_MB", 50),
+      50,
+    ),
     // Local storage for documents that cannot be passed to the model directly.
     // Empty means `<bot home>/inbox`.
     inboxDir: getEnvVar("FILE_INBOX_DIR", false),

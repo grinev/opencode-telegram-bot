@@ -30,6 +30,10 @@ import { alert, cancelMenu, failure } from "./feedback.js";
 import { attachToSession } from "../../app/services/attach-service.js";
 import { renderAssistantFinalPartsSafe } from "../messages/assistant-rendering.js";
 import {
+  prepareAssistantDocuments,
+  deliverAssistantDocuments,
+} from "../messages/assistant-document-delivery.js";
+import {
   AGENT_TEXT_LINK_PREVIEW_OPTIONS,
   sendBotText,
   sendRenderedBotPart,
@@ -851,8 +855,13 @@ async function sendSessionPickTranscript(
     return;
   }
 
-  const parts = renderAssistantFinalPartsSafe(
+  const prepared = await prepareAssistantDocuments(
     reply.text,
+    directory,
+    () => getCurrentSession()?.id === sessionId,
+  );
+  const parts = renderAssistantFinalPartsSafe(
+    prepared.text,
     directory,
     () => getCurrentSession()?.id === sessionId,
   );
@@ -860,6 +869,8 @@ async function sendSessionPickTranscript(
     await waitForSessionPickSend();
     await sendRenderedBotPart({ api, chatId, part, options: AGENT_TEXT_LINK_PREVIEW_OPTIONS });
   }
+  if (reply.completed !== undefined)
+    await deliverAssistantDocuments(prepared, api, chatId, { disable_notification: true });
 
   // The reply is in the chat now: its session stops carrying the unread mark. A send that threw
   // above leaves the mark where it was, and so does a reply that has not finished yet.
@@ -928,7 +939,7 @@ async function loadLatestAssistantResponse(
     // streaming is shown as it is, and clears nothing.
     return {
       text: latestResponse.text,
-      shownAt: latestResponse.errored ? null : latestResponse.completedAt ?? null,
+      shownAt: latestResponse.errored ? null : (latestResponse.completedAt ?? null),
     };
   } catch (err) {
     logger.error("[Sessions] Error loading latest assistant response:", err);
@@ -947,8 +958,13 @@ async function sendLatestAssistantResponse(
     return;
   }
 
-  const parts = renderAssistantFinalPartsSafe(
+  const prepared = await prepareAssistantDocuments(
     response.text,
+    directory,
+    () => getCurrentSession()?.id === sessionId,
+  );
+  const parts = renderAssistantFinalPartsSafe(
+    prepared.text,
     directory,
     () => getCurrentSession()?.id === sessionId,
   );
@@ -960,6 +976,8 @@ async function sendLatestAssistantResponse(
       options: AGENT_TEXT_LINK_PREVIEW_OPTIONS,
     });
   }
+  if (response.shownAt !== null)
+    await deliverAssistantDocuments(prepared, api, chatId, { disable_notification: true });
 
   // The notification showed the reply itself, so the session stops carrying its mark; a failed
   // send threw above and leaves the mark standing.

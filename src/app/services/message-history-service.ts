@@ -23,8 +23,10 @@ type SessionMessageLike = {
     id?: string;
     role?: string;
     summary?: boolean;
+    error?: unknown;
     time?: {
       created?: number;
+      completed?: number;
     };
   };
   parts: Array<{ type: string; text?: string }>;
@@ -93,7 +95,7 @@ export async function loadUserMessages(
 export async function loadLatestAssistantResponse(
   sessionId: string,
   directory: string,
-): Promise<string | null> {
+): Promise<{ text: string; completed: boolean } | null> {
   try {
     const { data: messages, error } = await opencodeClient.session.messages({
       sessionID: sessionId,
@@ -109,6 +111,7 @@ export async function loadLatestAssistantResponse(
     const latestResponse = (messages as SessionMessageLike[]).reduce<{
       text: string;
       created: number;
+      completed: boolean;
     } | null>((latest, message) => {
       if (message.info.role !== "assistant" || message.info.summary) {
         return latest;
@@ -121,13 +124,13 @@ export async function loadLatestAssistantResponse(
 
       const created = message.info.time?.created ?? 0;
       if (!latest || created >= latest.created) {
-        return { text, created };
+        return { text, created, completed: message.info.time?.completed !== undefined && !message.info.error };
       }
 
       return latest;
     }, null);
 
-    return latestResponse?.text ?? null;
+    return latestResponse ? { text: latestResponse.text, completed: latestResponse.completed } : null;
   } catch (err) {
     logger.error("[Messages] Error loading latest assistant response:", err);
     return null;
