@@ -110,6 +110,8 @@ export interface ScheduledTaskExecutionResult {
   startedAt: string;
   finishedAt: string;
   resultText: string | null;
+  /** Untrimmed successful response used for delivery filtering. Absent on error. */
+  rawResultText?: string;
   errorMessage: string | null;
   /** Assistant steps of a successful run, for the footer's speed. Absent on error. */
   steps?: AssistantRunStep[];

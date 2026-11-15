@@ -232,7 +232,7 @@ Agent picker behavior:
 - [x] Skills catalog access (`/skills`)
 - [x] Search skills by full name or description in `/skills`, with paginated results and the existing confirmation
 - [x] Scheduled task creation flow (`/task`), remembering the agent selected at creation and showing it (alongside the model) in the task confirmation and task details
-- [x] Scheduled task runtime execution with deferred Telegram delivery
+- [x] Scheduled task runtime execution with deferred Telegram delivery and conditional `[SILENT]` result suppression
 - [x] Scheduled task list and deletion flow (`/tasklist`), with individual recurring tasks enabled or disabled without deleting them
 - [x] Persistent settings between restarts (`settings.json`)
 - [x] UI localization support via i18n files

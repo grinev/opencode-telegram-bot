@@ -8,6 +8,7 @@ import {
   type AssistantRunStep,
 } from "../formatters/assistant-run-footer-formatter.js";
 import { executeScheduledTask } from "./scheduled-task-executor-service.js";
+import { isScheduledTaskSilentResult } from "./scheduled-task-silence-service.js";
 import type { ForegroundSessionState } from "../managers/foreground-session-state-manager.js";
 import { cleanupScheduledTaskSessionIgnores } from "./scheduled-task-session-ignore-service.js";
 import { computeNextRunAt, isTaskDue } from "./scheduled-task-next-run-service.js";
@@ -407,6 +408,7 @@ export class ScheduledTaskRuntime {
           result.finishedAt,
           result.resultText || "",
           result.steps,
+          result.rawResultText,
         );
       } else {
         await this.handleFailedExecution(
@@ -426,13 +428,18 @@ export class ScheduledTaskRuntime {
     finishedAt: string,
     resultText: string,
     steps: readonly AssistantRunStep[] | undefined,
+    rawResultText: string = resultText,
   ): Promise<void> {
-    const delivery = buildSuccessDelivery(task, startedAt, finishedAt, resultText, steps);
+    const delivery = isScheduledTaskSilentResult(rawResultText)
+      ? null
+      : buildSuccessDelivery(task, startedAt, finishedAt, resultText, steps);
 
     if (task.kind === "once") {
       await removeScheduledTask(task.id);
       this.removeTask(task.id);
-      await this.enqueueDelivery(delivery);
+      if (delivery) {
+        await this.enqueueDelivery(delivery);
+      }
       return;
     }
 
@@ -463,7 +470,9 @@ export class ScheduledTaskRuntime {
       this.scheduleTask(updatedTask);
     }
 
-    await this.enqueueDelivery(delivery);
+    if (delivery) {
+      await this.enqueueDelivery(delivery);
+    }
   }
 
   private async handleFailedExecution(

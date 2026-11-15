@@ -26,6 +26,7 @@ vi.mock("../../../src/config.js", () => ({
     },
     bot: {
       messageFormatMode: "markdown",
+      scheduledTaskExecutionTimeoutMinutes: 120,
     },
     opencode: {
       apiUrl: "http://localhost:4096",
@@ -44,8 +45,16 @@ vi.mock("../../../src/opencode/client.js", () => ({
       prompt: vi.fn(),
       promptAsync: vi.fn(),
       delete: vi.fn(),
+      messages: vi.fn(),
+      status: vi.fn(),
     },
+    question: { list: vi.fn() },
+    permission: { list: vi.fn() },
   },
+}));
+
+vi.mock("../../../src/app/services/folder-presence-service.js", () => ({
+  checkFolderPresence: vi.fn().mockResolvedValue("present"),
 }));
 
 vi.mock("../../../src/app/services/scheduled-task-executor-service.js", () => ({
@@ -54,6 +63,7 @@ vi.mock("../../../src/app/services/scheduled-task-executor-service.js", () => ({
 
 vi.mock("../../../src/app/services/scheduled-task-session-ignore-service.js", () => ({
   cleanupScheduledTaskSessionIgnores: mocked.cleanupIgnoresMock,
+  registerScheduledTaskSessionIgnore: vi.fn(),
 }));
 
 vi.mock("../../../src/bot/messages/telegram-text.js", () => ({
@@ -225,6 +235,194 @@ describe("app/services/scheduled-task-runtime-service", () => {
 
     runtime.shutdown();
     vi.useRealTimers();
+  });
+
+  it.each([
+    { kind: "once" as const, busy: false },
+    { kind: "once" as const, busy: true },
+    { kind: "cron" as const, busy: false },
+    { kind: "cron" as const, busy: true },
+  ])(
+    "suppresses $kind success with busy=$busy without changing its lifecycle",
+    async ({ kind, busy }) => {
+      const { ScheduledTaskRuntime } =
+        await import("../../../src/app/services/scheduled-task-runtime-service.js");
+      const { ForegroundSessionState } =
+        await import("../../../src/app/managers/foreground-session-state-manager.js");
+      const foreground = new ForegroundSessionState();
+      const runtime = new ScheduledTaskRuntime(foreground);
+      const send = vi.fn().mockResolvedValue(true);
+      mocked.tasks = [createTask({ kind })];
+      mocked.executeScheduledTaskMock.mockResolvedValue({
+        status: "success",
+        startedAt: "2026-03-16T10:00:00.000Z",
+        finishedAt: "2026-03-16T10:01:00.000Z",
+        resultText: "[SILENT]\n![image](image.png)\n[report](report.txt)",
+      });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
+      if (busy) foreground.markBusy("session-1", "D:\\Projects\\Repo");
+      let restarted: InstanceType<typeof ScheduledTaskRuntime> | undefined;
+
+      try {
+        await runtime.initialize({ api: {} } as Bot<Context>, { send });
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(mocked.executeScheduledTaskMock).toHaveBeenCalledTimes(1);
+        if (kind === "once") {
+          expect(mocked.removeScheduledTaskMock).toHaveBeenCalledWith("task-1");
+          expect(mocked.tasks).toHaveLength(0);
+        } else {
+          expect(mocked.tasks[0]).toMatchObject({
+            lastStatus: "success",
+            lastError: null,
+            runCount: 1,
+            nextRunAt: "2026-03-16T17:00:00.000Z",
+          });
+        }
+        expect(send).not.toHaveBeenCalled();
+
+        foreground.markIdle("session-1");
+        await runtime.flushDeferredDeliveries();
+        expect(send).not.toHaveBeenCalled();
+        runtime.shutdown();
+
+        restarted = new ScheduledTaskRuntime(foreground);
+        await restarted.initialize({ api: {} } as Bot<Context>, { send });
+        await restarted.flushDeferredDeliveries();
+        expect(send).not.toHaveBeenCalled();
+
+        if (kind === "cron") {
+          mocked.executeScheduledTaskMock.mockResolvedValue({
+            status: "success",
+            startedAt: "2026-03-16T17:00:00.000Z",
+            finishedAt: "2026-03-16T17:01:00.000Z",
+            resultText: "Changes found",
+          });
+          await vi.advanceTimersByTimeAsync(7 * 60 * 60 * 1_000);
+          expect(mocked.executeScheduledTaskMock).toHaveBeenCalledTimes(2);
+          expect(mocked.tasks[0]).toMatchObject({
+            lastStatus: "success",
+            runCount: 2,
+            nextRunAt: "2026-03-17T17:00:00.000Z",
+          });
+          expect(send).toHaveBeenCalledExactlyOnceWith(
+            expect.objectContaining({ status: "success", resultText: "Changes found" }),
+          );
+        }
+      } finally {
+        runtime.shutdown();
+        restarted?.shutdown();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each([
+    { rawText: "\ufeff[SILENT]", suppressed: false, confirmAfterIdle: false },
+    { rawText: "\ufeff[SILENT]", suppressed: false, confirmAfterIdle: true },
+    { rawText: " [SILENT] ", suppressed: true, confirmAfterIdle: false },
+    { rawText: " [SILENT] ", suppressed: true, confirmAfterIdle: true },
+    { rawText: "\u001c[SILENT]\u001f", suppressed: true, confirmAfterIdle: false },
+    { rawText: " No changes. [SILENT] \n", suppressed: false, confirmAfterIdle: false },
+  ])(
+    "filters original executor text $rawText with suppressed=$suppressed",
+    async ({ rawText, suppressed, confirmAfterIdle }) => {
+      const { ScheduledTaskRuntime } =
+        await import("../../../src/app/services/scheduled-task-runtime-service.js");
+      const { ForegroundSessionState } =
+        await import("../../../src/app/managers/foreground-session-state-manager.js");
+      const { executeScheduledTask } = await vi.importActual<
+        typeof import("../../../src/app/services/scheduled-task-executor-service.js")
+      >("../../../src/app/services/scheduled-task-executor-service.js");
+      const { opencodeClient } = await import("../../../src/opencode/client.js");
+      vi.mocked(opencodeClient.session.create).mockResolvedValue({
+        data: { id: "temporary-session", directory: "D:\\Projects\\Repo" },
+        error: null,
+      } as never);
+      vi.mocked(opencodeClient.session.promptAsync).mockResolvedValue({ error: null } as never);
+      vi.mocked(opencodeClient.session.messages).mockResolvedValue({
+        data: [
+          {
+            info: { id: "reply", role: "assistant", time: { completed: 1 } },
+            parts: [{ type: "text", text: rawText }],
+          },
+        ],
+        error: null,
+      } as never);
+      if (confirmAfterIdle) {
+        vi.mocked(opencodeClient.session.messages).mockResolvedValueOnce({
+          data: [],
+          error: null,
+        } as never);
+        vi.mocked(opencodeClient.session.status).mockResolvedValue({
+          data: {},
+          error: null,
+        } as never);
+      }
+      vi.mocked(opencodeClient.question.list).mockResolvedValue({ data: [], error: null } as never);
+      vi.mocked(opencodeClient.permission.list).mockResolvedValue({
+        data: [],
+        error: null,
+      } as never);
+      mocked.executeScheduledTaskMock.mockImplementationOnce(executeScheduledTask);
+      mocked.tasks = [createTask()];
+      const runtime = new ScheduledTaskRuntime(new ForegroundSessionState());
+      const send = vi.fn().mockResolvedValue(true);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
+
+      try {
+        await runtime.initialize({ api: {} } as Bot<Context>, { send });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mocked.tasks).toHaveLength(0);
+        expect(opencodeClient.session.delete).toHaveBeenCalledWith({
+          sessionID: "temporary-session",
+        });
+        if (suppressed) {
+          expect(send).not.toHaveBeenCalled();
+        } else {
+          expect(send).toHaveBeenCalledExactlyOnceWith(
+            expect.objectContaining({ status: "success", resultText: rawText.trim() }),
+          );
+        }
+      } finally {
+        runtime.shutdown();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("delivers execution errors even when their text starts with the silence marker", async () => {
+    const { ScheduledTaskRuntime } =
+      await import("../../../src/app/services/scheduled-task-runtime-service.js");
+    const { ForegroundSessionState } =
+      await import("../../../src/app/managers/foreground-session-state-manager.js");
+    const runtime = new ScheduledTaskRuntime(new ForegroundSessionState());
+    const send = vi.fn().mockResolvedValue(true);
+    mocked.tasks = [createTask()];
+    mocked.executeScheduledTaskMock.mockResolvedValue({
+      status: "error",
+      finishedAt: "2026-03-16T10:01:00.000Z",
+      resultText: null,
+      errorMessage: "[SILENT] Task failed",
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-16T10:00:00.000Z"));
+
+    try {
+      await runtime.initialize({ api: {} } as Bot<Context>, { send });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(send).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          status: "error",
+          notificationText: expect.stringContaining("[SILENT] Task failed"),
+        }),
+      );
+    } finally {
+      runtime.shutdown();
+      vi.useRealTimers();
+    }
   });
 
   it("keeps recurring task after execution error and schedules next run", async () => {
