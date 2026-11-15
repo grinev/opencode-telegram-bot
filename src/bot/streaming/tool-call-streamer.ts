@@ -1,4 +1,5 @@
 import { logger } from "../../utils/logger.js";
+import { isTransientTelegramNetworkError } from "../../utils/telegram-rate-limit-retry.js";
 import {
   resolveStreamThrottleMs,
   type StreamThrottleMs,
@@ -43,6 +44,8 @@ interface StreamState {
   deleteWhenEmpty: boolean;
   held: boolean;
   gate: ToolStreamGate | undefined;
+  recoveryAt: number;
+  recoveryDelayMs: number;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -352,18 +355,27 @@ export class ToolCallStreamer {
 
   async breakSession(sessionId: string, reason: string): Promise<void> {
     const states = this.getStatesForSession(sessionId);
-    if (reason === "session_error" || reason === "session_idle") {
+    if (
+      reason === "session_error" ||
+      reason === "session_idle" ||
+      reason === "session_interrupted"
+    ) {
       for (const state of states) {
         for (const entry of state.entries) {
           const entryId = this.getEntryId(sessionId, state.key, entry.prefix ?? "");
           if (
             entry.prefix?.startsWith("⏳") &&
-            entry.text.startsWith("⏳") &&
+            (entry.text.startsWith("⏳") || reason === "session_interrupted") &&
+            !(reason === "session_idle" && state.recoveryDelayMs > 0) &&
             !this.pinnedEntries.has(entryId)
           ) {
             this.frozenToolEntries.add(entryId);
+            if (reason === "session_interrupted" && state.recoveryDelayMs > 0) {
+              entry.text = entry.text.replace(/^⏳\s*/, "");
+            }
           }
         }
+        state.latestParts = buildParts(state.entries);
       }
     }
     // All at once: an update landing while an earlier state syncs must not join a later one.
@@ -376,7 +388,7 @@ export class ToolCallStreamer {
         await this.documentBoundaries.get(sessionId)?.done;
       }
       await this.enqueueTask(state, () => this.syncState(state, reason));
-      if (this.hasPinnedEntry(state)) {
+      if (state.recoveryDelayMs > 0 || this.hasPinnedEntry(state)) {
         this.keepAfterBreak(state);
         continue;
       }
@@ -527,6 +539,8 @@ export class ToolCallStreamer {
       deleteWhenEmpty: false,
       held: this.heldSessions.has(sessionId),
       gate: this.takeGate?.(sessionId),
+      recoveryAt: 0,
+      recoveryDelayMs: 0,
     };
 
     this.states.set(stateId, state);
@@ -548,7 +562,10 @@ export class ToolCallStreamer {
       return;
     }
 
-    const throttleMs = this.resolveThrottleMs(state.sessionId);
+    const throttleMs = Math.max(
+      this.resolveThrottleMs(state.sessionId),
+      state.recoveryAt - Date.now(),
+    );
     if (throttleMs === 0) {
       void this.enqueueTask(state, () => this.syncState(state, "immediate")).catch((error) => {
         logger.error(`[ToolCallStreamer] Immediate sync failed: session=${state.sessionId}`, error);
@@ -598,6 +615,12 @@ export class ToolCallStreamer {
       return false;
     }
 
+    if (state.recoveryAt > Date.now()) {
+      this.ensureTimer(state);
+      return false;
+    }
+    state.recoveryAt = 0;
+
     while (!state.isBroken && !state.cancelled) {
       const parts = state.latestParts;
       const unchanged =
@@ -619,12 +642,30 @@ export class ToolCallStreamer {
           return false;
         }
 
+        if (state.recoveryDelayMs > 0) {
+          state.recoveryDelayMs = 0;
+          if (
+            this.states.get(this.getStateId(state.sessionId, state.key)) !== state &&
+            !this.hasPinnedEntry(state) &&
+            parts === state.latestParts &&
+            state.entries.every((entry) => !entry.text.startsWith("⏳"))
+          ) {
+            this.freezeEntries(state);
+            this.cancelState(state);
+            this.removeState(state);
+          }
+        }
         logger.debug(
           `[ToolCallStreamer] Stream synced: session=${state.sessionId}, reason=${reason}, parts=${parts.length}`,
         );
         return true;
       } catch (error) {
         if (state.cancelled || error instanceof TelegramOperationCancelledError) {
+          return false;
+        }
+
+        if (state.recoveryAt > 0) {
+          this.ensureTimer(state);
           return false;
         }
 
@@ -648,6 +689,13 @@ export class ToolCallStreamer {
 
   private markStreamBroken(state: StreamState, error: unknown, reason: string): void {
     state.isBroken = true;
+    state.recoveryAt = 0;
+    state.recoveryDelayMs = 0;
+    this.clearTimer(state);
+    if (state.key === DEFAULT_STREAM_KEY) {
+      // A later completion must not reconstruct a creation with an unknown outcome.
+      this.freezeEntries(state);
+    }
     state.fatalErrorMessage = getErrorMessage(error);
 
     if (state.fatalErrorLogged) {
@@ -659,6 +707,41 @@ export class ToolCallStreamer {
       `[ToolCallStreamer] Stream marked as broken: session=${state.sessionId}, reason=${reason}, error=${state.fatalErrorMessage}`,
       error,
     );
+  }
+
+  private freezeEntries(state: StreamState): void {
+    for (const entry of state.entries) {
+      if (entry.prefix) {
+        this.frozenToolEntries.add(this.getEntryId(state.sessionId, state.key, entry.prefix));
+      }
+    }
+  }
+
+  private async updateKnownMessage(
+    state: StreamState,
+    operation: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await this.enqueueTelegramOperation(state.sessionId, operation);
+    } catch (error) {
+      if (
+        !state.cancelled &&
+        state.key === DEFAULT_STREAM_KEY &&
+        isTransientTelegramNetworkError(error)
+      ) {
+        state.recoveryDelayMs = Math.min(Math.max(1000, state.recoveryDelayMs * 2), 30000);
+        state.recoveryAt = Date.now() + state.recoveryDelayMs;
+        const stateId = this.getStateId(state.sessionId, state.key);
+        if (this.states.get(stateId) === state) {
+          this.states.delete(stateId);
+        }
+        logger.warn(
+          `[ToolCallStreamer] Known message update deferred: session=${state.sessionId}, retryInMs=${state.recoveryDelayMs}`,
+          error,
+        );
+      }
+      throw error;
+    }
   }
 
   private enqueueTelegramOperation<T>(
@@ -745,7 +828,7 @@ export class ToolCallStreamer {
       const currentMessageId = state.telegramMessageIds[index];
 
       if (currentMessageId) {
-        await this.enqueueTelegramOperation(state.sessionId, () =>
+        await this.updateKnownMessage(state, () =>
           this.editText(state.sessionId, currentMessageId, text),
         );
         state.lastSentParts[index] = text;
@@ -774,7 +857,7 @@ export class ToolCallStreamer {
 
       const messageId = state.telegramMessageIds[index];
       if (messageId) {
-        await this.enqueueTelegramOperation(state.sessionId, () =>
+        await this.updateKnownMessage(state, () =>
           this.deleteText(state.sessionId, messageId),
         );
       }

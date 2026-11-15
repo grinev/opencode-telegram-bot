@@ -106,7 +106,13 @@ export function registerSessionLifecycleHandlers(deps: SessionLifecycleDeps): vo
     }
 
     try {
-      await closeForegroundRun(deps, sessionId, destination, completedRun, "session_idle");
+      await closeForegroundRun(
+        deps,
+        sessionId,
+        destination,
+        completedRun,
+        interrupted ? "session_interrupted" : "session_idle",
+      );
     } catch (err) {
       logger.error("[Bot] Failed to send session idle footer:", err);
     } finally {
