@@ -347,6 +347,50 @@ describe("bot/events/session-runtime-state text sent early", () => {
   });
 
   describe("reply gate", () => {
+    it("delivers the reply and next tool while a known tool message awaits network recovery", async () => {
+      streamingMode.value = "edit";
+      let id = 10;
+      const api = {
+        sendMessage: vi.fn(async (_chatId: number, _text: string) => ({ message_id: id++ })),
+        sendRichMessage: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error("Bad Request: rich"), { error_code: 400 })),
+        editMessageText: vi.fn().mockResolvedValue(undefined),
+        deleteMessage: vi.fn().mockResolvedValue(true),
+      };
+      const policy = {
+        getDestination: () => ({ api, chatId: 42 }),
+        isForegroundSession: () => true,
+      } as unknown as SessionTargetPolicy;
+      runtime = new SessionRuntimeState({ policy, getReplyKeyboard: () => undefined });
+      runtime.toolCallStreamer.replaceByPrefix("session-1", "⏳one", "⏳ running");
+      await runtime.toolCallStreamer.flushSession("session-1", "initial");
+      api.editMessageText.mockRejectedValueOnce({
+        error: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+      });
+      runtime.toolCallStreamer.replaceByPrefix("session-1", "⏳one", "done");
+      const outage = runtime.toolCallStreamer.flushSession("session-1", "outage");
+      await vi.advanceTimersByTimeAsync(1000);
+      await outage;
+      streamText("reply-1", "assistant reply");
+      runtime.markReplyBegun("session-1", "reply-1");
+      runtime.startReplyCut("session-1");
+      await runtime.letOutReplies("session-1");
+      await runtime.toolCallStreamer.breakSession("session-1", "session_idle");
+      runtime.toolCallStreamer.replaceByPrefix("session-1", "⏳next", "next tool");
+      const flush = runtime.toolCallStreamer.flushSession("session-1", "next");
+      await vi.advanceTimersByTimeAsync(2000);
+      await flush;
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(api.editMessageText).toHaveBeenLastCalledWith(42, 10, "done");
+      expect(api.sendMessage.mock.calls.map((call) => String(call[1]))).toEqual([
+        "⏳ running",
+        "assistant reply",
+        "next tool",
+      ]);
+    });
+
     it("lets out only the replies begun when the gate was taken, after the cut", async () => {
       vi.useRealTimers();
       streamingMode.value = "edit";

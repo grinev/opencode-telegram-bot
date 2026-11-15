@@ -259,7 +259,7 @@ Agent picker behavior:
 - [x] Markdown file-link documents after reply text, with remote V1/V2 reads, replay and scheduled delivery, and a shared configurable outgoing download limit
 - [x] Incoming Telegram rich formatted messages (Bot API 10.1): converted to Markdown, accepted anywhere text is accepted, with photos attached and unsupported message types answered explicitly
 - [x] Startup either reaches Telegram polling or the process exits: transient Telegram failures are retried in-process; a bad token or other fatal startup error exits with code 1
-- [x] After a Telegram outage the bot answers again without restart; an undelivered assistant reply is not resent, and skipped stale messages are reported once
+- [x] After a Telegram outage the bot answers again without restart; already shown full-mode tool messages recover their latest text or pending document-companion deletion, even after the turn ends; an undelivered assistant reply is not resent, ambiguous tool creations are not reconstructed, and skipped stale messages are reported once
 - [x] OpenCode V2 session goal (`/goal`): separate text input and confirmed start, persistent short objective with Pause/Continue/Delete below waiting messages, no replacement, and normal Queue/Steer/Off routing; the server continues the same session after idle, `/abort` and `/start` pause it, and goal kickoff and continuation stay hidden
 
 ## Current Task List

@@ -352,6 +352,44 @@ describe("bot/services/event-subscription-service lifecycle", () => {
     return { api, summaryAggregator, service };
   }
 
+  it("carries interrupted idle to a recovering foreground tool without reviving it", async () => {
+    const { ToolCallStreamer } = await import("../../../src/bot/streaming/tool-call-streamer.js");
+    const breakSpy = vi.spyOn(ToolCallStreamer.prototype, "breakSession");
+    try {
+      const { api, summaryAggregator } = await setupService();
+      activeContainer.foregroundSessionState.markBusy("session-1", "D:/repo");
+      emitBashTool(summaryAggregator, "running");
+      await vi.waitFor(
+        () => expect(api.sendMessage).toHaveBeenCalled(),
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+      api.editMessageText.mockRejectedValueOnce({
+        error: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+      });
+      emitBashTool(summaryAggregator, "completed");
+      await vi.waitFor(
+        () => expect(api.editMessageText).toHaveBeenCalledTimes(1),
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+      emitSessionIdle(summaryAggregator, { interrupted: true, reason: "user" });
+      await vi.waitFor(
+        () => {
+          expect(breakSpy).toHaveBeenCalledWith("session-1", "session_interrupted");
+          expect(activeContainer.foregroundSessionState.isBusy()).toBe(false);
+          expect(api.editMessageText).toHaveBeenCalledTimes(2);
+        },
+        { timeout: STREAM_WAIT_TIMEOUT_MS },
+      );
+      expect(api.editMessageText).toHaveBeenLastCalledWith(42, 100, expect.not.stringContaining("⏳"));
+      emitBashTool(summaryAggregator, "completed");
+      await settle();
+      expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      expect(api.editMessageText).toHaveBeenCalledTimes(2);
+    } finally {
+      breakSpy.mockRestore();
+    }
+  }, 30_000);
+
   describe("assistant completion without a usable target", () => {
     it("clears the run and idles the session when the Telegram context is gone", async () => {
       const { api, summaryAggregator, service } = await setupService({ startAssistantRun: true });

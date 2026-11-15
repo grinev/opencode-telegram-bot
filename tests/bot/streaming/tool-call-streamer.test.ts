@@ -718,6 +718,312 @@ describe("bot/streaming/tool-call-streamer", () => {
     expect(sendText).toHaveBeenNthCalledWith(2, "s1", "after break");
   });
 
+  describe("network recovery", () => {
+    function createStreamer() {
+      vi.useFakeTimers();
+      let id = 1;
+      const sendText = vi.fn(async (_sessionId: string, _text: string) => id++);
+      const editText = vi.fn(async () => undefined);
+      const deleteText = vi.fn(async () => undefined);
+      const streamer = new ToolCallStreamer({
+        throttleMs: 0,
+        sendText,
+        editText,
+        deleteText,
+      });
+      const networkError = {
+        error: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+      };
+      return { streamer, sendText, editText, deleteText, networkError };
+    }
+
+    it.each(["finished", "❌ failed", "💻 interrupted"])(
+      "recovers the latest terminal text after idle: %s",
+      async (terminal) => {
+        const { streamer, sendText, editText, networkError } = createStreamer();
+        streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+        await vi.advanceTimersByTimeAsync(0);
+        editText.mockRejectedValue(networkError);
+        streamer.replaceByPrefix("s1", "⏳one", "⏳ running · 🕒 20s");
+        await vi.advanceTimersByTimeAsync(0);
+        streamer.replaceByPrefix("s1", "⏳one", "⏳ intermediate");
+        streamer.replaceByPrefix("s1", "⏳one", terminal);
+        await streamer.breakSession("s1", "session_idle");
+        expect(editText).toHaveBeenCalledTimes(1);
+
+        editText.mockResolvedValue(undefined);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(editText).toHaveBeenCalledTimes(2);
+        expect(editText).toHaveBeenLastCalledWith("s1", 1, terminal);
+        expect(sendText).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("does not hold new tools or standalone delivery behind a recovery timer", async () => {
+      const { streamer, sendText, editText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+      await vi.advanceTimersByTimeAsync(0);
+      editText.mockRejectedValue(networkError);
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ updated");
+      await vi.advanceTimersByTimeAsync(0);
+      streamer.replaceByPrefix("s1", "⏳two", "second tool");
+      await vi.advanceTimersByTimeAsync(0);
+      await streamer.sendStandalone("s1", "independent card");
+      expect(sendText.mock.calls.map((call) => call[1])).toEqual([
+        "⏳ running",
+        "second tool",
+        "independent card",
+      ]);
+      expect(editText).toHaveBeenCalledTimes(1);
+      streamer.clearAll("test_cleanup");
+    });
+
+    it("accepts completion during the outage even when idle was already observed", async () => {
+      const { streamer, sendText, editText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+      await vi.advanceTimersByTimeAsync(0);
+      editText.mockRejectedValueOnce(networkError);
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ updated");
+      await vi.advanceTimersByTimeAsync(0);
+      await streamer.breakSession("s1", "session_idle");
+      streamer.replaceByPrefix("s1", "⏳one", "done");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(editText).toHaveBeenLastCalledWith("s1", 1, "done");
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps completion when idle arrives during an in-flight recovery attempt", async () => {
+      const { streamer, sendText, editText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+      await vi.advanceTimersByTimeAsync(0);
+      let rejectEdit: (error: unknown) => void = () => {};
+      editText.mockRejectedValueOnce(networkError).mockImplementationOnce(
+        () =>
+          new Promise<undefined>((_resolve, reject) => {
+            rejectEdit = reject;
+          }),
+      );
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ updated");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(editText).toHaveBeenCalledTimes(2);
+      const idle = streamer.breakSession("s1", "session_idle");
+      streamer.replaceByPrefix("s1", "⏳one", "done");
+      rejectEdit(networkError);
+      await idle;
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(editText).toHaveBeenLastCalledWith("s1", 1, "done");
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([false, true])(
+      "does not revive an interrupted recovering call with terminal text already present: %s",
+      async (alreadyTerminal) => {
+        const { streamer, sendText, editText, networkError } = createStreamer();
+        streamer.replaceByPrefix("s1", "⏳one", "⏳ 💻 bash sleep");
+        await vi.advanceTimersByTimeAsync(0);
+        editText.mockRejectedValueOnce(networkError);
+        streamer.replaceByPrefix("s1", "⏳one", "⏳ 💻 bash sleep · 🕒 20s");
+        await vi.advanceTimersByTimeAsync(0);
+        if (alreadyTerminal) {
+          streamer.replaceByPrefix("s1", "⏳one", "💻 bash sleep");
+        }
+        await streamer.breakSession("s1", "session_interrupted");
+        streamer.replaceByPrefix("s1", "⏳one", "late successful result");
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(editText).toHaveBeenLastCalledWith(
+          "s1", 1, alreadyTerminal ? "💻 bash sleep" : "💻 bash sleep · 🕒 20s",
+        );
+        expect(sendText).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each(["assistant_reply_started", "thinking_started", "session_error"])(
+      "keeps pending terminal recovery across %s",
+      async (reason) => {
+        const { streamer, sendText, editText, networkError } = createStreamer();
+        streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+        await vi.advanceTimersByTimeAsync(0);
+        editText.mockRejectedValueOnce(networkError);
+        streamer.replaceByPrefix("s1", "⏳one", "done");
+        await vi.advanceTimersByTimeAsync(0);
+        await streamer.breakSession("s1", reason);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(editText).toHaveBeenLastCalledWith("s1", 1, "done");
+        expect(editText).toHaveBeenCalledTimes(2);
+        expect(sendText).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("recovers a pending document-companion deletion instead of restoring its text", async () => {
+      const { streamer, sendText, editText, deleteText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳file", "⏳ writing");
+      await vi.advanceTimersByTimeAsync(0);
+      editText.mockRejectedValueOnce(networkError);
+      streamer.replaceByPrefix("s1", "⏳file", "⏳ writing · 🕒 20s");
+      await vi.advanceTimersByTimeAsync(0);
+      streamer.removeByPrefix("s1", "⏳file", "default", true);
+      streamer.beginDocumentBoundary("s1");
+      await streamer.flushSession("s1", "tool_file_boundary");
+      streamer.endDocumentBoundary("s1");
+      deleteText.mockRejectedValueOnce(networkError);
+      await streamer.breakSession("s1", "session_idle");
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(deleteText).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(deleteText).toHaveBeenCalledTimes(2);
+      expect(deleteText).toHaveBeenLastCalledWith("s1", 1);
+      expect(editText).toHaveBeenCalledTimes(1);
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
+    it("retains a deletion whose first network failure happens at a document boundary", async () => {
+      const { streamer, deleteText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳file", "⏳ writing");
+      await vi.advanceTimersByTimeAsync(0);
+      deleteText.mockRejectedValueOnce(networkError);
+      streamer.removeByPrefix("s1", "⏳file", "default", true);
+      streamer.beginDocumentBoundary("s1");
+      await streamer.flushSession("s1", "tool_file_boundary");
+      streamer.endDocumentBoundary("s1");
+      await streamer.breakSession("s1", "session_idle");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(deleteText).toHaveBeenCalledTimes(2);
+    });
+
+    it.each(["clearSession", "clearAll"] as const)(
+      "cancels pending recovery on %s",
+      async (clear) => {
+        const { streamer, editText, networkError } = createStreamer();
+        streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+        await vi.advanceTimersByTimeAsync(0);
+        editText.mockRejectedValue(networkError);
+        streamer.replaceByPrefix("s1", "⏳one", "done");
+        await vi.advanceTimersByTimeAsync(0);
+        if (clear === "clearSession") {
+          streamer.clearSession("s1", "test_cleanup");
+        } else {
+          streamer.clearAll("test_cleanup");
+        }
+        await vi.advanceTimersByTimeAsync(60000);
+        expect(editText).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("does not reconstruct an ambiguous creation at later updates or boundaries", async () => {
+      const { streamer, sendText, networkError } = createStreamer();
+      sendText.mockRejectedValueOnce(networkError);
+      streamer.replaceByPrefix("s1", "⏳lost", "⏳ lost");
+      await vi.advanceTimersByTimeAsync(0);
+      streamer.replaceByPrefix("s1", "⏳other", "other");
+      await vi.advanceTimersByTimeAsync(0);
+      await streamer.breakSession("s1", "assistant_reply_started");
+      streamer.replaceByPrefix("s1", "⏳lost", "lost finished");
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(sendText.mock.calls.map((call) => call[1])).toEqual(["⏳ lost", "other"]);
+    });
+
+    it("does not retry an ambiguous new split part just because an earlier ID is known", async () => {
+      const { streamer, sendText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+      await vi.advanceTimersByTimeAsync(0);
+      sendText.mockRejectedValueOnce(networkError);
+      streamer.replaceByPrefix("s1", "⏳one", "x".repeat(5000));
+      await vi.advanceTimersByTimeAsync(0);
+      await streamer.breakSession("s1", "session_idle");
+      streamer.replaceByPrefix("s1", "⏳one", "final");
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(sendText).toHaveBeenCalledTimes(2);
+    });
+
+    it("stops recovery when a later attempt returns a permanent error", async () => {
+      const { streamer, editText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+      await vi.advanceTimersByTimeAsync(0);
+      editText
+        .mockRejectedValueOnce(networkError)
+        .mockRejectedValue(new Error("400: message not found"));
+      streamer.replaceByPrefix("s1", "⏳one", "done");
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(editText).toHaveBeenCalledTimes(2);
+      await streamer.breakSession("s1", "session_idle");
+      expect(Reflect.get(streamer, "allStates")).toHaveProperty("size", 0);
+      streamer.replaceByPrefix("s1", "⏳one", "late result");
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(editText).toHaveBeenCalledTimes(2);
+    });
+
+    it("backs off repeated failures without holding the break and resets after success", async () => {
+      const { streamer, editText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+      await vi.advanceTimersByTimeAsync(0);
+      streamer.pinEntry("s1", "⏳one");
+      editText.mockRejectedValue(networkError);
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ updated");
+      await vi.advanceTimersByTimeAsync(0);
+      await streamer.breakSession("s1", "session_idle");
+      await vi.advanceTimersByTimeAsync(999);
+      expect(editText).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(editText).toHaveBeenCalledTimes(2);
+      editText.mockResolvedValue(undefined);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(editText).toHaveBeenCalledTimes(3);
+      editText.mockRejectedValueOnce(networkError);
+      streamer.replaceByPrefix("s1", "⏳one", "done");
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(editText).toHaveBeenCalledTimes(5);
+      streamer.clearAll("test_cleanup");
+    });
+
+    it("does not extend recovery to subagent streams or standalone edits", async () => {
+      const { streamer, editText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "🧩", "card", "subagent:card");
+      await vi.advanceTimersByTimeAsync(0);
+      editText.mockRejectedValue(networkError);
+      streamer.replaceByPrefix("s1", "🧩", "card done", "subagent:card");
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(editText).toHaveBeenCalledTimes(1);
+      await expect(streamer.editStandalone("s1", 42, "todo")).rejects.toBe(networkError);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(editText).toHaveBeenCalledTimes(2);
+    });
+
+    it("recovers a known split part with a wrapped cause without opening another bubble", async () => {
+      const { streamer, sendText, editText } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳one", "a".repeat(5000));
+      await vi.advanceTimersByTimeAsync(0);
+      editText
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(
+          new TypeError("fetch failed", { cause: { code: "ETIMEDOUT" } }),
+        );
+      streamer.replaceByPrefix("s1", "⏳one", "b".repeat(5000));
+      await vi.advanceTimersByTimeAsync(0);
+      await streamer.breakSession("s1", "assistant_reply_started");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(editText).toHaveBeenLastCalledWith("s1", 2, "b".repeat(1000));
+      expect(sendText).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps recovery delay capped during a long outage", async () => {
+      const { streamer, editText, networkError } = createStreamer();
+      streamer.replaceByPrefix("s1", "⏳one", "⏳ running");
+      await vi.advanceTimersByTimeAsync(0);
+      editText.mockRejectedValue(networkError);
+      streamer.replaceByPrefix("s1", "⏳one", "done");
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1000 + 2000 + 4000 + 8000 + 16000);
+      expect(editText).toHaveBeenCalledTimes(6);
+      await vi.advanceTimersByTimeAsync(29999);
+      expect(editText).toHaveBeenCalledTimes(6);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(editText).toHaveBeenCalledTimes(7);
+      streamer.clearAll("test_cleanup");
+    });
+  });
+
   describe("pinned entries", () => {
     function createStreamer() {
       let id = 1;
