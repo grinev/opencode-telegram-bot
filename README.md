@@ -185,6 +185,23 @@ Scheduled tasks let you prepare prompts in advance and run them automatically la
 - By default, the bot waits up to 120 minutes for one scheduled task run; change this with `SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES` if needed
 - Up to 10 scheduled tasks can exist at once by default; change this with `TASK_LIMIT` in your `.env`
 
+### Conditional silence
+
+To skip delivery when there is nothing to report, put the condition in the task's prompt yourself. The bot does not append instructions or change the stored prompt. For example:
+
+```text
+Check the project for new dependency security advisories. Report new findings.
+If there are no new findings, reply with exactly: [SILENT]
+```
+
+For successful once and recurring tasks, `[SILENT]` suppresses the entire result: no completion heading, response body, attachments, footer, or replacement notice. The run still succeeds: once tasks are removed as usual, and recurring tasks keep their normal run count and next scheduled run. Suppressed results are not queued for later delivery, even while another session is busy.
+
+Matching is intentionally soft: the marker can be the whole response, a standalone first or last nonblank line, or a literal prefix such as `[SILENT]No changes`. Case and outer whitespace are ignored. Whole-response and edge-line candidates accept surrounding Unicode punctuation (except square brackets), so `**[SILENT]**` works; these candidates must be at most 64 characters before punctuation is stripped. A literal prefix has no response-length limit. Backticks and code fences are not stripped, malformed brackets are not repaired, and no other marker or short-response threshold is supported.
+
+A mere mention such as `No changes. [SILENT]` is delivered normally. Errors and empty-response errors keep their existing handling. Ordinary chat replies are unaffected.
+
+This is different from `SCHEDULED_TASK_DISABLE_NOTIFICATION` or notification-sound muting in `/settings`: muting still delivers messages, while `[SILENT]` skips delivery entirely.
+
 ## Track Existing Session
 
 After you create a new session, select an existing one, or let the bot auto-create one from your first prompt, the bot automatically starts tracking that session. It follows live events from the same OpenCode session, shows external text input sent from another client, and lets you continue the same session from Telegram.

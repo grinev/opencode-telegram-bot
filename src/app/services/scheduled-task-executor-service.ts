@@ -86,12 +86,11 @@ class ScheduledTaskInteractiveRequestError extends Error {
   }
 }
 
-function collectResponseText(parts: TextLikePart[]): string {
+function collectRawResponseText(parts: TextLikePart[]): string {
   return parts
     .filter((part) => part.type === "text" && typeof part.text === "string" && !part.ignored)
     .map((part) => part.text)
-    .join("")
-    .trim();
+    .join("");
 }
 
 function isTimeoutErrorMessage(message: string): boolean {
@@ -219,7 +218,7 @@ function extractAssistantResult(message: AssistantMessageSnapshot | null): {
     };
   }
 
-  const resultText = collectResponseText(message.parts);
+  const resultText = collectRawResponseText(message.parts).trim();
   const completed = Boolean(message.info.time?.completed);
   const finishReason = getAssistantFinishReason(message);
   const awaitingToolCalls = completed && finishReason === "tool-calls";
@@ -424,7 +423,7 @@ async function waitForScheduledTaskResult(
   taskId: string,
   sessionId: string,
   directory: string,
-): Promise<{ resultText: string; steps: AssistantRunStep[] }> {
+): Promise<{ resultText: string; rawResultText: string; steps: AssistantRunStep[] }> {
   const startedAtMs = Date.now();
   const executionTimeoutMs = getExecutionTimeoutMs();
   let idlePollsWithoutResult = 0;
@@ -447,7 +446,11 @@ async function waitForScheduledTaskResult(
 
     if (assistantResult.completed) {
       if (assistantResult.resultText) {
-        return { resultText: assistantResult.resultText, steps: assistantResult.steps };
+        return {
+          resultText: assistantResult.resultText,
+          rawResultText: collectRawResponseText(assistantResult.message?.parts ?? []),
+          steps: assistantResult.steps,
+        };
       }
 
       completedEmptyResultReadCount += 1;
@@ -493,6 +496,7 @@ async function waitForScheduledTaskResult(
         if (confirmedAssistantResult.resultText) {
           return {
             resultText: confirmedAssistantResult.resultText,
+            rawResultText: collectRawResponseText(confirmedAssistantResult.message?.parts ?? []),
             steps: confirmedAssistantResult.steps,
           };
         }
@@ -595,6 +599,7 @@ export async function executeScheduledTask(
       startedAt,
       finishedAt: new Date().toISOString(),
       resultText: result.resultText,
+      rawResultText: result.rawResultText,
       errorMessage: null,
       steps: result.steps,
     };
