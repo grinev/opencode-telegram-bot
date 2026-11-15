@@ -699,6 +699,13 @@ export const en = {
   "commands.download.error": "Failed to download file.",
 
   "skills.select": "Choose an OpenCode skill:",
+  "skills.search.button": "🔍 Search",
+  "skills.search.prompt": "🔍 Enter skill name or description:",
+  "skills.search.results": "Search results for \"{query}\":",
+  "skills.search.results_page": "Search results for \"{query}\" (page {page}):",
+  "skills.search.no_results": "No skills found for \"{query}\"",
+  "skills.search.again": "↩ Search again",
+  "skills.search.cancel": "❌ Cancel",
   "skills.empty": "📭 No OpenCode skills are available for this project.",
   "skills.fetch_error": "🔴 Failed to load OpenCode skills.",
   "skills.no_description": "No description",

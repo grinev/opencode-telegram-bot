@@ -592,6 +592,13 @@ export const zh: I18nDictionary = {
   "commands.download.error": "下载文件失败。",
 
   "skills.select": "请选择一个 OpenCode 技能：",
+  "skills.search.button": "🔍 搜索",
+  "skills.search.prompt": "🔍 请输入技能名称或描述：",
+  "skills.search.results": "“{query}”的搜索结果：",
+  "skills.search.results_page": "“{query}”的搜索结果（第 {page} 页）：",
+  "skills.search.no_results": "未找到与“{query}”匹配的技能",
+  "skills.search.again": "↩ 重新搜索",
+  "skills.search.cancel": "❌ 取消",
   "skills.empty": "📭 当前项目没有可用的 OpenCode 技能。",
   "skills.fetch_error": "🔴 加载 OpenCode 技能失败。",
   "skills.no_description": "无描述",

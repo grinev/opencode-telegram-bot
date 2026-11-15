@@ -641,6 +641,13 @@ export const tr: I18nDictionary = {
   "commands.download.error": "Dosya indirilemedi.",
 
   "skills.select": "Bir OpenCode yeteneği seçin:",
+  "skills.search.button": "🔍 Ara",
+  "skills.search.prompt": "🔍 Yetenek adını veya açıklamasını girin:",
+  "skills.search.results": "\"{query}\" için arama sonuçları:",
+  "skills.search.results_page": "\"{query}\" için arama sonuçları (sayfa {page}):",
+  "skills.search.no_results": "\"{query}\" için yetenek bulunamadı",
+  "skills.search.again": "↩ Yeniden ara",
+  "skills.search.cancel": "❌ İptal",
   "skills.empty": "📭 Bu proje için kullanılabilir OpenCode yeteneği yok.",
   "skills.fetch_error": "🔴 OpenCode yetenekleri yüklenemedi.",
   "skills.no_description": "Açıklama yok",

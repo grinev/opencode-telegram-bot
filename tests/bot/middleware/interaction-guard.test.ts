@@ -90,13 +90,13 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).not.toHaveBeenCalled();
   });
 
-  describe("commands search", () => {
+  describe.each(["commands", "skills"])("%s search", (catalog) => {
     function startSearch(stage: "input" | "results") {
       deps.interactionManager.start({
         kind: "custom",
         expectedInput: stage === "input" ? "text" : "callback",
         allowedCommands: [],
-        metadata: { flow: "commands-search", stage, token: Symbol("commands-search") },
+        metadata: { flow: `${catalog}-search`, stage, token: Symbol(`${catalog}-search`) },
       });
     }
 
@@ -125,11 +125,11 @@ describe("interactionGuardMiddleware", () => {
 
     it.each([
       "query",
-      "commands:search",
-      "commands:search:page:1",
-      "commands:search:result:0",
-      "commands:search:again",
-      "commands:search:cancel",
+      `${catalog}:search`,
+      `${catalog}:search:page:1`,
+      `${catalog}:search:result:0`,
+      `${catalog}:search:again`,
+      `${catalog}:search:cancel`,
     ])("blocks %s during a run and keeps the search waiting", async (input) => {
       startSearch(input === "query" ? "input" : "results");
       deps.foregroundSessionState.markBusy("session-1", "repo");

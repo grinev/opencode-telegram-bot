@@ -157,7 +157,7 @@ Current command set:
 - `/tasklist` - browse and delete scheduled tasks, and enable or disable individual recurring tasks
 - `/rename` - rename current session
 - `/commands` - browse, search by name or description, and run custom commands (plus built-ins like `init` and `review`); the server command `goal` is omitted
-- `/skills` - browse and run OpenCode skills
+- `/skills` - browse, search by name or description, and run OpenCode skills
 - `/opencode_start` - start local OpenCode server
 - `/opencode_stop` - stop local OpenCode server; available during an active request and kills the local process even if health is hung
 - `/reload` - V2 only: reload the OpenCode configuration (config, plugins, providers and models, agents, commands, skills, MCP) for every loaded project without restarting the server; available during an active request, blocked while an interaction is on screen; the model menu reflects the reloaded providers at once
@@ -178,7 +178,7 @@ Interaction routing rules:
 - Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills, messages)
 - Agent questions and permission requests are shown one after another: one arriving while another holds the slot waits, and waiting requests appear in the order they arrived; a new question from the session whose poll is on screen replaces it, one from another session (a parallel subagent) waits; `/abort`, `/detach` and `/opencode_stop` drop everything waiting
 - While an interaction is active, unrelated input is blocked with a contextual hint
-- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`, `/opencode_stop`; idle model, project, session and command searches block them
+- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`, `/opencode_stop`; idle model, project, session, command and skill searches block them
 - Unknown slash commands return an explicit fallback message
 - Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/abort`, `/detach`, reset/cleanup)
 
@@ -230,6 +230,7 @@ Agent picker behavior:
 - [x] Search commands by full name or description in `/commands`, with paginated results and the existing execution confirmation
 - [x] Trusted local JSON commands from the persistent application home, executed without OpenCode or model tokens
 - [x] Skills catalog access (`/skills`)
+- [x] Search skills by full name or description in `/skills`, with paginated results and the existing confirmation
 - [x] Scheduled task creation flow (`/task`), remembering the agent selected at creation and showing it (alongside the model) in the task confirmation and task details
 - [x] Scheduled task runtime execution with deferred Telegram delivery
 - [x] Scheduled task list and deletion flow (`/tasklist`), with individual recurring tasks enabled or disabled without deleting them

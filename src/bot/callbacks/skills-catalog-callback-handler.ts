@@ -1,7 +1,10 @@
 import type { Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { config } from "../../config.js";
-import type { SkillCatalogItem } from "../../app/services/skills-catalog-service.js";
+import { loadSkillsCatalog, type SkillCatalogItem } from "../../app/services/skills-catalog-service.js";
+import { isForegroundBusy } from "../../app/services/run-control-service.js";
+import { DEFAULT_ALLOWED_INTERACTION_COMMANDS } from "../../app/managers/interaction-manager.js";
+import { replyBusyBlocked } from "../messages/busy-blocked-renderer.js";
 import { getCurrentProject } from "../../app/stores/settings-store.js";
 import type { InteractionState } from "../../app/types/interaction.js";
 import { logger } from "../../utils/logger.js";
@@ -12,14 +15,18 @@ import { createIncomingPrompt } from "../../app/types/prompt.js";
 import {
   buildSkillsConfirmKeyboard,
   buildSkillsListKeyboard,
+  buildSkillsSearchView,
   calculateSkillsPaginationRange,
   formatExecutingSkillMessage,
   formatSkillsSelectText,
+  filterSkillsForSearch,
   parseSkillPageCallback,
   parseSkillSelectCallback,
   SKILLS_CALLBACK_CANCEL,
   SKILLS_CALLBACK_EXECUTE,
   SKILLS_CALLBACK_PREFIX,
+  SKILLS_CALLBACK_SEARCH,
+  SKILLS_SEARCH_QUERY_MAX_LENGTH,
 } from "../menus/skills-catalog-menu.js";
 
 interface SkillsListMetadata {
@@ -185,6 +192,10 @@ export async function handleSkillsCallback(
     return false;
   }
 
+  if (data === SKILLS_CALLBACK_SEARCH || data.startsWith(`${SKILLS_CALLBACK_SEARCH}:`)) {
+    return handleSkillsSearchCallback(ctx, deps);
+  }
+
   const metadata = parseSkillsMetadata(deps.interactionManager.getSnapshot());
   const callbackMessageId = getCallbackMessageId(ctx);
 
@@ -293,4 +304,197 @@ export async function handleSkillsCallback(
     await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     return true;
   }
+}
+
+type SkillsSearchDeps = Pick<
+  AppContainer,
+  "interactionManager" | "foregroundSessionState" | "attachManager"
+>;
+
+function skillsSearchState(deps: SkillsSearchDeps): Record<string, unknown> | null {
+  const state = deps.interactionManager.getSnapshot();
+  return state?.kind === "custom" && state.metadata.flow === "skills-search"
+    ? state.metadata
+    : null;
+}
+
+function sameSkillsSearch(deps: SkillsSearchDeps, state: Record<string, unknown>): boolean {
+  const current = skillsSearchState(deps);
+  return !!current && current.token === state.token && current.stage === state.stage;
+}
+
+function startSkillsSearch(deps: SkillsSearchDeps): void {
+  deps.interactionManager.start({
+    kind: "custom",
+    expectedInput: "text",
+    allowedCommands: [],
+    metadata: { flow: "skills-search", stage: "input", token: Symbol("skills-search") },
+  });
+}
+
+export async function handleSkillsSearchTextInput(
+  ctx: Context,
+  deps: SkillsSearchDeps,
+): Promise<boolean> {
+  const state = skillsSearchState(deps);
+  if (!state || state.stage !== "input" || ctx.message?.text === undefined) return false;
+  const query = ctx.message.text.slice(0, SKILLS_SEARCH_QUERY_MAX_LENGTH);
+  if (!query.trim()) return true;
+  try {
+    const project = getCurrentProject();
+    if (!project) throw new Error("Project no longer selected");
+    const skills = filterSkillsForSearch(await loadSkillsCatalog(project.worktree), query);
+    if (!sameSkillsSearch(deps, state)) return true;
+    if (isForegroundBusy(deps)) {
+      await replyBusyBlocked(ctx);
+      return true;
+    }
+    const view = buildSkillsSearchView(skills, query, 0, config.bot.commandsListLimit);
+    const sent = await ctx.reply(view.text, { reply_markup: view.keyboard });
+    if (!sameSkillsSearch(deps, state)) return true;
+    deps.interactionManager.transition({
+      expectedInput: "callback",
+      metadata: {
+        ...state,
+        stage: "results",
+        query,
+        skills,
+        projectDirectory: project.worktree,
+        messageId: sent.message_id,
+      },
+    });
+  } catch (error) {
+    logger.error("[Skills] Error searching skills:", error);
+    if (sameSkillsSearch(deps, state)) {
+      deps.interactionManager.clear("skills_search_error");
+      await ctx.reply(t("skills.fetch_error"));
+    }
+  }
+  return true;
+}
+
+async function handleSkillsSearchCallback(
+  ctx: Context,
+  deps: SkillsCallbackDeps,
+): Promise<boolean> {
+  const data = ctx.callbackQuery?.data;
+  if (isForegroundBusy(deps)) {
+    await replyBusyBlocked(ctx);
+    return true;
+  }
+  if (data === SKILLS_CALLBACK_SEARCH) {
+    const metadata = parseSkillsMetadata(deps.interactionManager.getSnapshot());
+    if (metadata?.stage !== "list" || metadata.messageId !== getCallbackMessageId(ctx)) {
+      await ctx.answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true });
+      return true;
+    }
+    const initial = deps.interactionManager.getSnapshot();
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    const current = deps.interactionManager.getSnapshot();
+    if (
+      current?.metadata.flow !== "skills" ||
+      current.metadata.stage !== "list" ||
+      current.metadata.messageId !== initial?.metadata.messageId
+    )
+      return true;
+    startSkillsSearch(deps);
+    await ctx.reply(t("skills.search.prompt"));
+    return true;
+  }
+  const state = skillsSearchState(deps);
+  if (!state || state.stage !== "results" || state.messageId !== getCallbackMessageId(ctx)) {
+    await ctx.answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true });
+    return true;
+  }
+  if (data === `${SKILLS_CALLBACK_SEARCH}:cancel`) {
+    deps.interactionManager.clear("skills_search_cancelled");
+    await cancelMenu(ctx);
+    return true;
+  }
+  if (data === `${SKILLS_CALLBACK_SEARCH}:again`) {
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    if (!sameSkillsSearch(deps, state)) return true;
+    startSkillsSearch(deps);
+    await ctx.reply(t("skills.search.prompt"));
+    return true;
+  }
+  if (data?.startsWith(`${SKILLS_CALLBACK_SEARCH}:page:`)) {
+    const raw = data.slice(`${SKILLS_CALLBACK_SEARCH}:page:`.length);
+    if (!/^\d+$/.test(raw) || typeof state.query !== "string") return true;
+    try {
+      const project = getCurrentProject();
+      if (!project) throw new Error("Project no longer selected");
+      const skills = filterSkillsForSearch(
+        await loadSkillsCatalog(project.worktree),
+        state.query,
+      );
+      if (!sameSkillsSearch(deps, state)) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        return true;
+      }
+      if (isForegroundBusy(deps)) {
+        await replyBusyBlocked(ctx);
+        return true;
+      }
+      const view = buildSkillsSearchView(
+        skills,
+        state.query,
+        Number(raw),
+        config.bot.commandsListLimit,
+      );
+      await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+      if (!sameSkillsSearch(deps, state)) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        return true;
+      }
+      deps.interactionManager.transition({
+        expectedInput: "callback",
+        metadata: { ...state, skills, projectDirectory: project.worktree },
+      });
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error("[Skills] Error loading search page:", error);
+      await ctx.answerCallbackQuery({ text: t("skills.page_load_error_callback") });
+    }
+    return true;
+  }
+  if (data?.startsWith(`${SKILLS_CALLBACK_SEARCH}:result:`)) {
+    const raw = data.slice(`${SKILLS_CALLBACK_SEARCH}:result:`.length);
+    const skills = parseSkillItems(state.skills);
+    const selectedSkill = /^\d+$/.test(raw) ? skills?.[Number(raw)] : undefined;
+    if (!selectedSkill || typeof state.projectDirectory !== "string") {
+      await ctx.answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true });
+      return true;
+    }
+    try {
+      await ctx.answerCallbackQuery();
+      if (!sameSkillsSearch(deps, state)) return true;
+      await ctx.editMessageText(t("skills.confirm", { skill: `/${selectedSkill.name}` }), {
+        reply_markup: buildSkillsConfirmKeyboard(),
+      });
+      if (!sameSkillsSearch(deps, state)) return true;
+      deps.interactionManager.transition({
+        expectedInput: "mixed",
+        allowedCommands: [...DEFAULT_ALLOWED_INTERACTION_COMMANDS],
+        metadata: {
+          flow: "skills",
+          stage: "confirm",
+          messageId: state.messageId,
+          projectDirectory: state.projectDirectory,
+          skillName: selectedSkill.name,
+        },
+      });
+    } catch (error) {
+      logger.error("[Skills] Error selecting search result:", error);
+      if (sameSkillsSearch(deps, state)) {
+        deps.interactionManager.clear("skills_search_select_error");
+        await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
+      } else {
+        await ctx.answerCallbackQuery().catch(() => {});
+      }
+    }
+  }
+  return true;
 }
