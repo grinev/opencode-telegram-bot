@@ -471,7 +471,16 @@ function parseListBlock(node: List, depth: number, context?: ImageContext): Tele
   return [{ type: "list", ordered: Boolean(node.ordered), items }];
 }
 
+/** Fence languages that Telegram renders as a native formula instead of a code block. */
+const MATH_FENCE_LANGUAGES = new Set(["math", "latex", "tex"]);
+
 function parseCodeBlock(node: Code): TelegramBlock[] {
+  const language = node.lang?.trim().toLowerCase();
+  if (language && MATH_FENCE_LANGUAGES.has(language)) {
+    const expression = node.value.trim();
+    return expression ? [{ type: "math", expression }] : [];
+  }
+
   return [{ type: "code", language: node.lang ?? undefined, text: node.value }];
 }
 

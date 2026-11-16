@@ -19,6 +19,21 @@ function isHeadingLine(line: string): boolean {
   return /^\s{0,3}#{1,6}\s+\S/.test(line);
 }
 
+/** `$$ formula $$` on a single line, as models often emit it. */
+function extractSingleLineMath(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("$$") || !trimmed.endsWith("$$") || trimmed.length <= 4) {
+    return null;
+  }
+
+  const expression = trimmed.slice(2, -2).trim();
+  return expression ? expression : null;
+}
+
+function isMathFenceLine(line: string): boolean {
+  return line.trim() === "$$";
+}
+
 function normalizeHeadingLine(line: string): string {
   const match = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*$/);
   const heading = match?.[1];
@@ -70,6 +85,37 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
       inQuote = false;
       output.push(line);
       continue;
+    }
+
+    const singleLineMath = extractSingleLineMath(line);
+    if (singleLineMath) {
+      output.push("```math", singleLineMath, "```");
+      inQuote = false;
+      continue;
+    }
+
+    if (isMathFenceLine(line)) {
+      const expressionLines: string[] = [];
+      let closingIndex = -1;
+      for (let inner = index + 1; inner < lines.length; inner++) {
+        const innerLine = lines[inner];
+        if (innerLine === undefined) {
+          continue;
+        }
+        if (isMathFenceLine(innerLine)) {
+          closingIndex = inner;
+          break;
+        }
+        expressionLines.push(innerLine);
+      }
+
+      const expression = expressionLines.join("\n").trim();
+      if (closingIndex !== -1 && expression) {
+        output.push("```math", expression, "```");
+        index = closingIndex;
+        inQuote = false;
+        continue;
+      }
     }
 
     if (isHeadingLine(line)) {

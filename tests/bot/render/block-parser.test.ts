@@ -314,4 +314,16 @@ describe("bot/render/block-parser", () => {
       },
     ]);
   });
+
+  it("parses math fences as native formula blocks", () => {
+    expect(parseTelegramBlocks(["```math", "y = x^2", "```"].join("\n"))).toEqual([
+      { type: "math", expression: "y = x^2" },
+    ]);
+  });
+
+  it("keeps ordinary fenced code as code", () => {
+    expect(parseTelegramBlocks(["```ts", "const a = 1;", "```"].join("\n"))).toEqual([
+      { type: "code", language: "ts", text: "const a = 1;" },
+    ]);
+  });
 });

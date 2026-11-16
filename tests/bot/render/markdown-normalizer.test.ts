@@ -95,4 +95,12 @@ describe("bot/render/markdown-normalizer", () => {
       ].join("\n"),
     );
   });
+
+  it("converts dollar-delimited formulas into math fences", () => {
+    const input = ["Intro", "", "$$", "E = mc^2", "$$", "", "and $$x^2$$ inside a line"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(
+      ["Intro", "", "```math", "E = mc^2", "```", "", "and $$x^2$$ inside a line"].join("\n"),
+    );
+  });
 });
