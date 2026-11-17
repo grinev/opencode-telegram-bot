@@ -2,8 +2,41 @@ interface NormalizeMarkdownOptions {
   preserveBlockMarkup: boolean;
 }
 
-function isCodeFenceLine(line: string): boolean {
-  return line.trimStart().startsWith("```");
+/** A fence delimiter: three or more backticks or tildes after up to three spaces. */
+const CODE_FENCE_PATTERN = /^\s*(`{3,}|~{3,})/;
+
+const LIST_MARKER_PATTERN = /^(\s*)(?:[-+*]|\d+[.)])\s+/;
+
+/** Fence character of a delimiter line, or null when the line is not a fence. */
+function codeFenceChar(line: string): "`" | "~" | null {
+  const fence = line.match(CODE_FENCE_PATTERN)?.[1];
+  return fence ? (fence[0] as "`" | "~") : null;
+}
+
+function leadingIndent(line: string): string {
+  return line.match(/^[ \t]*/)?.[0] ?? "";
+}
+
+/** Indentation width, with tabs counted as four spaces. */
+function indentWidth(indent: string): number {
+  return indent.replace(/\t/g, "    ").length;
+}
+
+/**
+ * Code the block parser reads literally: four spaces past the current list item
+ * content, or four spaces at the left margin.
+ */
+function isIndentedCodeLine(line: string, listContentIndent: number): boolean {
+  return indentWidth(leadingIndent(line)) >= listContentIndent + 4;
+}
+
+/** Drops the opening fence indentation so the formula keeps its own layout. */
+function stripIndent(line: string, indent: string): string {
+  if (!indent) {
+    return line;
+  }
+
+  return line.startsWith(indent) ? line.slice(indent.length) : line.trimStart();
 }
 
 function isHorizontalRuleLine(line: string): boolean {
@@ -61,7 +94,9 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
   const lines = text.split("\n");
   const output: string[] = [];
   let inCodeFence = false;
+  let codeFenceMark: "`" | "~" | null = null;
   let inQuote = false;
+  let listContentIndent = 0;
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
@@ -69,8 +104,15 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
       continue;
     }
 
-    if (isCodeFenceLine(line)) {
-      inCodeFence = !inCodeFence;
+    const fence = codeFenceChar(line);
+    if (fence) {
+      if (!inCodeFence) {
+        inCodeFence = true;
+        codeFenceMark = fence;
+      } else if (fence === codeFenceMark) {
+        inCodeFence = false;
+        codeFenceMark = null;
+      }
       inQuote = false;
       output.push(line);
       continue;
@@ -87,9 +129,24 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
       continue;
     }
 
+    const indent = leadingIndent(line);
+
+    // Indented code is literal text: formulas inside it must stay untouched.
+    if (isIndentedCodeLine(line, listContentIndent)) {
+      output.push(line);
+      continue;
+    }
+
+    const listMarker = line.match(LIST_MARKER_PATTERN);
+    if (listMarker) {
+      listContentIndent = indentWidth(listMarker[0]);
+    } else if (indentWidth(indent) < listContentIndent) {
+      listContentIndent = 0;
+    }
+
     const singleLineMath = extractSingleLineMath(line);
     if (singleLineMath) {
-      output.push("```math", singleLineMath, "```");
+      output.push(`${indent}\`\`\`math`, `${indent}${singleLineMath}`, `${indent}\`\`\``);
       inQuote = false;
       continue;
     }
@@ -109,9 +166,16 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
         expressionLines.push(innerLine);
       }
 
-      const expression = expressionLines.join("\n").trim();
+      const expression = expressionLines
+        .map((expressionLine) => stripIndent(expressionLine, indent))
+        .join("\n")
+        .trim();
       if (closingIndex !== -1 && expression) {
-        output.push("```math", expression, "```");
+        output.push(`${indent}\`\`\`math`);
+        for (const expressionLine of expression.split("\n")) {
+          output.push(expressionLine ? `${indent}${expressionLine}` : "");
+        }
+        output.push(`${indent}\`\`\``);
         index = closingIndex;
         inQuote = false;
         continue;
