@@ -178,7 +178,7 @@ Interaction routing rules:
 - Only one interactive flow can be active at a time (inline menu, permission, question, rename, commands, skills, messages)
 - Agent questions and permission requests are shown one after another: one arriving while another holds the slot waits, and waiting requests appear in the order they arrived; a new question from the session whose poll is on screen replaces it, one from another session (a parallel subagent) waits; `/abort`, `/detach` and `/opencode_stop` drop everything waiting
 - While an interaction is active, unrelated input is blocked with a contextual hint
-- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`, `/opencode_stop`; idle model, project, session, command and skill searches block them
+- Allowed utility commands during active interactions: `/help`, `/status`, `/abort`, `/detach`, `/opencode_stop`. An idle search can restrict other utility commands, but not `/abort`, which ends the search
 - Unknown slash commands return an explicit fallback message
 - Interaction flows do not expire automatically and wait for explicit completion (`answer`, `cancel`, `/abort`, `/detach`, reset/cleanup)
 

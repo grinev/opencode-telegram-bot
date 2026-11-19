@@ -100,7 +100,7 @@ describe("interactionGuardMiddleware", () => {
       });
     }
 
-    it.each(["/help", "/status", "/abort", "/detach", "/opencode_stop", "/review"])(
+    it.each(["/help", "/status", "/detach", "/opencode_stop", "/review"])(
       "blocks %s as a command rather than treating it as an idle query",
       async (command) => {
         startSearch("input");
@@ -109,10 +109,23 @@ describe("interactionGuardMiddleware", () => {
         const next = vi.fn();
         await interactionGuardMiddleware(ctx, next, deps);
         expect(next).not.toHaveBeenCalled();
-        expect(ctx.reply).toHaveBeenCalled();
+        expect(ctx.reply).toHaveBeenCalledWith(t("interaction.blocked.command_not_allowed"));
         expect(deps.interactionManager.getSnapshot()).toEqual(before);
       },
     );
+
+    it.each(["input", "results"] as const)("passes /abort during idle %s", async (stage) => {
+      startSearch(stage);
+      const before = deps.interactionManager.getSnapshot();
+      const ctx = createTextContext("/abort");
+      const next = vi.fn();
+
+      await interactionGuardMiddleware(ctx, next, deps);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(ctx.reply).not.toHaveBeenCalled();
+      expect(deps.interactionManager.getSnapshot()).toEqual(before);
+    });
 
     it("blocks results-stage text with the existing expected-callback hint", async () => {
       startSearch("results");

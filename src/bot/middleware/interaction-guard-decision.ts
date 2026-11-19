@@ -238,7 +238,7 @@ export function resolveInteractionGuardDecision(
   }
 
   if (inputType === "command") {
-    if (command === "/start") {
+    if (command === "/start" || command === "/abort") {
       return createAllowDecision(inputType, state, command);
     }
 

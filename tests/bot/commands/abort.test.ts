@@ -167,6 +167,22 @@ describe("bot/commands/abort", () => {
     expect(mocked.abortMock).not.toHaveBeenCalled();
   });
 
+  it("ends an abandoned project search without an attached session", async () => {
+    container.interactionManager.start({
+      kind: "custom",
+      expectedInput: "text",
+      allowedCommands: [],
+      metadata: { flow: "project-search", stage: "input" },
+    });
+    const reply = vi.fn().mockResolvedValue(undefined);
+
+    await abortCommand({ reply } as never, createDeps());
+
+    expect(container.interactionManager.getSnapshot()).toBeNull();
+    expect(reply).toHaveBeenCalledWith(t("stop.no_active_session"));
+    expect(mocked.abortMock).not.toHaveBeenCalled();
+  });
+
   it("clears interaction state and aborts active session", async () => {
     activateInteractionState();
 
@@ -549,13 +565,19 @@ describe("bot/commands/abort", () => {
     expectAbortStateReleased("abort_confirmed");
   });
 
-  it("releases local busy state when abort request returns an API error", async () => {
+  it("releases local busy state and closes search results on an abort API error", async () => {
     mocked.currentSession = {
       id: "session-1",
       title: "Session",
       directory: "D:/repo",
     };
     markSessionBusy();
+    container.interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      allowedCommands: [],
+      metadata: { flow: "project-search", stage: "results" },
+    });
 
     mocked.abortMock.mockResolvedValue({ data: null, error: new Error("abort failed") });
 
@@ -571,6 +593,7 @@ describe("bot/commands/abort", () => {
     await abortCommand(ctx as never, createDeps());
 
     expect(editMessageTextMock).toHaveBeenCalledWith(777, 88, t("stop.warn_unconfirmed"));
+    expect(container.interactionManager.getSnapshot()).toBeNull();
     expectAbortStateReleased("abort_unconfirmed");
   });
 

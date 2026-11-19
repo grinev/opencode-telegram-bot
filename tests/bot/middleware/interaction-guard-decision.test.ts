@@ -117,6 +117,21 @@ describe("interaction guard", () => {
     expect(decision.command).toBe("/start");
   });
 
+  it.each(["/abort", "/abort@test_bot"])(
+    "allows %s even when the idle interaction restricts commands",
+    (text) => {
+      startInteractionForTest(deps.interactionManager, {
+        kind: "inline",
+        expectedInput: "callback",
+        allowedCommands: ["/status"],
+      });
+
+      const decision = resolveInteractionGuardDecision(createContext({ text }), deps);
+
+      expect(decision).toMatchObject({ allow: true, inputType: "command", command: "/abort" });
+    },
+  );
+
   it("blocks command that is not allowed", () => {
     startInteractionForTest(deps.interactionManager, {
       kind: "inline",
