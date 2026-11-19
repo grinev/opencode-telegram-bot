@@ -22,7 +22,10 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
   <img src="assets/screencast.gif" width="45%" alt="OpenCode Telegram Bot screencast" />
 </p>
 
-> I use [boardown](https://github.com/grinev/boardown), my open-source Markdown-based task board, to plan and track this project. It stores tasks in plain `.md` files and can be used as a VS Code extension or a desktop app.
+> Two tools I built help me keep this project moving:
+>
+> - [Boardown](https://github.com/grinev/boardown) — a task board for planning work and tracking tasks in plain Markdown files.
+> - [Stepan](https://github.com/grinev/stepan) — a tool for defining and running repeatable, step-by-step development workflows.
 
 ## Features
 
