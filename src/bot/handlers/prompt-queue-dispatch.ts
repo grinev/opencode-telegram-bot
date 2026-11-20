@@ -22,7 +22,9 @@ import { sendBotText } from "../messages/telegram-text.js";
 import { isReplyKeyboardButtonText } from "../message-patterns.js";
 import {
   admitPromptToInbox,
+  isSessionRunning,
   processUserPrompt,
+  sendPromptToRunningTurn,
   startInboxPromptRun,
   type ProcessPromptDeps,
 } from "./prompt.js";
@@ -99,7 +101,11 @@ export function canQueueMediaPrompt(ctx: Context): boolean {
  * Queues a prepared prompt that arrived while the session was busy.
  * Returns false when queueing does not apply, so the caller keeps its old behaviour.
  */
-export async function tryEnqueuePrompt(ctx: Context, input: QueuedPromptInput): Promise<boolean> {
+export async function tryEnqueuePrompt(
+  ctx: Context,
+  input: QueuedPromptInput,
+  ticket?: ArrivalTicket,
+): Promise<boolean> {
   if (!promptDeps || !isPromptQueueEnabled() || !ctx.chat || !isQueueablePrompt(input)) {
     return false;
   }
@@ -109,7 +115,38 @@ export async function tryEnqueuePrompt(ctx: Context, input: QueuedPromptInput): 
     return true;
   }
 
+  // On V1 the running loop picks a steered prompt up at its next step: nothing is held.
+  // Prompts handed over at /detach still go first, and a turn the bot only finalizes is
+  // not running on the server: those messages wait in the bot like in Queue mode.
+  const steerAttempted = getPromptQueueMode() === "steer" && !waitsForHandedOverPrompts();
+  if (steerAttempted) {
+    const outcome = await sendPromptToRunningTurn(ctx, input, promptDeps, ticket);
+    if (outcome === "sent") {
+      await replyWithKeyboard(ctx, t("queue.steer_sent"));
+      return true;
+    }
+    if (outcome === "detached") {
+      // The session was detached while the prompt was being prepared: it follows it,
+      // and a refused handover is reported instead of dropping the prompt silently.
+      if (!ticket || !(await handOverPreparedPrompt(ctx, ticket, input))) {
+        await replyWithKeyboard(ctx, t("bot.prompt_send_error"));
+      }
+      return true;
+    }
+    if (outcome === "failed") {
+      return true;
+    }
+  }
+
   queuedPromptContext = ctx;
+
+  // A steer that fell back here may have skipped the pre-download media check: media
+  // without a reliable Telegram size is refused rather than held as zero bytes.
+  const carriesMedia = input.photos.length > 0 || input.fileParts.length > 0;
+  if (steerAttempted && carriesMedia && input.mediaBytes === undefined) {
+    await replyWithKeyboard(ctx, t("queue.media_limit", { maxSizeMb: formatQueuedMediaLimit() }));
+    return true;
+  }
 
   if (promptQueue.isFull()) {
     logger.info(`[PromptQueue] Rejected prompt: queue is full (max=${MAX_QUEUED_PROMPTS})`);
@@ -134,6 +171,10 @@ export async function tryEnqueuePrompt(ctx: Context, input: QueuedPromptInput): 
     ctx,
     t("queue.added", { count: String(promptQueue.size()), max: String(MAX_QUEUED_PROMPTS) }),
   );
+  if (steerAttempted) {
+    // The idle handler of the turn that just ended may have drained the queue already.
+    void dispatchNextQueuedPrompt();
+  }
   return true;
 }
 
@@ -235,7 +276,7 @@ export async function tryEnqueuePromptIfBusy(
   if (ticket && promptHandover.wasDetachedSince(ticket) && isQueueablePrompt(input)) {
     return handOverPreparedPrompt(ctx, ticket, input);
   }
-  return isBusy() && tryEnqueuePrompt(ctx, input);
+  return isBusy() && tryEnqueuePrompt(ctx, input, ticket);
 }
 
 /**
@@ -249,13 +290,26 @@ export async function rejectQueuedMediaBeforePreparation(
   if (!isBusy() || !isPromptQueueEnabled() || !ctx.chat) {
     return false;
   }
+  if (usesOpencodeInbox()) {
+    if (promptQueue.isFull()) {
+      await replyWithKeyboard(ctx, t("queue.full", { max: String(MAX_QUEUED_PROMPTS) }));
+      return true;
+    }
+    // Nothing is held by the bot on V2, so the queued media cap does not apply there.
+    return false;
+  }
+  // A steered prompt reaches the running turn at once, so no queue cap applies on V1
+  // either — but prompts handed over at /detach still queue ahead of it, and a message
+  // the server will not pick up falls back to the queue, caps included.
+  if (getPromptQueueMode() === "steer" && !waitsForHandedOverPrompts()) {
+    const session = getCurrentSession();
+    if (session && (await isSessionRunning(session.id, session.directory))) {
+      return false;
+    }
+  }
   if (promptQueue.isFull()) {
     await replyWithKeyboard(ctx, t("queue.full", { max: String(MAX_QUEUED_PROMPTS) }));
     return true;
-  }
-  // Nothing is held by the bot on V2, so the queued media cap does not apply there.
-  if (usesOpencodeInbox()) {
-    return false;
   }
   if (
     typeof mediaBytes !== "number" ||

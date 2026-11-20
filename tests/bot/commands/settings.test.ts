@@ -494,7 +494,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
     expect(defined(opts?.reply_markup?.inline_keyboard[8]?.[0]).text).toBe(
-      `${t("settings.prompt_queue.label")}: ${t("settings.value.on")}`,
+      `${t("settings.prompt_queue.label")}: ${t("settings.prompt_queue.queue")}`,
     );
   });
 
@@ -533,18 +533,18 @@ describe("bot/callbacks/settings-callback-handler", () => {
       },
     );
 
-    it("toggles the bot queue off on a V1 server", async () => {
+    it("cycles the queue to steer on a V1 server", async () => {
       mocked.getCompactOutputModeMock.mockReturnValue(false);
       mocked.getTtsModeMock.mockReturnValue("off");
-      mocked.getPromptQueueModeMock.mockReturnValueOnce("queue").mockReturnValueOnce("off");
+      mocked.getPromptQueueModeMock.mockReturnValueOnce("queue").mockReturnValueOnce("steer");
       activateSettingsMenu();
       const ctx = createCallbackContext(SETTINGS_PROMPT_QUEUE_CALLBACK);
 
       await handleSettingsCallback(ctx, createDeps());
 
-      expect(mocked.setPromptQueueModeMock).toHaveBeenCalledWith("off");
+      expect(mocked.setPromptQueueModeMock).toHaveBeenCalledWith("steer");
       expect(queueRowText(ctx)).toBe(
-        `${t("settings.prompt_queue.label")}: ${t("settings.value.off")}`,
+        `${t("settings.prompt_queue.label")}: ${t("settings.prompt_queue.steer")}`,
       );
     });
   });

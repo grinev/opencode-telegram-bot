@@ -466,6 +466,7 @@ export const tr: I18nDictionary = {
   "queue.removed": "🗑 Mesaj kuyruktan kaldırıldı.",
   "queue.not_found": "Bu mesaj artık kuyrukta değil.",
   "queue.steer_added": "📥 Geçerli göreve eklendi ({count}/{max}).",
+  "queue.steer_sent": "📥 Geçerli göreve eklendi.",
   "queue.disabled_hint": "Mesaj kuyruğu /settings içinden açılabilir.",
   "keyboard.updated": "⌨️ Klavye güncellendi",
 

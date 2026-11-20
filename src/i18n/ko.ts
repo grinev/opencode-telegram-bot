@@ -473,6 +473,7 @@ export const ko: I18nDictionary = {
   "queue.removed": "🗑 대기열에서 메시지를 삭제했습니다.",
   "queue.not_found": "이 메시지는 더 이상 대기열에 없습니다.",
   "queue.steer_added": "📥 현재 작업에 추가했습니다 ({count}/{max}).",
+  "queue.steer_sent": "📥 현재 작업에 추가했습니다.",
   "queue.disabled_hint": "메시지 대기열은 /settings에서 활성화할 수 있습니다.",
   "keyboard.updated": "⌨️ 키보드가 업데이트되었습니다",
 

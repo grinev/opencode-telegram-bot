@@ -466,6 +466,7 @@ export const id: I18nDictionary = {
   "queue.removed": "🗑 Pesan dihapus dari antrean.",
   "queue.not_found": "Pesan ini sudah tidak ada di antrean.",
   "queue.steer_added": "📥 Ditambahkan ke tugas saat ini ({count}/{max}).",
+  "queue.steer_sent": "📥 Ditambahkan ke tugas saat ini.",
   "queue.disabled_hint": "Aktifkan antrean pesan di /settings.",
   "keyboard.updated": "⌨️ Keyboard diperbarui",
 

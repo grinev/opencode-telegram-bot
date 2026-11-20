@@ -5,10 +5,15 @@ import {
   admitPromptToInbox,
   getPromptResponseMode,
   processUserPrompt as processIncomingPrompt,
+  sendPromptToRunningTurn,
   type ProcessPromptDeps,
 } from "../../../src/bot/handlers/prompt.js";
 import { promptAttachment } from "../../../src/app/managers/prompt-attachment-manager.js";
-import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
+import {
+  promptHandover,
+  type ArrivalTicket,
+} from "../../../src/app/managers/prompt-handover-manager.js";
+import { createIncomingPrompt, type IncomingPrompt } from "../../../src/app/types/prompt.js";
 import { t } from "../../../src/i18n/index.js";
 import { logger } from "../../../src/utils/logger.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
@@ -148,6 +153,7 @@ function createDeps(): ProcessPromptDeps {
       startRun: vi.fn(),
       clearRun: vi.fn(),
       clearAll: vi.fn(),
+      hasRun: vi.fn(() => true),
     } as unknown as AppContainer["assistantRunState"],
     externalUserInputSuppressionManager: {
       register: mocked.suppressionRegisterMock,
@@ -834,6 +840,254 @@ describe("bot/handlers/prompt", () => {
 
       expect(mocked.resolvePendingAttachmentMock).toHaveBeenCalled();
       expect(mocked.interactionClearMock).not.toHaveBeenCalledWith("attachment_consumed");
+    });
+  });
+
+  describe("sendPromptToRunningTurn", () => {
+    beforeEach(() => {
+      mocked.sessionStatusMock.mockResolvedValue({
+        data: { "session-1": { type: "busy" } },
+        error: null,
+      });
+    });
+
+    function steer(
+      ctx: Context,
+      deps: ProcessPromptDeps,
+      input: IncomingPrompt & { responseMode?: "text_only" | "text_and_tts" } =
+        createIncomingPrompt("Also check the tests"),
+      ticket?: ArrivalTicket,
+    ): ReturnType<typeof sendPromptToRunningTurn> {
+      return sendPromptToRunningTurn(ctx, input, deps, ticket);
+    }
+
+    it("sends the prompt into the running turn through promptAsync", async () => {
+      const ctx = createContext();
+      const deps = createDeps();
+
+      await expect(
+        steer(ctx, deps, {
+          ...createIncomingPrompt("Also check the tests"),
+          responseMode: "text_and_tts",
+        }),
+      ).resolves.toBe("sent");
+
+      expect(mocked.sessionPromptAsyncMock).toHaveBeenCalledWith({
+        sessionID: "session-1",
+        directory: "D:\\Projects\\Repo",
+        parts: [{ type: "text", text: "Also check the tests" }],
+        agent: "build",
+        model: { providerID: "openai", modelID: "gpt-5" },
+        variant: "default",
+      });
+      expect(deps.assistantRunState.startRun).not.toHaveBeenCalled();
+      expect(getPromptResponseMode("session-1")).toBe("text_and_tts");
+      expect(mocked.suppressionRegisterMock).toHaveBeenCalledWith(
+        "session-1",
+        "Also check the tests",
+      );
+      expect(ctx.reply).not.toHaveBeenCalled();
+    });
+
+    it("treats a provider retry as a running turn", async () => {
+      mocked.sessionStatusMock.mockResolvedValue({
+        data: { "session-1": { type: "retry" } },
+        error: null,
+      });
+      const deps = createDeps();
+
+      await expect(steer(createContext(), deps)).resolves.toBe("sent");
+
+      expect(mocked.sessionPromptAsyncMock).toHaveBeenCalled();
+    });
+
+    it("leaves the prompt to the queue when no turn runs on the server", async () => {
+      mocked.sessionStatusMock.mockResolvedValue({
+        data: { "session-1": { type: "idle" } },
+        error: null,
+      });
+      const ctx = createContext();
+      const deps = createDeps();
+
+      await expect(steer(ctx, deps)).resolves.toBe("not_running");
+
+      expect(mocked.sessionPromptAsyncMock).not.toHaveBeenCalled();
+      expect(deps.assistantRunState.startRun).not.toHaveBeenCalled();
+      expect(mocked.suppressionRegisterMock).not.toHaveBeenCalled();
+      expect(ctx.reply).not.toHaveBeenCalled();
+    });
+
+    it("starts a run when the bot has no run for the running turn", async () => {
+      const deps = createDeps();
+      vi.mocked(deps.assistantRunState.hasRun).mockReturnValue(false);
+
+      await expect(
+        steer(createContext(), deps, {
+          ...createIncomingPrompt("Also check the tests"),
+          responseMode: "text_and_tts",
+        }),
+      ).resolves.toBe("sent");
+
+      expect(deps.assistantRunState.startRun).toHaveBeenCalledWith(
+        "session-1",
+        expect.objectContaining({
+          configuredAgent: "build",
+          configuredProviderID: "openai",
+          configuredModelID: "gpt-5",
+        }),
+      );
+      expect(getPromptResponseMode("session-1")).toBe("text_and_tts");
+      expect(mocked.sessionPromptAsyncMock).toHaveBeenCalled();
+    });
+
+    it("cleans up when the run cannot be opened", async () => {
+      mocked.sessionStatusMock
+        .mockResolvedValueOnce({ data: { "session-1": { type: "busy" } }, error: null })
+        .mockResolvedValueOnce({ data: { "session-1": { type: "idle" } }, error: null });
+      const attachService = await import("../../../src/app/services/attach-service.js");
+      vi.mocked(attachService.markAttachedSessionBusy).mockRejectedValueOnce(
+        new Error("dashboard down"),
+      );
+      const deps = createDeps();
+      vi.mocked(deps.assistantRunState.hasRun).mockReturnValue(false);
+      const ctx = createContext();
+
+      await expect(steer(ctx, deps)).resolves.toBe("failed");
+
+      expect(deps.foregroundSessionState.markIdle).toHaveBeenCalledWith("session-1");
+      expect(deps.assistantRunState.clearRun).toHaveBeenCalledWith(
+        "session-1",
+        "steer_prompt_error",
+      );
+      expect(ctx.reply).toHaveBeenCalledWith(t("bot.prompt_send_error"));
+    });
+
+    it("reports a start error and clears the run it opened", async () => {
+      mocked.sessionStatusMock
+        .mockResolvedValueOnce({ data: { "session-1": { type: "busy" } }, error: null })
+        .mockResolvedValueOnce({ data: { "session-1": { type: "idle" } }, error: null });
+      const deps = createDeps();
+      vi.mocked(deps.assistantRunState.hasRun).mockReturnValue(false);
+      mocked.sessionPromptAsyncMock.mockResolvedValue({ data: {}, error: new Error("refused") });
+      const ctx = createContext();
+
+      await expect(steer(ctx, deps)).resolves.toBe("failed");
+
+      expect(ctx.reply).toHaveBeenCalledWith(t("bot.prompt_send_error"));
+      expect(deps.assistantRunState.clearRun).toHaveBeenCalledWith(
+        "session-1",
+        "steer_prompt_api_error",
+      );
+      expect(deps.foregroundSessionState.markIdle).toHaveBeenCalledWith("session-1");
+    });
+
+    it("keeps the running turn when the steer send fails", async () => {
+      const deps = createDeps();
+      mocked.sessionPromptAsyncMock.mockRejectedValueOnce(new Error("network down"));
+      const ctx = createContext();
+
+      await expect(steer(ctx, deps)).resolves.toBe("failed");
+
+      expect(ctx.reply).toHaveBeenCalledWith(t("bot.prompt_send_error"));
+      expect(deps.assistantRunState.clearRun).not.toHaveBeenCalled();
+    });
+
+    it("replies with a send error when there is no current session", async () => {
+      mocked.currentSession = null;
+      const ctx = createContext();
+
+      await expect(steer(ctx, createDeps())).resolves.toBe("failed");
+
+      expect(ctx.reply).toHaveBeenCalledWith(t("bot.prompt_send_error"));
+    });
+
+    it("reports a session detached before the steer", async () => {
+      promptHandover.__resetForTests();
+      const ticket = promptHandover.takeTicket("session-1");
+      promptHandover.recordDetach(
+        { id: "session-1", directory: "D:\\Projects\\Repo" },
+        { agent: "build", providerID: "openai", modelID: "gpt-5" },
+      );
+      const deps = createDeps();
+
+      await expect(steer(createContext(), deps, undefined, ticket)).resolves.toBe(
+        "detached",
+      );
+
+      expect(mocked.sessionPromptAsyncMock).not.toHaveBeenCalled();
+      expect(deps.assistantRunState.startRun).not.toHaveBeenCalled();
+    });
+
+    it("reports a session detached while the prompt was prepared", async () => {
+      promptHandover.__resetForTests();
+      const ticket = promptHandover.takeTicket("session-1");
+      mocked.resolvePendingAttachmentMock.mockImplementation(async () => {
+        promptHandover.recordDetach(
+          { id: "session-1", directory: "D:\\Projects\\Repo" },
+          { agent: "build", providerID: "openai", modelID: "gpt-5" },
+        );
+        return null;
+      });
+      const deps = createDeps();
+
+      await expect(steer(createContext(), deps, undefined, ticket)).resolves.toBe(
+        "detached",
+      );
+
+      expect(mocked.sessionPromptAsyncMock).not.toHaveBeenCalled();
+      expect(deps.assistantRunState.startRun).not.toHaveBeenCalled();
+    });
+
+    it("reports a session detached while the run was opening", async () => {
+      promptHandover.__resetForTests();
+      const ticket = promptHandover.takeTicket("session-1");
+      const attachService = await import("../../../src/app/services/attach-service.js");
+      vi.mocked(attachService.markAttachedSessionBusy).mockImplementationOnce(async () => {
+        promptHandover.recordDetach(
+          { id: "session-1", directory: "D:\\Projects\\Repo" },
+          { agent: "build", providerID: "openai", modelID: "gpt-5" },
+        );
+      });
+      const deps = createDeps();
+      vi.mocked(deps.assistantRunState.hasRun).mockReturnValue(false);
+
+      await expect(steer(createContext(), deps, undefined, ticket)).resolves.toBe(
+        "detached",
+      );
+
+      expect(mocked.sessionPromptAsyncMock).not.toHaveBeenCalled();
+      expect(deps.assistantRunState.clearRun).toHaveBeenCalledWith("session-1", "steer_detached");
+    });
+
+    it("keeps the busy state when the server still runs the turn after a failed steer", async () => {
+      const deps = createDeps();
+      vi.mocked(deps.assistantRunState.hasRun).mockReturnValue(false);
+      mocked.sessionPromptAsyncMock.mockResolvedValue({ data: {}, error: new Error("refused") });
+      const ctx = createContext();
+
+      await expect(steer(ctx, deps)).resolves.toBe("failed");
+
+      expect(ctx.reply).toHaveBeenCalledWith(t("bot.prompt_send_error"));
+      expect(deps.foregroundSessionState.markIdle).not.toHaveBeenCalled();
+      expect(deps.assistantRunState.clearRun).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the queue when the status check fails", async () => {
+      mocked.sessionStatusMock.mockRejectedValueOnce(new Error("network down"));
+      const deps = createDeps();
+
+      await expect(steer(createContext(), deps)).resolves.toBe("not_running");
+
+      expect(mocked.sessionPromptAsyncMock).not.toHaveBeenCalled();
+    });
+
+    it("reports a missing project folder and sends nothing", async () => {
+      mocked.getMissingFolderNoticeMock.mockResolvedValue("folder gone notice");
+      const ctx = createContext();
+
+      await expect(steer(ctx, createDeps())).resolves.toBe("failed");
+
+      expect(mocked.sessionPromptAsyncMock).not.toHaveBeenCalled();
     });
   });
 });

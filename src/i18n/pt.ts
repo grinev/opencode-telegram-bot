@@ -482,6 +482,7 @@ export const pt: I18nDictionary = {
   "queue.removed": "🗑 Mensagem removida da fila.",
   "queue.not_found": "Esta mensagem não está mais na fila.",
   "queue.steer_added": "📥 Adicionado à tarefa atual ({count}/{max}).",
+  "queue.steer_sent": "📥 Adicionado à tarefa atual.",
   "queue.disabled_hint": "A fila de mensagens pode ser ativada em /settings.",
   "keyboard.updated": "⌨️ Teclado atualizado",
 

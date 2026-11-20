@@ -474,6 +474,7 @@ export const ru: I18nDictionary = {
   "queue.removed": "🗑 Сообщение удалено из очереди.",
   "queue.not_found": "Этого сообщения больше нет в очереди.",
   "queue.steer_added": "📥 Добавлено в текущую задачу ({count}/{max}).",
+  "queue.steer_sent": "📥 Добавлено в текущую задачу.",
   "queue.disabled_hint": "Очередь сообщений включается в /settings.",
   "keyboard.updated": "⌨️ Клавиатура обновлена",
 

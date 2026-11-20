@@ -454,6 +454,7 @@ export const ar: I18nDictionary = {
   "queue.removed": "🗑 تمت إزالة الرسالة من قائمة الانتظار.",
   "queue.not_found": "لم تعد هذه الرسالة في قائمة الانتظار.",
   "queue.steer_added": "📥 تمت الإضافة إلى المهمة الحالية ({count}/{max}).",
+  "queue.steer_sent": "📥 تمت الإضافة إلى المهمة الحالية.",
   "queue.disabled_hint": "يمكن تفعيل قائمة انتظار الرسائل من /settings.",
   "keyboard.updated": "⌨️ تم تحديث لوحة التحكم",
 

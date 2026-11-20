@@ -180,6 +180,36 @@ describe("app/stores/settings-store", () => {
       },
     );
 
+    it("stores the V1 steer choice apart from the V2 mode", async () => {
+      const readSettings = async () =>
+        JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
+
+      config.opencode.serverVersion = "v1";
+      await loadSettings();
+      setPromptQueueMode("steer");
+      await flushSettings();
+
+      expect(getPromptQueueMode()).toBe("steer");
+      expect(await readSettings()).toMatchObject({
+        promptQueueEnabled: true,
+        promptQueueV1Mode: "steer",
+      });
+
+      config.opencode.serverVersion = "v2";
+      await loadSettings();
+      expect(getPromptQueueMode()).toBe("steer");
+      setPromptQueueMode("queue");
+      await flushSettings();
+
+      config.opencode.serverVersion = "v1";
+      await loadSettings();
+      expect(getPromptQueueMode()).toBe("steer");
+      expect(await readSettings()).toMatchObject({
+        promptQueueMode: "queue",
+        promptQueueV1Mode: "steer",
+      });
+    });
+
     it("keeps the V1 and V2 choices apart across version switches", async () => {
       const readSettings = async () =>
         JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
@@ -213,7 +243,79 @@ describe("app/stores/settings-store", () => {
         promptQueueMode: "off",
       });
     });
+
+    it("lets a later change from an older build win over the stored V1 mode", async () => {
+      config.opencode.serverVersion = "v1";
+      await writeFile(
+        path.join(tempHome, "settings.json"),
+        JSON.stringify({ promptQueueV1Mode: "steer", promptQueueEnabled: false }),
+      );
+
+      await loadSettings();
+
+      expect(getPromptQueueMode()).toBe("off");
+    });
+
+    it("reads the older build's queue choice over a stored V1 off", async () => {
+      config.opencode.serverVersion = "v1";
+      await writeFile(
+        path.join(tempHome, "settings.json"),
+        JSON.stringify({ promptQueueV1Mode: "off", promptQueueEnabled: true }),
+      );
+
+      await loadSettings();
+
+      expect(getPromptQueueMode()).toBe("queue");
+    });
   });
+
+  it("applies queue modes from INITIAL_SETTINGS_PRESET", async () => {
+    vi.resetModules();
+    vi.stubEnv("OPENCODE_SERVER_VERSION", "v1");
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"promptQueueMode":"queue","promptQueueV1Mode":"steer"}');
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getPromptQueueMode()).toBe("steer");
+
+    await store.flushSettings();
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("applies the V2 queue mode from INITIAL_SETTINGS_PRESET", async () => {
+    vi.resetModules();
+    vi.stubEnv("OPENCODE_SERVER_VERSION", "v2");
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"promptQueueMode":"queue","promptQueueV1Mode":"steer"}');
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getPromptQueueMode()).toBe("queue");
+
+    await store.flushSettings();
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it.each(["promptQueueMode", "promptQueueV1Mode"])(
+    "throws when INITIAL_SETTINGS_PRESET %s is not a queue mode",
+    async (key) => {
+      vi.resetModules();
+      vi.stubEnv("INITIAL_SETTINGS_PRESET", JSON.stringify({ [key]: "later" }));
+
+      await expect(
+        (async () => {
+          const store = await import("../../../src/app/stores/settings-store.js");
+          await store.loadSettings();
+        })(),
+      ).rejects.toThrow(/expected one of off, queue, steer/);
+
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    },
+  );
 
   it("applies INITIAL_SETTINGS_PRESET for settings not yet persisted", async () => {
     vi.resetModules();
@@ -497,6 +599,25 @@ describe("app/stores/settings-store", () => {
     await store.loadSettings();
 
     expect(store.getPromptQueueMode()).toBe("queue");
+
+    await store.flushSettings();
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("does not let a preset promptQueueV1Mode override a stored promptQueueEnabled", async () => {
+    vi.resetModules();
+    vi.stubEnv("OPENCODE_SERVER_VERSION", "v1");
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"promptQueueV1Mode":"steer"}');
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      JSON.stringify({ promptQueueEnabled: false }),
+    );
+
+    const store = await import("../../../src/app/stores/settings-store.js");
+    await store.loadSettings();
+
+    expect(store.getPromptQueueMode()).toBe("off");
 
     await store.flushSettings();
     vi.unstubAllEnvs();

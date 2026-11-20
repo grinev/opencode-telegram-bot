@@ -52,6 +52,7 @@ export interface Settings {
   sendDiffFileAttachments?: boolean | undefined;
   promptQueueEnabled?: boolean | undefined;
   promptQueueMode?: PromptQueueMode | undefined;
+  promptQueueV1Mode?: PromptQueueMode | undefined;
   sessionDirectoryCache?: SessionDirectoryCacheInfo | undefined;
   scheduledTasks?: ScheduledTask[] | undefined;
   scheduledTaskSessionIgnores?: ScheduledTaskSessionIgnoreInfo[] | undefined;

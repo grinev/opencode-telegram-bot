@@ -476,6 +476,7 @@ export const it: I18nDictionary = {
   "queue.removed": "🗑 Messaggio rimosso dalla coda.",
   "queue.not_found": "Questo messaggio non è più in coda.",
   "queue.steer_added": "📥 Aggiunto all'attività corrente ({count}/{max}).",
+  "queue.steer_sent": "📥 Aggiunto all'attività corrente.",
   "queue.disabled_hint": "La coda dei messaggi può essere attivata in /settings.",
   "keyboard.updated": "⌨️ Tastiera aggiornata",
 

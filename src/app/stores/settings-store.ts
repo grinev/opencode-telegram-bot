@@ -273,21 +273,36 @@ export function setSendDiffFileAttachments(enabled: boolean): void {
 
 /**
  * The message queue mode in effect for the configured OpenCode server. V1 keeps its
- * released On/Off boolean (off by default); V2 stores its own mode (steer by default),
- * so neither version's choice moves the other's.
+ * released On/Off boolean as the fallback (off by default) and stores its own three
+ * modes separately from V2's (steer by default), so neither version's choice moves
+ * the other's.
  */
 export function getPromptQueueMode(): PromptQueueMode {
   if (config.opencode.serverVersion === "v2") {
     return currentSettings.promptQueueMode ?? "steer";
   }
 
-  return currentSettings.promptQueueEnabled === true ? "queue" : "off";
+  const mode = currentSettings.promptQueueV1Mode;
+  const legacy = currentSettings.promptQueueEnabled;
+  if (mode === undefined) {
+    return legacy === true ? "queue" : "off";
+  }
+
+  // An older build writes only the boolean: a disagreement means it changed the setting
+  // after this mode was stored, so the boolean is the later choice.
+  if (legacy !== undefined && legacy !== (mode !== "off")) {
+    return legacy ? "queue" : "off";
+  }
+
+  return mode;
 }
 
 export function setPromptQueueMode(mode: PromptQueueMode): void {
   if (config.opencode.serverVersion === "v2") {
     currentSettings.promptQueueMode = mode;
   } else {
+    currentSettings.promptQueueV1Mode = mode;
+    // Keep the released boolean in step for builds that only know it.
     currentSettings.promptQueueEnabled = mode !== "off";
   }
   void writeSettingsFile(currentSettings);
@@ -410,6 +425,7 @@ export function __resetSettingsForTests(): void {
 
 const VALID_TTS_MODES: readonly TtsMode[] = ["off", "all", "auto"];
 const VALID_STREAMING_MODES: readonly ResponseStreamingMode[] = ["edit", "draft"];
+const VALID_QUEUE_MODES: readonly PromptQueueMode[] = ["off", "queue", "steer"];
 
 function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
   const knownKeys = new Set([
@@ -423,6 +439,8 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
     "responseStreamingMode",
     "sendDiffFileAttachments",
     "promptQueueEnabled",
+    "promptQueueMode",
+    "promptQueueV1Mode",
   ]);
 
   for (const [key, value] of Object.entries(preset)) {
@@ -451,6 +469,18 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
       }
       if (currentSettings.responseStreamingMode === undefined) {
         currentSettings.responseStreamingMode = value as ResponseStreamingMode;
+      }
+    } else if (key === "promptQueueMode" || key === "promptQueueV1Mode") {
+      if (
+        typeof value !== "string" ||
+        !VALID_QUEUE_MODES.includes(value as PromptQueueMode)
+      ) {
+        throw new Error(
+          `INITIAL_SETTINGS_PRESET: invalid value for "${key}"; expected one of ${VALID_QUEUE_MODES.join(", ")}.`,
+        );
+      }
+      if (currentSettings[key] === undefined) {
+        currentSettings[key] = value as PromptQueueMode;
       }
     } else {
       // Boolean settings: compactOutputMode, deleteCompactProgressOnFinish, showThinkingContent, showAssistantRunFooter, pinnedDashboardEnabled, showBackgroundSessionNotifications, sendDiffFileAttachments, promptQueueEnabled

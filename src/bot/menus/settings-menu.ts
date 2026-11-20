@@ -15,7 +15,6 @@ import {
   type TtsMode,
 } from "../../app/stores/settings-store.js";
 import { t } from "../../i18n/index.js";
-import { opencodeServerVersion } from "../../opencode/client.js";
 
 export const SETTINGS_CALLBACK_PREFIX = "settings:";
 export const SETTINGS_COMPACT_OUTPUT_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}compact_output`;
@@ -45,12 +44,8 @@ export function formatTtsModeValue(mode: TtsMode): string {
   return t("status.tts.off");
 }
 
-/** V2 names the three modes; V1 has only the bot's own queue, so it stays On/Off. */
+/** Both versions name the three modes; on V1 steer reaches the running turn too. */
 export function formatPromptQueueModeValue(mode: PromptQueueMode): string {
-  if (opencodeServerVersion !== "v2") {
-    return formatBooleanSettingValue(mode !== "off");
-  }
-
   if (mode === "queue") {
     return t("settings.prompt_queue.queue");
   }

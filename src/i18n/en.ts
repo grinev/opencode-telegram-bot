@@ -471,6 +471,7 @@ export const en = {
   "queue.removed": "🗑 Message removed from the queue.",
   "queue.not_found": "This message is no longer in the queue.",
   "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
+  "queue.steer_sent": "📥 Added to the current task.",
   "queue.disabled_hint": "The message queue can be enabled in /settings.",
   "keyboard.updated": "⌨️ Keyboard updated",
 

@@ -463,6 +463,7 @@ export const pl: I18nDictionary = {
   "queue.removed": "🗑 Wiadomość usunięta z kolejki.",
   "queue.not_found": "Ta wiadomość nie znajduje się już w kolejce.",
   "queue.steer_added": "📥 Dodano do bieżącego zadania ({count}/{max}).",
+  "queue.steer_sent": "📥 Dodano do bieżącego zadania.",
   "queue.disabled_hint": "Kolejkę wiadomości można włączyć w /settings.",
   "keyboard.updated": "⌨️ Klawiatura zaktualizowana",
   "pinned.default_session_title": "nowa sesja",

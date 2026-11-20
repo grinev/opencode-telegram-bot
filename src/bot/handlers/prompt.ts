@@ -42,7 +42,11 @@ import {
   supportsInput,
 } from "../../app/services/model-capabilities-service.js";
 import type { IncomingPrompt } from "../../app/types/prompt.js";
-import type { HandoverSelection } from "../../app/managers/prompt-handover-manager.js";
+import {
+  promptHandover,
+  type ArrivalTicket,
+  type HandoverSelection,
+} from "../../app/managers/prompt-handover-manager.js";
 
 /** Module-level references for async callbacks that don't have ctx. */
 let botInstance: Bot<Context> | null = null;
@@ -77,26 +81,40 @@ export function getPromptResponseMode(sessionId: string): PromptResponseMode | n
   return promptResponseModes.get(sessionId) ?? null;
 }
 
-async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
+async function getSessionStatusType(
+  sessionId: string,
+  directory: string,
+): Promise<string | undefined> {
   try {
     const { data, error } = await opencodeClient.session.status({ directory });
 
     if (error || !data) {
       logger.warn("[Bot] Failed to check session status before prompt:", error);
-      return false;
+      return undefined;
     }
 
     const sessionStatus = (data as Record<string, { type?: string }>)[sessionId];
-    if (!sessionStatus) {
-      return false;
-    }
-
-    logger.debug(`[Bot] Current session status before prompt: ${sessionStatus.type || "unknown"}`);
-    return sessionStatus.type === "busy";
+    logger.debug(
+      `[Bot] Current session status before prompt: ${sessionStatus?.type || "unknown"}`,
+    );
+    return sessionStatus?.type;
   } catch (err) {
     logger.warn("[Bot] Error checking session status before prompt:", err);
-    return false;
+    return undefined;
   }
+}
+
+async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
+  return (await getSessionStatusType(sessionId, directory)) === "busy";
+}
+
+/** Whether a loop still runs: a provider retry belongs to a running turn, as in the handover. */
+export async function isSessionRunning(
+  sessionId: string,
+  directory: string,
+): Promise<boolean> {
+  const type = await getSessionStatusType(sessionId, directory);
+  return type === "busy" || type === "retry";
 }
 
 async function resetMismatchedSessionContext(deps: ProcessPromptDeps): Promise<void> {
@@ -657,6 +675,156 @@ async function sendToSessionInbox(
     return null;
   }
   return data.inboxID;
+}
+
+/**
+ * Sends a prompt into the running turn on OpenCode V1, whose message-driven loop picks
+ * it up at the next step, between tool calls, and keeps going in the same turn. Returns
+ * "sent" when the prompt was accepted, "not_running" when no turn runs on the server (the
+ * caller then holds it like a queued one), "detached" when its session was detached
+ * during preparation (the caller hands it over), and "failed" when it was refused; the
+ * user has been told why not otherwise.
+ */
+export async function sendPromptToRunningTurn(
+  ctx: Context,
+  input: IncomingPrompt & { responseMode?: PromptResponseMode },
+  deps: ProcessPromptDeps,
+  ticket?: ArrivalTicket,
+): Promise<"sent" | "not_running" | "detached" | "failed"> {
+  const currentSession = getCurrentSession();
+  if (!currentSession) {
+    logger.warn("[Bot] Cannot steer a prompt: no current session");
+    await ctx.reply(t("bot.prompt_send_error"));
+    return "failed";
+  }
+
+  if (await replyIfProjectFolderMissing(ctx, deps, currentSession.directory)) {
+    return "failed";
+  }
+
+  // A /detach handled while this prompt is being prepared keeps the message: it must not
+  // be steered into the session, nor start a new one through the queue fallback.
+  const detached = (): boolean =>
+    (ticket ? promptHandover.wasDetachedSince(ticket) : false) ||
+    getCurrentSession()?.id !== currentSession.id;
+
+  // The bot still counts a finished turn busy while it finalizes the reply after the
+  // idle event; only a loop the server still runs can take a steered message.
+  if (!(await isSessionRunning(currentSession.id, currentSession.directory))) {
+    return detached() ? "detached" : "not_running";
+  }
+
+  if (detached()) {
+    return "detached";
+  }
+
+  let startedRun = false;
+  let joinedRun = false;
+  let previousResponseMode: PromptResponseMode | null = null;
+
+  // Undoes the run this call opened. A turn the server still runs keeps its busy state:
+  // the bot may simply have had no run for it (a restart, an externally started turn).
+  const cleanupStartedRun = async (reason: string): Promise<void> => {
+    if (!startedRun) {
+      return;
+    }
+    startedRun = false;
+    if (await isSessionRunning(currentSession.id, currentSession.directory)) {
+      return;
+    }
+    deps.foregroundSessionState.markIdle(currentSession.id);
+    await markAttachedSessionIdle(currentSession.id, deps);
+    deps.assistantRunState.clearRun(currentSession.id, reason);
+    clearPromptResponseMode(currentSession.id);
+  };
+
+  const restoreJoinedMode = (): void => {
+    if (!joinedRun) {
+      return;
+    }
+    if (previousResponseMode) {
+      setPromptResponseMode(currentSession.id, previousResponseMode);
+    } else {
+      clearPromptResponseMode(currentSession.id);
+    }
+  };
+
+  try {
+    const prepared = await preparePromptRequest(ctx, input, deps, currentSession);
+    if (!prepared) {
+      return "failed";
+    }
+
+    // Preparation can take a while (media downloads, an /ls attachment).
+    if (detached()) {
+      return "detached";
+    }
+
+    const responseMode =
+      input.responseMode ?? (getTtsMode() === "all" ? "text_and_tts" : "text_only");
+
+    // The turn can end between the status check and this send: the next loop starts here
+    // then, so it must own a run for its reply, footer and busy state.
+    if (!deps.assistantRunState.hasRun(currentSession.id)) {
+      // Set first: a throw inside startPromptRun must still be cleaned up below.
+      startedRun = true;
+      await startPromptRun(currentSession, deps, {
+        agent: prepared.currentAgent,
+        providerID: prepared.storedModel.providerID,
+        modelID: prepared.storedModel.modelID,
+        responseMode,
+      });
+    } else {
+      joinedRun = true;
+      previousResponseMode = getPromptResponseMode(currentSession.id);
+      // Set before the send: the reply can complete before the call returns.
+      setPromptResponseMode(currentSession.id, responseMode);
+    }
+
+    // startPromptRun awaits the dashboard sync: a /detach handled meanwhile still keeps
+    // the message, and nothing may be steered into the detached session.
+    if (detached()) {
+      if (startedRun) {
+        startedRun = false;
+        deps.foregroundSessionState.markIdle(currentSession.id);
+        await markAttachedSessionIdle(currentSession.id, deps);
+        deps.assistantRunState.clearRun(currentSession.id, "steer_detached");
+        clearPromptResponseMode(currentSession.id);
+      }
+      return "detached";
+    }
+
+    if (prepared.preparedText.trim().length > 0) {
+      deps.externalUserInputSuppressionManager.register(
+        currentSession.id,
+        prepared.preparedText,
+      );
+    }
+
+    logger.info(
+      `[Bot] Steering a prompt into the running turn: session=${currentSession.id}, fileCount=${prepared.promptErrorLogContext.fileCount}`,
+    );
+    const { error } = await opencodeClient.session.promptAsync(prepared.promptOptions);
+    if (error) {
+      logger.error(
+        "[Bot] OpenCode API returned an error for the steered prompt",
+        prepared.promptErrorLogContext,
+      );
+      logger.error("[Bot] Steered prompt error details:", formatErrorDetails(error, 6000));
+      restoreJoinedMode();
+      await cleanupStartedRun("steer_prompt_api_error");
+      await ctx.reply(t("bot.prompt_send_error"));
+      return "failed";
+    }
+
+    return "sent";
+  } catch (err) {
+    restoreJoinedMode();
+    await cleanupStartedRun("steer_prompt_error");
+    logger.error(`[Bot] Failed to steer a prompt: session=${currentSession.id}`, err);
+    await ctx.reply(t("bot.prompt_send_error"));
+    return "failed";
+  }
 }
 
 type HandedOverPromptDeps = Pick<ProcessPromptDeps, "downloadFile" | "getModelCapabilities">;

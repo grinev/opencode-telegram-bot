@@ -431,6 +431,7 @@ export const zh: I18nDictionary = {
   "queue.removed": "🗑 消息已从队列中移除。",
   "queue.not_found": "该消息已不在队列中。",
   "queue.steer_added": "📥 已添加到当前任务（{count}/{max}）。",
+  "queue.steer_sent": "📥 已添加到当前任务。",
   "queue.disabled_hint": "可在 /settings 中开启消息队列。",
   "keyboard.updated": "⌨️ 键盘已更新",
 

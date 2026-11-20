@@ -4,6 +4,8 @@ import { defined } from "../../helpers/defined.js";
 import { createIncomingPrompt } from "../../../src/app/types/prompt.js";
 
 const processUserPromptMock = vi.hoisted(() => vi.fn());
+const sendPromptToRunningTurnMock = vi.hoisted(() => vi.fn());
+const isSessionRunningMock = vi.hoisted(() => vi.fn());
 const getPromptQueueModeMock = vi.hoisted(() => vi.fn());
 const isForegroundBusyMock = vi.hoisted(() => vi.fn());
 const getKeyboardMock = vi.hoisted(() => vi.fn());
@@ -18,6 +20,8 @@ vi.mock("../../../src/bot/handlers/prompt-handover.js", () => ({
 vi.mock("../../../src/bot/handlers/prompt.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/bot/handlers/prompt.js")>()),
   processUserPrompt: processUserPromptMock,
+  sendPromptToRunningTurn: sendPromptToRunningTurnMock,
+  isSessionRunning: isSessionRunningMock,
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -39,11 +43,13 @@ import {
   __resetPromptQueueDispatchForTests,
   dispatchNextQueuedPrompt,
   initializePromptQueueDispatch,
+  rejectQueuedMediaBeforePreparation,
   shouldSuggestPromptQueue as shouldSuggestPromptQueueInput,
   takeArrivalTicket,
   tryEnqueuePrompt as tryEnqueueInput,
   tryEnqueuePromptIfBusy,
 } from "../../../src/bot/handlers/prompt-queue-dispatch.js";
+import { t } from "../../../src/i18n/index.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 
@@ -82,6 +88,8 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
     handOverPreparedPromptMock.mockReset().mockResolvedValue(true);
     replyMock = vi.fn().mockResolvedValue(undefined);
     processUserPromptMock.mockReset().mockResolvedValue(true);
+    sendPromptToRunningTurnMock.mockReset().mockResolvedValue("sent");
+    isSessionRunningMock.mockReset().mockResolvedValue(true);
     getPromptQueueModeMock.mockReset().mockReturnValue("queue");
     isForegroundBusyMock.mockReset().mockReturnValue(false);
     getKeyboardMock.mockReset().mockReturnValue(KEYBOARD);
@@ -213,6 +221,274 @@ describe("bot/handlers/prompt-queue-dispatch", () => {
       await expect(tryEnqueuePrompt(ctx, "   ")).resolves.toBe(false);
 
       expect(promptQueue.size()).toBe(0);
+    });
+  });
+
+  describe("steer mode", () => {
+    it("sends the prompt into the running turn instead of queueing it", async () => {
+      getPromptQueueModeMock.mockReturnValue("steer");
+      const ctx = makeContext();
+      const input = createIncomingPrompt("do the thing");
+
+      await expect(tryEnqueueInput(ctx, input)).resolves.toBe(true);
+
+      expect(sendPromptToRunningTurnMock).toHaveBeenCalledWith(ctx, input, DEPS, undefined);
+      expect(promptQueue.size()).toBe(0);
+      expect(replyMock).toHaveBeenCalledWith(t("queue.steer_sent"), { reply_markup: KEYBOARD });
+    });
+
+    it("keeps quiet when the steer send reported its own failure", async () => {
+      getPromptQueueModeMock.mockReturnValue("steer");
+      sendPromptToRunningTurnMock.mockResolvedValue("failed");
+
+      await expect(tryEnqueuePrompt(makeContext(), "do the thing")).resolves.toBe(true);
+
+      expect(promptQueue.size()).toBe(0);
+      expect(replyMock).not.toHaveBeenCalled();
+    });
+
+    it("skips the caps that only apply to messages held in the bot", async () => {
+      getCurrentSettingsSessionMock.mockReturnValue({
+        id: "ses-1",
+        title: "Session",
+        directory: "D:/repo",
+      });
+      const ctx = makeContext();
+      for (let index = 0; index < MAX_QUEUED_PROMPTS; index++) {
+        await tryEnqueuePrompt(ctx, `prompt ${index}`);
+      }
+      getPromptQueueModeMock.mockReturnValue("steer");
+      isForegroundBusyMock.mockReturnValue(true);
+      replyMock.mockClear();
+
+      await expect(rejectQueuedMediaBeforePreparation(ctx, 100 * 1024 * 1024)).resolves.toBe(
+        false,
+      );
+      expect(replyMock).not.toHaveBeenCalled();
+    });
+
+    it("drains the fallback when the turn's busy state clears during the steer", async () => {
+      getPromptQueueModeMock.mockReturnValue("steer");
+      isForegroundBusyMock.mockReturnValue(true);
+      sendPromptToRunningTurnMock.mockImplementation(async () => {
+        isForegroundBusyMock.mockReturnValue(false);
+        return "not_running";
+      });
+
+      await expect(tryEnqueuePrompt(makeContext(), "do the thing")).resolves.toBe(true);
+
+      await vi.waitFor(() => expect(processUserPromptMock).toHaveBeenCalledTimes(1));
+      expect(promptQueue.size()).toBe(0);
+    });
+
+    it("refuses media without a reliable size when the steer falls back", async () => {
+      getPromptQueueModeMock.mockReturnValue("steer");
+      isForegroundBusyMock.mockReturnValue(true);
+      sendPromptToRunningTurnMock.mockResolvedValue("not_running");
+
+      await expect(
+        tryEnqueueInput(makeContext(), {
+          ...createIncomingPrompt("photo", {
+            fileParts: [
+              {
+                type: "file",
+                mime: "image/jpeg",
+                filename: "photo.jpg",
+                url: "data:image/jpeg;base64,cGhvdG8=",
+              },
+            ],
+          }),
+        }),
+      ).resolves.toBe(true);
+
+      expect(promptQueue.size()).toBe(0);
+      expect(replyMock).toHaveBeenCalledWith(
+        t("queue.media_limit", { maxSizeMb: "20" }),
+        { reply_markup: KEYBOARD },
+      );
+    });
+
+    it("queues a steered media prompt with a known size on fallback", async () => {
+      getPromptQueueModeMock.mockReturnValue("steer");
+      isForegroundBusyMock.mockReturnValue(true);
+      sendPromptToRunningTurnMock.mockResolvedValue("not_running");
+
+      await expect(
+        tryEnqueueInput(makeContext(), {
+          ...createIncomingPrompt("photo", {
+            fileParts: [
+              {
+                type: "file",
+                mime: "image/jpeg",
+                filename: "photo.jpg",
+                url: "data:image/jpeg;base64,cGhvdG8=",
+              },
+            ],
+          }),
+          mediaBytes: 1024,
+        }),
+      ).resolves.toBe(true);
+
+      expect(promptQueue.list()).toHaveLength(1);
+      expect(defined(promptQueue.list()[0]).mediaBytes).toBe(1024);
+    });
+
+    it("reports a detached steer that cannot be handed over", async () => {
+      getPromptQueueModeMock.mockReturnValue("steer");
+      sendPromptToRunningTurnMock.mockResolvedValue("detached");
+      const ctx = makeContext();
+
+      await expect(tryEnqueuePrompt(ctx, "do the thing")).resolves.toBe(true);
+
+      expect(handOverPreparedPromptMock).not.toHaveBeenCalled();
+      expect(replyMock).toHaveBeenCalledWith(t("bot.prompt_send_error"), {
+        reply_markup: KEYBOARD,
+      });
+    });
+
+    it("applies the media cap when no turn runs after all", async () => {
+      getCurrentSettingsSessionMock.mockReturnValue({
+        id: "ses-1",
+        title: "Session",
+        directory: "D:/repo",
+      });
+      getPromptQueueModeMock.mockReturnValue("steer");
+      isForegroundBusyMock.mockReturnValue(true);
+      isSessionRunningMock.mockResolvedValue(false);
+
+      await expect(
+        rejectQueuedMediaBeforePreparation(makeContext(), 100 * 1024 * 1024),
+      ).resolves.toBe(true);
+      expect(replyMock).toHaveBeenCalledWith(
+        t("queue.media_limit", { maxSizeMb: "20" }),
+        { reply_markup: KEYBOARD },
+      );
+    });
+
+    it("applies the queue-full cap when no turn runs after all", async () => {
+      const ctx = makeContext();
+      for (let index = 0; index < MAX_QUEUED_PROMPTS; index++) {
+        await tryEnqueuePrompt(ctx, `prompt ${index}`);
+      }
+      getCurrentSettingsSessionMock.mockReturnValue({
+        id: "ses-1",
+        title: "Session",
+        directory: "D:/repo",
+      });
+      getPromptQueueModeMock.mockReturnValue("steer");
+      isForegroundBusyMock.mockReturnValue(true);
+      isSessionRunningMock.mockResolvedValue(false);
+      replyMock.mockClear();
+
+      await expect(rejectQueuedMediaBeforePreparation(ctx, 1024)).resolves.toBe(true);
+      expect(replyMock).toHaveBeenCalledWith(
+        t("queue.full", { max: String(MAX_QUEUED_PROMPTS) }),
+        { reply_markup: KEYBOARD },
+      );
+    });
+
+    it("sends steered prompts even when the bot's queue is full", async () => {
+      const ctx = makeContext();
+      for (let index = 0; index < MAX_QUEUED_PROMPTS; index++) {
+        await tryEnqueuePrompt(ctx, `prompt ${index}`);
+      }
+      getPromptQueueModeMock.mockReturnValue("steer");
+      replyMock.mockClear();
+
+      await expect(tryEnqueuePrompt(ctx, "steered")).resolves.toBe(true);
+
+      expect(sendPromptToRunningTurnMock).toHaveBeenCalledTimes(1);
+      expect(promptQueue.size()).toBe(MAX_QUEUED_PROMPTS);
+      expect(replyMock).toHaveBeenCalledWith(t("queue.steer_sent"), { reply_markup: KEYBOARD });
+    });
+
+    it("holds the prompt in the queue when no turn runs on the server", async () => {
+      getPromptQueueModeMock.mockReturnValue("steer");
+      isForegroundBusyMock.mockReturnValue(true);
+      sendPromptToRunningTurnMock.mockResolvedValue("not_running");
+      const ctx = makeContext();
+
+      await expect(tryEnqueuePrompt(ctx, "do the thing")).resolves.toBe(true);
+
+      expect(promptQueue.list().map((item) => item.text)).toEqual(["do the thing"]);
+      expect(replyMock).toHaveBeenCalledTimes(1);
+      expect(replyMock).toHaveBeenCalledWith(
+        t("queue.added", { count: "1", max: String(MAX_QUEUED_PROMPTS) }),
+        { reply_markup: KEYBOARD },
+      );
+    });
+
+    it("applies the media cap while handed-over prompts still wait", async () => {
+      const SESSION = { id: "ses-1", title: "Session", directory: "D:/repo" };
+      const SELECTION = { agent: "build", providerID: "p", modelID: "m" };
+      promptHandover.recordDetach(SESSION, SELECTION);
+      promptHandover.addPrompt("ses-1", {
+        ...createIncomingPrompt("handed over"),
+        selection: SELECTION,
+      });
+      getCurrentSettingsSessionMock.mockReturnValue(SESSION);
+      getPromptQueueModeMock.mockReturnValue("steer");
+      isForegroundBusyMock.mockReturnValue(true);
+
+      await expect(
+        rejectQueuedMediaBeforePreparation(makeContext(), 100 * 1024 * 1024),
+      ).resolves.toBe(true);
+      expect(replyMock).toHaveBeenCalledWith(
+        t("queue.media_limit", { maxSizeMb: "20" }),
+        { reply_markup: KEYBOARD },
+      );
+    });
+
+    it("hands a prompt over when its session is detached while steering", async () => {
+      const SESSION = { id: "ses-1", title: "Session", directory: "D:/repo" };
+      getCurrentSettingsSessionMock.mockReturnValue(SESSION);
+      isForegroundBusyMock.mockReturnValue(true);
+      const ticket = takeArrivalTicket();
+      getPromptQueueModeMock.mockReturnValue("steer");
+      sendPromptToRunningTurnMock.mockResolvedValue("detached");
+      const ctx = makeContext();
+      const input = createIncomingPrompt("photo caption");
+
+      await expect(tryEnqueueInput(ctx, input, ticket)).resolves.toBe(true);
+
+      expect(handOverPreparedPromptMock).toHaveBeenCalledWith(ctx, ticket, input);
+      expect(replyMock).not.toHaveBeenCalled();
+    });
+
+    it("reports a refused handover of a detached steer", async () => {
+      const SESSION = { id: "ses-1", title: "Session", directory: "D:/repo" };
+      getCurrentSettingsSessionMock.mockReturnValue(SESSION);
+      isForegroundBusyMock.mockReturnValue(true);
+      const ticket = takeArrivalTicket();
+      getPromptQueueModeMock.mockReturnValue("steer");
+      sendPromptToRunningTurnMock.mockResolvedValue("detached");
+      handOverPreparedPromptMock.mockResolvedValue(false);
+      const ctx = makeContext();
+
+      await expect(tryEnqueueInput(ctx, createIncomingPrompt("caption"), ticket)).resolves.toBe(
+        true,
+      );
+
+      expect(replyMock).toHaveBeenCalledWith(t("bot.prompt_send_error"), {
+        reply_markup: KEYBOARD,
+      });
+    });
+
+    it("queues behind prompts handed over at /detach instead of steering", async () => {
+      const SESSION = { id: "ses-1", title: "Session", directory: "D:/repo" };
+      const SELECTION = { agent: "build", providerID: "p", modelID: "m" };
+      promptHandover.recordDetach(SESSION, SELECTION);
+      promptHandover.addPrompt("ses-1", {
+        ...createIncomingPrompt("handed over"),
+        selection: SELECTION,
+      });
+      getCurrentSettingsSessionMock.mockReturnValue(SESSION);
+      getPromptQueueModeMock.mockReturnValue("steer");
+
+      await expect(tryEnqueuePrompt(makeContext(), "sent since")).resolves.toBe(true);
+
+      expect(sendPromptToRunningTurnMock).not.toHaveBeenCalled();
+      expect(promptQueue.list().map((item) => item.text)).toEqual(["sent since"]);
     });
   });
 
