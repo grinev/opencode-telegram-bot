@@ -4,6 +4,7 @@ import { opencodeClient } from "../../opencode/client.js";
 import { fetchSessionTitle, getCurrentSession } from "../../app/services/session-service.js";
 import { formatSessionTitle } from "../../app/formatters/session-title-formatter.js";
 import { logger } from "../../utils/logger.js";
+import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { t } from "../../i18n/index.js";
 import { alert, failure } from "./feedback.js";
 import {
@@ -13,6 +14,10 @@ import {
   type InlineMenuDeps,
 } from "../menus/inline-menu.js";
 import { buildCompactConfirmationMenu } from "../menus/context-control-menu.js";
+
+// A manual compaction runs in the background now, so a second confirm could start
+// another one while the first is still running.
+const compactingSessions = new Set<string>();
 
 export async function handleCompactDetails(ctx: Context, deps: InlineMenuDeps): Promise<boolean> {
   if (ctx.callbackQuery?.data !== "compact:details") {
@@ -84,6 +89,13 @@ export async function handleCompactConfirm(
       return true;
     }
 
+    if (compactingSessions.has(session.id)) {
+      clearActiveInlineMenu("context_compact_already_running", deps);
+      await ctx.answerCallbackQuery({ text: t("context.callback_compacting") });
+      await ctx.deleteMessage().catch(() => {});
+      return true;
+    }
+
     // Answer callback query and delete menu immediately
     await ctx.answerCallbackQuery({ text: t("context.callback_compacting") });
     clearActiveInlineMenu("context_compact_confirmed", deps);
@@ -96,33 +108,44 @@ export async function handleCompactConfirm(
     await ctx.api.sendChatAction(ctx.chat!.id, "typing");
 
     const storedModel = getStoredModel();
+    const chatId = ctx.chat!.id;
+    const api = ctx.api;
+    const progressMessageId = progressMessage.message_id;
 
     logger.debug(
       `[ContextHandler] Calling summarize with sessionID=${session.id}, directory=${session.directory}, model=${storedModel.providerID}/${storedModel.modelID}`,
     );
 
-    // Call summarize API (AI compaction)
-    const { error } = await opencodeClient.session.summarize({
-      sessionID: session.id,
-      directory: session.directory,
-      providerID: storedModel.providerID,
-      modelID: storedModel.modelID,
+    // The compaction can run for minutes on a large context: keep it out of the update
+    // loop, or every command waits behind it and is then dropped as stale.
+    const showResult = (text: string) =>
+      api.editMessageText(chatId, progressMessageId, text).catch(() => undefined);
+    compactingSessions.add(session.id);
+    safeBackgroundTask({
+      taskName: "session.summarize",
+      task: () =>
+        opencodeClient.session.summarize({
+          sessionID: session.id,
+          directory: session.directory,
+          providerID: storedModel.providerID,
+          modelID: storedModel.modelID,
+        }),
+      onSuccess: async ({ error }) => {
+        compactingSessions.delete(session.id);
+        if (error) {
+          logger.error("[ContextHandler] Compact failed:", error);
+          await showResult(t("context.error"));
+          return;
+        }
+        logger.info(`[ContextHandler] Session compacted: ${session.id}`);
+        await showResult(t("context.success"));
+      },
+      onError: async (error) => {
+        compactingSessions.delete(session.id);
+        logger.error("[ContextHandler] Compact failed:", error);
+        await showResult(t("context.error"));
+      },
     });
-
-    if (error) {
-      logger.error("[ContextHandler] Compact failed:", error);
-      // Update progress message to show error
-      await ctx.api
-        .editMessageText(ctx.chat!.id, progressMessage.message_id, t("context.error"))
-        .catch(() => {});
-      return true;
-    }
-
-    logger.info(`[ContextHandler] Session compacted: ${session.id}`);
-    // Update progress message to show success
-    await ctx.api
-      .editMessageText(ctx.chat!.id, progressMessage.message_id, t("context.success"))
-      .catch(() => {});
 
     return true;
   } catch (err) {
