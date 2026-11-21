@@ -56,7 +56,76 @@ describe("context compaction flow", () => {
     expect(deps.interactionManager.getSnapshot()).toBeNull();
     expect(confirm.deleteMessage).toHaveBeenCalledOnce();
     expect(confirm.reply).toHaveBeenCalledWith(t("context.progress"));
-    expect(confirm.api.editMessageText).toHaveBeenCalledWith(100, 8, t("context.success"));
+    await vi.waitFor(() =>
+      expect(confirm.api.editMessageText).toHaveBeenCalledWith(100, 8, t("context.success")),
+    );
+  });
+
+  it("does not wait for the compaction to finish", async () => {
+    const deps = createTestAppContainer();
+    deps.interactionManager.start({ kind: "inline", expectedInput: "callback", metadata: { menuKind: "context", messageId: 7, stage: "confirm" } });
+    let finish!: (value: unknown) => void;
+    mocked.summarize.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const ctx = callback("compact:confirm");
+
+    await handleCompactConfirm(ctx, deps);
+
+    expect(mocked.summarize).toHaveBeenCalledOnce();
+    expect(ctx.api.editMessageText).not.toHaveBeenCalledWith(100, 8, t("context.success"));
+    finish({});
+    await vi.waitFor(() =>
+      expect(ctx.api.editMessageText).toHaveBeenCalledWith(100, 8, t("context.success")),
+    );
+  });
+
+  it("rejects a second confirmation while a compaction is still running", async () => {
+    const deps = createTestAppContainer();
+    deps.interactionManager.start({ kind: "inline", expectedInput: "callback", metadata: { menuKind: "context", messageId: 7, stage: "confirm" } });
+    let finish!: (value: unknown) => void;
+    mocked.summarize.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const first = callback("compact:confirm");
+    await handleCompactConfirm(first, deps);
+
+    deps.interactionManager.start({ kind: "inline", expectedInput: "callback", metadata: { menuKind: "context", messageId: 9, stage: "confirm" } });
+    const second = callback("compact:confirm", 9);
+    await handleCompactConfirm(second, deps);
+
+    expect(mocked.summarize).toHaveBeenCalledOnce();
+    expect(second.answerCallbackQuery).toHaveBeenCalledWith({ text: t("context.callback_compacting") });
+    expect(second.reply).not.toHaveBeenCalled();
+    expect(second.deleteMessage).toHaveBeenCalledOnce();
+    expect(deps.interactionManager.getSnapshot()).toBeNull();
+
+    finish({});
+    await vi.waitFor(() =>
+      expect(first.api.editMessageText).toHaveBeenCalledWith(100, 8, t("context.success")),
+    );
+  });
+
+  it("reports a failed compaction through the progress message", async () => {
+    for (const result of [
+      () => Promise.resolve({ error: new Error("boom") }),
+      () => Promise.reject(new Error("drop")),
+    ]) {
+      const deps = createTestAppContainer();
+      deps.interactionManager.start({ kind: "inline", expectedInput: "callback", metadata: { menuKind: "context", messageId: 7, stage: "confirm" } });
+      mocked.summarize.mockImplementationOnce(result);
+      const ctx = callback("compact:confirm");
+
+      await handleCompactConfirm(ctx, deps);
+
+      await vi.waitFor(() =>
+        expect(ctx.api.editMessageText).toHaveBeenCalledWith(100, 8, t("context.error")),
+      );
+    }
+
+    // The guard is released after a failed compaction, so a later confirm compacts again.
+    const callsBefore = mocked.summarize.mock.calls.length;
+    const deps = createTestAppContainer();
+    deps.interactionManager.start({ kind: "inline", expectedInput: "callback", metadata: { menuKind: "context", messageId: 7, stage: "confirm" } });
+    const retry = callback("compact:confirm");
+    await handleCompactConfirm(retry, deps);
+    expect(mocked.summarize).toHaveBeenCalledTimes(callsBefore + 1);
   });
 
   it("closes details or cancels confirmation without compacting", async () => {
