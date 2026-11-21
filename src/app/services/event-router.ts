@@ -3,6 +3,7 @@ import { config } from "../../config.js";
 import type { AppContainer } from "../bootstrap/app-container.js";
 import type { EventEnvelope } from "../../opencode/events.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
+import { logger } from "../../utils/logger.js";
 import { markAttachedSessionBusy } from "./attach-service.js";
 import { reconcileBusyState } from "./busy-reconciliation-service.js";
 import { ingestSessionInfoForCache } from "./session-cache-service.js";
@@ -16,7 +17,7 @@ export type EventRouterDeps = Pick<
   | "goalService"
   | "scheduledTaskRuntime"
   | "summaryAggregator"
->;
+> & Partial<Pick<AppContainer, "manualCompaction">>;
 
 export interface EventRouterOptions {
   /** The directory the subscription was opened for. */
@@ -64,15 +65,20 @@ export function createEventRouter({
   deps,
   isForegroundSession,
 }: EventRouterOptions): (envelope: EventEnvelope) => void {
+  const backgroundTails = new Map<string, Promise<void>>();
+
   return ({ event }) => {
     // The SDK event union does not list the heartbeat the server sends.
     if ((event as { type: string }).type === "server.heartbeat") {
       // A heartbeat is a liveness signal of the subscription, so the check runs
       // for the directory the subscription was opened with.
       void reconcileBusyState(directory, deps);
+      deps.manualCompaction?.reconcile(true);
     }
 
     const sessionId = getEventSessionId(event);
+    deps.manualCompaction?.onEvent(event, sessionId);
+    if ((event.type as string) === "manual_compaction.changed") return;
     const attached = deps.attachManager.getSnapshot();
     if (attached && sessionId === attached.sessionId && shouldMarkAttachedBusyFromEvent(event)) {
       void markAttachedSessionBusy(attached.sessionId, deps);
@@ -99,7 +105,25 @@ export function createEventRouter({
 
     if (config.bot.trackBackgroundSessions) {
       const foregroundSessionId = sessionId && isForegroundSession(sessionId) ? sessionId : null;
-      deps.backgroundSessionTracker.processEvent(event, foregroundSessionId);
+      const ignored = deps.manualCompaction?.isLegacyCompactionSummary(event) ?? false;
+      const forward = (skip: boolean) => {
+        if (!skip) deps.backgroundSessionTracker.processEvent(event, foregroundSessionId);
+      };
+      const previous = sessionId ? backgroundTails.get(sessionId) : undefined;
+      if (sessionId && (previous || typeof ignored !== "boolean")) {
+        const tail = (previous ?? Promise.resolve())
+          .then(() => ignored)
+          .then(forward)
+          .catch((error: unknown) => {
+            logger.warn(`[Events] Could not route background event for ${sessionId}`, error);
+          })
+          .finally(() => {
+            if (backgroundTails.get(sessionId) === tail) backgroundTails.delete(sessionId);
+          });
+        backgroundTails.set(sessionId, tail);
+      } else if (typeof ignored === "boolean") {
+        forward(ignored);
+      }
     }
 
     deps.summaryAggregator.processEvent(event);

@@ -90,6 +90,45 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).not.toHaveBeenCalled();
   });
 
+  it("blocks new text, media and catalog runs before the normal busy or queue logic", async () => {
+    const session = { id: "manual", title: "Manual", directory: "/project" };
+    vi.spyOn(settingsStore, "getCurrentSession").mockReturnValue(session);
+    mocked.getPromptQueueMode.mockReturnValue("on");
+    promptQueue.add(createIncomingPrompt("Accepted earlier"));
+    expect(deps.manualCompaction.reserve(session)).toBeDefined();
+
+    const next = vi.fn();
+    for (const ctx of [
+      createTextContext("New prompt"),
+      createVoiceContext(),
+      createTextContext("/commands"),
+      createTextContext("/skills"),
+      createTextContext("/reload"),
+    ]) {
+      await interactionGuardMiddleware(ctx, next, deps);
+      expect(ctx.reply).toHaveBeenCalledWith(t("context.blocked"));
+    }
+    const callback = createCallbackContext("background-session:c:other");
+    await interactionGuardMiddleware(callback, next, deps);
+    expect(callback.answerCallbackQuery).toHaveBeenCalledWith({ text: t("context.blocked") });
+    expect(next).not.toHaveBeenCalled();
+    expect(promptQueue.size()).toBe(1);
+    expect(mocked.reconcileForegroundBusyStateMock).not.toHaveBeenCalled();
+  });
+
+  it("allows the five utility commands and does not lock another selected session", async () => {
+    const session = { id: "manual", title: "Manual", directory: "/project" };
+    const selection = vi.spyOn(settingsStore, "getCurrentSession").mockReturnValue(session);
+    deps.manualCompaction.reserve(session);
+    const next = vi.fn();
+    for (const command of ["/abort", "/detach", "/status", "/help", "/opencode_stop"]) {
+      await interactionGuardMiddleware(createTextContext(command), next, deps);
+    }
+    selection.mockReturnValue({ ...session, id: "other" });
+    await interactionGuardMiddleware(createTextContext("New prompt"), next, deps);
+    expect(next).toHaveBeenCalledTimes(6);
+  });
+
   describe.each(["commands", "skills"])("%s search", (catalog) => {
     function startSearch(stage: "input" | "results") {
       deps.interactionManager.start({

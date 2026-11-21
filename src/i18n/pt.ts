@@ -411,6 +411,13 @@ export const pt: I18nDictionary = {
   "context.progress": "⏳ Compactando contexto...",
   "context.error": "❌ A compactação de contexto falhou",
   "context.success": "✅ Contexto compactado com sucesso",
+  "context.blocked": "O contexto está a ser compactado. Tente novamente quando terminar ou use /abort.",
+  "context.interrupted": "⏹ Compactação do contexto interrompida",
+  "context.status": "A compactar o contexto",
+  "context.background_success": "🔔 Contexto compactado noutra sessão:\n[{project}] {session}",
+  "context.cancel_pending": "⏳ A cancelar a compactação do contexto…",
+  "context.cancel_unconfirmed": "Não foi possível confirmar o cancelamento da compactação do contexto.",
+  "context.outcome_unknown": "Não foi possível verificar o resultado da compactação do contexto.",
 
   "permission.inactive_callback": "A solicitação de permissão está inativa",
   "permission.processing_error_callback": "Erro de processamento",

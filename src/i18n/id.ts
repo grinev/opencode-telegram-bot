@@ -396,6 +396,13 @@ export const id: I18nDictionary = {
   "context.progress": "⏳ Meringkas konteks...",
   "context.error": "❌ Gagal meringkas konteks",
   "context.success": "✅ Konteks berhasil diringkas",
+  "context.blocked": "Konteks sedang diringkas. Coba lagi setelah selesai atau gunakan /abort.",
+  "context.interrupted": "⏹ Peringkasan konteks dihentikan",
+  "context.status": "Meringkas konteks",
+  "context.background_success": "🔔 Konteks diringkas di sesi lain:\n[{project}] {session}",
+  "context.cancel_pending": "⏳ Membatalkan peringkasan konteks…",
+  "context.cancel_unconfirmed": "Pembatalan peringkasan konteks tidak dapat dikonfirmasi.",
+  "context.outcome_unknown": "Hasil peringkasan konteks tidak dapat diverifikasi.",
 
   "permission.inactive_callback": "Permintaan izin tidak aktif",
   "permission.processing_error_callback": "Gagal memproses",

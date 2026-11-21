@@ -4,7 +4,7 @@ import { getCurrentSession } from "../stores/settings-store.js";
 import { logger } from "../../utils/logger.js";
 
 export type BackgroundSessionNotificationKind =
-  "assistant_response" | "question_asked" | "permission_asked";
+  "assistant_response" | "question_asked" | "permission_asked" | "context_compacted";
 
 export interface BackgroundSessionNotification {
   kind: BackgroundSessionNotificationKind;

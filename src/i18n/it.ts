@@ -407,6 +407,13 @@ export const it: I18nDictionary = {
   "context.progress": "⏳ Compattazione del contesto...",
   "context.error": "❌ Compattazione del contesto non riuscita",
   "context.success": "✅ Contesto compattato correttamente",
+  "context.blocked": "Il contesto è in fase di compattazione. Riprova al termine oppure usa /abort.",
+  "context.interrupted": "⏹ Compattazione del contesto interrotta",
+  "context.status": "Compattazione del contesto in corso",
+  "context.background_success": "🔔 Contesto compattato in un’altra sessione:\n[{project}] {session}",
+  "context.cancel_pending": "⏳ Annullamento della compattazione del contesto…",
+  "context.cancel_unconfirmed": "Impossibile confermare l’annullamento della compattazione del contesto.",
+  "context.outcome_unknown": "Impossibile verificare il risultato della compattazione del contesto.",
 
   "permission.inactive_callback": "La richiesta di permesso non è attiva",
   "permission.processing_error_callback": "Errore di elaborazione",

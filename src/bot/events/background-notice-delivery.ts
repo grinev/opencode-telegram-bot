@@ -6,6 +6,7 @@ import { config } from "../../config.js";
 import { formatSessionTitle } from "../../app/formatters/session-title-formatter.js";
 import { fetchSessionTitle } from "../../app/services/session-service.js";
 import { loadRecentSessionDirectories } from "../../app/services/recent-sessions-service.js";
+import { normalizePathKey } from "../../app/services/worktree-service.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import type { BackgroundSessionNotification } from "../../app/managers/background-session-manager.js";
@@ -65,7 +66,10 @@ async function formatAssistantResponseNotification(
     resolveAssistantSessionTitle(notification, directory),
     resolveProjectLabel(directory),
   ]);
-  return t("background.assistant_response", { project, session });
+  const key = notification.kind === "context_compacted"
+    ? "context.background_success"
+    : "background.assistant_response";
+  return t(key, { project, session });
 }
 
 async function formatBackgroundSessionNotification(
@@ -73,6 +77,7 @@ async function formatBackgroundSessionNotification(
 ): Promise<string> {
   switch (notification.kind) {
     case "assistant_response":
+    case "context_compacted":
       return formatAssistantResponseNotification(notification);
     case "question_asked":
       return t("background.question_asked", { session: getBackgroundSessionLabel(notification) });
@@ -83,11 +88,21 @@ async function formatBackgroundSessionNotification(
 
 /** Sends a background-session notice to the destination of its own session. */
 export function createBackgroundNoticeDelivery(
-  policy: Pick<SessionTargetPolicy, "getDestination">,
+  policy: Pick<SessionTargetPolicy, "getDestination"> & Partial<Pick<SessionTargetPolicy, "isForegroundSession">>,
   delivery: TelegramEventDelivery,
 ): (notification: BackgroundSessionNotification) => Promise<void> {
   return async (notification) => {
-    if (!getShowBackgroundSessionNotifications()) {
+    const eligible = () => {
+      if (!getShowBackgroundSessionNotifications()) return false;
+      if (notification.kind !== "context_compacted") return true;
+      const project = getCurrentProject()?.worktree;
+      return Boolean(
+        project && notification.sessionDirectory &&
+        normalizePathKey(project) === normalizePathKey(notification.sessionDirectory) &&
+        !policy.isForegroundSession?.(notification.sessionId),
+      );
+    };
+    if (!eligible()) {
       return;
     }
 
@@ -96,7 +111,9 @@ export function createBackgroundNoticeDelivery(
       return;
     }
 
-    await delivery.sendText(destination, await formatBackgroundSessionNotification(notification), {
+    const text = await formatBackgroundSessionNotification(notification);
+    if (!eligible()) return;
+    await delivery.sendText(destination, text, {
       reply_markup: buildBackgroundSessionOpenKeyboard(notification.sessionId, notification.kind),
     });
   };

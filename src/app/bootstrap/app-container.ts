@@ -23,6 +23,7 @@ import { TaskCreationManager } from "../managers/scheduled-task-creation-manager
 import { SummaryAggregator } from "../managers/summary-aggregation-manager.js";
 import { GoalService } from "../services/goal-service.js";
 import { HealthServer } from "../services/health-server-service.js";
+import { ManualCompactionService } from "../services/manual-compaction-service.js";
 import { formatDashboardGoalLine } from "../formatters/goal-text.js";
 import { ScheduledTaskRuntime } from "../services/scheduled-task-runtime-service.js";
 
@@ -47,6 +48,7 @@ export interface AppContainer {
   readonly healthServer: HealthServer;
   readonly interactionManager: InteractionManager;
   readonly keyboardManager: KeyboardManager;
+  readonly manualCompaction: ManualCompactionService;
   readonly opencodeAutoRestartService: OpencodeAutoRestartService;
   readonly opencodeReadyLifecycle: OpencodeReadyLifecycle;
   readonly permissionManager: PermissionManager;
@@ -127,6 +129,7 @@ export function createAppContainer(): AppContainer {
     healthServer: new HealthServer(),
     interactionManager,
     keyboardManager: new KeyboardManager(goalManager),
+    manualCompaction: new ManualCompactionService(),
     opencodeAutoRestartService: new OpencodeAutoRestartService(opencodeReadyLifecycle),
     opencodeReadyLifecycle,
     permissionManager: new PermissionManager(interactionManager),

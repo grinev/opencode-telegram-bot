@@ -130,10 +130,35 @@ export class MediaGroupAttachmentHandler {
   private readonly deps: MediaGroupHandlerDeps;
   private readonly debounceMs: number;
   private readonly batches = new Map<string, MediaGroupBatch>();
+  private readonly refusedBatches = new Map<string, number>();
 
   constructor(deps: MediaGroupHandlerDeps, options: MediaGroupHandlerOptions = {}) {
     this.deps = deps;
     this.debounceMs = options.debounceMs ?? DEFAULT_MEDIA_GROUP_DEBOUNCE_MS;
+  }
+
+  /** Rejects the entire unfinished album, including fragments arriving after the lock lifts. */
+  rejectDuringCompaction(ctx: Context): boolean {
+    const chatId = ctx.chat?.id;
+    const groupId = ctx.message?.media_group_id;
+    if (chatId === undefined || !groupId) return true;
+    const key = this.getBatchKey(chatId, groupId);
+    const firstRefusal = !this.isRefused(key);
+    this.refusedBatches.set(key, Date.now() + 60_000);
+    const batch = this.batches.get(key);
+    if (batch) {
+      clearTimeout(batch.timer);
+      this.batches.delete(key);
+    }
+    return firstRefusal;
+  }
+
+  private isRefused(key: string): boolean {
+    const now = Date.now();
+    for (const [id, expiresAt] of this.refusedBatches) {
+      if (expiresAt <= now) this.refusedBatches.delete(id);
+    }
+    return this.refusedBatches.has(key);
   }
 
   async handle(ctx: Context, next: NextFunction): Promise<void> {
@@ -151,9 +176,9 @@ export class MediaGroupAttachmentHandler {
       return;
     }
 
-    flushPendingPrompt(chatId);
-
     const key = this.getBatchKey(chatId, mediaGroupId);
+    if (this.isRefused(key)) return;
+    flushPendingPrompt(chatId);
     const existingBatch = this.batches.get(key);
 
     if (existingBatch) {
@@ -267,6 +292,7 @@ export class MediaGroupAttachmentHandler {
       }
 
       const validationResult = await this.validateItems(items);
+      if (this.isRefused(key)) return;
       if ("reason" in validationResult) {
         logger.warn(
           `[MediaGroup] Rejecting media group: key=${key}, reason=${validationResult.reason}`,
@@ -288,6 +314,7 @@ export class MediaGroupAttachmentHandler {
       await replyCtx.reply(t("bot.files_downloading"));
 
       const { promptText, fileParts } = await this.preparePrompt(validationResult.items, items);
+      if (this.isRefused(key)) return;
       const processPrompt = this.deps.processPrompt ?? processUserPrompt;
 
       logger.info(

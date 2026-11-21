@@ -25,7 +25,7 @@ export type OpencodeStopCommandDeps = Pick<
   | "opencodeReadyLifecycle"
   | "resetInteractions"
   | "resetRuntimeStreams"
->;
+> & Partial<Pick<AppContainer, "manualCompaction">>;
 
 const STOP_REASON = "opencode_stop";
 
@@ -56,6 +56,7 @@ async function releaseLocalStateAfterServerStop(deps: OpencodeStopCommandDeps): 
 
   promptQueue.clear(STOP_REASON);
   deps.resetInteractions(STOP_REASON);
+  deps.manualCompaction?.serverInterrupted();
   deps.opencodeReadyLifecycle.notifyUnavailable(STOP_REASON);
 }
 
@@ -92,6 +93,7 @@ export async function opencodeStopCommand(
     // those handed over at /detach included.
     await withdrawPromptQueue(STOP_REASON);
     await withdrawAllHandedOverPrompts(STOP_REASON);
+    await deps.manualCompaction?.withdrawBeforeStop();
 
     const stopped = await killServerProcess(pid, 5000);
     if (!stopped) {

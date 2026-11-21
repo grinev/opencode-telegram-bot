@@ -1,6 +1,7 @@
 import type { Context, NextFunction } from "grammy";
 import {
   resolveInteractionGuardDecision,
+  resolveCompactionInput,
   type InteractionGuardDecisionDeps,
 } from "./interaction-guard-decision.js";
 import type { BlockReason, InteractionKind } from "../../app/types/interaction.js";
@@ -21,6 +22,7 @@ import type { LocalCommandRegistry } from "../../app/services/local-command-regi
 
 export interface InteractionGuardDeps extends InteractionGuardDecisionDeps, RunControlDeps {
   localCommandRegistry?: LocalCommandRegistry;
+  rejectCompactionAlbum?: (ctx: Context) => boolean;
 }
 
 function getInteractionBlockedMessage(
@@ -130,6 +132,20 @@ export async function interactionGuardMiddleware(
   next: NextFunction,
   deps: InteractionGuardDeps,
 ): Promise<void> {
+  const compaction = resolveCompactionInput(ctx, deps);
+  if (compaction === "allow") {
+    await next();
+    return;
+  }
+  if (compaction === "block") {
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery({ text: t("context.blocked") }).catch(() => {});
+    } else if (ctx.chat && (deps.rejectCompactionAlbum?.(ctx) ?? true)) {
+      await ctx.reply(t("context.blocked")).catch(() => {});
+    }
+    return;
+  }
+
   let decision = resolveInteractionGuardDecision(ctx, deps, deps.localCommandRegistry);
 
   if (!decision.allow && decision.busy) {

@@ -53,9 +53,9 @@ describe("bot/events/background-notice-delivery", () => {
     mocked.loadRecentSessionDirectories.mockResolvedValue(["/alpha/other"]);
   });
 
-  function deliver() {
+  function deliver(isForegroundSession = () => false) {
     return createBackgroundNoticeDelivery(
-      { getDestination: () => destination as never },
+      { getDestination: () => destination as never, isForegroundSession },
       { sendText, editText } as never,
     );
   }
@@ -100,6 +100,33 @@ describe("bot/events/background-notice-delivery", () => {
     await deliver()(notice("assistant_response"));
 
     expect(sendText).toHaveBeenCalledOnce();
+  });
+
+  it("names a detached compaction and offers its session without an ordinary reply notice", async () => {
+    mocked.getCurrentProject.mockReturnValue({ worktree: "/alpha/other" });
+    await deliver()(notice("context_compacted"));
+    expect(sendText).toHaveBeenCalledWith(
+      destination,
+      t("context.background_success", { project: "other", session: "Other" }),
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: [[{
+            text: t("background.open_session_button"), callback_data: "background-session:c:session-1",
+          }]],
+        }),
+      }),
+    );
+  });
+
+  it("suppresses compaction notices outside the selected project or after reattachment", async () => {
+    mocked.getCurrentProject.mockReturnValue({ worktree: "/different" });
+    await deliver()(notice("context_compacted"));
+    mocked.getCurrentProject.mockReturnValue({ worktree: "/alpha/other" });
+    const isForeground = vi.fn().mockReturnValueOnce(false).mockReturnValue(true);
+    await deliver(isForeground)(notice("context_compacted"));
+    mocked.getShowBackgroundSessionNotifications.mockReturnValue(false);
+    await deliver()(notice("context_compacted"));
+    expect(sendText).not.toHaveBeenCalled();
   });
 
   it("drops every kind when the setting is off and does not edit a previous message", async () => {

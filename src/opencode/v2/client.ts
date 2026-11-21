@@ -6,6 +6,7 @@ import {
   type SessionInboxItem,
 } from "@opencode/client";
 import { Service } from "@opencode/client/service";
+import type { V2CompactionState } from "../manual-compaction.js";
 import { createV2EventTranslator, type V1GlobalEvent } from "./events.js";
 import {
   toFormAnswer,
@@ -58,6 +59,13 @@ export interface V2ClientExtension {
       /** Ids of the messages still waiting in the session inbox. */
       list: (params: { sessionID: string }) => Promise<Result<string[]>>;
       cancel: (params: { sessionID: string; inboxID: string }) => Promise<Result<true>>;
+    };
+    manualCompaction: {
+      start: (sessionID: string, id: string) => Promise<Result<string>>;
+      inspect: (sessionID: string, id: string, signal?: AbortSignal) => Promise<Result<V2CompactionState>>;
+      waitForIdle: (sessionID: string) => Promise<Result<true>>;
+      withdraw: (sessionID: string, id: string, signal?: AbortSignal) => Promise<Result<true>>;
+      interrupt: (sessionID: string) => Promise<Result<boolean>>;
     };
   };
   location: {
@@ -631,6 +639,49 @@ export function createV2OpencodeClient(options: V2ClientOptions): OpencodeClient
             });
             return true as const;
           }),
+      },
+      manualCompaction: {
+        start: (sessionID: string, id: string) =>
+          run(async () => (await client.session.compact(
+            { sessionID, id, delivery: "queue" },
+            { signal: AbortSignal.timeout(5_000) },
+          )).id),
+        inspect: (sessionID: string, id: string, signal = AbortSignal.timeout(5_000)) =>
+          run(async (): Promise<V2CompactionState> => {
+            const options = { signal };
+            const pending = await client.session.inbox.list({ sessionID }, options);
+            if (pending.some((item) => item.id === id && item.type === "compaction")) return "pending";
+            try {
+              const message = await client.session.message.get({ sessionID, messageID: id }, options);
+              if (message.type !== "compaction" || message.reason !== "manual") return "missing";
+              if (message.status === "completed") return "success";
+              if (message.status === "running") return "running";
+              return message.error.type === "aborted" || message.error.type === "compaction.interrupted"
+                ? "interrupted"
+                : "failure";
+            } catch (error) {
+              if (!(error instanceof Error && isNotFound(error))) throw error;
+              // The promotion may have removed the inbox item before the durable message
+              // is readable. A live execution is not proof of absence.
+              const active = await client.session.active(options);
+              return Object.hasOwn(active, sessionID) ? "unverified" : "missing";
+            }
+          }),
+        withdraw: (sessionID: string, id: string, signal = AbortSignal.timeout(5_000)) =>
+          run(async () => {
+            await client.session.inbox.cancel({ sessionID, inboxID: id }, { signal });
+            return true as const;
+          }),
+        waitForIdle: (sessionID: string) =>
+          run(async () => {
+            await client.session.wait({ sessionID }, { signal: AbortSignal.timeout(1_500) });
+            return true as const;
+          }),
+        interrupt: (sessionID: string) =>
+          run(async () => (await client.session.interrupt(
+            { sessionID },
+            { signal: AbortSignal.timeout(5_000) },
+          )).interrupted),
       },
       prompt: (params: PromptParams) =>
         run(async () => {

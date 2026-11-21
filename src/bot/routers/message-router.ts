@@ -30,7 +30,10 @@ import { promptQueue } from "../../app/managers/prompt-queue-manager.js";
 import { findQueuedPromptByButtonLabel } from "../keyboards/queued-prompt-button.js";
 import { withdrawInboxPrompt } from "../../app/services/prompt-inbox-service.js";
 import { handleDocumentMessage } from "../handlers/document-handler.js";
-import { createMediaGroupAttachmentMiddleware } from "../handlers/media-group-handler.js";
+import {
+  createMediaGroupAttachmentMiddleware,
+  type MediaGroupAttachmentHandler,
+} from "../handlers/media-group-handler.js";
 import { handlePhotoMessage } from "../handlers/photo-handler.js";
 import { queuePromptForMerging } from "../handlers/message-merger.js";
 import { tryEnqueuePromptIfBusy } from "../handlers/prompt-queue-dispatch.js";
@@ -42,6 +45,7 @@ import { handleUnsupportedMessage } from "../handlers/unsupported-message-handle
 
 interface MessageRouterDeps {
   container: AppContainer;
+  mediaGroups?: MediaGroupAttachmentHandler;
 }
 
 async function blockMenuWhileInteractionActive(
@@ -193,7 +197,7 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
 
   bot.on(
     "message",
-    createMediaGroupAttachmentMiddleware(botDeps),
+    deps.mediaGroups?.handle.bind(deps.mediaGroups) ?? createMediaGroupAttachmentMiddleware(botDeps),
   );
 
   bot.on("message:photo", async (ctx) => {

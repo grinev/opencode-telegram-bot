@@ -294,6 +294,22 @@ describe("opencode/v2/events", () => {
     expect(result[1]).toMatchObject({ properties: { part: { text: "hello" } } });
   });
 
+  it("signals an exact manual compaction without turning it into a user prompt", () => {
+    const translate = createV2EventTranslator();
+    const result = payloads(translate, [
+      event("session.compaction.started", { sessionID: SESSION, reason: "auto" }),
+      event("session.compaction.started", { sessionID: SESSION, reason: "manual", inputID: "msg-start" }),
+      event("session.inbox.cancelled", { sessionID: SESSION, inboxID: "msg-cancelled" }),
+      event("session.compaction.ended", { sessionID: SESSION, reason: "manual" }),
+    ]);
+
+    expect(result).toMatchObject([
+      { type: "manual_compaction.changed", properties: { inputID: "msg-start", phase: "started" } },
+      { type: "manual_compaction.changed", properties: { inputID: "msg-cancelled", phase: "cancelled" } },
+      { type: "session.compacted", properties: { sessionID: SESSION } },
+    ]);
+  });
+
   describe("inbox items kept across subscriptions", () => {
     const enqueued = event("session.inbox.enqueued", {
       sessionID: SESSION,

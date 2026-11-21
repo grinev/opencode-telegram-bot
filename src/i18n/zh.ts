@@ -366,6 +366,13 @@ export const zh: I18nDictionary = {
   "context.progress": "⏳ 正在压缩上下文...",
   "context.error": "❌ 上下文压缩失败",
   "context.success": "✅ 上下文压缩成功",
+  "context.blocked": "正在压缩上下文。请在完成后重试，或使用 /abort。",
+  "context.interrupted": "⏹ 上下文压缩已中断",
+  "context.status": "正在压缩上下文",
+  "context.background_success": "🔔 另一个会话的上下文已压缩：\n[{project}] {session}",
+  "context.cancel_pending": "⏳ 正在取消上下文压缩…",
+  "context.cancel_unconfirmed": "无法确认上下文压缩是否已取消。",
+  "context.outcome_unknown": "无法确认上下文压缩的结果。",
 
   "permission.inactive_callback": "权限请求已失效",
   "permission.processing_error_callback": "处理错误",

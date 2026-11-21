@@ -8,6 +8,7 @@ import {
   findMissingFolders,
 } from "../../app/services/folder-presence-service.js";
 import { getCurrentSession } from "../../app/stores/settings-store.js";
+import type { BackgroundSessionNotificationKind } from "../../app/managers/background-session-manager.js";
 
 export const SESSION_CALLBACK_PREFIX = "session:";
 /** A session title never approaches this; the cap keeps a typed query sendable. */
@@ -31,7 +32,7 @@ export type SessionPage = {
   page: number;
 };
 
-export type BackgroundSessionOpenKind = "assistant_response" | "question_asked" | "permission_asked";
+export type BackgroundSessionOpenKind = BackgroundSessionNotificationKind;
 
 export interface BackgroundSessionCallbackPayload {
   sessionId: string;
@@ -42,12 +43,14 @@ const BACKGROUND_SESSION_KIND_CALLBACK_MARKERS: Record<BackgroundSessionOpenKind
   assistant_response: "a",
   question_asked: "q",
   permission_asked: "p",
+  context_compacted: "c",
 };
 
 const BACKGROUND_SESSION_KIND_BY_CALLBACK_MARKER: Record<string, BackgroundSessionOpenKind> = {
   a: "assistant_response",
   q: "question_asked",
   p: "permission_asked",
+  c: "context_compacted",
 };
 
 function buildSessionPageCallback(page: number): string {

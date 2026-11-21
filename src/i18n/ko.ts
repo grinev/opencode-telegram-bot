@@ -405,6 +405,13 @@ export const ko: I18nDictionary = {
   "context.progress": "⏳ 컨텍스트를 압축하는 중...",
   "context.error": "❌ 컨텍스트 압축에 실패했습니다",
   "context.success": "✅ 컨텍스트 압축이 완료되었습니다",
+  "context.blocked": "컨텍스트를 압축 중입니다. 완료된 후 다시 시도하거나 /abort를 사용하세요.",
+  "context.interrupted": "⏹ 컨텍스트 압축이 중단되었습니다",
+  "context.status": "컨텍스트 압축 중",
+  "context.background_success": "🔔 다른 세션의 컨텍스트가 압축되었습니다:\n[{project}] {session}",
+  "context.cancel_pending": "⏳ 컨텍스트 압축을 취소하는 중…",
+  "context.cancel_unconfirmed": "컨텍스트 압축이 취소되었는지 확인할 수 없습니다.",
+  "context.outcome_unknown": "컨텍스트 압축 결과를 확인할 수 없습니다.",
 
   "permission.inactive_callback": "권한 요청이 비활성 상태입니다",
   "permission.processing_error_callback": "처리 오류",

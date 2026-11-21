@@ -403,6 +403,13 @@ export const en = {
   "context.progress": "⏳ Compacting context...",
   "context.error": "❌ Context compaction failed",
   "context.success": "✅ Context compacted successfully",
+  "context.blocked": "Context is being compacted. Try again when it finishes, or use /abort.",
+  "context.interrupted": "⏹ Context compaction interrupted",
+  "context.status": "Compacting context",
+  "context.background_success": "🔔 Context compacted in another session:\n[{project}] {session}",
+  "context.cancel_pending": "⏳ Cancelling context compaction…",
+  "context.cancel_unconfirmed": "Could not confirm that context compaction was cancelled.",
+  "context.outcome_unknown": "Could not verify the result of context compaction.",
 
   "permission.inactive_callback": "Permission request is inactive",
   "permission.processing_error_callback": "Processing error",

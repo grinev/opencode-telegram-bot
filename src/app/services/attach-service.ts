@@ -60,12 +60,13 @@ export function configureAttachPresentation(deps: AttachPresentationDeps | null)
 
 export type AttachStateDeps = Pick<AppContainer, "attachManager">;
 
-export type DetachSessionDeps = Pick<AppContainer, "attachManager" | "resetAggregator" | "goalManager">;
+export type DetachSessionDeps = Pick<AppContainer, "attachManager" | "resetAggregator" | "goalManager"> &
+  Partial<Pick<AppContainer, "manualCompaction">>;
 
 type AttachRestoreDeps = Pick<
   AppContainer,
   "attachManager" | "permissionManager" | "questionManager" | "summaryAggregator" | "interactionManager"
->;
+> & Partial<Pick<AppContainer, "manualCompaction">>;
 
 export interface AttachSessionDeps extends AttachRestoreDeps {
   bot: Bot<Context>;
@@ -192,6 +193,7 @@ async function restorePendingQuestions(
     if (!(await belongsToFollowedSession(deps, request.sessionID, sessionId, directory))) continue;
 
     const shown =
+      !deps.manualCompaction?.isActive(sessionId) &&
       !deps.questionManager.isActive() &&
       deps.questionManager.startQuestions(request.questions, request.id, request.sessionID);
     if (shown) {
@@ -225,7 +227,7 @@ async function restorePendingPermissions(
   }
 
   for (const request of pendingPermissions) {
-    if (deps.questionManager.isActive()) {
+    if (deps.manualCompaction?.isActive(sessionId) || deps.questionManager.isActive()) {
       deps.interactionManager.waitPermission(request);
     } else {
       await attachPresentation.showPermissionRequest(bot.api, chatId, request);
@@ -328,6 +330,7 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
   const { bot, chatId, session, ensureEventSubscription, forceFullRestore = false } = deps;
   const { attachManager, permissionManager, questionManager, summaryAggregator } = deps;
   const alreadyAttached = attachManager.isAttachedSession(session.id, session.directory);
+  deps.manualCompaction?.select(session.id);
 
   deps.goalService?.follow(session.id);
 
@@ -622,6 +625,7 @@ export function detachAttachedSession(reason: string, deps: DetachSessionDeps): 
 
   const attachedSessionId = deps.attachManager.getSnapshot()?.sessionId;
   if (attachedSessionId) {
+    deps.manualCompaction?.detach(attachedSessionId);
     resetStreamThrottle(attachedSessionId);
   }
 

@@ -1,4 +1,5 @@
 import { getDeleteCompactProgressOnFinish } from "../../../app/stores/settings-store.js";
+import type { AppContainer } from "../../../app/bootstrap/app-container.js";
 import { logger } from "../../../utils/logger.js";
 import type { PermissionRequest } from "../../../app/types/permission.js";
 import type { Question } from "../../../app/types/question.js";
@@ -23,7 +24,7 @@ type InteractionDeps = EventHandlerDeps<
   | "permissionManager"
   | "questionManager"
   | "summaryAggregator"
->;
+> & Partial<Pick<AppContainer, "manualCompaction">>;
 
 /** The session the chat follows for a request: a subagent's requests belong to its root. */
 function getFollowedSessionId(deps: InteractionDeps, sessionId: string): string {
@@ -108,7 +109,8 @@ async function showOrQueueQuestion(
   const replacing = questionManager.isActive() && questionManager.getSessionId() === sessionId;
   const previousMessageIds = replacing ? questionManager.getMessageIds() : [];
   const previousRequestID = replacing ? questionManager.getRequestID() : null;
-  if (!questionManager.startQuestions(questions, requestID, sessionId)) {
+  if (deps.manualCompaction?.isActive(followedSessionId) ||
+      !questionManager.startQuestions(questions, requestID, sessionId)) {
     // A released poll that has to wait again keeps its turn at the head of the queue.
     interactionManager.waitQuestion(questions, requestID, sessionId, {
       atHead: generation !== null,
@@ -191,7 +193,10 @@ async function presentPermission(
     return;
   }
 
-  if (interactionManager.getSnapshot()?.kind === "question") {
+  if (!policy.isForegroundSession(followedSessionId)) return;
+
+  if (deps.manualCompaction?.isActive(followedSessionId) ||
+      interactionManager.getSnapshot()?.kind === "question") {
     interactionManager.waitPermission(request, { atHead: released });
     return;
   }

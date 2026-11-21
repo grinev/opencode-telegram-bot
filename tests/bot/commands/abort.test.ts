@@ -33,6 +33,7 @@ vi.mock("../../../src/app/services/session-service.js", () => ({
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
+  opencodeServerVersion: "v1",
   opencodeClient: {
     session: {
       abort: mocked.abortMock,
@@ -124,6 +125,26 @@ describe("bot/commands/abort", () => {
     expect(defined(mocked.withdrawHandedOverPromptsMock.mock.invocationCallOrder[0])).toBeLessThan(
       defined(mocked.abortMock.mock.invocationCallOrder[0]),
     );
+  });
+
+  it("uses a separate compaction reply and leaves its lock alone when cancellation is unverified", async () => {
+    const session = { id: "session-1", title: "Session", directory: "D:/repo" };
+    mocked.currentSession = session;
+    const attempt = container.manualCompaction.reserve(session);
+    const cancel = vi.spyOn(container.manualCompaction, "cancel").mockResolvedValue(false);
+    const reply = vi.fn().mockResolvedValue({ message_id: 10 });
+    const editMessageText = vi.fn().mockResolvedValue(undefined);
+
+    await abortCommand({ chat: { id: 1 }, reply, api: { editMessageText } } as never, createDeps());
+
+    expect(reply).toHaveBeenCalledWith(t("context.cancel_pending"));
+    await vi.waitFor(() =>
+      expect(editMessageText).toHaveBeenCalledWith(1, 10, t("context.cancel_unconfirmed")),
+    );
+    expect(cancel).toHaveBeenCalledWith(attempt);
+    expect(container.manualCompaction.isActive(session.id)).toBe(true);
+    expect(mocked.abortMock).not.toHaveBeenCalled();
+    expect(mocked.withdrawHandedOverPromptsMock).toHaveBeenCalledWith(session.id, "abort_command");
   });
 
   it("leaves handed-over messages alone in the abort /start shares", async () => {

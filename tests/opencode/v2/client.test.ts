@@ -14,12 +14,15 @@ const fake = vi.hoisted(() => ({
       switchAgent: vi.fn(),
       switchModel: vi.fn(),
       prompt: vi.fn(),
+      compact: vi.fn(),
+      interrupt: vi.fn(),
       command: vi.fn(),
       wait: vi.fn(),
       active: vi.fn(),
       diff: vi.fn(),
       form: { reply: vi.fn(), cancel: vi.fn(), get: vi.fn() },
       inbox: { list: vi.fn(), cancel: vi.fn() },
+      message: { get: vi.fn() },
     },
     message: { list: vi.fn() },
     skill: { list: vi.fn() },
@@ -116,6 +119,40 @@ describe("opencode/v2/client", () => {
       baseUrl: "http://127.0.0.1:49374",
       headers: { Authorization: "Basic abc" },
     });
+  });
+
+  it("returns the V2 inbox identity and reads a real compaction result through that id", async () => {
+    const compact = (createClient() as unknown as V2ClientExtension).session.manualCompaction;
+    fake.client.session.compact.mockResolvedValue({ id: "msg_returned" });
+    await expect(compact.start("ses-1", "msg_requested")).resolves.toMatchObject({ data: "msg_returned" });
+    expect(fake.client.session.compact).toHaveBeenCalledWith(
+      { sessionID: "ses-1", id: "msg_requested", delivery: "queue" },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    fake.client.session.inbox.list.mockResolvedValue([{ id: "msg_returned", type: "compaction" }]);
+    await expect(compact.inspect("ses-1", "msg_returned")).resolves.toMatchObject({ data: "pending" });
+    expect(fake.client.session.message.get).not.toHaveBeenCalled();
+    fake.client.session.inbox.list.mockResolvedValue([]);
+    fake.client.session.message.get.mockResolvedValue({
+      type: "compaction", status: "failed", reason: "manual", error: { type: "aborted" },
+    });
+    await expect(compact.inspect("ses-1", "msg_returned")).resolves.toMatchObject({ data: "interrupted" });
+    expect(fake.client.session.message.get).toHaveBeenCalledWith(
+      { sessionID: "ses-1", messageID: "msg_returned" },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("does not treat an unreadable promoted V2 message as absent while the session is active", async () => {
+    const compact = (createClient() as unknown as V2ClientExtension).session.manualCompaction;
+    fake.client.session.inbox.list.mockResolvedValue([]);
+    fake.client.session.message.get.mockRejectedValue(
+      Object.assign(new Error("not found"), { name: "MessageNotFoundError" }),
+    );
+    fake.client.session.active.mockResolvedValueOnce({ "ses-1": {} }).mockResolvedValue({});
+
+    await expect(compact.inspect("ses-1", "msg_compaction")).resolves.toMatchObject({ data: "unverified" });
+    await expect(compact.inspect("ses-1", "msg_compaction")).resolves.toMatchObject({ data: "missing" });
   });
 
   it("hands its options to the SDK as is, so getters on them are read per request", () => {

@@ -387,6 +387,13 @@ export const ar: I18nDictionary = {
   "context.progress": "⏳ جارٍ ضغط السياق...",
   "context.error": "❌ فشل ضغط السياق",
   "context.success": "✅ تم ضغط السياق بنجاح",
+  "context.blocked": "يجري ضغط السياق. حاول مجددًا بعد انتهائه أو استخدم /abort.",
+  "context.interrupted": "⏹ توقف ضغط السياق",
+  "context.status": "ضغط السياق جارٍ",
+  "context.background_success": "🔔 تم ضغط السياق في جلسة أخرى:\n[{project}] {session}",
+  "context.cancel_pending": "⏳ يجري إلغاء ضغط السياق…",
+  "context.cancel_unconfirmed": "تعذر تأكيد إلغاء ضغط السياق.",
+  "context.outcome_unknown": "تعذر التحقق من نتيجة ضغط السياق.",
 
   "permission.inactive_callback": "انتهت صلاحية طلب الصلاحية",
   "permission.processing_error_callback": "تعذر تنفيذ الطلب",

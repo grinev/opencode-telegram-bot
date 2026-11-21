@@ -177,6 +177,20 @@ describe("bot/handlers/media-group", () => {
     vi.useRealTimers();
   });
 
+  it("does not dispatch a partial album if a fragment is rejected during compaction", async () => {
+    const first = createDocumentContext({ messageId: 10, fileId: "image-1", filename: "first.png", mimeType: "image/png" });
+    const second = createDocumentContext({ messageId: 11, fileId: "image-2", filename: "second.png", mimeType: "image/png" });
+    const { deps, downloadMock, processPromptMock } = createDeps();
+    const handler = new MediaGroupAttachmentHandler(deps, { debounceMs: 10_000 });
+    await addToHandler(handler, first.ctx);
+    expect(handler.rejectDuringCompaction(second.ctx)).toBe(true);
+    expect(handler.rejectDuringCompaction(second.ctx)).toBe(false);
+    await addToHandler(handler, second.ctx);
+    await handler.flushAll();
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(processPromptMock).not.toHaveBeenCalled();
+  });
+
   it("sends multiple image documents as one prompt", async () => {
     const first = createDocumentContext({
       messageId: 10,

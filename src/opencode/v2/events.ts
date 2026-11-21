@@ -17,6 +17,19 @@ export interface V1GlobalEvent {
   payload: Event;
 }
 
+function manualCompactionSignal(
+  id: string,
+  sessionID: string,
+  inputID: string,
+  phase: "delivered" | "started" | "failed" | "cancelled",
+): Event {
+  return {
+    id,
+    type: "manual_compaction.changed",
+    properties: { sessionID, inputID, phase },
+  } as unknown as Event;
+}
+
 type ToolInput = Record<string, unknown>;
 
 /** A V1 idle, plus the mark of an execution that was interrupted rather than finished. */
@@ -409,13 +422,20 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
         inbox.set(event.data.inboxID, event.data.item);
         return [];
 
-      case "session.inbox.cancelled":
+      case "session.inbox.cancelled": {
+        const item = inbox.get(event.data.inboxID);
         inbox.delete(event.data.inboxID);
-        return [];
+        return !item || item.type === "compaction"
+          ? [manualCompactionSignal(event.id, event.data.sessionID, event.data.inboxID, "cancelled")]
+          : [];
+      }
 
       case "session.inbox.delivered": {
         const item = inbox.get(event.data.inboxID);
         inbox.delete(event.data.inboxID);
+        if (item?.type === "compaction") {
+          return [manualCompactionSignal(event.id, event.data.sessionID, event.data.inboxID, "delivered")];
+        }
         if (!item || item.type !== "user" || isGoalInternalMetadata(item.payload.metadata)) {
           return [];
         }
@@ -701,6 +721,15 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
         tools.delete(data.id);
         return part ? [partUpdated(part, created)] : [];
       }
+
+      case "session.compaction.started":
+      case "session.compaction.failed":
+        return event.data.reason === "manual" && event.data.inputID
+          ? [manualCompactionSignal(
+              event.id, event.data.sessionID, event.data.inputID,
+              event.type === "session.compaction.started" ? "started" : "failed",
+            )]
+          : [];
 
       case "session.compaction.ended":
         return [

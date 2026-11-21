@@ -396,6 +396,13 @@ export const tr: I18nDictionary = {
   "context.progress": "⏳ Bağlam sıkıştırılıyor...",
   "context.error": "❌ Bağlam sıkıştırma başarısız oldu",
   "context.success": "✅ Bağlam başarıyla sıkıştırıldı",
+  "context.blocked": "Bağlam sıkıştırılıyor. İşlem bitince yeniden deneyin veya /abort komutunu kullanın.",
+  "context.interrupted": "⏹ Bağlam sıkıştırma durduruldu",
+  "context.status": "Bağlam sıkıştırılıyor",
+  "context.background_success": "🔔 Başka bir oturumda bağlam sıkıştırıldı:\n[{project}] {session}",
+  "context.cancel_pending": "⏳ Bağlam sıkıştırma iptal ediliyor…",
+  "context.cancel_unconfirmed": "Bağlam sıkıştırmanın iptal edildiği doğrulanamadı.",
+  "context.outcome_unknown": "Bağlam sıkıştırmanın sonucu doğrulanamadı.",
 
   "permission.inactive_callback": "İzin isteği etkin değil",
   "permission.processing_error_callback": "İşleme hatası",

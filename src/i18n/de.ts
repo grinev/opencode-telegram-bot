@@ -415,6 +415,13 @@ export const de: I18nDictionary = {
   "context.progress": "⏳ Komprimiere Kontext...",
   "context.error": "❌ Kontext-Komprimierung fehlgeschlagen",
   "context.success": "✅ Kontext erfolgreich komprimiert",
+  "context.blocked": "Der Kontext wird komprimiert. Versuche es danach erneut oder nutze /abort.",
+  "context.interrupted": "⏹ Kontextkomprimierung unterbrochen",
+  "context.status": "Kontext wird komprimiert",
+  "context.background_success": "🔔 Kontext in einer anderen Sitzung komprimiert:\n[{project}] {session}",
+  "context.cancel_pending": "⏳ Kontextkomprimierung wird abgebrochen…",
+  "context.cancel_unconfirmed": "Der Abbruch der Kontextkomprimierung konnte nicht bestätigt werden.",
+  "context.outcome_unknown": "Das Ergebnis der Kontextkomprimierung konnte nicht überprüft werden.",
 
   "permission.inactive_callback": "Berechtigungsanfrage ist inaktiv",
   "permission.processing_error_callback": "Verarbeitungsfehler",

@@ -407,6 +407,13 @@ export const ru: I18nDictionary = {
   "context.progress": "⏳ Сжимаю контекст...",
   "context.error": "❌ Ошибка при сжатии контекста",
   "context.success": "✅ Контекст успешно сжат",
+  "context.blocked": "Контекст сжимается. Повторите действие после завершения или используйте /abort.",
+  "context.interrupted": "⏹ Сжатие контекста прервано",
+  "context.status": "Сжатие контекста",
+  "context.background_success": "🔔 Контекст сжат в другой сессии:\n[{project}] {session}",
+  "context.cancel_pending": "⏳ Отменяю сжатие контекста…",
+  "context.cancel_unconfirmed": "Не удалось подтвердить отмену сжатия контекста.",
+  "context.outcome_unknown": "Не удалось подтвердить результат сжатия контекста.",
 
   "permission.inactive_callback": "Запрос разрешения неактивен",
   "permission.processing_error_callback": "Ошибка при обработке",

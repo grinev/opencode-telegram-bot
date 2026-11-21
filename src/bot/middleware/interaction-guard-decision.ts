@@ -11,11 +11,12 @@ import type {
 import { GOAL_BUTTON_TEXT_PATTERN, QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../message-patterns.js";
 import type { LocalCommandRegistry } from "../../app/services/local-command-registry.js";
 import { isKnownCommand } from "../routers/command-utils.js";
+import { getCurrentSession } from "../../app/services/session-service.js";
 
 export type InteractionGuardDecisionDeps = Pick<
   AppContainer,
   "attachManager" | "foregroundSessionState" | "interactionManager"
->;
+> & Partial<Pick<AppContainer, "manualCompaction">>;
 
 const BUSY_ALLOWED_COMMANDS = ["/abort", "/detach", "/status", "/help", "/opencode_stop"] as const;
 const BUSY_ALLOWED_COMMAND_SET = new Set<string>(BUSY_ALLOWED_COMMANDS);
@@ -84,6 +85,17 @@ function classifyIncomingInput(ctx: Context): {
   }
 
   return { inputType: "other" };
+}
+
+export function resolveCompactionInput(
+  ctx: Context,
+  deps: InteractionGuardDecisionDeps,
+): "allow" | "block" | null {
+  if (!deps.manualCompaction?.isActive(getCurrentSession()?.id)) return null;
+  const { inputType, command } = classifyIncomingInput(ctx);
+  return inputType === "command" && command && BUSY_ALLOWED_COMMAND_SET.has(command)
+    ? "allow"
+    : "block";
 }
 
 function getExpectedInputBlockReason(expectedInput: ExpectedInput): BlockReason {

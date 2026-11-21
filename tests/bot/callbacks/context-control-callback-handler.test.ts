@@ -3,13 +3,27 @@ import type { Context } from "grammy";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 import { t } from "../../../src/i18n/index.js";
 
-const mocked = vi.hoisted(() => ({ session: vi.fn(), title: vi.fn(), summarize: vi.fn(), model: vi.fn() }));
+const mocked = vi.hoisted(() => ({
+  session: vi.fn(), title: vi.fn(), summarize: vi.fn(), model: vi.fn(), messages: vi.fn(),
+}));
 vi.mock("../../../src/app/services/session-service.js", () => ({ getCurrentSession: mocked.session, fetchSessionTitle: mocked.title }));
 vi.mock("../../../src/app/services/model-selection-service.js", () => ({ getStoredModel: mocked.model }));
-vi.mock("../../../src/opencode/client.js", () => ({ opencodeClient: { session: { summarize: mocked.summarize } } }));
+vi.mock("../../../src/opencode/client.js", () => ({
+  opencodeServerVersion: "v1",
+  opencodeClient: {
+    session: { summarize: mocked.summarize, messages: mocked.messages, status: vi.fn().mockResolvedValue({ data: {} }) },
+  },
+}));
 
 import { handleCompactConfirm, handleCompactDetails } from "../../../src/bot/callbacks/context-control-callback-handler.js";
 import { handleInlineMenuCancel } from "../../../src/bot/callbacks/inline-menu-cancel-callback-handler.js";
+
+function publishCompaction() {
+  mocked.messages.mockResolvedValue({ data: [
+    { info: { id: "manual" }, parts: [{ type: "compaction", auto: false }] },
+    { info: { role: "assistant", parentID: "manual", summary: true, finish: "stop" }, parts: [] },
+  ] });
+}
 
 function callback(data: string, messageId = 7): Context {
   return {
@@ -29,7 +43,11 @@ describe("context compaction flow", () => {
     mocked.session.mockReturnValue({ id: "session", directory: "/project", title: "Task" });
     mocked.title.mockResolvedValue("Task");
     mocked.model.mockReturnValue({ providerID: "provider", modelID: "model" });
-    mocked.summarize.mockResolvedValue({});
+    mocked.messages.mockResolvedValue({ data: [] });
+    mocked.summarize.mockImplementation(async () => {
+      publishCompaction();
+      return { data: true };
+    });
   });
 
   it("edits details into confirmation and compacts only after confirming", async () => {
@@ -52,7 +70,7 @@ describe("context compaction flow", () => {
 
     const confirm = callback("compact:confirm");
     await handleCompactConfirm(confirm, deps);
-    expect(mocked.summarize).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(mocked.summarize).toHaveBeenCalledOnce());
     expect(deps.interactionManager.getSnapshot()).toBeNull();
     expect(confirm.deleteMessage).toHaveBeenCalledOnce();
     expect(confirm.reply).toHaveBeenCalledWith(t("context.progress"));
@@ -70,9 +88,11 @@ describe("context compaction flow", () => {
 
     await handleCompactConfirm(ctx, deps);
 
-    expect(mocked.summarize).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(mocked.summarize).toHaveBeenCalledOnce());
+    expect(deps.manualCompaction.isActive("session")).toBe(true);
     expect(ctx.api.editMessageText).not.toHaveBeenCalledWith(100, 8, t("context.success"));
-    finish({});
+    publishCompaction();
+    finish({ data: true });
     await vi.waitFor(() =>
       expect(ctx.api.editMessageText).toHaveBeenCalledWith(100, 8, t("context.success")),
     );
@@ -96,7 +116,8 @@ describe("context compaction flow", () => {
     expect(second.deleteMessage).toHaveBeenCalledOnce();
     expect(deps.interactionManager.getSnapshot()).toBeNull();
 
-    finish({});
+    publishCompaction();
+    finish({ data: true });
     await vi.waitFor(() =>
       expect(first.api.editMessageText).toHaveBeenCalledWith(100, 8, t("context.success")),
     );
@@ -125,7 +146,7 @@ describe("context compaction flow", () => {
     deps.interactionManager.start({ kind: "inline", expectedInput: "callback", metadata: { menuKind: "context", messageId: 7, stage: "confirm" } });
     const retry = callback("compact:confirm");
     await handleCompactConfirm(retry, deps);
-    expect(mocked.summarize).toHaveBeenCalledTimes(callsBefore + 1);
+    await vi.waitFor(() => expect(mocked.summarize).toHaveBeenCalledTimes(callsBefore + 1));
   });
 
   it("closes details or cancels confirmation without compacting", async () => {

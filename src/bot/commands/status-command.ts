@@ -14,7 +14,8 @@ import { t } from "../../i18n/index.js";
 import { sendBotText } from "../messages/telegram-text.js";
 import { getBotVersion } from "../../runtime/bot-version.js";
 
-export type StatusCommandDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager">;
+export type StatusCommandDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager"> &
+  Partial<Pick<AppContainer, "manualCompaction">>;
 
 export async function statusCommand(ctx: CommandContext<Context>, deps: StatusCommandDeps) {
   try {
@@ -78,6 +79,7 @@ export async function statusCommand(ctx: CommandContext<Context>, deps: StatusCo
     if (currentSession) {
       const title = formatSessionTitle(await fetchSessionTitle(currentSession));
       message += `\n${t("status.session_selected", { title })}\n`;
+      if (deps.manualCompaction?.isActive(currentSession.id)) message += `⏳ ${t("context.status")}\n`;
     } else {
       message += `\n${t("status.session_not_selected")}\n`;
       message += t("status.session_hint");

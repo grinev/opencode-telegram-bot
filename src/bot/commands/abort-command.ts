@@ -11,6 +11,7 @@ import { withdrawHandedOverPrompts } from "../handlers/prompt-handover.js";
 import { markUserAbortRequested } from "../../app/managers/abort-suppression-manager.js";
 import { withdrawPromptQueue } from "../../app/services/prompt-inbox-service.js";
 import { promptAttachment } from "../../app/managers/prompt-attachment-manager.js";
+import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 
 type SessionState = "idle" | "busy" | "not-found";
 
@@ -24,7 +25,7 @@ export type AbortCommandDeps = Pick<
   | "interruptSubagents"
   | "keyboardManager"
   | "resetInteractions"
->;
+> & Partial<Pick<AppContainer, "manualCompaction">>;
 
 interface AbortCurrentOperationOptions {
   notifyUser?: boolean;
@@ -94,7 +95,9 @@ export async function abortCurrentOperation(
     // V2 reports /abort as the same interrupted idle as a client stop. Mark the run
     // footerless before any await, so that idle cannot send a footer while abort is in flight.
     const sessionToAbort = getCurrentSession();
-    if (sessionToAbort) {
+    const manualCompaction = deps.manualCompaction;
+    const compaction = manualCompaction?.get(sessionToAbort?.id);
+    if (sessionToAbort && !compaction) {
       deps.assistantRunState.suppressFooter(sessionToAbort.id);
     }
     // Awaited: a prompt still waiting in the OpenCode V2 inbox must not start a new turn
@@ -144,7 +147,7 @@ export async function abortCurrentOperation(
     if (notifyUser) {
       // No reply_markup here: this message is edited below, and Telegram
       // refuses to edit a message that carries a custom reply keyboard.
-      const waitingMessage = await ctx.reply(t("stop.in_progress"));
+      const waitingMessage = await ctx.reply(t(compaction ? "context.cancel_pending" : "stop.in_progress"));
       waitingMessageId = waitingMessage.message_id;
       chatId = ctx.chat?.id ?? null;
 
@@ -152,6 +155,25 @@ export async function abortCurrentOperation(
         logger.warn("[Abort] Chat context is missing while aborting active session");
         return;
       }
+    }
+
+    if (manualCompaction && compaction) {
+      markUserAbortRequested(currentSession.id);
+      safeBackgroundTask({
+        taskName: "manualCompaction.cancel",
+        task: () => manualCompaction.cancel(compaction),
+        onSuccess: async (cancelled) => {
+          const text = t(cancelled ? "context.interrupted" : "context.cancel_unconfirmed");
+          if (notifyUser && chatId !== null && waitingMessageId !== null &&
+              getCurrentSession()?.id !== currentSession.id) {
+            await ctx.api.editMessageText(chatId, waitingMessageId, withPause(text));
+          } else {
+            await finishReply(text);
+          }
+        },
+        onError: () => finishReply(t("context.cancel_unconfirmed")),
+      });
+      return;
     }
 
     const controller = new AbortController();

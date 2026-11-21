@@ -28,6 +28,7 @@ import {
   registerCommandRouter,
 } from "./routers/command-router.js";
 import { registerMessageRouter } from "./routers/message-router.js";
+import { MediaGroupAttachmentHandler } from "./handlers/media-group-handler.js";
 import { createAttachPresentation } from "./services/attach-presentation.js";
 import { createTelegramBotOptions } from "./telegram-client-options.js";
 
@@ -214,12 +215,17 @@ export function createBot(
   bot.use(staleUpdateMiddleware);
   bot.on("message:rich_message", normalizeRichMessage);
   bot.use((ctx, next) => ensureCommandsInitialized(ctx, next, localCommandRegistry));
-  const guardDeps = { ...container, localCommandRegistry };
+  const mediaGroups = new MediaGroupAttachmentHandler({ ...container, bot });
+  const guardDeps = {
+    ...container,
+    localCommandRegistry,
+    rejectCompactionAlbum: (ctx: Context) => mediaGroups.rejectDuringCompaction(ctx),
+  };
   bot.use((ctx, next) => interactionGuardMiddleware(ctx, next, guardDeps));
 
   registerCommandRouter(bot, { container, localCommandRegistry });
   registerCallbackRouter(bot, { container });
-  registerMessageRouter(bot, { container });
+  registerMessageRouter(bot, { container, mediaGroups });
 
   safeBackgroundTask({
     taskName: "bot.clearGlobalCommands",

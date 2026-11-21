@@ -1,7 +1,7 @@
 import { Context } from "grammy";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
-import { opencodeClient } from "../../opencode/client.js";
 import { fetchSessionTitle, getCurrentSession } from "../../app/services/session-service.js";
+import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { formatSessionTitle } from "../../app/formatters/session-title-formatter.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
@@ -14,10 +14,7 @@ import {
   type InlineMenuDeps,
 } from "../menus/inline-menu.js";
 import { buildCompactConfirmationMenu } from "../menus/context-control-menu.js";
-
-// A manual compaction runs in the background now, so a second confirm could start
-// another one while the first is still running.
-const compactingSessions = new Set<string>();
+import { compactionResultText } from "../events/handlers/manual-compaction-handler.js";
 
 export async function handleCompactDetails(ctx: Context, deps: InlineMenuDeps): Promise<boolean> {
   if (ctx.callbackQuery?.data !== "compact:details") {
@@ -59,7 +56,7 @@ export async function handleCompactDetails(ctx: Context, deps: InlineMenuDeps): 
  */
 export async function handleCompactConfirm(
   ctx: Context,
-  deps: InlineMenuDeps,
+  deps: InlineMenuDeps & Pick<AppContainer, "manualCompaction">,
 ): Promise<boolean> {
   const callbackQuery = ctx.callbackQuery;
 
@@ -89,64 +86,32 @@ export async function handleCompactConfirm(
       return true;
     }
 
-    if (compactingSessions.has(session.id)) {
+    const model = getStoredModel();
+    const attempt = deps.manualCompaction.reserve(session);
+    if (!attempt) {
       clearActiveInlineMenu("context_compact_already_running", deps);
-      await ctx.answerCallbackQuery({ text: t("context.callback_compacting") });
+      await ctx.answerCallbackQuery({ text: t("context.callback_compacting") }).catch(() => {});
       await ctx.deleteMessage().catch(() => {});
       return true;
     }
 
-    // Answer callback query and delete menu immediately
-    await ctx.answerCallbackQuery({ text: t("context.callback_compacting") });
     clearActiveInlineMenu("context_compact_confirmed", deps);
+    await ctx.answerCallbackQuery({ text: t("context.callback_compacting") }).catch(() => {});
     await ctx.deleteMessage().catch(() => {});
 
-    // Send progress message
-    const progressMessage = await ctx.reply(t("context.progress"));
-
-    // Show typing indicator
-    await ctx.api.sendChatAction(ctx.chat!.id, "typing");
-
-    const storedModel = getStoredModel();
     const chatId = ctx.chat!.id;
     const api = ctx.api;
-    const progressMessageId = progressMessage.message_id;
-
-    logger.debug(
-      `[ContextHandler] Calling summarize with sessionID=${session.id}, directory=${session.directory}, model=${storedModel.providerID}/${storedModel.modelID}`,
-    );
-
-    // The compaction can run for minutes on a large context: keep it out of the update
-    // loop, or every command waits behind it and is then dropped as stale.
-    const showResult = (text: string) =>
-      api.editMessageText(chatId, progressMessageId, text).catch(() => undefined);
-    compactingSessions.add(session.id);
+    const progress = deps.manualCompaction.showProgress(attempt, async () => {
+      const message = await ctx.reply(t("context.progress"));
+      return {
+        finish: (outcome) => api.editMessageText(chatId, message.message_id, compactionResultText(outcome)),
+      };
+    });
     safeBackgroundTask({
       taskName: "session.summarize",
-      task: () =>
-        opencodeClient.session.summarize({
-          sessionID: session.id,
-          directory: session.directory,
-          providerID: storedModel.providerID,
-          modelID: storedModel.modelID,
-        }),
-      onSuccess: async ({ error }) => {
-        compactingSessions.delete(session.id);
-        if (error) {
-          logger.error("[ContextHandler] Compact failed:", error);
-          await showResult(t("context.error"));
-          return;
-        }
-        logger.info(`[ContextHandler] Session compacted: ${session.id}`);
-        await showResult(t("context.success"));
-      },
-      onError: async (error) => {
-        compactingSessions.delete(session.id);
-        logger.error("[ContextHandler] Compact failed:", error);
-        await showResult(t("context.error"));
-      },
+      task: () => deps.manualCompaction.start(attempt, model),
     });
-
+    await progress;
     return true;
   } catch (err) {
     clearActiveInlineMenu("context_compact_error", deps);

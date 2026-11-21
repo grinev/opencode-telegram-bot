@@ -30,6 +30,7 @@ import { registerInteractionHandlers } from "../events/handlers/interaction-hand
 import { registerSessionLifecycleHandlers } from "../events/handlers/session-lifecycle-handler.js";
 import { registerDashboardHandlers } from "../events/handlers/dashboard-handler.js";
 import { registerGoalHandlers } from "../events/handlers/goal-handler.js";
+import { registerManualCompactionPresentation } from "../events/handlers/manual-compaction-handler.js";
 
 export interface BotEventSubscriptionService {
   ensureEventSubscription(directory: string): Promise<void>;
@@ -57,7 +58,7 @@ export type EventSubscriptionServiceDeps = Pick<
   | "questionManager"
   | "scheduledTaskRuntime"
   | "summaryAggregator"
->;
+> & Partial<Pick<AppContainer, "manualCompaction">>;
 
 /** The idle OpenCode sends for an interrupted execution, marked the way the V2 adapter does. */
 function buildInterruptedIdleEvents(sessionId: string): Event[] {
@@ -94,12 +95,16 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     isForegroundSession: (sessionId) => getCurrentSession()?.id === sessionId,
   };
   private readonly runtime: SessionRuntimeState;
+  private subscriptionDirectory?: string;
 
   constructor(private readonly deps: EventSubscriptionServiceDeps) {
     this.runtime = new SessionRuntimeState({
       policy: this.policy,
       getReplyKeyboard: () => getReplyKeyboard(deps),
     });
+    if (deps.manualCompaction) {
+      registerManualCompactionPresentation(deps.manualCompaction, deps.interactionManager, this.policy, this.runtime.delivery);
+    }
     setPromptResponseModeClearerForReconciliation(clearPromptResponseMode);
   }
 
@@ -146,6 +151,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     }
 
     const { deps, runtime, policy } = this;
+    if (this.subscriptionDirectory && this.subscriptionDirectory !== directory) {
+      deps.manualCompaction?.reconcile(false, false);
+    }
+    this.subscriptionDirectory = directory;
 
     deps.summaryAggregator.setTypingIndicatorEnabled(true);
     deps.backgroundSessionTracker.setDirectory(directory);
@@ -247,12 +256,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
   private restoreAfterReconnect({ serverRestarted }: ReconnectInfo): void {
     if (serverRestarted === true) {
+      this.deps.manualCompaction?.serverInterrupted();
       // The restarted server lost the run and resumes it as a new turn: the old one ends
       // here before any event of the new connection is handled.
       this.endRunLostWithServer("opencode_restarted").catch((error) => {
         logger.warn("[Bot] Failed to end the run lost with the OpenCode server:", error);
       });
     } else {
+      this.deps.manualCompaction?.reconcile();
       // The new stream no longer knows the background operations the old one announced,
       // so their end would never arrive.
       this.stopBackgroundOperations("event_stream_reconnect");
