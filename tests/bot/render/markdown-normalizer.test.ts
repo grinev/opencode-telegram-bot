@@ -44,6 +44,21 @@ describe("bot/render/markdown-normalizer", () => {
     );
   });
 
+  it.each([
+    ["> note `code`", "- [ ] Next"],
+    ["> note", "continuation `code`", "- [ ] Next"],
+    ["> note `begin", "literal", "end`", "- [ ] Next"],
+  ])("keeps lazy quote continuation around inline code: %j", (...lines) => {
+    const input = lines.join("\n");
+    const normalized = normalizeMarkdownForTelegramBlockParsing(input);
+
+    expect(normalized.split("\n")).toEqual(
+      lines.map((line) => (line.startsWith(">") ? line : `> ${line}`)),
+    );
+    expect(parseTelegramBlocks(input)).toHaveLength(1);
+    expect(parseTelegramBlocks(input)[0]?.type).toBe("blockquote");
+  });
+
   it("resets quote mode after an empty line", () => {
     const input = ["> quoted line", "", "Plain line"].join("\n");
 
@@ -76,6 +91,50 @@ describe("bot/render/markdown-normalizer", () => {
     const input = ["Example:", "", "    $$x^2$$", "", "    $$", "    a = b", "    $$"].join("\n");
 
     expect(normalizeMarkdownForTelegramRendering(input)).toBe(input);
+  });
+
+  it.each([
+    ["shorter backtick fences", ["````markdown", "```math", "$$x^2$$", "```", "````"]],
+    ["shorter tilde fences", ["~~~~text", "~~~", "$$x^2$$", "~~~~"]],
+    ["backtick fence info", ["```text", "```not-a-closing-fence", "$$x^2$$", "```"]],
+    ["tilde fence info", ["~~~text", "~~~not-a-closing-fence", "$$x^2$$", "~~~"]],
+    ["multiline code spans", ["`begin", "$$x^2$$", "end`"]],
+    ["longer code spans", ["``begin ` literal", "$$", "x^2", "$$", "end``"]],
+    ["CRLF line endings", ["````text\r", "```\r", "$$x^2$$\r", "````\r"]],
+    ["code inside quotes", ["> ```text", "> $$x^2$$", "> ```"]],
+    ["code inside lists", ["- Example:", "", "  ~~~~text", "  ~~~", "  $$x^2$$", "  ~~~~"]],
+  ])("preserves literal code containing %s", (_name, lines) => {
+    const input = lines.join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(input);
+    expect(normalizeMarkdownForTelegramBlockParsing(input)).toBe(input);
+  });
+
+  it.each([
+    ["fenced code", ["```text", "$$", "keep me", "```"]],
+    ["indented code", ["    $$", "    keep me"]],
+    ["inline code", ["`begin", "$$", "end`"]],
+  ])("does not close an unmatched math delimiter inside %s", (_name, code) => {
+    const input = ["$$", "", ...code, "", "After"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(input);
+    expect(normalizeMarkdownForTelegramBlockParsing(input)).toBe(input);
+  });
+
+  it("renders a formula after an indented code example containing an unclosed fence", () => {
+    const input = ["Example:", "", "    ```text", "    literal", "", "$$x^2$$"].join("\n");
+
+    expect(normalizeMarkdownForTelegramBlockParsing(input)).toBe(
+      ["Example:", "", "    ```text", "    literal", "", "```math", "x^2", "```"].join("\n"),
+    );
+  });
+
+  it("does not treat an unmatched backtick as a code span", () => {
+    const input = ["Unmatched `", "", "$$x^2$$"].join("\n");
+
+    expect(normalizeMarkdownForTelegramBlockParsing(input)).toBe(
+      ["Unmatched `", "", "```math", "x^2", "```"].join("\n"),
+    );
   });
 
   it("preserves malformed emphasis text without dropping content", () => {

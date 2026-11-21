@@ -196,4 +196,47 @@ describe("bot/render/pipeline", () => {
       },
     ]);
   });
+
+  it("keeps nested fence examples literal while rendering a following formula", () => {
+    const code = ["```math", "$$x^2$$", "```"].join("\n");
+    const markdown = ["````markdown", code, "````", "", "$$y^2$$"].join("\n");
+
+    expect(renderTelegramBlocks(markdown)).toEqual([
+      {
+        block: { type: "pre", language: "markdown", text: code },
+        plainText: code,
+      },
+      {
+        block: { type: "mathematical_expression", expression: "y^2" },
+        plainText: "y^2",
+      },
+    ]);
+  });
+
+  it("keeps a multiline code span as inline code instead of a formula", () => {
+    const markdown = ["`begin", "$$x^2$$", "end`"].join("\n");
+
+    expect(renderTelegramBlocks(markdown)).toEqual([
+      {
+        block: {
+          type: "paragraph",
+          text: { type: "code", text: "begin\n$$x^2$$\nend" },
+        },
+        plainText: "begin\n$$x^2$$\nend",
+      },
+    ]);
+  });
+
+  it("preserves an unmatched math delimiter and the following code and text", () => {
+    const markdown = ["$$", "", "```text", "$$", "keep me", "```", "", "After"].join("\n");
+
+    expect(renderTelegramBlocks(markdown)).toEqual([
+      { block: { type: "paragraph", text: "$$" }, plainText: "$$" },
+      {
+        block: { type: "pre", language: "text", text: "$$\nkeep me" },
+        plainText: "$$\nkeep me",
+      },
+      { block: { type: "paragraph", text: "After" }, plainText: "After" },
+    ]);
+  });
 });

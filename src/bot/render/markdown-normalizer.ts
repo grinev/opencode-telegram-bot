@@ -1,33 +1,46 @@
+import type { PhrasingContent, Root, RootContent } from "mdast";
+import { unified } from "unified";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+
 interface NormalizeMarkdownOptions {
   preserveBlockMarkup: boolean;
 }
 
-/** A fence delimiter: three or more backticks or tildes after up to three spaces. */
-const CODE_FENCE_PATTERN = /^\s*(`{3,}|~{3,})/;
+const markdownProcessor = unified().use(remarkParse).use(remarkGfm);
 
-const LIST_MARKER_PATTERN = /^(\s*)(?:[-+*]|\d+[.)])\s+/;
+type CodeLine = "block" | "inline-start" | "inline-continuation";
 
-/** Fence character of a delimiter line, or null when the line is not a fence. */
-function codeFenceChar(line: string): "`" | "~" | null {
-  const fence = line.match(CODE_FENCE_PATTERN)?.[1];
-  return fence ? (fence[0] as "`" | "~") : null;
-}
+/** Zero-based source lines occupied by literal block or inline code. */
+function collectCodeLines(markdown: string): Map<number, CodeLine> {
+  const codeLines = new Map<number, CodeLine>();
+  const visit = (node: Root | RootContent | PhrasingContent): void => {
+    if (node.type === "code" || node.type === "inlineCode") {
+      if (node.position) {
+        for (let line = node.position.start.line; line <= node.position.end.line; line++) {
+          const kind =
+            node.type === "code"
+              ? "block"
+              : line === node.position.start.line
+                ? "inline-start"
+                : "inline-continuation";
+          if (kind !== "inline-start" || !codeLines.has(line - 1)) {
+            codeLines.set(line - 1, kind);
+          }
+        }
+      }
+      return;
+    }
 
-function leadingIndent(line: string): string {
-  return line.match(/^[ \t]*/)?.[0] ?? "";
-}
+    if ("children" in node) {
+      for (const child of node.children) {
+        visit(child);
+      }
+    }
+  };
 
-/** Indentation width, with tabs counted as four spaces. */
-function indentWidth(indent: string): number {
-  return indent.replace(/\t/g, "    ").length;
-}
-
-/**
- * Code the block parser reads literally: four spaces past the current list item
- * content, or four spaces at the left margin.
- */
-function isIndentedCodeLine(line: string, listContentIndent: number): boolean {
-  return indentWidth(leadingIndent(line)) >= listContentIndent + 4;
+  visit(markdownProcessor.parse(markdown) as Root);
+  return codeLines;
 }
 
 /** Drops the opening fence indentation so the formula keeps its own layout. */
@@ -92,11 +105,9 @@ function normalizeChecklistLine(line: string): string | null {
 
 function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): string {
   const lines = text.split("\n");
+  const codeLines = collectCodeLines(text);
   const output: string[] = [];
-  let inCodeFence = false;
-  let codeFenceMark: "`" | "~" | null = null;
   let inQuote = false;
-  let listContentIndent = 0;
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
@@ -104,22 +115,15 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
       continue;
     }
 
-    const fence = codeFenceChar(line);
-    if (fence) {
-      if (!inCodeFence) {
-        inCodeFence = true;
-        codeFenceMark = fence;
-      } else if (fence === codeFenceMark) {
-        inCodeFence = false;
-        codeFenceMark = null;
+    const codeLine = codeLines.get(index);
+    if (codeLine) {
+      const hasQuoteMarker = line.trimStart().startsWith(">");
+      if (codeLine === "block") {
+        inQuote = false;
+      } else if (codeLine === "inline-start" && hasQuoteMarker) {
+        inQuote = true;
       }
-      inQuote = false;
-      output.push(line);
-      continue;
-    }
-
-    if (inCodeFence) {
-      output.push(line);
+      output.push(inQuote && !hasQuoteMarker ? `> ${line}` : line);
       continue;
     }
 
@@ -129,21 +133,7 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
       continue;
     }
 
-    const indent = leadingIndent(line);
-
-    // Indented code is literal text: formulas inside it must stay untouched.
-    if (isIndentedCodeLine(line, listContentIndent)) {
-      output.push(line);
-      continue;
-    }
-
-    const listMarker = line.match(LIST_MARKER_PATTERN);
-    if (listMarker) {
-      listContentIndent = indentWidth(listMarker[0]);
-    } else if (indentWidth(indent) < listContentIndent) {
-      listContentIndent = 0;
-    }
-
+    const indent = line.match(/^[ \t]*/)?.[0] ?? "";
     const singleLineMath = extractSingleLineMath(line);
     if (singleLineMath) {
       output.push(`${indent}\`\`\`math`, `${indent}${singleLineMath}`, `${indent}\`\`\``);
@@ -155,6 +145,9 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
       const expressionLines: string[] = [];
       let closingIndex = -1;
       for (let inner = index + 1; inner < lines.length; inner++) {
+        if (codeLines.has(inner)) {
+          break;
+        }
         const innerLine = lines[inner];
         if (innerLine === undefined) {
           continue;
