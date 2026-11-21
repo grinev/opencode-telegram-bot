@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseTelegramBlocks } from "../../../src/bot/render/block-parser.js";
 import {
   normalizeMarkdownForTelegramBlockParsing,
   normalizeMarkdownForTelegramRendering,
@@ -64,6 +65,19 @@ describe("bot/render/markdown-normalizer", () => {
     expect(normalizeMarkdownForTelegramRendering(input)).toBe(input);
   });
 
+  it("keeps tilde-fenced code blocks untouched", () => {
+    const input = ["~~~text", "$$x^2$$", "", "```math", "```", "~~~"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(input);
+    expect(normalizeMarkdownForTelegramBlockParsing(input)).toBe(input);
+  });
+
+  it("keeps four-space indented code blocks untouched", () => {
+    const input = ["Example:", "", "    $$x^2$$", "", "    $$", "    a = b", "    $$"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(input);
+  });
+
   it("preserves malformed emphasis text without dropping content", () => {
     const input = "*text: *value**";
 
@@ -93,6 +107,47 @@ describe("bot/render/markdown-normalizer", () => {
         "",
         "---",
       ].join("\n"),
+    );
+  });
+
+  it("converts dollar-delimited formulas into math fences", () => {
+    const input = ["Intro", "", "$$", "E = mc^2", "$$", "", "and $$x^2$$ inside a line"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(
+      ["Intro", "", "```math", "E = mc^2", "```", "", "and $$x^2$$ inside a line"].join("\n"),
+    );
+  });
+
+  it("keeps a formula nested inside a numbered list item", () => {
+    const input = ["1. Formula:", "   $$x^2$$", "   continuation", "2. Second"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(
+      ["1. Formula:", "   ```math", "   x^2", "   ```", "   continuation", "2. Second"].join("\n"),
+    );
+
+    expect(parseTelegramBlocks(input)).toEqual([
+      {
+        type: "list",
+        ordered: true,
+        items: [
+          {
+            blocks: [
+              { type: "paragraph", inlines: [{ type: "text", text: "Formula:" }] },
+              { type: "math", expression: "x^2" },
+              { type: "paragraph", inlines: [{ type: "text", text: "continuation" }] },
+            ],
+          },
+          { blocks: [{ type: "paragraph", inlines: [{ type: "text", text: "Second" }] }] },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps multi-line formulas nested inside a list item", () => {
+    const input = ["- item", "  $$", "  a = b", "  $$", "- next"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(
+      ["- item", "  ```math", "  a = b", "  ```", "- next"].join("\n"),
     );
   });
 });
