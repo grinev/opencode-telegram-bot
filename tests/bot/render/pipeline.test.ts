@@ -187,4 +187,13 @@ describe("bot/render/pipeline", () => {
       { block: { type: "paragraph", text: "## literal" }, plainText: "## literal" },
     ]);
   });
+
+  it("renders math fenced blocks as native formula blocks", () => {
+    expect(renderTelegramBlocks(["```math", "E = mc^2", "```"].join("\n"))).toEqual([
+      {
+        block: { type: "mathematical_expression", expression: "E = mc^2" },
+        plainText: "E = mc^2",
+      },
+    ]);
+  });
 });

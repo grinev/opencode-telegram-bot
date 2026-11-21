@@ -270,6 +270,8 @@ export function toRichBlock(block: TelegramBlock): TelegramRichBlock {
         text: block.text,
         ...(block.language ? { language: block.language } : {}),
       };
+    case "math":
+      return { type: "mathematical_expression", expression: block.expression };
     case "table":
       return block.rows.length > 0
         ? toTableBlock(block.rows, block.align)

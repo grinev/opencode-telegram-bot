@@ -54,6 +54,8 @@ export type TelegramBlock =
   /** `start` continues the numbering when a list is written out in pieces. */
   | { type: "list"; ordered: boolean; items: TelegramListItem[]; start?: number }
   | { type: "code"; language?: string | undefined; text: string }
+  /** A display formula in LaTeX; rendered by Telegram as a native math block. */
+  | { type: "math"; expression: string }
   | { type: "table"; rows: string[][]; align?: TableColumnAlign[] }
   | { type: "rule" }
   | { type: "plain"; text: string };

@@ -99,6 +99,8 @@ export function toBlockPlainText(block: TelegramBlock): string {
         .join("\n");
     case "code":
       return block.text;
+    case "math":
+      return block.expression;
     case "table":
       return buildAlignedTableText(block.rows);
     case "rule":

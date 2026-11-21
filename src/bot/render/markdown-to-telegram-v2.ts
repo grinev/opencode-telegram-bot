@@ -87,6 +87,9 @@ function renderBlock(block: TelegramBlock): string {
         .join("\n");
     case "code":
       return `\`\`\`${escapeMarkdownV2Code(block.language ?? "")}\n${escapeMarkdownV2Code(block.text)}\n\`\`\``;
+    case "math":
+      // MarkdownV2 has no formula markup, so the LaTeX source is kept verbatim.
+      return escapeMarkdownV2(`$$${block.expression}$$`);
     case "table": {
       if (block.rows.length === 0) {
         return "";
