@@ -2,6 +2,7 @@ import { config } from "../../config.js";
 import { logger } from "../../utils/logger.js";
 import textToSpeech from "@google-cloud/text-to-speech";
 import { synthesizeWithEdgeTts, EDGE_DEFAULT_VOICE } from "./edge-tts.js";
+import { Mp3Encoder } from "@breezystack/lamejs";
 
 const TTS_REQUEST_TIMEOUT_MS = 60_000;
 const MAX_TTS_INPUT_CHARS = 4_000;
@@ -137,7 +138,7 @@ async function synthesizeWithOpenAi(text: string): Promise<TtsResult> {
         model: config.tts.model,
         voice: config.tts.voice,
         input: text,
-        response_format: "mp3",
+        response_format: config.tts.responseFormat,
       }),
       signal: controller.signal,
     });
@@ -155,7 +156,8 @@ async function synthesizeWithOpenAi(text: string): Promise<TtsResult> {
     }
 
     logger.debug(`[TTS] Generated speech audio: ${buffer.length} bytes`);
-    return { buffer, filename: "assistant-reply.mp3", mimeType: "audio/mpeg" };
+    const mp3 = config.tts.responseFormat === "wav" ? wavToMp3(buffer) : buffer;
+    return { buffer: mp3, filename: "assistant-reply.mp3", mimeType: "audio/mpeg" };
   } finally {
     clearTimeout(timeout);
   }
@@ -301,4 +303,46 @@ export async function prepareTtsResponseForSession({
   }
 
   return { shouldSend: true, speech: await synthesizeSpeechImpl(normalizedText) };
+}
+
+/** Encodes a PCM16 WAV as MP3, the format every reply is sent in. */
+export function wavToMp3(wav: Buffer): Buffer {
+  const fmt = wav.indexOf("fmt ");
+  const data = wav.indexOf("data", fmt);
+  if (
+    wav.toString("ascii", 0, 4) !== "RIFF" ||
+    fmt < 0 ||
+    data < 0 ||
+    wav.readUInt16LE(fmt + 22) !== 16
+  ) {
+    throw new Error("TTS API returned audio that is not a PCM16 WAV");
+  }
+  const channels = wav.readUInt16LE(fmt + 10);
+  const sampleRate = wav.readUInt32LE(fmt + 12);
+  const frame = channels * 2;
+  const start = data + 8;
+  const last = Math.min(start + wav.readUInt32LE(data + 4), wav.length);
+  const end = start + Math.floor((last - start) / frame) * frame;
+  const pcm = new Int16Array(wav.buffer.slice(wav.byteOffset + start, wav.byteOffset + end));
+
+  const encoder = new Mp3Encoder(channels, sampleRate, 64);
+  const chunks: Uint8Array[] = [];
+  const step = 1152 * channels;
+  for (let i = 0; i < pcm.length; i += step) {
+    const block = pcm.subarray(i, i + step);
+    if (channels === 2) {
+      const left = new Int16Array(block.length / 2);
+      const right = new Int16Array(block.length / 2);
+      for (let j = 0; j < left.length; j++) {
+        left[j] = block[2 * j] ?? 0;
+        right[j] = block[2 * j + 1] ?? 0;
+      }
+      chunks.push(encoder.encodeBuffer(left, right));
+    } else {
+      chunks.push(encoder.encodeBuffer(block));
+    }
+  }
+  chunks.push(encoder.flush());
+  // lamejs returns Int8Array chunks, whatever its type declarations say.
+  return Buffer.concat(chunks.map((c) => Buffer.from(c.buffer, c.byteOffset, c.byteLength)));
 }
