@@ -209,4 +209,13 @@ describe("bot/render/markdown-normalizer", () => {
       ["- item", "  ```math", "  a = b", "  ```", "- next"].join("\n"),
     );
   });
+
+  it("uses a longer math fence when the expression contains a fence", () => {
+    const input = ["$$", "    ```", "x = 1", "$$"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(
+      ["````math", "```", "x = 1", "````"].join("\n"),
+    );
+    expect(parseTelegramBlocks(input)).toEqual([{ type: "math", expression: "```\nx = 1" }]);
+  });
 });

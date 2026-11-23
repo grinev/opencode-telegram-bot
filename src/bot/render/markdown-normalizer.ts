@@ -80,6 +80,19 @@ function isMathFenceLine(line: string): boolean {
   return line.trim() === "$$";
 }
 
+/** A math fence must be longer than any backtick run that starts an expression line. */
+function mathFenceLength(lines: string[]): number {
+  let longest = 0;
+  for (const line of lines) {
+    const run = line.trimStart().match(/^`+/)?.[0];
+    if (run && run.length >= 3) {
+      longest = Math.max(longest, run.length);
+    }
+  }
+
+  return Math.max(3, longest + 1);
+}
+
 function normalizeHeadingLine(line: string): string {
   const match = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*$/);
   const heading = match?.[1];
@@ -136,7 +149,8 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
     const indent = line.match(/^[ \t]*/)?.[0] ?? "";
     const singleLineMath = extractSingleLineMath(line);
     if (singleLineMath) {
-      output.push(`${indent}\`\`\`math`, `${indent}${singleLineMath}`, `${indent}\`\`\``);
+      const fence = "`".repeat(mathFenceLength([singleLineMath]));
+      output.push(`${indent}${fence}math`, `${indent}${singleLineMath}`, `${indent}${fence}`);
       inQuote = false;
       continue;
     }
@@ -164,11 +178,13 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
         .join("\n")
         .trim();
       if (closingIndex !== -1 && expression) {
-        output.push(`${indent}\`\`\`math`);
-        for (const expressionLine of expression.split("\n")) {
+        const emittedLines = expression.split("\n");
+        const fence = "`".repeat(mathFenceLength(emittedLines));
+        output.push(`${indent}${fence}math`);
+        for (const expressionLine of emittedLines) {
           output.push(expressionLine ? `${indent}${expressionLine}` : "");
         }
-        output.push(`${indent}\`\`\``);
+        output.push(`${indent}${fence}`);
         index = closingIndex;
         inQuote = false;
         continue;
