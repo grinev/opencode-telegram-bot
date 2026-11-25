@@ -11,21 +11,60 @@ const markdownProcessor = unified().use(remarkParse).use(remarkGfm);
 
 type CodeLine = "block" | "inline-start" | "inline-continuation";
 
+interface CodeBlock {
+  /** Zero-based first and last source lines of the block. */
+  start: number;
+  end: number;
+  /** A fenced block is complete only with its closing delimiter. */
+  closed: boolean;
+}
+
+interface CodeLayout {
+  lines: Map<number, CodeLine>;
+  blocks: Map<number, CodeBlock>;
+}
+
+/** Indented code is always complete; a fence needs a closing delimiter. */
+function isClosedFence(sourceLines: string[], start: number, end: number): boolean {
+  const opening = sourceLines[start]?.match(/^\s*(`{3,}|~{3,})/)?.[1];
+  if (!opening) {
+    return true;
+  }
+
+  const closing = sourceLines[end]?.trim() ?? "";
+  return (
+    closing.length >= opening.length && [...closing].every((char) => char === opening[0])
+  );
+}
+
 /** Zero-based source lines occupied by literal block or inline code. */
-function collectCodeLines(markdown: string): Map<number, CodeLine> {
-  const codeLines = new Map<number, CodeLine>();
+function collectCodeLines(markdown: string): CodeLayout {
+  const sourceLines = markdown.split("\n");
+  const lines = new Map<number, CodeLine>();
+  const blocks = new Map<number, CodeBlock>();
   const visit = (node: Root | RootContent | PhrasingContent): void => {
     if (node.type === "code" || node.type === "inlineCode") {
       if (node.position) {
-        for (let line = node.position.start.line; line <= node.position.end.line; line++) {
+        const start = node.position.start.line;
+        const end = node.position.end.line;
+
+        if (node.type === "code") {
+          const block: CodeBlock = { start: start - 1, end: end - 1, closed: false };
+          block.closed = isClosedFence(sourceLines, block.start, block.end);
+          for (let line = block.start; line <= block.end; line++) {
+            blocks.set(line, block);
+          }
+        }
+
+        for (let line = start; line <= end; line++) {
           const kind =
             node.type === "code"
               ? "block"
-              : line === node.position.start.line
+              : line === start
                 ? "inline-start"
                 : "inline-continuation";
-          if (kind !== "inline-start" || !codeLines.has(line - 1)) {
-            codeLines.set(line - 1, kind);
+          if (kind !== "inline-start" || !lines.has(line - 1)) {
+            lines.set(line - 1, kind);
           }
         }
       }
@@ -40,7 +79,7 @@ function collectCodeLines(markdown: string): Map<number, CodeLine> {
   };
 
   visit(markdownProcessor.parse(markdown) as Root);
-  return codeLines;
+  return { lines, blocks };
 }
 
 /** Drops the opening fence indentation so the formula keeps its own layout. */
@@ -118,7 +157,7 @@ function normalizeChecklistLine(line: string): string | null {
 
 function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): string {
   const lines = text.split("\n");
-  const codeLines = collectCodeLines(text);
+  const { lines: codeLines, blocks: codeBlocks } = collectCodeLines(text);
   const output: string[] = [];
   let inQuote = false;
 
@@ -159,13 +198,29 @@ function normalizeMarkdown(text: string, options: NormalizeMarkdownOptions): str
       const expressionLines: string[] = [];
       let closingIndex = -1;
       for (let inner = index + 1; inner < lines.length; inner++) {
-        if (codeLines.has(inner)) {
-          break;
-        }
         const innerLine = lines[inner];
         if (innerLine === undefined) {
           continue;
         }
+
+        const codeLine = codeLines.get(inner);
+        if (codeLine === "block") {
+          // A fence opened inside the formula never closes: it cannot hide the
+          // closing delimiter, so the formula still ends at its own `$$`.
+          const block = codeBlocks.get(inner);
+          if (block && !block.closed && isMathFenceLine(innerLine)) {
+            closingIndex = inner;
+            break;
+          }
+          expressionLines.push(innerLine);
+          continue;
+        }
+
+        if (codeLine) {
+          expressionLines.push(innerLine);
+          continue;
+        }
+
         if (isMathFenceLine(innerLine)) {
           closingIndex = inner;
           break;
