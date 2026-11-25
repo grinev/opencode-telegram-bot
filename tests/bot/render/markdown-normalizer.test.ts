@@ -209,4 +209,32 @@ describe("bot/render/markdown-normalizer", () => {
       ["- item", "  ```math", "  a = b", "  ```", "- next"].join("\n"),
     );
   });
+
+  it("uses a longer math fence when the expression contains a fence", () => {
+    const input = ["$$", "    ```", "x = 1", "$$"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(
+      ["````math", "```", "x = 1", "````"].join("\n"),
+    );
+    expect(parseTelegramBlocks(input)).toEqual([{ type: "math", expression: "```\nx = 1" }]);
+  });
+
+  it("keeps an unindented fence inside the formula", () => {
+    const input = ["$$", "```", "x = 1", "$$", "", "Paragraph after."].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(
+      ["````math", "```", "x = 1", "````", "", "Paragraph after."].join("\n"),
+    );
+    expect(parseTelegramBlocks(input)).toEqual([
+      { type: "math", expression: "```\nx = 1" },
+      { type: "paragraph", inlines: [{ type: "text", text: "Paragraph after." }] },
+    ]);
+  });
+
+  it("does not close a formula on a delimiter inside a closed code block", () => {
+    const input = ["$$", "intro", "```", "$$", "```"].join("\n");
+
+    expect(normalizeMarkdownForTelegramRendering(input)).toBe(input);
+    expect(normalizeMarkdownForTelegramBlockParsing(input)).toBe(input);
+  });
 });
