@@ -10,6 +10,7 @@ dotenv.config({ path: runtimePaths.envFilePath, quiet: true });
 export type MessageFormatMode = "raw" | "markdown";
 export type TtsProvider = "openai" | "google" | "elevenlabs" | "edge";
 export type SttRequestFormat = "multipart" | "json";
+export type TtsResponseFormat = "mp3" | "wav";
 
 function getEnvVar(key: string, required: boolean = true): string {
   const value = process.env[key];
@@ -215,6 +216,26 @@ function getOptionalSttRequestFormatEnvVar(
   return defaultValue;
 }
 
+const VALID_TTS_RESPONSE_FORMATS: TtsResponseFormat[] = ["mp3", "wav"];
+
+function getOptionalTtsResponseFormatEnvVar(
+  key: string,
+  defaultValue: TtsResponseFormat,
+): TtsResponseFormat {
+  const value = getEnvVar(key, false);
+
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (VALID_TTS_RESPONSE_FORMATS.includes(normalized as TtsResponseFormat)) {
+    return normalized as TtsResponseFormat;
+  }
+
+  return defaultValue;
+}
+
 export function buildTelegramConfig(): {
   token: string;
   allowedUserId: number;
@@ -349,6 +370,7 @@ export const config = {
       provider,
       model: getEnvVar("TTS_MODEL", false) || defaultModel,
       voice: getEnvVar("TTS_VOICE", false) || defaultVoice,
+      responseFormat: getOptionalTtsResponseFormatEnvVar("TTS_RESPONSE_FORMAT", "mp3"),
     };
   })(),
 };

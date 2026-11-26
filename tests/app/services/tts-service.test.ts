@@ -37,6 +37,7 @@ const mockTts = vi.hoisted(() => ({
   provider: "openai" as string,
   model: "gpt-4o-mini-tts",
   voice: "alloy",
+  responseFormat: "mp3" as "mp3" | "wav",
 }));
 
 vi.mock("../../../src/config.js", () => ({
@@ -231,6 +232,7 @@ describe("synthesizeSpeech (OpenAI)", () => {
     mockTts.provider = "openai";
     mockTts.model = "gpt-4o-mini-tts";
     mockTts.voice = "alloy";
+    mockTts.responseFormat = "mp3";
     vi.restoreAllMocks();
   });
 
@@ -283,6 +285,35 @@ describe("synthesizeSpeech (OpenAI)", () => {
       input: "Hello world",
       response_format: "mp3",
     });
+  });
+
+  it("asks for WAV and returns it encoded as MP3 when responseFormat is wav", async () => {
+    mockTts.responseFormat = "wav";
+    const wav = pcm16Wav(24000, 24000);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array(wav), { status: 200, headers: { "Content-Type": "audio/wav" } }),
+    );
+
+    const result = await synthesizeSpeech("Hello world");
+
+    const [, options] = defined(fetchSpy.mock.calls[0]);
+    expect(JSON.parse(String(options?.body)).response_format).toBe("wav");
+    expect(result.filename).toBe("assistant-reply.mp3");
+    expect(result.mimeType).toBe("audio/mpeg");
+    expect(result.buffer.length).toBeGreaterThan(1000);
+    expect(result.buffer.length).toBeLessThan(wav.length / 4);
+    // An MPEG audio frame sync, not a RIFF header.
+    expect(result.buffer[0]).toBe(0xff);
+    expect((result.buffer[1] ?? 0) & 0xe0).toBe(0xe0);
+  });
+
+  it("rejects a reply that is not a PCM16 WAV when responseFormat is wav", async () => {
+    mockTts.responseFormat = "wav";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(Uint8Array.from([1, 2, 3]), { status: 200 }),
+    );
+
+    await expect(synthesizeSpeech("Hello world")).rejects.toThrow("not a PCM16 WAV");
   });
 
   it("throws on non-OK HTTP response", async () => {
@@ -491,3 +522,25 @@ describe("synthesizeSpeech (Edge)", () => {
     await expect(synthesizeSpeech("Hello")).rejects.toThrow("no audio received");
   });
 });
+
+/** One mono PCM16 WAV of a 440 Hz tone. */
+function pcm16Wav(sampleRate: number, samples: number): Buffer {
+  const wav = Buffer.alloc(44 + samples * 2);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + samples * 2, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(samples * 2, 40);
+  for (let i = 0; i < samples; i++) {
+    const sample = Math.round(8000 * Math.sin((2 * Math.PI * 440 * i) / sampleRate));
+    wav.writeInt16LE(sample, 44 + i * 2);
+  }
+  return wav;
+}
