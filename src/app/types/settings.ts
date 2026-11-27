@@ -5,6 +5,8 @@ import type { ScheduledTask } from "./scheduled-task.js";
 
 export type ResponseStreamingMode = "edit" | "draft" | "off";
 
+export type OutputMode = "full" | "compact" | "minimal";
+
 export type PromptQueueMode = "off" | "queue" | "steer";
 
 export interface ScheduledTaskSessionIgnoreInfo {
@@ -42,6 +44,7 @@ export interface Settings {
   currentModel?: ModelInfo | undefined;
   pinnedMessageId?: number | undefined;
   ttsMode?: "off" | "all" | "auto" | undefined;
+  outputMode?: OutputMode | undefined;
   compactOutputMode?: boolean | undefined;
   deleteCompactProgressOnFinish?: boolean | undefined;
   showThinkingContent?: boolean | undefined;

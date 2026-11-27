@@ -25,7 +25,7 @@ export type AbortCommandDeps = Pick<
   | "interruptSubagents"
   | "keyboardManager"
   | "resetInteractions"
-> & Partial<Pick<AppContainer, "manualCompaction">>;
+> & Partial<Pick<AppContainer, "manualCompaction" | "captureMinimalProgressEnd">>;
 
 interface AbortCurrentOperationOptions {
   notifyUser?: boolean;
@@ -176,6 +176,7 @@ export async function abortCurrentOperation(
       return;
     }
 
+    const endMinimal = deps.captureMinimalProgressEnd?.(currentSession.id);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
     markUserAbortRequested(currentSession.id);
@@ -215,6 +216,8 @@ export async function abortCurrentOperation(
       );
 
       if (finalStatus === "idle" || finalStatus === "not-found") {
+        const minimalClosed = endMinimal?.();
+        if (minimalClosed) await minimalClosed;
         await releaseAbortBusyState(deps, currentSession.id, "abort_confirmed");
         try {
           if (notifyUser && chatId !== null && waitingMessageId !== null) {

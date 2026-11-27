@@ -8,7 +8,7 @@ import type { ScheduledTask } from "../../../src/app/types/scheduled-task.js";
 import {
   __resetSettingsForTests,
   flushSettings,
-  getCompactOutputMode,
+  getOutputMode,
   getLastTodoSnapshot,
   getPromptQueueMode,
   getResponseStreamingMode,
@@ -21,7 +21,7 @@ import {
   getScheduledTasks,
   getTtsMode,
   loadSettings,
-  setCompactOutputMode,
+  setOutputMode,
   setLastTodoSnapshot,
   setPromptQueueMode,
   setScheduledTasks,
@@ -70,18 +70,18 @@ describe("app/stores/settings-store", () => {
     },
   );
 
-  it("uses disabled compact output mode by default", async () => {
+  it("uses full output mode by default", async () => {
     await loadSettings();
 
-    expect(getCompactOutputMode()).toBe(false);
+    expect(getOutputMode()).toBe("full");
   });
 
-  it("loads compact output mode from settings.json", async () => {
+  it("loads legacy compact output mode from settings.json", async () => {
     await writeFile(path.join(tempHome, "settings.json"), JSON.stringify({ compactOutputMode: true }));
 
     await loadSettings();
 
-    expect(getCompactOutputMode()).toBe(true);
+    expect(getOutputMode()).toBe("compact");
   });
 
   it("shows thinking content by default", async () => {
@@ -226,7 +226,7 @@ describe("app/stores/settings-store", () => {
     await store.loadSettings();
 
     expect(store.getShowAssistantRunFooter()).toBe(false);
-    expect(store.getCompactOutputMode()).toBe(true);
+    expect(store.getOutputMode()).toBe("compact");
     expect(store.getDeleteCompactProgressOnFinish()).toBe(true);
     expect(store.getTtsMode()).toBe("auto");
     expect(store.getResponseStreamingMode()).toBe("draft");
@@ -258,6 +258,34 @@ describe("app/stores/settings-store", () => {
     await store.flushSettings();
     vi.unstubAllEnvs();
     vi.resetModules();
+  });
+
+  it.each([
+    [{ outputMode: "full", compactOutputMode: true }, { outputMode: "minimal" }, "full"],
+    [{ outputMode: "minimal", compactOutputMode: false }, { outputMode: "compact" }, "minimal"],
+    [{ compactOutputMode: false }, { outputMode: "minimal" }, "full"],
+    [{ compactOutputMode: true }, { outputMode: "minimal" }, "compact"],
+    [{}, { compactOutputMode: true, outputMode: "minimal" }, "minimal"],
+    [{}, { outputMode: "minimal", compactOutputMode: false }, "minimal"],
+    [{}, { compactOutputMode: false }, "full"],
+  ])("resolves saved %j and preset %j as %s", async (saved, preset, expected) => {
+    await writeFile(path.join(tempHome, "settings.json"), JSON.stringify(saved));
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", JSON.stringify(preset));
+    const store = await import("../../../src/app/stores/settings-store.js");
+
+    await store.loadSettings();
+    expect(store.getOutputMode()).toBe(expected);
+    await store.flushSettings();
+  });
+
+  it("rejects an invalid output mode preset even when a saved choice exists", async () => {
+    await writeFile(path.join(tempHome, "settings.json"), '{"outputMode":"full"}');
+    vi.resetModules();
+    vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"outputMode":"quiet"}');
+    const store = await import("../../../src/app/stores/settings-store.js");
+
+    await expect(store.loadSettings()).rejects.toThrow(/invalid value for "outputMode"/);
   });
 
   it.each([undefined, "edit", "draft"] as const)(
@@ -462,24 +490,22 @@ describe("app/stores/settings-store", () => {
     });
   });
 
-  it("persists compact output mode to settings.json", async () => {
+  it("saves output mode without changing other settings", async () => {
+    await writeFile(
+      path.join(tempHome, "settings.json"),
+      '{"compactOutputMode":true,"responseStreamingMode":"draft"}',
+    );
     await loadSettings();
 
-    setCompactOutputMode(true);
+    setOutputMode("minimal");
+    expect(getOutputMode()).toBe("minimal");
+    await flushSettings();
+    const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
+    expect(settings).toMatchObject({ outputMode: "minimal", responseStreamingMode: "draft" });
+    expect(settings).not.toHaveProperty("compactOutputMode");
 
-    expect(getCompactOutputMode()).toBe(true);
-    await vi.waitFor(async () => {
-      const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
-      expect(settings.compactOutputMode).toBe(true);
-    });
-
-    setCompactOutputMode(false);
-
-    expect(getCompactOutputMode()).toBe(false);
-    await vi.waitFor(async () => {
-      const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
-      expect(settings.compactOutputMode).toBe(false);
-    });
+    await loadSettings();
+    expect(getOutputMode()).toBe("minimal");
   });
 
   it("persists thinking content setting to settings.json", async () => {
@@ -566,22 +592,22 @@ describe("app/stores/settings-store", () => {
   it("flushes a write queued by a fire-and-forget setter", async () => {
     await loadSettings();
 
-    setCompactOutputMode(true);
+    setOutputMode("compact");
     await flushSettings();
 
     const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
-    expect(settings.compactOutputMode).toBe(true);
+    expect(settings.outputMode).toBe("compact");
   });
 
   it("flushes the whole queue of pending writes", async () => {
     await loadSettings();
 
-    setCompactOutputMode(true);
+    setOutputMode("compact");
     setShowThinkingContent(false);
     await flushSettings();
 
     const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
-    expect(settings.compactOutputMode).toBe(true);
+    expect(settings.outputMode).toBe("compact");
     expect(settings.showThinkingContent).toBe(false);
   });
 
@@ -595,7 +621,7 @@ describe("app/stores/settings-store", () => {
       try {
         await loadSettings();
         if (kind === "setter") {
-          setCompactOutputMode(true);
+          setOutputMode("compact");
         } else {
           void setScheduledTasksConfirmed([]);
         }
@@ -632,7 +658,7 @@ describe("app/stores/settings-store", () => {
     }));
     try {
       await loadSettings();
-      setCompactOutputMode(true);
+      setOutputMode("compact");
       await flushSettings();
       expect(process.env.OPENCODE_TELEGRAM_HOME).toBe(otherHome);
       const rotated = JSON.parse(await readFile(path.join(tempHome, "settings.json.bak"), "utf8"));
@@ -640,7 +666,7 @@ describe("app/stores/settings-store", () => {
       expect(await readFile(path.join(otherHome, "settings.json.bak"), "utf8")).toBe(sentinel);
       expect(
         JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf8")),
-      ).toMatchObject({ compactOutputMode: true });
+      ).toMatchObject({ outputMode: "compact" });
     } finally {
       await flushSettings();
       vi.doUnmock("fs/promises");
@@ -690,11 +716,11 @@ describe("app/stores/settings-store", () => {
       expect(await exists(backupPath())).toBe(false);
       expect(await exists(tempPath())).toBe(false);
 
-      setCompactOutputMode(true);
+      setOutputMode("compact");
       await flushSettings();
 
       expect(JSON.parse(await readFile(settingsPath(), "utf8"))).toMatchObject({
-        compactOutputMode: true,
+        outputMode: "compact",
       });
       expect(await exists(tempPath())).toBe(false);
     });
@@ -702,15 +728,15 @@ describe("app/stores/settings-store", () => {
     it("keeps the previous version in settings.json.bak on the next write", async () => {
       await loadSettings();
 
-      setCompactOutputMode(true);
+      setOutputMode("compact");
       await flushSettings();
-      setCompactOutputMode(false);
+      setOutputMode("full");
       await flushSettings();
 
       const settings = JSON.parse(await readFile(settingsPath(), "utf-8"));
       const backup = JSON.parse(await readFile(backupPath(), "utf-8"));
-      expect(settings.compactOutputMode).toBe(false);
-      expect(backup.compactOutputMode).toBe(true);
+      expect(settings.outputMode).toBe("full");
+      expect(backup.outputMode).toBe("compact");
       expect(await exists(tempPath())).toBe(false);
     });
 
@@ -720,7 +746,7 @@ describe("app/stores/settings-store", () => {
 
       await loadSettings();
 
-      expect(getCompactOutputMode()).toBe(true);
+      expect(getOutputMode()).toBe("compact");
     });
 
     it("recovers settings from the backup when settings.json is missing", async () => {
@@ -786,7 +812,7 @@ describe("app/stores/settings-store", () => {
     it("starts with empty settings when neither file exists", async () => {
       await expect(loadSettings()).resolves.toBeUndefined();
 
-      expect(getCompactOutputMode()).toBe(false);
+      expect(getOutputMode()).toBe("full");
     });
 
     it("ignores a corrupted backup when settings.json is readable", async () => {
@@ -795,7 +821,7 @@ describe("app/stores/settings-store", () => {
 
       await loadSettings();
 
-      expect(getCompactOutputMode()).toBe(true);
+      expect(getOutputMode()).toBe("compact");
     });
 
     it("keeps scheduled tasks when settings.json is corrupted after a write", async () => {

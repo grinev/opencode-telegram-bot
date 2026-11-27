@@ -14,6 +14,7 @@ interface FinalizeAssistantResponseOptions {
   renderFinalParts: (messageText: string) => TelegramRenderedPart[];
   getReplyKeyboard: () => unknown;
   notifyFirstFinalPart?: boolean;
+  beforeReply?: () => Promise<void> | undefined;
   afterTextAccepted?: () => Promise<void>;
   strictFinalPayload?: boolean;
   sendRenderedPart: (
@@ -37,6 +38,7 @@ export async function finalizeAssistantResponse({
   renderFinalParts,
   getReplyKeyboard,
   notifyFirstFinalPart = false,
+  beforeReply,
   afterTextAccepted,
   strictFinalPayload = false,
   sendRenderedPart,
@@ -91,6 +93,8 @@ export async function finalizeAssistantResponse({
 
   if (!strictFinalPayload) await flushPendingServiceMessages();
   const parts = finalParts ?? renderFinalParts(messageText);
+  const beforeSend = parts.length > 0 ? beforeReply?.() : undefined;
+  if (beforeSend) await beforeSend;
 
   let notifyNextPart = notifyFirstFinalPart;
   for (const part of parts) {

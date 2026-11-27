@@ -429,10 +429,13 @@ describe("opencode/v2/events", () => {
       }),
     );
 
-    expect(envelope).toBeUndefined();
+    expect(envelope?.payload).toMatchObject({
+      type: "tool.live_activity",
+      properties: { sessionID: SESSION, callID: "call-1" },
+    });
   });
 
-  it("drops every event of a call it never saw start instead of naming it", () => {
+  it("keeps live activity but not tool output for a call it never saw start", () => {
     const translate = createV2EventTranslator();
     const base = { sessionID: SESSION, assistantMessageID: MESSAGE, id: "call-lost" };
 
@@ -451,7 +454,10 @@ describe("opencode/v2/events", () => {
       }),
     ]);
 
-    expect(result).toEqual([]);
+    expect(result).toMatchObject([
+      { type: "tool.live_activity", properties: { sessionID: SESSION, callID: "call-lost" } },
+      { type: "tool.live_activity", properties: { sessionID: SESSION, callID: "call-lost" } },
+    ]);
   });
 
   it("forgets the calls it knew once the stream connects again", () => {

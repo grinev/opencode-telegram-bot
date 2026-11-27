@@ -171,7 +171,10 @@ export const ru: I18nDictionary = {
   "tts.failed": "⚠️ Не удалось создать аудиоответ.",
 
   "settings.menu.title": "⚙️ Настройки бота\nНажмите на параметр, чтобы переключить его значение:",
-  "settings.compact_output.label": "Компактный вывод",
+  "settings.output_mode": "Режим вывода",
+  "settings.output_mode.full": "полный",
+  "settings.output_mode.compact": "компактный",
+  "settings.output_mode.minimal": "минимальный",
   "settings.delete_progress_on_finish.label": "Удалять прогресс по завершении",
   "settings.thinking_content.label": "Содержимое thinking",
   "settings.response_streaming.label": "Стриминг ответа",

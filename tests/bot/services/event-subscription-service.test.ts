@@ -581,6 +581,7 @@ describe("bot/services/event-subscription-service", () => {
     sendDiffFileAttachments: boolean,
     options: {
       responseStreamingMode?: import("../../../src/app/types/settings.js").ResponseStreamingMode;
+      outputMode?: import("../../../src/app/types/settings.js").OutputMode;
       showThinkingContent?: boolean;
       showAssistantRunFooter?: boolean;
       startAssistantRun?: boolean;
@@ -604,7 +605,7 @@ describe("bot/services/event-subscription-service", () => {
       title: "Test session",
       directory: "D:/repo",
     });
-    settingsStore.setCompactOutputMode(false);
+    settingsStore.setOutputMode(options.outputMode ?? "full");
     settingsStore.setSendDiffFileAttachments(sendDiffFileAttachments);
     settingsStore.setResponseStreamingMode(options.responseStreamingMode ?? "edit");
     settingsStore.setShowThinkingContent(options.showThinkingContent ?? true);
@@ -631,6 +632,166 @@ describe("bot/services/event-subscription-service", () => {
 
     return { api, summaryAggregator };
   }
+
+  describe("minimal output", () => {
+    const header = t("progress.compact.working_header");
+
+    it.each(["edit", "draft", "off"] as const)(
+      "removes the unchanged marker before the first %s output",
+      async (responseStreamingMode) => {
+        const { api, summaryAggregator } = await setupService(true, {
+          outputMode: "minimal",
+          responseStreamingMode,
+          showAssistantRunFooter: false,
+        });
+        useTrackerFakeTimers();
+        emitThinkingPart(summaryAggregator, "Thinking privately");
+        emitBashTool(summaryAggregator, "running");
+        emitWriteTool(summaryAggregator, "running");
+        emitWriteTool(summaryAggregator, "completed");
+        emitTodoTool(summaryAggregator, { todos: [{ content: "private todo", status: "pending" }] });
+        await flushPendingDispatch();
+        await vi.advanceTimersByTimeAsync(25_000);
+        expect(collectSentTexts(api)).toEqual([header]);
+        expect(api.sendDocument).not.toHaveBeenCalled();
+
+        emitAssistantTextPart(summaryAggregator, "First answer");
+        await flushPendingDispatch();
+        if (responseStreamingMode === "off") {
+          expect(collectSentTexts(api)).toEqual([header]);
+          expect(api.deleteMessage).not.toHaveBeenCalled();
+          emitAssistantCompleted(summaryAggregator);
+          await flushPendingDispatch();
+        }
+
+        const transport = responseStreamingMode === "draft" ? api.sendMessageDraft : api.sendMessage;
+        const replyCall = defined(
+          transport.mock.invocationCallOrder[responseStreamingMode === "draft" ? 0 : 1],
+        );
+        expect(api.deleteMessage).toHaveBeenCalledExactlyOnceWith(42, 100);
+        expect(api.deleteMessage.mock.invocationCallOrder[0]).toBeLessThan(replyCall);
+      },
+    );
+
+    it("ignores later text of a shown reply but opens a fresh marker after completion", async () => {
+      const { api, summaryAggregator } = await setupService(false, {
+        outputMode: "minimal",
+        showAssistantRunFooter: false,
+      });
+      useTrackerFakeTimers();
+      emitAssistantTextPart(summaryAggregator, "First");
+      await flushPendingDispatch();
+      emitAssistantTextPart(summaryAggregator, "First answer continues");
+      emitBashTool(summaryAggregator, "running", { callId: "after-preview" });
+      await flushPendingDispatch();
+      expect(collectSentTexts(api).filter((text) => text === header)).toEqual([header]);
+
+      emitAssistantCompleted(summaryAggregator);
+      await flushPendingDispatch();
+      emitAssistantMessage(summaryAggregator, "message-2");
+      emitThinkingPart(summaryAggregator, "New work", "message-2");
+      await flushPendingDispatch();
+      expect(collectSentTexts(api).filter((text) => text === header)).toEqual([header, header]);
+
+      emitSessionIdle(summaryAggregator);
+      await flushPendingDispatch();
+      expect(api.deleteMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it("removes the marker before an attachment-only reply", async () => {
+      const { api, summaryAggregator } = await setupService(false, {
+        outputMode: "minimal",
+        responseStreamingMode: "off",
+        showAssistantRunFooter: false,
+      });
+      useTrackerFakeTimers();
+      emitAssistantTextPart(summaryAggregator, "[](only.bin)");
+      await flushPendingDispatch();
+      expect(collectSentTexts(api)).toEqual([header]);
+      expect(api.deleteMessage).not.toHaveBeenCalled();
+
+      emitAssistantCompleted(summaryAggregator);
+      await flushPendingDispatch();
+
+      expect(collectSentTexts(api)).toEqual([header]);
+      expect(api.deleteMessage).toHaveBeenCalledExactlyOnceWith(42, 100);
+      expect(api.sendDocument).toHaveBeenCalledExactlyOnceWith(
+        42,
+        expect.anything(),
+        { caption: "only.bin", disable_notification: true },
+      );
+      expect(api.deleteMessage.mock.invocationCallOrder[0]).toBeLessThan(
+        defined(api.sendDocument.mock.invocationCallOrder[0]),
+      );
+    });
+
+    it("removes the marker on a terminal error without replacing the existing notice", async () => {
+      const { api, summaryAggregator } = await setupService(true, { outputMode: "minimal" });
+      useTrackerFakeTimers();
+      emitThinkingPart(summaryAggregator, "Thinking");
+      await flushPendingDispatch();
+      summaryAggregator.processEvent({
+        type: "session.error",
+        properties: {
+          sessionID: "session-1",
+          error: { name: "UnknownError", data: { message: "test failure" } },
+        },
+      } as unknown as Event);
+      await flushPendingDispatch();
+
+      expect(api.deleteMessage).toHaveBeenCalledExactlyOnceWith(42, 100);
+      expect(collectSentTexts(api)).toEqual([
+        header,
+        t("bot.session_error", { message: "test failure" }),
+      ]);
+    });
+
+    it("closes for a visible question and waits for fresh work after queued prompts settle", async () => {
+      const { api, summaryAggregator } = await setupService(false, { outputMode: "minimal" });
+      const { interactionManager, permissionManager } = activeContainer;
+      useTrackerFakeTimers();
+      emitThinkingPart(summaryAggregator, "Planning");
+      await flushPendingDispatch();
+
+      emitQuestionAsked(summaryAggregator, "question-1");
+      await flushPendingDispatch();
+      expect(interactionManager.getSnapshot()?.kind).toBe("question");
+      expect(api.deleteMessage).toHaveBeenCalledExactlyOnceWith(42, 100);
+      emitPermissionAsked(summaryAggregator, "perm-1");
+      emitBashTool(summaryAggregator, "running", { callId: "while-question-visible" });
+      await flushPendingDispatch();
+      expect(permissionManager.isActive()).toBe(false);
+      expect(collectSentTexts(api).filter((text) => text === header)).toEqual([header]);
+
+      emitQuestionSettled(summaryAggregator, "question.replied", "question-1");
+      await flushPendingDispatch();
+      expect(permissionManager.isActive()).toBe(true);
+      emitPermissionReplied(summaryAggregator, "perm-1");
+      await flushPendingDispatch();
+      expect(collectSentTexts(api).filter((text) => text === header)).toEqual([header]);
+
+      emitBashTool(summaryAggregator, "running", { callId: "fresh-after-prompts" });
+      await flushPendingDispatch();
+      expect(collectSentTexts(api).filter((text) => text === header)).toEqual([header, header]);
+    });
+
+    it.each(["minimal", "compact", "full"] as const)(
+      "routes orphan live V2 tool activity only to Minimal (%s)",
+      async (outputMode) => {
+        const { api } = await setupService(false, { outputMode });
+        const route = defined(mocked.subscribeToEvents.mock.lastCall?.[1]);
+        const event = (sessionID: string) => ({
+          event: { type: "tool.live_activity", properties: { sessionID, callID: "known-live" } },
+        });
+        route(event("other-session"));
+        expect(api.sendMessage).not.toHaveBeenCalled();
+
+        route(event("session-1"));
+        route(event("session-1"));
+        expect(collectSentTexts(api)).toEqual(outputMode === "minimal" ? [header] : []);
+      },
+    );
+  });
 
   it("sends write tool output as a document attachment when diff files are enabled", async () => {
     const { api, summaryAggregator } = await setupService(true);
@@ -1018,7 +1179,7 @@ describe("bot/services/event-subscription-service", () => {
     it("does not send compact progress after the session goes idle", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1032,7 +1193,7 @@ describe("bot/services/event-subscription-service", () => {
     it("adds the duration to the compact progress line", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       // Let the settings write finish before the clock is faked, otherwise it
       // races with the temp home cleanup in afterEach.
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1108,7 +1269,7 @@ describe("bot/services/event-subscription-service", () => {
     it("times the task tool in compact mode, where no subagent card exists", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1125,7 +1286,7 @@ describe("bot/services/event-subscription-service", () => {
     it("names the most recently started of parallel launches in compact mode", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1148,7 +1309,7 @@ describe("bot/services/event-subscription-service", () => {
     it("falls back to the still-running bash after parallel reads finish in compact mode", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1169,7 +1330,7 @@ describe("bot/services/event-subscription-service", () => {
     it("lets a new compact tool take the line and returns to the remaining one with its timer", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1192,7 +1353,7 @@ describe("bot/services/event-subscription-service", () => {
     it("shows the most recently started still-running tool in compact mode", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1209,7 +1370,7 @@ describe("bot/services/event-subscription-service", () => {
     it("leaves the finished tool on the compact line once nothing is still running", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1227,7 +1388,7 @@ describe("bot/services/event-subscription-service", () => {
     it("treats an error sibling like a finish and falls back to the still-running tool", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1245,7 +1406,7 @@ describe("bot/services/event-subscription-service", () => {
     it("applies the same compact fallback when a task tool runs beside bash", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1265,7 +1426,7 @@ describe("bot/services/event-subscription-service", () => {
     it("keeps the running compact tool on the line when thinking or writing arrives", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1285,7 +1446,7 @@ describe("bot/services/event-subscription-service", () => {
     it("shows a detail-less running sibling instead of a finished compact tool", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1304,7 +1465,7 @@ describe("bot/services/event-subscription-service", () => {
     it("does not leave a finished compact tool on the line when only a detail-less sibling remains", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1322,7 +1483,7 @@ describe("bot/services/event-subscription-service", () => {
     it("does not let an older compact tool steal the line on a later running update", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1341,7 +1502,7 @@ describe("bot/services/event-subscription-service", () => {
     it("shows the existing duration bucket when falling back after ten minutes", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1502,7 +1663,7 @@ describe("bot/services/event-subscription-service", () => {
     async function setupCompact(): Promise<Awaited<ReturnType<typeof setupService>>> {
       const setup = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
       useTrackerFakeTimers();
       return setup;
@@ -1651,7 +1812,7 @@ describe("bot/services/event-subscription-service", () => {
     it("shows thinking on the progress message before any tool runs", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1666,7 +1827,7 @@ describe("bot/services/event-subscription-service", () => {
     it("shows writing on the progress message when the model writes first", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1679,7 +1840,7 @@ describe("bot/services/event-subscription-service", () => {
     it("reuses the thinking message for a later tool and then writing", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1708,7 +1869,7 @@ describe("bot/services/event-subscription-service", () => {
     it("deletes the progress message on idle when delete on finish is on", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       settingsStore.setDeleteCompactProgressOnFinish(true);
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -1724,7 +1885,7 @@ describe("bot/services/event-subscription-service", () => {
     it("finalizes a second run while the first card is still being finalized", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       let nextMessageId = 100;
@@ -1764,7 +1925,7 @@ describe("bot/services/event-subscription-service", () => {
     it("closes the card when a reply is delivered and opens a new one for the next stretch", async () => {
       const { api, summaryAggregator } = await setupService(false, { startAssistantRun: true });
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1814,7 +1975,7 @@ describe("bot/services/event-subscription-service", () => {
     it("does not edit the open card with activity that arrives before the reply close runs", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1845,7 +2006,7 @@ describe("bot/services/event-subscription-service", () => {
     it("does not send a second copy of a reply after compact delivery", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1865,7 +2026,7 @@ describe("bot/services/event-subscription-service", () => {
     it("removes the mid-run card when delete on finish is on", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       settingsStore.setDeleteCompactProgressOnFinish(true);
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -1892,7 +2053,7 @@ describe("bot/services/event-subscription-service", () => {
     it("leaves the card live when the question prompt fails to send", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1918,7 +2079,7 @@ describe("bot/services/event-subscription-service", () => {
     it("edits the progress message to the finished summary on idle when delete on finish is off", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1935,7 +2096,7 @@ describe("bot/services/event-subscription-service", () => {
     it("removes a card with nothing to count on idle when delete on finish is off", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1953,7 +2114,7 @@ describe("bot/services/event-subscription-service", () => {
     it("counts a call that failed after it was seen running", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -1970,7 +2131,7 @@ describe("bot/services/event-subscription-service", () => {
     it("does not carry a call of an aborted run onto the next run's card", async () => {
       const { api, summaryAggregator } = await setupService(false);
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       useTrackerFakeTimers();
@@ -2051,7 +2212,7 @@ describe("bot/services/event-subscription-service", () => {
 
     async function useCompactMode(): Promise<void> {
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
@@ -2555,7 +2716,7 @@ describe("bot/services/event-subscription-service", () => {
         responseStreamingMode: "off",
       });
       const settings = await import("../../../src/app/stores/settings-store.js");
-      settings.setCompactOutputMode(interaction === "question");
+      settings.setOutputMode(interaction === "question" ? "compact" : "full");
       emitAssistantTextPart(summaryAggregator, "[Report](report.txt)");
       const prompt = interaction === "question" ? "Which option for q-off?" : "D:/shared/*";
       if (interaction === "question") {
@@ -2851,7 +3012,7 @@ describe("bot/services/event-subscription-service", () => {
         responseStreamingMode: "draft",
       });
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
-      settingsStore.setCompactOutputMode(true);
+      settingsStore.setOutputMode("compact");
 
       await streamDraft(api, summaryAggregator, "Analysis");
       emitQuestionAsked(summaryAggregator, "q1");
@@ -3570,7 +3731,7 @@ describe("bot/services/event-subscription-service", () => {
       import("../../../src/app/stores/settings-store.js"),
       import("../../../src/i18n/index.js"),
     ]);
-    settingsStore.setCompactOutputMode(true);
+    settingsStore.setOutputMode("compact");
     const { questionManager } = getInteractionManagers();
     const waitingPermissionText = t("progress.compact.waiting_permission");
     const hasText = (fragment: string): boolean =>
@@ -3793,7 +3954,7 @@ describe("bot/services/event-subscription-service", () => {
       async function setupCompact(): Promise<Awaited<ReturnType<typeof setupService>>> {
         const setup = await setupService(false);
         const settingsStore = await import("../../../src/app/stores/settings-store.js");
-        settingsStore.setCompactOutputMode(true);
+        settingsStore.setOutputMode("compact");
         await new Promise((resolve) => setTimeout(resolve, 50));
         useTrackerFakeTimers();
         return setup;

@@ -102,7 +102,7 @@ describe("test app-home isolation", () => {
           for (const mode of ["installed", "sources"]) {
             vi.stubEnv("OPENCODE_TELEGRAM_RUNTIME_MODE", mode);
             delete process.env.OPENCODE_TELEGRAM_HOME;
-            store.setCompactOutputMode(true);
+            store.setOutputMode("compact");
             await store.flushSettings();
           }
           // Restoring an inherited override is not permission to write there.

@@ -332,7 +332,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       title: "Test session",
       directory: "D:/repo",
     });
-    settingsStore.setCompactOutputMode(false);
+    settingsStore.setOutputMode("full");
     settingsStore.setSendDiffFileAttachments(false);
     settingsStore.setResponseStreamingMode(options.responseStreamingMode ?? "edit");
     settingsStore.setShowThinkingContent(true);

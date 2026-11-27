@@ -30,6 +30,7 @@ interface ResponseStreamerCompleteOptions {
 
 interface ResponseStreamerOptions {
   throttleMs: StreamThrottleMs;
+  beforeSend?: (sessionId: string, messageId: string) => Promise<void> | undefined;
   // Each transport callback also receives the session the stream belongs to.
   sendPart: (
     part: TelegramRenderedPart,
@@ -176,6 +177,7 @@ function enableNotificationForOptions(
 export class ResponseStreamer {
   private readonly throttleMs: StreamThrottleMs;
   private readonly sendPart: ResponseStreamerOptions["sendPart"];
+  private readonly beforeSend: ResponseStreamerOptions["beforeSend"];
   private readonly editPart: ResponseStreamerOptions["editPart"];
   private readonly deleteText: ResponseStreamerOptions["deleteText"];
   private readonly completePart: ResponseStreamerOptions["completePart"];
@@ -184,6 +186,7 @@ export class ResponseStreamer {
   constructor(options: ResponseStreamerOptions) {
     this.throttleMs = options.throttleMs;
     this.sendPart = options.sendPart;
+    this.beforeSend = options.beforeSend;
     this.editPart = options.editPart;
     this.deleteText = options.deleteText;
     this.completePart = options.completePart;
@@ -619,6 +622,11 @@ export class ResponseStreamer {
         continue;
       }
 
+      const beforeSend = this.beforeSend?.(state.sessionId, state.messageId);
+      if (beforeSend) {
+        await beforeSend;
+        if (state.cancelled) return;
+      }
       const result = await this.sendPart(part, payload.sendOptions, state.sessionId);
       state.telegramMessageIds[index] = result.messageId;
       state.lastSentSignatures[index] = result.deliveredSignature;

@@ -11,6 +11,7 @@ import { buildFailedToolEvent } from "../failed-tool-event.js";
 import {
   formatSessionMessage,
   isCompactProgressMode,
+  isMinimalProgressMode,
   type EventHandlerDeps,
 } from "./handler-context.js";
 import { closeForegroundRun } from "./run-close.js";
@@ -54,6 +55,8 @@ export function registerSessionLifecycleHandlers(deps: SessionLifecycleDeps): vo
   });
 
   summaryAggregator.setOnSessionIdle(async (sessionId, { interrupted, reason }) => {
+    runtime.minimalProgress.dropDeferredWork(sessionId);
+    const endMinimal = runtime.minimalProgress.captureEnd(sessionId);
     wakePromptHandover(sessionId);
     resetStreamThrottle(sessionId);
     await markAttachedSessionIdle(sessionId, deps);
@@ -72,6 +75,8 @@ export function registerSessionLifecycleHandlers(deps: SessionLifecycleDeps): vo
       runtime.compactProgressStreamer.clearSession(sessionId, "session_idle");
     }
     await runtime.getCompletionTask(sessionId)?.catch(() => undefined);
+    const minimalClosed = endMinimal?.();
+    if (minimalClosed) await minimalClosed;
 
     // A server stop sends no footer even if this idle arrives before the reconnect clear.
     // A reject or a cancelled question shares this idle with a client stop and stays footerless.
@@ -133,6 +138,7 @@ export function registerSessionLifecycleHandlers(deps: SessionLifecycleDeps): vo
   });
 
   summaryAggregator.setOnSessionError(async (sessionId, message, { interrupted }) => {
+    runtime.minimalProgress.clear(sessionId);
     if (interrupted) {
       endRunningForegroundCalls(deps, sessionId);
     }
@@ -201,6 +207,10 @@ export function registerSessionLifecycleHandlers(deps: SessionLifecycleDeps): vo
       return;
     }
 
+    if (isMinimalProgressMode()) {
+      runtime.noteMinimalWork(sessionId);
+      return;
+    }
     if (isCompactProgressMode()) {
       runtime.compactProgressStreamer.updateActivity(sessionId, t("progress.compact.retrying"));
       return;

@@ -18,7 +18,7 @@ type ResponseStreamerForReconciliation = {
 export type BusyReconciliationDeps = Pick<
   AppContainer,
   "attachManager" | "foregroundSessionState" | "scheduledTaskRuntime"
->;
+> & Partial<Pick<AppContainer, "captureMinimalProgressEnd">>;
 
 const inFlightDirectories = new Set<string>();
 const lastReconcileAtByDirectory = new Map<string, number>();
@@ -97,6 +97,19 @@ export async function reconcileBusyStateNow(
     return;
   }
 
+  const minimalEnds = new Map(
+    foregroundBusySessions.map(({ sessionId }) => [
+      sessionId,
+      deps.captureMinimalProgressEnd?.(sessionId),
+    ]),
+  );
+  const attachedIsForegroundBusy =
+    attachedSessionForDirectory && minimalEnds.has(attachedSessionForDirectory.sessionId);
+  if (attachedSessionForDirectory && !attachedIsForegroundBusy) {
+    const { sessionId } = attachedSessionForDirectory;
+    minimalEnds.set(sessionId, deps.captureMinimalProgressEnd?.(sessionId));
+  }
+
   const { data: statuses, error } = await opencodeClient.session.status({ directory });
   if (error || !statuses) {
     logger.warn("[BusyReconciliation] Failed to load session status", error);
@@ -118,6 +131,12 @@ export async function reconcileBusyStateNow(
       isTerminalStatus(attachedStatus) &&
       !freshForegroundSessionIds.has(attachedSessionForDirectory.sessionId)
     ) {
+      if (
+        !attachedIsForegroundBusy &&
+        !responseStreamerInstance?.hasActiveStream(attachedSessionForDirectory.sessionId)
+      ) {
+        void minimalEnds.get(attachedSessionForDirectory.sessionId)?.();
+      }
       await markAttachedSessionIdle(attachedSessionForDirectory.sessionId, deps);
     }
   }
@@ -146,6 +165,7 @@ export async function reconcileBusyStateNow(
     logger.info(
       `[BusyReconciliation] Clearing stale foreground busy state: session=${session.sessionId}, directory=${session.directory}, status=${status?.type ?? "not-found"}`,
     );
+    void minimalEnds.get(session.sessionId)?.();
     if (attachedSessionForDirectory?.sessionId !== session.sessionId) {
       await markAttachedSessionIdle(session.sessionId, deps);
     }

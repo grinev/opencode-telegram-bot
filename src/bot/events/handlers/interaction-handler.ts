@@ -139,7 +139,10 @@ async function showOrQueueQuestion(
     `[Bot] Received ${questions.length} questions from agent, requestID=${requestID}, subagent=${followedSessionId !== sessionId}`,
   );
   try {
-    await showCurrentQuestion(destination.api, destination.chatId, deps);
+    await showCurrentQuestion(destination.api, destination.chatId, {
+      ...deps,
+      onAgentPromptShown: () => runtime.minimalProgress.promptShown(followedSessionId),
+    });
   } catch {
     runtime.compactProgressStreamer.releaseHold(followedSessionId);
     return;
@@ -211,7 +214,13 @@ async function presentPermission(
   );
   const messageIdsBefore = new Set(permissionManager.getMessageIds());
   try {
-    await showPermissionRequest(destination.api, destination.chatId, request, deps, generation);
+    await showPermissionRequest(
+      destination.api,
+      destination.chatId,
+      request,
+      { ...deps, onAgentPromptShown: () => runtime.minimalProgress.promptShown(followedSessionId) },
+      generation,
+    );
   } catch {
     runtime.compactProgressStreamer.releaseHold(followedSessionId);
     return;

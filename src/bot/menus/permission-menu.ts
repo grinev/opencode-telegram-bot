@@ -26,7 +26,7 @@ export type PermissionInteractionDeps = Pick<AppContainer, "interactionManager">
 export type PermissionMenuDeps = Pick<
   AppContainer,
   "interactionManager" | "permissionManager" | "summaryAggregator"
->;
+> & { onAgentPromptShown?: (sessionId: string) => void };
 
 // Permission type display names
 const PERMISSION_NAME_KEYS: Record<string, I18nKey> = {
@@ -179,6 +179,7 @@ export async function showPermissionRequest(
       messageId: message.message_id,
     });
 
+    deps.onAgentPromptShown?.(request.sessionID);
     summaryAggregator.stopTypingIndicator();
   } catch (err) {
     logger.error("[PermissionHandler] Failed to send permission message:", err);

@@ -181,7 +181,10 @@ export const tr: I18nDictionary = {
   "tts.failed": "⚠️ Sesli yanıt oluşturulamadı.",
 
   "settings.menu.title": "⚙️ Bot ayarları\nDeğerini değiştirmek için bir ayara dokunun:",
-  "settings.compact_output.label": "Kompakt çıktı modu",
+  "settings.output_mode": "Çıktı modu",
+  "settings.output_mode.full": "tam",
+  "settings.output_mode.compact": "kompakt",
+  "settings.output_mode.minimal": "asgari",
   "settings.delete_progress_on_finish.label": "Bitince ilerlemeyi sil",
   "settings.thinking_content.label": "Düşünme içeriği",
   "settings.response_streaming.label": "Yanıt akışı",

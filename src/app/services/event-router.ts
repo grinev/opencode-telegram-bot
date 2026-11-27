@@ -17,13 +17,14 @@ export type EventRouterDeps = Pick<
   | "goalService"
   | "scheduledTaskRuntime"
   | "summaryAggregator"
-> & Partial<Pick<AppContainer, "manualCompaction">>;
+> & Partial<Pick<AppContainer, "manualCompaction" | "captureMinimalProgressEnd">>;
 
 export interface EventRouterOptions {
   /** The directory the subscription was opened for. */
   directory: string;
   deps: EventRouterDeps;
   isForegroundSession: (sessionId: string) => boolean;
+  onLiveToolActivity?: (sessionId: string, callId: string) => void;
 }
 
 /** The session an event belongs to, read from the event itself. */
@@ -64,6 +65,7 @@ export function createEventRouter({
   directory,
   deps,
   isForegroundSession,
+  onLiveToolActivity,
 }: EventRouterOptions): (envelope: EventEnvelope) => void {
   const backgroundTails = new Map<string, Promise<void>>();
 
@@ -77,6 +79,13 @@ export function createEventRouter({
     }
 
     const sessionId = getEventSessionId(event);
+    if ((event.type as string) === "tool.live_activity") {
+      const { callID } = event.properties as { callID?: string };
+      if (sessionId && callID && isForegroundSession(sessionId)) {
+        onLiveToolActivity?.(sessionId, callID);
+      }
+      return;
+    }
     deps.manualCompaction?.onEvent(event, sessionId);
     if ((event.type as string) === "manual_compaction.changed") return;
     const attached = deps.attachManager.getSnapshot();

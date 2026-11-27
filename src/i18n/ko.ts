@@ -187,7 +187,10 @@ export const ko: I18nDictionary = {
   "tts.failed": "⚠️ 음성 답변 생성에 실패했습니다.",
 
   "settings.menu.title": "⚙️ 봇 설정\n항목을 탭하여 값을 전환하세요:",
-  "settings.compact_output.label": "간결 출력 모드",
+  "settings.output_mode": "출력 모드",
+  "settings.output_mode.full": "전체",
+  "settings.output_mode.compact": "간결",
+  "settings.output_mode.minimal": "최소",
   "settings.delete_progress_on_finish.label": "완료 시 진행 삭제",
   "settings.thinking_content.label": "생각 내용",
   "settings.response_streaming.label": "응답 스트리밍",

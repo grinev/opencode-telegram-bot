@@ -180,7 +180,10 @@ export const ar: I18nDictionary = {
   "tts.failed": "⚠️ تعذر إنشاء الرد الصوتي.",
 
   "settings.menu.title": "⚙️ إعدادات البوت\nاضغط على إعداد لتبديل قيمته:",
-  "settings.compact_output.label": "وضع الإخراج المختصر",
+  "settings.output_mode": "وضع الإخراج",
+  "settings.output_mode.full": "كامل",
+  "settings.output_mode.compact": "مختصر",
+  "settings.output_mode.minimal": "الحد الأدنى",
   "settings.delete_progress_on_finish.label": "حذف التقدم عند الانتهاء",
   "settings.thinking_content.label": "محتوى التفكير",
   "settings.response_streaming.label": "بث الرد",

@@ -329,13 +329,13 @@ Logs are written to `./logs` when running from sources and to the runtime config
 
 Runtime preferences are changed from `/settings` and stored in `settings.json`:
 
-- Compact output mode: one progress message per stretch of work between replies and prompts, from the moment the model starts thinking or writing in that stretch. When the reply or prompt lands, or when the run ends if nothing followed, it turns into one line of what was done (`✅ commands: 3, reads: 4, changed files: 2`), or is removed when there is nothing to count
-- Delete progress on finish: available while compact output mode is on, removes each of those progress messages when that stretch finishes
-- Thinking content display
+- Output mode: `full` (default) shows individual progress; `compact` shows one updating progress card per stretch of work, which can become a one-line summary; `minimal` shows only a static `⏳ Working` between visible replies and prompts. Minimal removes the message before the reply first appears, or when a prompt appears or work ends, without an activity summary. It does not change reply delivery or streaming.
+- Delete progress on finish: available only in Compact, removes each progress card instead of showing its summary
+- Thinking content display: available only in Full
 - Assistant run footer display
 - Pin session dashboard
 - Notifications from other sessions: on by default. Off silences chat notices about replies, questions and permission requests from sessions that are not the one selected in the bot. Tracking keeps running, and a pending question or permission stays answerable from a TUI or Desktop
-- Diff file attachments
+- Diff file attachments: available only in Full; files in the assistant reply are unaffected
 - Response streaming mode: `edit` (default), `draft (experimental)`, or `off`. With `off`, each completed assistant reply is sent in full as soon as it is ready, without a preview and without waiting for the turn to end. Thinking, progress and interactive prompts are unaffected. A mode change applies to the next reply.
 - Audio replies: `off`, `all`, or `auto` when TTS is configured
 - Message queue: `Off`, or what happens to text, voice, photos, rich formatted messages with photos, documents, and media groups sent while the agent is busy — on OpenCode V2 `Queue` or `Steer` (the default), on V1 `On` (the bot's own queue, off by default)
@@ -344,15 +344,17 @@ With the message queue on, text, transcribed voice, photos, rich formatted messa
 
 `/detach` does not withdraw them: they stay with the detached session and reach it as if the bot had stayed attached, with the agent and model selected at `/detach` — a message still being transcribed or downloaded included. Their buttons leave the keyboard and they no longer count toward the limit. A later session or project switch leaves them alone; `/abort` after returning to that session, or `/opencode_stop`, withdraws them. Picked up while detached, they show nothing in the chat beyond the usual background notification; back in the session before pickup, each is quoted as external user input when it starts.
 
-On OpenCode V2 a waiting message is sent to OpenCode at once and waits in the session's inbox, not in the bot: with `Steer` the running task picks it up at its next step and keeps going in the same progress message with one footer at the end; with `Queue` it starts its own run once the task finishes. Nothing is held by the bot, so there is no queued-media size limit, and after a bot restart the buttons are gone while OpenCode still delivers the messages.
+On OpenCode V2 a waiting message is sent to OpenCode at once and waits in the session's inbox, not in the bot: with `Steer` the running task picks it up at its next step without starting a new run or progress stretch; with `Queue` it starts its own run once the task finishes. Nothing is held by the bot, so there is no queued-media size limit, and after a bot restart the buttons are gone while OpenCode still delivers the messages.
 
 On OpenCode V1 the bot holds the messages itself and sends them one at a time as each run finishes. Its queue also holds at most 20 MiB of raw Telegram media bytes in total; the limit is checked from reliable Telegram `file_size` metadata before media is downloaded or prepared, while base64 data-URI expansion is not counted. Queued media without a reliable source size is refused while the task is busy.
 
 You can seed the initial defaults for any of these settings without hard-coding them in your Docker image by setting `INITIAL_SETTINGS_PRESET` to a JSON object. Only keys not yet persisted in `settings.json` are affected — settings the user has already changed via `/settings` are left untouched:
 
 ```env
-INITIAL_SETTINGS_PRESET={"showAssistantRunFooter":false,"compactOutputMode":true,"ttsMode":"auto","pinnedDashboardEnabled":true}
+INITIAL_SETTINGS_PRESET={"showAssistantRunFooter":false,"outputMode":"minimal","ttsMode":"auto","pinnedDashboardEnabled":true}
 ```
+
+For output mode, a saved `outputMode` wins. An older saved `compactOutputMode` still means `compact` for `true` and `full` for `false`, and takes precedence over the preset. The preset also accepts that legacy boolean when it has no `outputMode`.
 
 Settings are written atomically: the new content goes to a temporary file that then replaces `settings.json`, and the previous version is kept as `settings.json.bak`. A crash during a write can never leave a truncated file — the bot falls back to the backup on the next start. If both `settings.json` and `settings.json.bak` are unreadable, the bot refuses to start instead of overwriting them, and the error names the file so you can fix or remove it manually.
 

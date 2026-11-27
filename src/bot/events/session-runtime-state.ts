@@ -7,6 +7,7 @@ import { TOOL_ELAPSED_THRESHOLD_MS } from "../../app/formatters/duration-formatt
 import { ToolMessageBatcher } from "../../app/formatters/tool-message-batcher.js";
 import { logger } from "../../utils/logger.js";
 import {
+  getOutputMode,
   getResponseStreamingMode,
   type ResponseStreamingMode,
 } from "../../app/stores/settings-store.js";
@@ -17,6 +18,7 @@ import { ToolCallStreamer } from "../streaming/tool-call-streamer.js";
 import { TodoSnapshotManager } from "../streaming/todo-snapshot-manager.js";
 import { RunningToolTracker, type RunningToolTick } from "../streaming/running-tool-tracker.js";
 import { CompactProgressStreamer } from "../streaming/compact-progress-streamer.js";
+import { MinimalProgress } from "../streaming/minimal-progress.js";
 import { getSessionStreamThrottleMs } from "../streaming/stream-throttle.js";
 import { setResponseStreamerForReconciliation } from "../../app/services/busy-reconciliation-service.js";
 import {
@@ -36,6 +38,7 @@ type ReplyKeyboard = NonNullable<
 export interface SessionRuntimeStateOptions {
   policy: SessionTargetPolicy;
   getReplyKeyboard: () => ReplyKeyboard | undefined;
+  isMinimalWorkBlocked?: (sessionId: string) => boolean;
 }
 
 export interface UndeliveredAssistantDraft {
@@ -83,6 +86,7 @@ function deleteSessionKeys(map: Map<string, unknown>, sessionId: string): void {
  */
 export class SessionRuntimeState {
   readonly delivery = new TelegramEventDelivery();
+  readonly minimalProgress = new MinimalProgress(this.delivery);
   readonly assistantEditStreamer: ResponseStreamer;
   readonly assistantDraftStreamer: ResponseStreamer;
   readonly thinkingStreamer: ResponseStreamer;
@@ -93,6 +97,7 @@ export class SessionRuntimeState {
   readonly runningToolTracker: RunningToolTracker;
 
   private readonly policy: SessionTargetPolicy;
+  private readonly isMinimalWorkBlocked: SessionRuntimeStateOptions["isMinimalWorkBlocked"];
   private runningToolHooks: RunningToolHooks | null = null;
   private readonly assistantStreamModes = new Map<string, ResponseStreamingMode>();
   // Full text of each streamed reply, and how much of it was already sent
@@ -123,8 +128,9 @@ export class SessionRuntimeState {
   private readonly compactActivityBySession = new Map<string, CompactActivity>();
   private readonly subagentSnapshots = new Map<string, SubagentInfo[]>();
 
-  constructor({ policy, getReplyKeyboard }: SessionRuntimeStateOptions) {
+  constructor({ policy, getReplyKeyboard, isMinimalWorkBlocked }: SessionRuntimeStateOptions) {
     this.policy = policy;
+    this.isMinimalWorkBlocked = isMinimalWorkBlocked;
 
     this.runningToolTracker = new RunningToolTracker({
       thresholdMs: TOOL_ELAPSED_THRESHOLD_MS,
@@ -162,7 +168,7 @@ export class SessionRuntimeState {
       },
     });
 
-    this.assistantEditStreamer = this.createEditResponseStreamer();
+    this.assistantEditStreamer = this.createEditResponseStreamer(true);
     this.assistantDraftStreamer = this.createDraftResponseStreamer();
     this.thinkingStreamer = this.createEditResponseStreamer();
     setResponseStreamerForReconciliation({
@@ -238,6 +244,35 @@ export class SessionRuntimeState {
 
   setRunningToolHooks(hooks: RunningToolHooks): void {
     this.runningToolHooks = hooks;
+  }
+
+  noteMinimalWork(sessionId: string, activity?: { messageId?: string; callId?: string }): void {
+    if (getOutputMode() !== "minimal") return;
+    const destination = this.getForegroundDestination(sessionId);
+    if (destination) {
+      this.minimalProgress.activity(
+        sessionId,
+        destination,
+        this.isMinimalWorkBlocked?.(sessionId) ?? false,
+        activity,
+      );
+    }
+  }
+
+  trackMinimalReply(sessionId: string, messageId: string): void {
+    if (getOutputMode() === "minimal" && this.policy.isForegroundSession(sessionId)) {
+      this.minimalProgress.trackReply(sessionId, messageId);
+    }
+  }
+
+  finishMinimalReply(sessionId: string, messageId: string): void {
+    this.minimalProgress.completeReply(
+      sessionId,
+      messageId,
+      getOutputMode() === "minimal" &&
+        this.policy.isForegroundSession(sessionId) &&
+        !this.isMinimalWorkBlocked?.(sessionId),
+    );
   }
 
   // --- assistant response streams ---
@@ -771,6 +806,7 @@ export class SessionRuntimeState {
 
   /** Drops everything one session holds; other sessions keep running. */
   clearSession(sessionId: string, reason: string): void {
+    this.minimalProgress.clear(sessionId);
     this.todoSnapshots.cancelPending(sessionId);
     this.clearAssistantResponseSession(sessionId, reason);
     this.thinkingStreamer.clearSession(sessionId, reason);
@@ -784,6 +820,7 @@ export class SessionRuntimeState {
 
   /** Drops all output of all sessions; queued completion work is kept. */
   clearAllOutput(reason: string, previousSessionId?: string | null): void {
+    if (previousSessionId !== null) this.minimalProgress.clear(previousSessionId);
     this.todoSnapshots.cancelPending();
     this.toolMessageBatcher.clearAll(reason);
     this.toolCallStreamer.clearAll(reason);
@@ -862,9 +899,15 @@ export class SessionRuntimeState {
     return destination;
   }
 
-  private createEditResponseStreamer(): ResponseStreamer {
+  private createEditResponseStreamer(assistant = false): ResponseStreamer {
     return new ResponseStreamer({
       throttleMs: getSessionStreamThrottleMs,
+      ...(assistant
+        ? {
+            beforeSend: (sessionId, messageId) =>
+              this.minimalProgress.beforeReply(sessionId, messageId),
+          }
+        : {}),
       sendPart: (part, options, sessionId) =>
         this.delivery.sendRenderedPart(
           this.requireDestination(sessionId, "streamed send"),
@@ -887,6 +930,7 @@ export class SessionRuntimeState {
   private createDraftResponseStreamer(): ResponseStreamer {
     return new ResponseStreamer({
       throttleMs: getSessionStreamThrottleMs,
+      beforeSend: (sessionId, messageId) => this.minimalProgress.beforeReply(sessionId, messageId),
       sendPart: (part, _options, sessionId) =>
         this.delivery.sendDraftPart(this.requireDestination(sessionId, "draft send"), part),
       editPart: (messageId, part, _options, sessionId) =>
