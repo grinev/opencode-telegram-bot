@@ -11,6 +11,8 @@ export interface BackgroundSessionNotification {
   sessionId: string;
   sessionTitle?: string | undefined;
   sessionDirectory?: string | undefined;
+  /** Route a lookup or preserve the legacy label; not evidence of the session's own folder. */
+  directoryHint?: string | undefined;
   requestId?: string | undefined;
   messageId?: string | undefined;
 }
@@ -133,8 +135,8 @@ class BackgroundSessionTracker {
       this.sessionTitles.set(info.id, title);
     }
 
-    const directory = info.directory?.trim();
-    if (directory) {
+    const directory = info.directory;
+    if (directory?.trim()) {
       this.sessionDirectories.set(info.id, directory);
     }
 
@@ -188,7 +190,8 @@ class BackgroundSessionTracker {
       kind: "assistant_response",
       sessionId,
       sessionTitle: this.sessionTitles.get(sessionId),
-      sessionDirectory: this.sessionDirectory(sessionId),
+      sessionDirectory: this.sessionDirectories.get(sessionId),
+      directoryHint: this.directory ?? undefined,
       messageId: pendingResponse.messageId,
     });
   }
@@ -218,14 +221,10 @@ class BackgroundSessionTracker {
       kind,
       sessionId,
       sessionTitle: this.sessionTitles.get(sessionId),
-      sessionDirectory: this.sessionDirectory(sessionId),
+      sessionDirectory: this.sessionDirectories.get(sessionId),
+      directoryHint: this.directory ?? undefined,
       requestId: id,
     });
-  }
-
-  /** The session's own folder, or the one being tracked when its event carried none. */
-  private sessionDirectory(sessionId: string): string | undefined {
-    return this.sessionDirectories.get(sessionId) ?? this.directory ?? undefined;
   }
 
   private shouldIgnoreSession(sessionId: string, currentSessionId: string | null): boolean {

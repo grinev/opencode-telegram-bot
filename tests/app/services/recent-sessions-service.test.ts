@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { config } from "../../../src/config.js";
 import {
   loadRecentSessionDirectories,
   loadRecentSessions,
@@ -24,6 +25,7 @@ const session = (id: string, directory: string, updated: number) => ({
 
 describe("cross-project recent session snapshot", () => {
   beforeEach(() => {
+    config.bot.excludedProjectPaths = [];
     mocked.attached = null;
     mocked.list.mockReset(); mocked.get.mockReset(); mocked.status.mockReset();
     mocked.questions.mockReset(); mocked.permissions.mockReset(); mocked.warn.mockReset();
@@ -47,6 +49,57 @@ describe("cross-project recent session snapshot", () => {
 
     expect(rows.map(({ session }) => session.id)).toEqual(["a", "b", "c"]);
     expect(mocked.status).not.toHaveBeenCalledWith({ directory: "/gone" });
+  });
+
+  it("refills past excluded paths, keeping worktrees, descendants and similar paths", async () => {
+    config.bot.excludedProjectPaths = ["D:/Projects/Repo/"];
+    mocked.missing = new Set(["D:/gone"]);
+    const all = [
+      session("hidden", "d:\\projects\\repo", 6),
+      session("gone", "D:/gone", 5),
+      session("hidden-again", "D:/Projects/Repo", 4),
+      session("worktree", "D:/Worktrees/feature", 3),
+      session("descendant", "D:/Projects/Repo/child", 2),
+      session("similar", "D:/Projects/Repo-other", 1),
+    ];
+    mocked.list.mockImplementation(async ({ limit }: { limit: number }) => ({
+      data: all.slice(0, limit), error: null,
+    }));
+
+    const rows = await loadRecentSessions(3);
+
+    expect(rows.map(({ session }) => session.id)).toEqual(["worktree", "descendant", "similar"]);
+    expect(mocked.list.mock.calls.map(([query]) => query.limit)).toEqual([3, 6]);
+    expect(mocked.fileList).not.toHaveBeenCalledWith({ path: "d:\\projects\\repo" });
+    expect(mocked.status).toHaveBeenCalledTimes(3);
+    expect(await loadRecentSessionDirectories(3)).toEqual([
+      "D:/Worktrees/feature", "D:/Projects/Repo/child", "D:/Projects/Repo-other",
+    ]);
+  });
+
+  it("returns an empty result when the source is exhausted with only excluded rows", async () => {
+    config.bot.excludedProjectPaths = ["/excluded"];
+    mocked.attached = { id: "old", directory: "/excluded" };
+    const all = [session("new", "/excluded", 2), session("old", "/excluded", 1)];
+    mocked.list.mockImplementation(async ({ limit }: { limit: number }) => ({
+      data: all.slice(0, limit), error: null,
+    }));
+
+    expect(await loadRecentSessions(2)).toEqual([]);
+    expect(mocked.list.mock.calls.map(([query]) => query.limit)).toEqual([2, 4]);
+    expect(mocked.status).not.toHaveBeenCalled();
+  });
+
+  it("does not reserve a place for an older followed session whose returned folder is excluded", async () => {
+    config.bot.excludedProjectPaths = ["/excluded"];
+    mocked.attached = { id: "old", directory: "/hint" };
+    mocked.list.mockResolvedValue({
+      data: [session("new", "/visible", 3), session("next", "/visible", 2)], error: null,
+    });
+    mocked.get.mockResolvedValue({ data: session("old", "/excluded", 1), error: null });
+
+    expect((await loadRecentSessions(2)).map(({ session }) => session.id)).toEqual(["new", "next"]);
+    expect(mocked.get).toHaveBeenCalledWith({ sessionID: "old", directory: "/hint" });
   });
 
   it("hides a session of a deleted worktree while the main project's sessions stay", async () => {
@@ -113,6 +166,7 @@ describe("cross-project recent session snapshot", () => {
   });
 
   it("retains an older attached root inside the limit", async () => {
+    config.bot.excludedProjectPaths = ["/excluded"];
     mocked.attached = { id: "old", directory: "/old" };
     mocked.list.mockResolvedValue({ data: [session("new", "/new", 10), session("next", "/new", 9)], error: null });
     mocked.get.mockResolvedValue({ data: session("old", "/old", 1), error: null });

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BackgroundSessionNotification } from "../../../src/app/managers/background-session-manager.js";
 import { createBackgroundNoticeDelivery } from "../../../src/bot/events/background-notice-delivery.js";
+import { config } from "../../../src/config.js";
 import { t } from "../../../src/i18n/index.js";
 
 const mocked = vi.hoisted(() => ({
@@ -8,6 +9,11 @@ const mocked = vi.hoisted(() => ({
   getCurrentProject: vi.fn(),
   fetchSessionTitle: vi.fn(),
   loadRecentSessionDirectories: vi.fn(),
+  getSession: vi.fn(),
+}));
+
+vi.mock("../../../src/opencode/client.js", () => ({
+  opencodeClient: { session: { get: mocked.getSession } },
 }));
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
@@ -40,6 +46,7 @@ describe("bot/events/background-notice-delivery", () => {
   const editText = vi.fn();
 
   beforeEach(() => {
+    config.bot.excludedProjectPaths = [];
     sendText.mockReset();
     editText.mockReset();
     sendText.mockResolvedValue(1);
@@ -51,6 +58,7 @@ describe("bot/events/background-notice-delivery", () => {
     mocked.fetchSessionTitle.mockImplementation(async (session: { title: string }) => session.title);
     mocked.loadRecentSessionDirectories.mockReset();
     mocked.loadRecentSessionDirectories.mockResolvedValue(["/alpha/other"]);
+    mocked.getSession.mockReset();
   });
 
   function deliver(isForegroundSession = () => false) {
@@ -104,7 +112,12 @@ describe("bot/events/background-notice-delivery", () => {
 
   it("names a detached compaction and offers its session without an ordinary reply notice", async () => {
     mocked.getCurrentProject.mockReturnValue({ worktree: "/alpha/other" });
-    await deliver()(notice("context_compacted"));
+    await deliver()({
+      ...notice("context_compacted"),
+      sessionDirectory: undefined,
+      directoryHint: "/alpha/other",
+    });
+    expect(mocked.getSession).not.toHaveBeenCalled();
     expect(sendText).toHaveBeenCalledWith(
       destination,
       t("context.background_success", { project: "other", session: "Other" }),
@@ -127,6 +140,97 @@ describe("bot/events/background-notice-delivery", () => {
     mocked.getShowBackgroundSessionNotifications.mockReturnValue(false);
     await deliver()(notice("context_compacted"));
     expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it.each([...kinds, "context_compacted"] as const)(
+    "suppresses %s for an excluded session even in the selected project",
+    async (kind) => {
+      config.bot.excludedProjectPaths = ["/alpha/other/"];
+      mocked.getCurrentProject.mockReturnValue({ worktree: "/alpha/other" });
+      const notification = notice(kind);
+      if (kind === "context_compacted") {
+        notification.sessionDirectory = undefined;
+        notification.directoryHint = "/alpha/other";
+        mocked.getSession.mockResolvedValue({ data: { directory: "/alpha/other", title: "Other" } });
+      }
+
+      await deliver()(notification);
+
+      expect(sendText).not.toHaveBeenCalled();
+      expect(mocked.fetchSessionTitle).not.toHaveBeenCalled();
+      expect(mocked.loadRecentSessionDirectories).not.toHaveBeenCalled();
+      expect(mocked.getSession).toHaveBeenCalledTimes(kind === "context_compacted" ? 1 : 0);
+    },
+  );
+
+  it("uses the session lookup, not an excluded selected project, to decide an absent directory", async () => {
+    config.bot.excludedProjectPaths = ["/excluded"];
+    mocked.getCurrentProject.mockReturnValue({ worktree: "/excluded" });
+    mocked.getSession.mockResolvedValue({ data: { directory: "/alpha/other", title: "Confirmed" } });
+
+    await deliver()({
+      ...notice("assistant_response"),
+      sessionDirectory: undefined,
+      directoryHint: "/excluded",
+    });
+
+    expect(mocked.getSession).toHaveBeenCalledExactlyOnceWith({
+      sessionID: "session-1", directory: "/excluded",
+    });
+    expect(mocked.fetchSessionTitle).not.toHaveBeenCalled();
+    expect(sentText()).toBe(
+      t("background.assistant_response", { project: "other", session: "Confirmed" }),
+    );
+  });
+
+  it("suppresses a request whose confirmed directory is excluded despite a visible route", async () => {
+    config.bot.excludedProjectPaths = ["/excluded"];
+    mocked.getCurrentProject.mockReturnValue({ worktree: "/alpha/other" });
+    mocked.getSession.mockResolvedValue({ data: { directory: "/excluded", title: "Confirmed" } });
+
+    await deliver()({
+      ...notice("permission_asked"),
+      sessionDirectory: undefined,
+      directoryHint: "/alpha/other",
+    });
+
+    expect(mocked.getSession).toHaveBeenCalledExactlyOnceWith({
+      sessionID: "session-1", directory: "/alpha/other",
+    });
+    expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it("suppresses a notice when the lookup errors, throws or returns a blank directory", async () => {
+    config.bot.excludedProjectPaths = ["/excluded"];
+    mocked.getCurrentProject.mockReturnValue({ worktree: "/alpha/other" });
+    mocked.getSession
+      .mockResolvedValueOnce({ error: new Error("offline") })
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ data: { directory: " ", title: "Other" } });
+    const send = deliver();
+    const notification = { ...notice("question_asked"), sessionDirectory: undefined };
+
+    await send(notification);
+    await send(notification);
+    await send(notification);
+
+    expect(mocked.getSession).toHaveBeenCalledTimes(3);
+    expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it("uses the confirmed worktree rather than the captured hint for compaction scope", async () => {
+    config.bot.excludedProjectPaths = ["/excluded"];
+    mocked.getCurrentProject.mockReturnValue({ worktree: "/alpha/other" });
+    mocked.getSession.mockResolvedValue({ data: { directory: "/alpha/other", title: "Other" } });
+    const notification = { ...notice("context_compacted"), sessionDirectory: undefined };
+    const send = deliver();
+
+    await send({ ...notification, directoryHint: "/old" });
+    mocked.getSession.mockResolvedValue({ data: { directory: "/different", title: "Other" } });
+    await send({ ...notification, directoryHint: "/alpha/other" });
+
+    expect(sendText).toHaveBeenCalledOnce();
+    expect(sentText()).toBe(t("context.background_success", { project: "other", session: "Other" }));
   });
 
   it("drops every kind when the setting is off and does not edit a previous message", async () => {
@@ -177,15 +281,21 @@ describe("bot/events/background-notice-delivery", () => {
     );
   });
 
-  it("uses the folder name when the recent list cannot be read", async () => {
-    mocked.loadRecentSessionDirectories.mockRejectedValue(new Error("offline"));
+  it.each(["assistant_response", "context_compacted"] as const)(
+    "uses the folder name for %s when the recent list cannot be read",
+    async (kind) => {
+      config.bot.excludedProjectPaths = ["/excluded"];
+      mocked.getCurrentProject.mockReturnValue({ worktree: "/alpha/other" });
+      mocked.loadRecentSessionDirectories.mockRejectedValue(new Error("offline"));
 
-    await deliver()(notice("assistant_response"));
+      await deliver()(notice(kind));
 
-    expect(sentText()).toBe(
-      t("background.assistant_response", { project: "other", session: "Other" }),
-    );
-  });
+      expect(sentText()).toBe(t(
+        kind === "assistant_response" ? "background.assistant_response" : "context.background_success",
+        { project: "other", session: "Other" },
+      ));
+    },
+  );
 
   it("names an unnamed session as a new session, never by its id", async () => {
     mocked.fetchSessionTitle.mockResolvedValue("");
@@ -222,6 +332,7 @@ describe("bot/events/background-notice-delivery", () => {
     expect(sentText()).toBe(
       t("background.assistant_response", { project: "project-b", session: "Other" }),
     );
+    expect(mocked.getSession).not.toHaveBeenCalled();
   });
 
   it("keeps question and permission notices on their old label without looking the session up", async () => {

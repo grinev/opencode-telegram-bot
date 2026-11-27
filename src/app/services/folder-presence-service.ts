@@ -99,27 +99,29 @@ export async function findMissingFolders(folders: Iterable<string>): Promise<Set
 }
 
 /**
- * Reads a list newest-first, leaving out items whose folder is gone, and asks the source for
- * more until at least `wanted` items remain or the source has no more. Returns every
- * remaining item read, in source order.
+ * Reads a list newest-first, leaving out items whose folder is excluded or gone, and asks
+ * the source for more until at least `wanted` items remain or the source has no more.
+ * Returns every remaining item read, in source order.
  */
 export async function collectFromPresentFolders<T>(
   fetchItems: (limit: number) => Promise<T[]>,
   folderOf: (item: T) => string,
   wanted: number,
+  isExcluded?: (folder: string) => boolean,
 ): Promise<T[]> {
   const missingByFolder = new Map<string, boolean>();
   let limit = Math.max(1, wanted);
   for (;;) {
     const items = await fetchItems(limit);
-    const unchecked = [...new Set(items.map(folderOf))].filter(
+    const candidates = isExcluded ? items.filter((item) => !isExcluded(folderOf(item))) : items;
+    const unchecked = [...new Set(candidates.map(folderOf))].filter(
       (folder) => !missingByFolder.has(folder),
     );
     const missing = await findMissingFolders(unchecked);
     for (const folder of unchecked) {
       missingByFolder.set(folder, missing.has(folder));
     }
-    const visible = items.filter((item) => !missingByFolder.get(folderOf(item)));
+    const visible = candidates.filter((item) => !missingByFolder.get(folderOf(item)));
     if (visible.length >= wanted || items.length < limit) {
       return visible;
     }
