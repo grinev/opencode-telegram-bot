@@ -59,16 +59,21 @@ async function resolveAssistantSessionTitle(
   return formatSessionTitle(title.trim());
 }
 
-async function resolveNoticeSession({ sessionId, directoryHint }: BackgroundSessionNotification) {
+async function resolveNoticeSession({
+  sessionId,
+  sessionDirectory,
+  directoryHint,
+}: BackgroundSessionNotification) {
+  const directory = directoryHint ?? sessionDirectory;
   try {
     const { data, error } = await opencodeClient.session.get({
       sessionID: sessionId,
-      ...(directoryHint ? { directory: directoryHint } : {}),
+      ...(directory ? { directory } : {}),
     });
-    if (!error && data?.directory?.trim()) return data;
-    logger.debug(`[BackgroundNotice] Could not confirm directory for ${sessionId}:`, error);
+    if (!error && data?.id === sessionId) return data;
+    logger.debug(`[BackgroundNotice] Could not confirm session ${sessionId}:`, error);
   } catch (error) {
-    logger.debug(`[BackgroundNotice] Could not confirm directory for ${sessionId}:`, error);
+    logger.debug(`[BackgroundNotice] Could not confirm session ${sessionId}:`, error);
   }
   return undefined;
 }
@@ -109,37 +114,41 @@ async function formatBackgroundSessionNotification(
 
 /** Sends a background-session notice to the destination of its own session. */
 export function createBackgroundNoticeDelivery(
-  policy: Pick<SessionTargetPolicy, "getDestination"> & Partial<Pick<SessionTargetPolicy, "isForegroundSession">>,
+  policy: SessionTargetPolicy,
   delivery: TelegramEventDelivery,
 ): (notification: BackgroundSessionNotification) => Promise<void> {
   return async (notification) => {
     const compaction = notification.kind === "context_compacted";
     const canNotify = () =>
       getShowBackgroundSessionNotifications() &&
-      (!compaction || !policy.isForegroundSession?.(notification.sessionId));
+      !policy.isForegroundSession(notification.sessionId);
     const inScope = (directory: string | undefined) => {
-      if (!compaction) return true;
+      // Spontaneous notices come from a worktree subscription. Its scope is
+      // independent of the session's own directory used for exclusions.
+      const scope = compaction ? directory : notification.directoryHint;
+      if (!compaction && !scope) return true;
       const project = getCurrentProject()?.worktree;
-      return Boolean(project && directory && normalizePathKey(project) === normalizePathKey(directory));
+      return Boolean(project && scope && normalizePathKey(project) === normalizePathKey(scope));
     };
 
-    if (!canNotify()) return;
+    if (!canNotify() || (!compaction && !inScope(undefined))) return;
     const destination = policy.getDestination(notification.sessionId);
     if (!destination) return;
 
     const isExcluded = createProjectPathExclusionMatcher(config.bot.excludedProjectPaths);
     let directory = notification.sessionDirectory;
+    if (directory?.trim() && isExcluded?.(directory)) return;
+
     let confirmedTitle: string | undefined;
-    if (isExcluded) {
-      if (!directory?.trim()) {
-        const session = await resolveNoticeSession(notification);
-        directory = session?.directory;
-        confirmedTitle = session?.title;
-      }
-      if (!directory || isExcluded(directory)) return;
-    } else {
-      directory ||= notification.directoryHint;
+    if (!compaction || (isExcluded && !directory?.trim())) {
+      const session = await resolveNoticeSession(notification);
+      // Absence of a parent is evidence only on a full session record, not in SSE metadata.
+      if (!compaction && (!session || session.parentID)) return;
+      if (session?.directory?.trim()) directory = session.directory;
+      confirmedTitle = session?.title ?? (compaction ? undefined : (notification.sessionTitle ?? ""));
     }
+    if (isExcluded && (!directory?.trim() || isExcluded(directory))) return;
+    if (!isExcluded && !directory?.trim()) directory = notification.directoryHint;
     if (!inScope(directory)) return;
 
     const text = await formatBackgroundSessionNotification(notification, directory, confirmedTitle);
