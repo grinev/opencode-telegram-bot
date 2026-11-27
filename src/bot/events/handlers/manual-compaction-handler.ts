@@ -43,7 +43,7 @@ export function registerManualCompactionPresentation(
       await notify({
         kind: "context_compacted",
         sessionId: session.id,
-        sessionDirectory: session.directory,
+        directoryHint: session.directory,
         sessionTitle: session.title,
       });
     },

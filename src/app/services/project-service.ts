@@ -5,6 +5,7 @@ import { config } from "../../config.js";
 import { getCachedSessionProjects } from "./session-cache-service.js";
 import { logger } from "../../utils/logger.js";
 import { findMissingFolders } from "./folder-presence-service.js";
+import { createProjectPathExclusionMatcher, projectPathKey } from "./project-path-exclusions.js";
 import type { ProjectInfo } from "../types/project.js";
 
 interface InternalProject extends ProjectInfo {
@@ -32,11 +33,11 @@ async function getResolvedProjects(options?: {
   const mergedByWorktree = new Map<string, InternalProject>();
 
   for (const apiProject of apiProjects) {
-    mergedByWorktree.set(worktreeKey(apiProject.worktree), apiProject);
+    mergedByWorktree.set(projectPathKey(apiProject.worktree), apiProject);
   }
 
   for (const cachedProject of cachedProjects) {
-    const key = worktreeKey(cachedProject.worktree);
+    const key = projectPathKey(cachedProject.worktree);
     const existing = mergedByWorktree.get(key);
 
     if (existing) {
@@ -69,10 +70,9 @@ async function getResolvedProjects(options?: {
   const visibleProjects = projectList.filter((_, index) => !linkedWorktreeFlags[index]);
   const hiddenLinkedWorktrees = projectList.length - visibleProjects.length;
 
-  const excludedPaths = config.bot.excludedProjectPaths;
-  const excludedKeys = new Set(excludedPaths.map((excluded) => worktreeKey(excluded)));
-  const filteredProjects = excludedKeys.size > 0
-    ? visibleProjects.filter((p) => !excludedKeys.has(worktreeKey(p.worktree)))
+  const isExcluded = createProjectPathExclusionMatcher(config.bot.excludedProjectPaths);
+  const filteredProjects = isExcluded
+    ? visibleProjects.filter((p) => !isExcluded(p.worktree))
     : visibleProjects;
   const hiddenExcluded = visibleProjects.length - filteredProjects.length;
 
@@ -114,24 +114,6 @@ async function isLinkedGitWorktree(worktree: string): Promise<boolean> {
   }
 }
 
-function worktreeKey(worktree: string): string {
-  const pathModule = isWindowsWorktreePath(worktree) ? path.win32 : path.posix;
-  const normalizedWorktree = pathModule.normalize(worktree);
-  const root = pathModule.parse(normalizedWorktree).root;
-  const trimmedWorktree =
-    normalizedWorktree === root ? normalizedWorktree : normalizedWorktree.replace(/[\\/]+$/, "");
-
-  if (pathModule === path.win32) {
-    return trimmedWorktree.toLowerCase();
-  }
-
-  return trimmedWorktree;
-}
-
-function isWindowsWorktreePath(worktree: string): boolean {
-  return process.platform === "win32" || /^[a-zA-Z]:[\\/]/.test(worktree) || /^\\\\/.test(worktree);
-}
-
 export async function getProjects(): Promise<ProjectInfo[]> {
   const projects = await getResolvedProjects();
   return projects.map(({ id, worktree, name }) => ({ id, worktree, name }));
@@ -155,8 +137,8 @@ export async function getProjectById(id: string): Promise<ProjectInfo> {
 
 export async function getProjectByWorktree(worktree: string): Promise<ProjectInfo> {
   const projects = await getResolvedProjects({ includeLinkedWorktrees: true });
-  const key = worktreeKey(worktree);
-  const project = projects.find((p) => worktreeKey(p.worktree) === key);
+  const key = projectPathKey(worktree);
+  const project = projects.find((p) => projectPathKey(p.worktree) === key);
   if (!project) {
     throw new Error(`Project with worktree ${worktree} not found`);
   }

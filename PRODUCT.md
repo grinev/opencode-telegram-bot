@@ -151,7 +151,7 @@ Current command set:
 - `/abort` - stop the current task and, on OpenCode V2, pause an active session goal even between turns; the reply names the pause only when one happened or the pause itself failed, and never calls a failed pause a success. Background operations OpenCode keeps running stay followed, and the success reply then says how many keep running in place of "No more messages from this run will be sent": each background command and each subagent card still running counts once, a nested launch inside its card, the same number in compact and full mode
 - `/detach` - detach the bot from the current session without stopping it; messages waiting for its running task stay with it and reach it as if the bot had stayed attached (no buttons, withdrawn only by `/abort` there or `/opencode_stop`); a later command or prompt HTTP failure for that session is not posted to chat unless the bot has re-attached to it
 - `/sessions` - browse, search and switch sessions in the current project
-- `/recent` - show recent sessions across projects and worktrees with their status, including a bell for a reply the chat has not shown yet, and switch directly to one
+- `/recent` - show recent sessions across projects and worktrees with their status, including a bell for a reply the chat has not shown yet, and switch directly to one. Sessions whose own directory exactly matches `PROJECTS_EXCLUDED_PATHS` stay out and do not count toward the limit, even when followed
 - `/messages` - browse user messages in the current session
 - `/projects` - show and switch projects
 - `/worktree` - show and switch existing git worktrees for the current repository
@@ -227,6 +227,7 @@ Agent picker behavior:
 - [x] Automatic tracking of the current OpenCode CLI session, including continuing it from Telegram, live updates, and external text input notifications
 - [x] Remote task execution, interruption, and local detachment support (`/abort`, `/detach`)
 - [x] Background notifications for detached/non-current sessions in the currently selected project/worktree, with an opt-out in `/settings` that defaults to on and does not cancel the request in OpenCode; an assistant-response notification names the session by its title and its own project, labelled the way `/recent` labels a folder, with an unnamed session reading as `new session`, while question and permission notifications keep their shorter text; a notification's open button selects that session's own project and worktree, whichever project is selected by the time it is pressed, and follows the session there
+- [x] `PROJECTS_EXCLUDED_PATHS` suppresses new background notices for replies, questions, permissions and successful manual compaction in matching session directories. With exclusions configured, no notice is sent if the session's own directory cannot be confirmed. Followed-session output and existing notice buttons stay available
 - [x] Telegram-friendly result delivery, including sending generated code/files when needed
 - [x] Interactive question and permission handling directly in chat (buttons + custom answers)
 - [x] Current project and session on the bottom keyboard, with a closable on-demand dashboard for context usage, session cost, changed files, and the OpenCode V2 goal when present

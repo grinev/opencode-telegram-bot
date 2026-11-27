@@ -106,11 +106,14 @@ describe("BackgroundSessionTracker", () => {
     await flushNotifications();
 
     expect(onNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionDirectory: "D:/worktrees/feature-x" }),
+      expect.objectContaining({
+        sessionDirectory: "D:/worktrees/feature-x",
+        directoryHint: "D:/repo-a",
+      }),
     );
   });
 
-  it("uses the tracked project directory when a session event carries none", async () => {
+  it("carries the tracked project only as a hint when a session event carries no directory", async () => {
     const tracker = new BackgroundSessionTracker();
     const onNotification = vi.fn();
     tracker.setOnNotification(onNotification);
@@ -133,7 +136,7 @@ describe("BackgroundSessionTracker", () => {
     await flushNotifications();
 
     expect(onNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionDirectory: "D:/repo-a" }),
+      expect.objectContaining({ sessionDirectory: undefined, directoryHint: "D:/repo-a" }),
     );
   });
 
@@ -219,6 +222,7 @@ describe("BackgroundSessionTracker", () => {
     const tracker = new BackgroundSessionTracker();
     const onNotification = vi.fn();
     tracker.setOnNotification(onNotification);
+    tracker.setDirectory("D:/repo-a");
 
     tracker.processEvent(
       event({
@@ -242,6 +246,7 @@ describe("BackgroundSessionTracker", () => {
       sessionId: "session-2",
       sessionTitle: undefined,
       sessionDirectory: undefined,
+      directoryHint: "D:/repo-a",
       requestId: "question-1",
     });
     expect(onNotification).toHaveBeenCalledWith({
@@ -249,6 +254,7 @@ describe("BackgroundSessionTracker", () => {
       sessionId: "session-2",
       sessionTitle: undefined,
       sessionDirectory: undefined,
+      directoryHint: "D:/repo-a",
       requestId: "permission-1",
     });
   });
@@ -437,7 +443,8 @@ describe("BackgroundSessionTracker", () => {
       kind: "assistant_response",
       sessionId: "session-2",
       sessionTitle: undefined,
-      sessionDirectory: "D:/repo-a",
+      sessionDirectory: undefined,
+      directoryHint: "D:/repo-a",
       messageId: "message-1",
     });
   });
