@@ -167,7 +167,10 @@ export const zh: I18nDictionary = {
   "tts.failed": "⚠️ 生成语音回复失败。",
 
   "settings.menu.title": "⚙️ 机器人设置\n点按设置项以切换其值：",
-  "settings.compact_output.label": "紧凑输出模式",
+  "settings.output_mode": "输出模式",
+  "settings.output_mode.full": "完整",
+  "settings.output_mode.compact": "紧凑",
+  "settings.output_mode.minimal": "极简",
   "settings.delete_progress_on_finish.label": "完成后删除进度",
   "settings.thinking_content.label": "思考内容",
   "settings.response_streaming.label": "回复流式模式",

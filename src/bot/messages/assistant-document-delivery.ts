@@ -57,6 +57,7 @@ export async function deliverAssistantDocuments(
   api: Pick<Api<RawApi>, "sendDocument" | "sendMessage">,
   chatId: number,
   options?: { disable_notification?: boolean },
+  beforeReply?: () => Promise<void> | undefined,
 ): Promise<void> {
   for (const document of prepared.documents) {
     if (!prepared.canDeliver()) return;
@@ -70,6 +71,9 @@ export async function deliverAssistantDocuments(
       await waitForDocumentSlot();
       if (!prepared.canDeliver()) return;
       try {
+        const beforeSend = beforeReply?.();
+        if (beforeSend) await beforeSend;
+        if (!prepared.canDeliver()) return;
         await api.sendDocument(chatId, new InputFile(result.bytes, filename), {
           ...options,
           caption: name,
@@ -83,6 +87,9 @@ export async function deliverAssistantDocuments(
     await waitForDocumentSlot();
     if (!prepared.canDeliver()) return;
     try {
+      const beforeSend = beforeReply?.();
+      if (beforeSend) await beforeSend;
+      if (!prepared.canDeliver()) return;
       await sendBotText({
         api,
         chatId,

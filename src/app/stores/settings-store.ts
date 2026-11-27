@@ -4,6 +4,7 @@ import type { ProjectInfo } from "../types/project.js";
 import type { SessionDirectoryCacheInfo, SessionInfo } from "../types/session.js";
 import { cloneScheduledTask, type ScheduledTask } from "../types/scheduled-task.js";
 import type {
+  OutputMode,
   PromptQueueMode,
   ResponseStreamingMode,
   ScheduledTaskSessionIgnoreInfo,
@@ -197,12 +198,23 @@ export function setTtsMode(mode: TtsMode): void {
   void writeSettingsFile(currentSettings);
 }
 
-export function getCompactOutputMode(): boolean {
-  return currentSettings.compactOutputMode ?? false;
+function isOutputMode(value: unknown): value is OutputMode {
+  return value === "full" || value === "compact" || value === "minimal";
 }
 
-export function setCompactOutputMode(enabled: boolean): void {
-  currentSettings.compactOutputMode = enabled;
+function resolveOutputMode(mode: unknown, legacy: unknown): OutputMode | undefined {
+  if (isOutputMode(mode)) return mode;
+  if (typeof legacy === "boolean") return legacy ? "compact" : "full";
+  return undefined;
+}
+
+export function getOutputMode(): OutputMode {
+  return resolveOutputMode(currentSettings.outputMode, currentSettings.compactOutputMode) ?? "full";
+}
+
+export function setOutputMode(mode: OutputMode): void {
+  currentSettings.outputMode = mode;
+  delete currentSettings.compactOutputMode;
   void writeSettingsFile(currentSettings);
 }
 
@@ -251,7 +263,7 @@ export function setShowBackgroundSessionNotifications(enabled: boolean): void {
   void writeSettingsFile(currentSettings);
 }
 
-export type { PromptQueueMode, ResponseStreamingMode };
+export type { OutputMode, PromptQueueMode, ResponseStreamingMode };
 
 export function getResponseStreamingMode(): ResponseStreamingMode {
   const mode = currentSettings.responseStreamingMode;
@@ -415,6 +427,7 @@ const VALID_STREAMING_MODES: readonly ResponseStreamingMode[] = ["edit", "draft"
 function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
   const knownKeys = new Set([
     "ttsMode",
+    "outputMode",
     "compactOutputMode",
     "deleteCompactProgressOnFinish",
     "showThinkingContent",
@@ -441,6 +454,12 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
       if (currentSettings.ttsMode === undefined) {
         currentSettings.ttsMode = value as TtsMode;
       }
+    } else if (key === "outputMode") {
+      if (!isOutputMode(value)) {
+        throw new Error(
+          'INITIAL_SETTINGS_PRESET: invalid value for "outputMode"; expected one of full, compact, minimal.',
+        );
+      }
     } else if (key === "responseStreamingMode") {
       if (
         typeof value !== "string" ||
@@ -454,15 +473,10 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
         currentSettings.responseStreamingMode = value as ResponseStreamingMode;
       }
     } else {
-      // Boolean settings: compactOutputMode, deleteCompactProgressOnFinish, showThinkingContent, showAssistantRunFooter, pinnedDashboardEnabled, showBackgroundSessionNotifications, sendDiffFileAttachments, promptQueueEnabled
       if (typeof value !== "boolean") {
         throw new Error(`INITIAL_SETTINGS_PRESET: "${key}" must be a boolean.`);
       }
       switch (key) {
-        case "compactOutputMode":
-          if (currentSettings.compactOutputMode === undefined)
-            currentSettings.compactOutputMode = value;
-          break;
         case "deleteCompactProgressOnFinish":
           if (currentSettings.deleteCompactProgressOnFinish === undefined)
             currentSettings.deleteCompactProgressOnFinish = value;
@@ -493,6 +507,9 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
           break;
       }
     }
+  }
+  if (resolveOutputMode(currentSettings.outputMode, currentSettings.compactOutputMode) === undefined) {
+    currentSettings.outputMode = resolveOutputMode(preset.outputMode, preset.compactOutputMode);
   }
 }
 

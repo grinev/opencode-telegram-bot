@@ -187,7 +187,10 @@ export const id: I18nDictionary = {
   "tts.failed": "⚠️ Gagal membuat balasan audio.",
 
   "settings.menu.title": "⚙️ Pengaturan bot\nKetuk pengaturan untuk mengubah nilainya:",
-  "settings.compact_output.label": "Mode output ringkas",
+  "settings.output_mode": "Mode keluaran",
+  "settings.output_mode.full": "lengkap",
+  "settings.output_mode.compact": "ringkas",
+  "settings.output_mode.minimal": "minimal",
   "settings.delete_progress_on_finish.label": "Hapus progres saat selesai",
   "settings.thinking_content.label": "Tampilkan proses berpikir",
   "settings.response_streaming.label": "Streaming balasan",

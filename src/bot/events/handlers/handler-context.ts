@@ -1,5 +1,5 @@
 import type { AppContainer } from "../../../app/bootstrap/app-container.js";
-import { getCompactOutputMode } from "../../../app/stores/settings-store.js";
+import { getOutputMode } from "../../../app/stores/settings-store.js";
 import { t } from "../../../i18n/index.js";
 import type { SessionRuntimeState } from "../session-runtime-state.js";
 import type { SessionTargetPolicy } from "../telegram-event-delivery.js";
@@ -18,7 +18,15 @@ export const SUBAGENT_STREAM_PREFIX = "🧩";
 const SESSION_MESSAGE_MAX_LENGTH = 3500;
 
 export function isCompactProgressMode(): boolean {
-  return getCompactOutputMode();
+  return getOutputMode() === "compact";
+}
+
+export function isFullProgressMode(): boolean {
+  return getOutputMode() === "full";
+}
+
+export function isMinimalProgressMode(): boolean {
+  return getOutputMode() === "minimal";
 }
 
 export function getReplyKeyboard(deps: Pick<AppContainer, "keyboardManager">) {

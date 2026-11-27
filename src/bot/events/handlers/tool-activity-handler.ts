@@ -37,6 +37,8 @@ import { closeCompactCardBeforeNextActivity } from "./assistant-response-handler
 import {
   SUBAGENT_STREAM_PREFIX,
   isCompactProgressMode,
+  isFullProgressMode,
+  isMinimalProgressMode,
   type EventHandlerBase,
   type EventHandlerDeps,
 } from "./handler-context.js";
@@ -238,6 +240,7 @@ async function renderSubagentCards(
 }
 
 function handleRunningToolTick(deps: EventHandlerBase, tick: RunningToolTick): void {
+  if (isMinimalProgressMode()) return;
   const { runtime, policy } = deps;
   if (!policy.isForegroundSession(tick.sessionId)) {
     // The user moved to another session: what ran in the background here stays as it was.
@@ -297,7 +300,7 @@ async function refreshSubagentCards(
   { runtime, policy }: EventHandlerBase,
   sessionId: string,
 ): Promise<void> {
-  if (isCompactProgressMode()) {
+  if (!isFullProgressMode()) {
     return;
   }
 
@@ -337,6 +340,7 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
 
     const status = "status" in toolInfo.state ? toolInfo.state.status : undefined;
     const compactMode = isCompactProgressMode();
+    const fullMode = isFullProgressMode();
     // In full mode the subagent card already reports what the child agent is
     // doing, so a live line for the task tool itself would duplicate it.
     const tracksElapsed = compactMode || toolInfo.tool !== "task";
@@ -355,6 +359,10 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
     const storedInfo = runtime.getRunningToolInfo(sessionId, callId);
     const failedWhileComposing = status === "error" && !!storedInfo && isComposing(storedInfo);
 
+    if (!fullMode && !compactMode && status === "running" && !composing && !backgroundTracked) {
+      runtime.noteMinimalWork(sessionId, { callId });
+    }
+
     if (compactMode && !isTerminal && !storedInfo) {
       closeCompactCardBeforeNextActivity(runtime, sessionId);
     }
@@ -365,14 +373,14 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
         // early in compact mode, which would leave the entry tracked forever.
         const durationMs = runtime.runningToolTracker.release(callId);
 
-        if (!compactMode && status === "error") {
+        if (fullMode && status === "error") {
           finalizeLiveToolLine(deps, toolInfo, durationMs);
           unpinLiveToolLine(runtime, toolInfo);
         }
 
         // Only a completed call reaches the tool callback, so only it has a
         // final line to carry the duration.
-        if (durationMs !== undefined && !compactMode && status === "completed") {
+        if (durationMs !== undefined && fullMode && status === "completed") {
           runtime.setCompletedToolDuration(sessionId, callId, durationMs);
         }
       }
@@ -383,7 +391,7 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       runtime.setRunningToolInfo(toolInfo);
       if (composing) {
         // Nothing to draw yet: the bare tool name would flash before its command.
-      } else if (!compactMode) {
+      } else if (fullMode) {
         const line = getToolLine(toolInfo);
         if (line) {
           const tick = runtime.runningToolTracker.displayTick(callId);
@@ -397,7 +405,7 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
             runtime.toolCallStreamer.pinEntry(sessionId, getLiveToolPrefix(callId));
           }
         }
-      } else if (background) {
+      } else if (compactMode && background) {
         const activity = getCompactToolActivity(toolInfo);
         const tick = runtime.runningToolTracker.displayTick(callId);
         if (activity) {
@@ -467,7 +475,7 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       return;
     }
 
-    if (isCompactProgressMode()) {
+    if (!isFullProgressMode()) {
       return;
     }
 
@@ -505,11 +513,17 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       return;
     }
 
-    if (isCompactProgressMode()) {
+    if (!policy.isForegroundSession(sessionId)) {
       return;
     }
-
-    if (!policy.isForegroundSession(sessionId)) {
+    if (!isFullProgressMode()) {
+      if (isMinimalProgressMode()) {
+        for (const subagent of subagents) {
+          if (subagent.status === "running" && !outlivesParentTurn(subagent)) {
+            runtime.noteMinimalWork(sessionId, { callId: subagent.cardId });
+          }
+        }
+      }
       return;
     }
 
@@ -536,7 +550,7 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       return;
     }
 
-    if (isCompactProgressMode()) {
+    if (!isFullProgressMode()) {
       return;
     }
 

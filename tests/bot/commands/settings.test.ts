@@ -33,8 +33,8 @@ import { createTestAppContainer } from "../../helpers/app-container.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 
 const mocked = vi.hoisted(() => ({
-  getCompactOutputModeMock: vi.fn(),
-  setCompactOutputModeMock: vi.fn(),
+  getOutputModeMock: vi.fn(),
+  setOutputModeMock: vi.fn(),
   getDeleteCompactProgressOnFinishMock: vi.fn(),
   setDeleteCompactProgressOnFinishMock: vi.fn(),
   getResponseStreamingModeMock: vi.fn(),
@@ -70,8 +70,8 @@ vi.mock("../../../src/opencode/client.js", async (importOriginal) => {
 });
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
-  getCompactOutputMode: mocked.getCompactOutputModeMock,
-  setCompactOutputMode: mocked.setCompactOutputModeMock,
+  getOutputMode: mocked.getOutputModeMock,
+  setOutputMode: mocked.setOutputModeMock,
   getDeleteCompactProgressOnFinish: mocked.getDeleteCompactProgressOnFinishMock,
   setDeleteCompactProgressOnFinish: mocked.setDeleteCompactProgressOnFinishMock,
   getResponseStreamingMode: mocked.getResponseStreamingModeMock,
@@ -115,8 +115,8 @@ beforeEach(() => {
 
 describe("bot/commands/settings-command", () => {
   beforeEach(() => {
-    mocked.getCompactOutputModeMock.mockReset();
-    mocked.setCompactOutputModeMock.mockReset();
+    mocked.getOutputModeMock.mockReset().mockReturnValue("full");
+    mocked.setOutputModeMock.mockReset();
     mocked.getDeleteCompactProgressOnFinishMock.mockReset();
     mocked.setDeleteCompactProgressOnFinishMock.mockReset();
     mocked.getResponseStreamingModeMock.mockReset();
@@ -148,7 +148,7 @@ describe("bot/commands/settings-command", () => {
   });
 
   it("shows settings menu with current compact output and TTS modes", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(true);
+    mocked.getOutputModeMock.mockReturnValue("compact");
     mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(true);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("auto");
@@ -166,7 +166,7 @@ describe("bot/commands/settings-command", () => {
     const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
     expect(opts.reply_markup.inline_keyboard[0][0].text).toBe(
-      `${t("settings.compact_output.label")}: ${t("settings.value.on")}`,
+      `${t("settings.output_mode")}: ${t("settings.output_mode.compact")}`,
     );
     expect(opts.reply_markup.inline_keyboard[1][0].text).toBe(
       `${t("settings.delete_progress_on_finish.label")}: ${t("settings.value.on")}`,
@@ -193,7 +193,7 @@ describe("bot/commands/settings-command", () => {
   });
 
   it("shows thinking content setting when compact output is disabled", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("off");
@@ -235,7 +235,7 @@ describe("bot/commands/settings-command", () => {
   });
 
   it("marks draft response streaming mode as experimental", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getResponseStreamingModeMock.mockReturnValue("draft");
@@ -259,8 +259,8 @@ describe("bot/commands/settings-command", () => {
 
 describe("bot/callbacks/settings-callback-handler", () => {
   beforeEach(() => {
-    mocked.getCompactOutputModeMock.mockReset();
-    mocked.setCompactOutputModeMock.mockReset();
+    mocked.getOutputModeMock.mockReset().mockReturnValue("full");
+    mocked.setOutputModeMock.mockReset();
     mocked.getDeleteCompactProgressOnFinishMock.mockReset();
     mocked.setDeleteCompactProgressOnFinishMock.mockReset();
     mocked.getResponseStreamingModeMock.mockReset();
@@ -310,8 +310,8 @@ describe("bot/callbacks/settings-callback-handler", () => {
     } as unknown as Context;
   }
 
-  it("toggles compact output mode and returns to settings menu", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
+  it("cycles full to compact and redraws the same menu", async () => {
+    mocked.getOutputModeMock.mockReturnValueOnce("full").mockReturnValueOnce("compact");
     mocked.getDeleteCompactProgressOnFinishMock.mockReturnValue(false);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("off");
@@ -321,13 +321,13 @@ describe("bot/callbacks/settings-callback-handler", () => {
     const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
-    expect(mocked.setCompactOutputModeMock).toHaveBeenCalledWith(true);
+    expect(mocked.setOutputModeMock).toHaveBeenCalledWith("compact");
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
     const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
     const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
     expect(defined(opts?.reply_markup?.inline_keyboard[0]?.[0]).text).toBe(
-      `${t("settings.compact_output.label")}: ${t("settings.value.on")}`,
+      `${t("settings.output_mode")}: ${t("settings.output_mode.compact")}`,
     );
     expect(defined(opts?.reply_markup?.inline_keyboard[1]?.[0]).text).toBe(
       `${t("settings.delete_progress_on_finish.label")}: ${t("settings.value.off")}`,
@@ -349,8 +349,32 @@ describe("bot/callbacks/settings-callback-handler", () => {
     );
   });
 
+  it.each([
+    ["compact", "minimal", SETTINGS_RESPONSE_STREAMING_CALLBACK],
+    ["minimal", "full", SETTINGS_THINKING_CONTENT_CALLBACK],
+  ] as const)("cycles %s to %s with the right conditional rows", async (mode, next, secondRow) => {
+    mocked.getOutputModeMock.mockReturnValueOnce(mode).mockReturnValueOnce(next);
+    activateSettingsMenu();
+    const ctx = createCallbackContext(SETTINGS_COMPACT_OUTPUT_CALLBACK);
+
+    await handleSettingsCallback(ctx, createDeps());
+
+    expect(mocked.setOutputModeMock).toHaveBeenCalledWith(next);
+    expect(mocked.setResponseStreamingModeMock).not.toHaveBeenCalled();
+    const [, opts] = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
+    const rows = defined(opts?.reply_markup?.inline_keyboard);
+    expect(rows[0]?.[0]?.text).toBe(`${t("settings.output_mode")}: ${t(`settings.output_mode.${next}`)}`);
+    expect(rows[1]?.[0]).toMatchObject({ callback_data: secondRow });
+    const callbacks = rows.flat().map((button) => "callback_data" in button && button.callback_data);
+    expect(callbacks).not.toContain(SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK);
+    if (next === "minimal") {
+      expect(callbacks).not.toContain(SETTINGS_DIFF_FILES_CALLBACK);
+      expect(callbacks).not.toContain(SETTINGS_THINKING_CONTENT_CALLBACK);
+    }
+  });
+
   it("toggles delete progress on finish and returns to settings menu", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(true);
+    mocked.getOutputModeMock.mockReturnValue("compact");
     mocked.getDeleteCompactProgressOnFinishMock
       .mockReturnValueOnce(false)
       .mockReturnValueOnce(true);
@@ -372,7 +396,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
   });
 
   it("toggles thinking content and returns to settings menu", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getShowThinkingContentMock.mockReturnValueOnce(true).mockReturnValueOnce(false);
     mocked.getTtsModeMock.mockReturnValue("off");
     activateSettingsMenu();
@@ -392,7 +416,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
   });
 
   it("toggles diff file attachments and returns to settings menu", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getSendDiffFileAttachmentsMock.mockReturnValueOnce(true).mockReturnValueOnce(false);
     mocked.getTtsModeMock.mockReturnValue("off");
@@ -413,12 +437,13 @@ describe("bot/callbacks/settings-callback-handler", () => {
   });
 
   it.each([
-    ["edit", "draft", false, 3],
-    ["draft", "off", false, 3],
-    ["draft", "off", true, 2],
-    ["off", "edit", true, 2],
-  ] as const)("cycles %s to %s and redraws the settings row (compact=%s)", async (mode, next, compact, row) => {
-    mocked.getCompactOutputModeMock.mockReturnValue(compact);
+    ["edit", "draft", "full", 3],
+    ["draft", "off", "full", 3],
+    ["draft", "off", "compact", 2],
+    ["off", "edit", "compact", 2],
+    ["off", "edit", "minimal", 1],
+  ] as const)("cycles %s to %s and redraws the settings row in %s", async (mode, next, output, row) => {
+    mocked.getOutputModeMock.mockReturnValue(output);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getResponseStreamingModeMock.mockReturnValueOnce(mode).mockReturnValueOnce(next);
     mocked.getTtsModeMock.mockReturnValue("off");
@@ -429,6 +454,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
 
     expect(result).toBe(true);
     expect(mocked.setResponseStreamingModeMock).toHaveBeenCalledWith(next);
+    expect(mocked.setOutputModeMock).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
     const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
     const [text, opts] = call;
@@ -439,7 +465,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
   });
 
   it("toggles assistant footer and returns to settings menu", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getShowAssistantRunFooterMock.mockReturnValueOnce(true).mockReturnValueOnce(false);
     mocked.getTtsModeMock.mockReturnValue("off");
@@ -460,7 +486,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
   });
 
   it("toggles notifications from other sessions and returns to settings menu", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getShowBackgroundSessionNotificationsMock
       .mockReturnValueOnce(true)
@@ -483,7 +509,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
   });
 
   it("toggles the prompt queue setting and returns to settings menu", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("off");
     mocked.getPromptQueueModeMock.mockReturnValueOnce("off").mockReturnValueOnce("queue");
@@ -525,7 +551,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
       "cycles $current to $next on a V2 server",
       async ({ current, next, label }) => {
         mocked.serverVersion = "v2";
-        mocked.getCompactOutputModeMock.mockReturnValue(false);
+        mocked.getOutputModeMock.mockReturnValue("full");
         mocked.getTtsModeMock.mockReturnValue("off");
         mocked.getPromptQueueModeMock.mockReturnValueOnce(current).mockReturnValueOnce(next);
         activateSettingsMenu();
@@ -539,7 +565,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     );
 
     it("toggles the bot queue off on a V1 server", async () => {
-      mocked.getCompactOutputModeMock.mockReturnValue(false);
+      mocked.getOutputModeMock.mockReturnValue("full");
       mocked.getTtsModeMock.mockReturnValue("off");
       mocked.getPromptQueueModeMock.mockReturnValueOnce("queue").mockReturnValueOnce("off");
       activateSettingsMenu();
@@ -556,7 +582,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
 
   it("cycles TTS mode and returns to settings menu", async () => {
     mocked.isTtsConfiguredMock.mockReturnValue(true);
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+      mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValueOnce("off").mockReturnValueOnce("all");
     activateSettingsMenu();
@@ -594,7 +620,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
 
   it("allows cycling TTS to off when TTS is not configured", async () => {
     mocked.isTtsConfiguredMock.mockReturnValue(false);
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValueOnce("auto").mockReturnValueOnce("off");
     activateSettingsMenu();
@@ -609,7 +635,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
   });
 
   it("toggles pin session dashboard and applies it immediately", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+    mocked.getOutputModeMock.mockReturnValue("full");
     mocked.getShowThinkingContentMock.mockReturnValue(true);
     mocked.getTtsModeMock.mockReturnValue("off");
     mocked.getPinnedDashboardEnabledMock.mockReturnValueOnce(true).mockReturnValueOnce(false);

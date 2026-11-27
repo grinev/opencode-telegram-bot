@@ -2,8 +2,8 @@ import type { Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { isTtsConfigured } from "../../app/services/tts-service.js";
 import {
-  getCompactOutputMode,
   getDeleteCompactProgressOnFinish,
+  getOutputMode,
   getPromptQueueMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
@@ -12,8 +12,8 @@ import {
   getShowBackgroundSessionNotifications,
   getShowThinkingContent,
   getTtsMode,
-  setCompactOutputMode,
   setDeleteCompactProgressOnFinish,
+  setOutputMode,
   setPinnedDashboardEnabled,
   setPromptQueueMode,
   setShowBackgroundSessionNotifications,
@@ -108,7 +108,8 @@ export async function handleSettingsCallback(
 
   try {
     if (callbackData === SETTINGS_COMPACT_OUTPUT_CALLBACK) {
-      setCompactOutputMode(!getCompactOutputMode());
+      const mode = getOutputMode();
+      setOutputMode(mode === "full" ? "compact" : mode === "compact" ? "minimal" : "full");
       const { text, keyboard } = buildSettingsMenuView();
       await ctx.answerCallbackQuery({ text: t("settings.saved") });
       await ctx.editMessageText(text, {

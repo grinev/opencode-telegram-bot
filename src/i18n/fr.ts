@@ -188,7 +188,10 @@ export const fr: I18nDictionary = {
   "tts.failed": "⚠️ Impossible de générer la réponse audio.",
 
   "settings.menu.title": "⚙️ Paramètres du bot\nTouchez un paramètre pour basculer sa valeur :",
-  "settings.compact_output.label": "Sortie compacte",
+  "settings.output_mode": "Mode de sortie",
+  "settings.output_mode.full": "complet",
+  "settings.output_mode.compact": "compact",
+  "settings.output_mode.minimal": "minimal",
   "settings.delete_progress_on_finish.label": "Supprimer la progression à la fin",
   "settings.thinking_content.label": "Contenu thinking",
   "settings.response_streaming.label": "Streaming de réponse",

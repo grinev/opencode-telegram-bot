@@ -30,6 +30,10 @@ function manualCompactionSignal(
   } as unknown as Event;
 }
 
+function liveToolActivitySignal(id: string, sessionID: string, callID: string): Event {
+  return { id, type: "tool.live_activity", properties: { sessionID, callID } } as unknown as Event;
+}
+
 type ToolInput = Record<string, unknown>;
 
 /** A V1 idle, plus the mark of an execution that was interrupted rather than finished. */
@@ -290,7 +294,7 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
     switch (event.type) {
       case "server.connected": {
         // Calls started before this connection never get a start here: their later events
-        // are dropped rather than shown under a made-up name.
+        // are not projected to named tools.
         tools.clear();
         const properties: ConnectedEventProperties = restarted === undefined ? {} : { restarted };
         return [{ id: event.id, type: "server.connected", properties } as Event];
@@ -635,7 +639,7 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
         const data = event.data;
         const call = tools.get(data.id);
         if (!call) {
-          return [];
+          return [liveToolActivitySignal(event.id, data.sessionID, data.id)];
         }
         call.input = toV1ToolInput(call.tool, data.input);
         call.start = created;
@@ -652,7 +656,8 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
         const data = event.data;
         const call = tools.get(data.id);
         if (!call) {
-          return [];
+          if (Array.from(backgroundCalls.values()).some(({ callID }) => callID === data.id)) return [];
+          return [liveToolActivitySignal(event.id, data.sessionID, data.id)];
         }
         call.metadata = toV1ToolMetadata(call.tool, { ...call.metadata, ...data.metadata });
         const part = toolPart(data.id, {

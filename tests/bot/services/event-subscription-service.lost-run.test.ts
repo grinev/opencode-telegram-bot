@@ -197,7 +197,7 @@ describe("bot/services/event-subscription-service lost run", () => {
       import("../../../src/app/services/session-service.js"),
     ]);
     sessionService.setCurrentSession({ id: "session-1", title: "Test", directory: "D:/repo" });
-    settingsStore.setCompactOutputMode(false);
+    settingsStore.setOutputMode("full");
     settingsStore.setShowAssistantRunFooter(true);
 
     const fake = createFakeBot();

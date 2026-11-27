@@ -38,6 +38,8 @@ export interface BotEventSubscriptionService {
   clearRuntimeState(reason: string): void;
   stopBackgroundOperations(reason: string, sessionId?: string): void;
   countBackgroundOperations(sessionId: string): number;
+  captureMinimalProgressEnd(sessionId: string): (() => Promise<void> | undefined) | undefined;
+  onAgentPromptShown(sessionId: string): void;
   interruptSubagents(reason: string): void;
   endRunLostWithServer(reason: string): Promise<void>;
   cleanup(reason: string): void;
@@ -101,6 +103,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     this.runtime = new SessionRuntimeState({
       policy: this.policy,
       getReplyKeyboard: () => getReplyKeyboard(deps),
+      isMinimalWorkBlocked: (sessionId) => {
+        const kind = deps.interactionManager.getSnapshot()?.kind;
+        return (
+          kind === "question" ||
+          kind === "permission" ||
+          (deps.manualCompaction?.isActive(sessionId) ?? false)
+        );
+      },
     });
     if (deps.manualCompaction) {
       registerManualCompactionPresentation(deps.manualCompaction, deps.interactionManager, this.policy, this.runtime.delivery);
@@ -131,6 +141,14 @@ class EventSubscriptionService implements BotEventSubscriptionService {
   countBackgroundOperations = (sessionId: string): number =>
     this.runtime.countBackgroundCommands(sessionId) +
     this.deps.summaryAggregator.countFollowedBackgroundSubagents();
+
+  captureMinimalProgressEnd = (sessionId: string) =>
+    this.runtime.minimalProgress.captureEnd(sessionId);
+
+  onAgentPromptShown = (sessionId: string): void => {
+    const root = this.deps.summaryAggregator.getRootSessionId(sessionId);
+    if (this.policy.isForegroundSession(root)) this.runtime.minimalProgress.promptShown(root);
+  };
 
   interruptSubagents = (reason: string): void => {
     logger.debug(`[Bot] Interrupting running subagent cards: reason=${reason}`);
@@ -183,8 +201,9 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       directory,
       createEventRouter({
         directory,
-        deps,
+        deps: { ...deps, captureMinimalProgressEnd: this.captureMinimalProgressEnd },
         isForegroundSession: policy.isForegroundSession,
+        onLiveToolActivity: (sessionId, callId) => runtime.noteMinimalWork(sessionId, { callId }),
       }),
       (info) => this.restoreAfterReconnect(info),
     ).catch((err) => {
@@ -225,6 +244,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       summaryAggregator.interruptSubagents(true);
 
       const sessionId = getCurrentSession()?.id;
+      if (sessionId) runtime.minimalProgress.clear(sessionId);
       const runningTools = sessionId ? runtime.getRunningToolInfos(sessionId) : [];
       if (
         sessionId &&

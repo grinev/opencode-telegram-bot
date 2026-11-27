@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Event } from "@opencode-ai/sdk/v2";
 
 const mocked = vi.hoisted(() => ({
-  getCompactOutputMode: vi.fn(() => true),
+  getOutputMode: vi.fn(() => "compact"),
 }));
 
 vi.mock("../../../../src/app/stores/settings-store.js", () => ({
-  getCompactOutputMode: mocked.getCompactOutputMode,
+  getOutputMode: mocked.getOutputMode,
   getCurrentProject: () => ({ id: "p1", worktree: "D:/repo", name: "repo" }),
 }));
 

@@ -36,6 +36,8 @@ import { config } from "../../../config.js";
 import {
   getReplyKeyboard,
   isCompactProgressMode,
+  isFullProgressMode,
+  isMinimalProgressMode,
   type EventHandlerBase,
   type EventHandlerDeps,
 } from "./handler-context.js";
@@ -186,15 +188,21 @@ export function keepAssistantDraftsBeforePrompt(
           messageId,
           prepared.documents,
         );
+        const beforeReply = () => runtime.minimalProgress.beforeReply(sessionId, messageId);
         await finalizeAssistantResponse({
           sessionId,
           messageId,
           messageText: prepared.text,
           strictFinalPayload: prepared.documents.length > 0,
+          beforeReply,
           afterTextAccepted: () =>
-            deliverAssistantDocuments(prepared, destination.api, destination.chatId, {
-              disable_notification: true,
-            }),
+            deliverAssistantDocuments(
+              prepared,
+              destination.api,
+              destination.chatId,
+              { disable_notification: true },
+              beforeReply,
+            ),
           responseStreamer: {
             complete: (completeSessionId, completeMessageId, payload, options) =>
               runtime.completeAssistantDraftEarly(
@@ -310,7 +318,7 @@ function beginEditReply(runtime: SessionRuntimeState, sessionId: string, message
   runtime.markReplyBegun(sessionId, messageId);
   if (isCompactProgressMode()) {
     runtime.markCompactCloseDue(sessionId, messageId);
-  } else {
+  } else if (isFullProgressMode()) {
     runtime.startReplyCut(sessionId);
   }
 }
@@ -365,6 +373,8 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
     if (isCompactProgressMode() && !runtime.runningToolTracker.newestCallId(sessionId)) {
       runtime.compactProgressStreamer.updateResponding(sessionId);
     }
+    runtime.noteMinimalWork(sessionId, { messageId });
+    runtime.trackMinimalReply(sessionId, messageId);
 
     runtime.captureAssistantStreamMode(sessionId, messageId);
     const mode = runtime.getAssistantStreamMode(sessionId, messageId);
@@ -408,11 +418,15 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
   });
 
   summaryAggregator.setOnComplete((sessionId, messageId, messageText, completionInfo) => {
+    runtime.trackMinimalReply(sessionId, messageId);
     const assistantResponseMode = runtime.getAssistantStreamMode(sessionId, messageId);
     if (assistantResponseMode === "off" && completionInfo.failed) {
+      runtime.minimalProgress.completeReply(sessionId, messageId);
       runtime.clearAssistantResponse(sessionId, messageId, "assistant_message_failed");
       return;
     }
+    runtime.minimalProgress.beginReplyCompletion(sessionId, messageId);
+    const endMinimal = runtime.minimalProgress.captureEnd(sessionId);
 
     // Its card closed when the next activity came: the open card is below this reply.
     const compactCardClosed = runtime.takeCompactClosedForReply(sessionId, messageId);
@@ -437,6 +451,7 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
         runtime.clearThinking(sessionId, messageId, reason);
         runtime.toolCallStreamer.clearSession(sessionId, reason);
         runtime.compactProgressStreamer.clearSession(sessionId, reason);
+        void endMinimal?.();
         runtime.clearToolTracking(sessionId, reason);
         deps.assistantRunState.clearRun(sessionId, reason);
         deps.foregroundSessionState.markIdle(sessionId);
@@ -506,17 +521,23 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
           messageId,
           prepared.documents,
         );
+        const beforeReply = () => runtime.minimalProgress.beforeReply(sessionId, messageId);
         await finalizeAssistantResponse({
           sessionId,
           messageId,
           // Text sent early, above a question or permission prompt, is not sent again.
           messageText: prepared.text,
           strictFinalPayload: hasDocumentLinks,
+          beforeReply,
           afterTextAccepted: async () => {
             try {
-              await deliverAssistantDocuments(prepared, destination.api, destination.chatId, {
-                disable_notification: true,
-              });
+              await deliverAssistantDocuments(
+                prepared,
+                destination.api,
+                destination.chatId,
+                { disable_notification: true },
+                beforeReply,
+              );
             } finally {
               runtime.releaseReplyDocuments(sessionId, messageId);
             }
@@ -560,6 +581,7 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
             );
           },
         });
+        runtime.finishMinimalReply(sessionId, messageId);
 
         if (closesCompactCard) {
           await runtime.compactProgressStreamer.finalize(
@@ -602,10 +624,15 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
   });
 
   summaryAggregator.setOnExternalUserInput(async (sessionId, messageId, messageText) => {
+    const endMinimal = promptQueue.findByInboxId(messageId)?.inbox?.delivery === "queue"
+      ? runtime.minimalProgress.captureEnd(sessionId)
+      : undefined;
     void runtime.enqueueCompletionTask(sessionId, async () => {
       // A V2 user message carries the inbox id it waited under.
       const mirrored = promptQueue.findByInboxId(messageId);
       if (mirrored) {
+        const minimalClosed = endMinimal?.();
+        if (minimalClosed) await minimalClosed;
         promptQueue.removeById(mirrored.id);
         await pickUpInboxPrompt(deps, sessionId, mirrored);
         return;
@@ -638,6 +665,13 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
 
   summaryAggregator.setOnThinking(async (update) => {
     if (!policy.getDestination(update.sessionId) || !policy.isForegroundSession(update.sessionId)) {
+      return;
+    }
+    if (isMinimalProgressMode()) {
+      runtime.noteMinimalWork(update.sessionId, { messageId: update.messageId });
+      if (update.isFirstUpdate && deps.pinnedMessageManager.isInitialized()) {
+        await deps.pinnedMessageManager.refresh();
+      }
       return;
     }
     await runtime.waitForReplyDocuments(update.sessionId, update.messageId);

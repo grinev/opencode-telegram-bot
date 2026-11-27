@@ -32,7 +32,7 @@ export type QuestionStateDeps = Pick<AppContainer, "interactionManager" | "quest
 export type QuestionMenuDeps = Pick<
   AppContainer,
   "interactionManager" | "questionManager" | "summaryAggregator"
->;
+> & { onAgentPromptShown?: (sessionId: string) => void };
 
 /** Where a question sits in its poll, shown as `n/total` in its header. */
 interface QuestionProgress {
@@ -224,6 +224,7 @@ export async function showCurrentQuestion(
       deps,
     );
 
+    if (sessionId) deps.onAgentPromptShown?.(sessionId);
     summaryAggregator.stopTypingIndicator();
   } catch (err) {
     if (requestID) {

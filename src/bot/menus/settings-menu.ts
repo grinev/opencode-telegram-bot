@@ -1,7 +1,7 @@
 import { InlineKeyboard } from "grammy";
 import {
-  getCompactOutputMode,
   getDeleteCompactProgressOnFinish,
+  getOutputMode,
   getPromptQueueMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
@@ -67,7 +67,7 @@ export function formatResponseStreamingModeValue(mode: ResponseStreamingMode): s
 }
 
 export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboard } {
-  const compactOutputMode = getCompactOutputMode();
+  const outputMode = getOutputMode();
   const deleteCompactProgressOnFinish = getDeleteCompactProgressOnFinish();
   const showThinkingContent = getShowThinkingContent();
   const responseStreamingMode = getResponseStreamingMode();
@@ -79,16 +79,16 @@ export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboar
   const promptQueueMode = getPromptQueueMode();
   const keyboard = new InlineKeyboard()
     .text(
-      `${t("settings.compact_output.label")}: ${formatBooleanSettingValue(compactOutputMode)}`,
+      `${t("settings.output_mode")}: ${t(`settings.output_mode.${outputMode}`)}`,
       SETTINGS_COMPACT_OUTPUT_CALLBACK,
     );
 
-  if (compactOutputMode) {
+  if (outputMode === "compact") {
     keyboard.row().text(
       `${t("settings.delete_progress_on_finish.label")}: ${formatBooleanSettingValue(deleteCompactProgressOnFinish)}`,
       SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK,
     );
-  } else {
+  } else if (outputMode === "full") {
     keyboard.row().text(
       `${t("settings.thinking_content.label")}: ${formatBooleanSettingValue(showThinkingContent)}`,
       SETTINGS_THINKING_CONTENT_CALLBACK,

@@ -76,6 +76,8 @@ export interface AppContainer {
   resetRuntimeStreams(reason: string): void;
   /** Background commands and subagent cards of the session the bot still follows. */
   countBackgroundOperations(sessionId: string): number;
+  captureMinimalProgressEnd(sessionId: string): (() => Promise<void> | undefined) | undefined;
+  onAgentPromptShown(sessionId: string): void;
   /**
    * Ends the followed session's running foreground subagent cards as interrupted; a
    * background one keeps running until its subagent reports its own end.
@@ -165,6 +167,9 @@ export function createAppContainer(): AppContainer {
     resetRuntimeStreams: (reason) => eventSubscriptionService.clearRuntimeState(reason),
     countBackgroundOperations: (sessionId) =>
       eventSubscriptionService.countBackgroundOperations(sessionId),
+    captureMinimalProgressEnd: (sessionId) =>
+      eventSubscriptionService.captureMinimalProgressEnd(sessionId),
+    onAgentPromptShown: (sessionId) => eventSubscriptionService.onAgentPromptShown(sessionId),
     interruptSubagents: (reason) => eventSubscriptionService.interruptSubagents(reason),
     endRunLostWithServer: (reason) => eventSubscriptionService.endRunLostWithServer(reason),
 
