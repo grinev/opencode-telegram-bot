@@ -15,6 +15,7 @@ const mocked = vi.hoisted(() => ({
   stopEventListening: vi.fn(),
   reconcileBusyState: vi.fn(),
   fetchSessionTitle: vi.fn(),
+  getSession: vi.fn(),
   loadRecentSessionDirectories: vi.fn(),
   reconciliationStreamer: {
     current: null as { hasActiveStream(sessionId: string): boolean } | null,
@@ -274,10 +275,13 @@ describe("bot/services/event-subscription-service lifecycle", () => {
     mocked.reconcileBusyState.mockReset();
     mocked.fetchSessionTitle.mockReset();
     mocked.fetchSessionTitle.mockImplementation(async (session: { title: string }) => session.title);
+    mocked.getSession.mockReset().mockResolvedValue({ data: undefined });
     mocked.loadRecentSessionDirectories.mockReset();
     mocked.loadRecentSessionDirectories.mockResolvedValue(["D:/repo"]);
     mocked.subscribeToEvents.mockResolvedValue(undefined);
     mocked.reconciliationStreamer.current = null;
+    const { opencodeClient } = await import("../../../src/opencode/client.js");
+    vi.spyOn(opencodeClient.session, "get").mockImplementation(mocked.getSession);
 
     const [settingsStore, abortSuppression] = await Promise.all([
       import("../../../src/app/stores/settings-store.js"),
@@ -1075,9 +1079,18 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       expect(attachManager.isBusy()).toBe(false);
     });
 
-    it("announces a background session that finished answering", async () => {
+    async function setupBackgroundNoticeService() {
       const { api } = await setupService();
-      const dispatch = getEventDispatcher();
+      const { setCurrentProject } = await import("../../../src/app/stores/settings-store.js");
+      setCurrentProject({ id: "project-1", name: "repo", worktree: "D:/repo" });
+      return { api, dispatch: getEventDispatcher() };
+    }
+
+    it("announces a background root session that finished answering", async () => {
+      const { api, dispatch } = await setupBackgroundNoticeService();
+      mocked.getSession.mockResolvedValue({
+        data: { id: "session-9", title: "Background work", directory: "D:/repo" },
+      });
 
       dispatch({
         type: "session.created",
@@ -1098,9 +1111,27 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       expect(defined(api.sendMessage.mock.calls[0])[2]).toHaveProperty("reply_markup");
     });
 
+    it("does not announce a subagent whose parent was missing from the event stream", async () => {
+      const { api, dispatch } = await setupBackgroundNoticeService();
+      mocked.getSession.mockResolvedValue({
+        data: { id: "session-9", parentID: "session-1", title: "Subagent", directory: "D:/repo" },
+      });
+
+      dispatch({
+        type: "session.updated",
+        properties: { info: { id: "session-9", title: "Subagent", directory: "D:/repo" } },
+      });
+      for (const event of idleEvents) dispatch(event);
+
+      await vi.waitFor(() => expect(mocked.getSession).toHaveBeenCalledOnce());
+      expect(api.sendMessage).not.toHaveBeenCalled();
+    });
+
     it("labels an untitled background session as a new session, never by its id", async () => {
-      const { api } = await setupService();
-      const dispatch = getEventDispatcher();
+      const { api, dispatch } = await setupBackgroundNoticeService();
+      mocked.getSession.mockResolvedValue({
+        data: { id: "bg-session-123456", title: "", directory: "D:/repo" },
+      });
 
       dispatch({
         type: "message.updated",

@@ -282,6 +282,30 @@ describe("BackgroundSessionTracker", () => {
     expect(onNotification).toHaveBeenCalledTimes(2);
   });
 
+  it("does not replay a candidate after later session metadata arrives", async () => {
+    const tracker = new BackgroundSessionTracker();
+    const onNotification = vi.fn();
+    const questionEvent = event({
+      type: "question.asked",
+      properties: { id: "question-1", sessionID: "session-2", questions: [] },
+    });
+    tracker.setOnNotification(onNotification);
+
+    tracker.processEvent(questionEvent, "session-1");
+    await flushNotifications();
+    tracker.processEvent(
+      event({
+        type: "session.updated",
+        properties: { info: { id: "session-2", title: "Now named", directory: "/repo" } },
+      }),
+      "session-1",
+    );
+    tracker.processEvent(questionEvent, "session-1");
+    await flushNotifications();
+
+    expect(onNotification).toHaveBeenCalledOnce();
+  });
+
   it("ignores child sessions to avoid duplicate subagent notifications", async () => {
     const tracker = new BackgroundSessionTracker();
     const onNotification = vi.fn();

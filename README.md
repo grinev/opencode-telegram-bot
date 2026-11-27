@@ -296,7 +296,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `SCHEDULED_TASK_EXECUTION_TIMEOUT_MINUTES` | Maximum time the bot waits for one scheduled task run before marking it failed                                        |    No    | `120`                    |
 | `SCHEDULED_TASK_DISABLE_NOTIFICATION`      | Send scheduled task result/error messages without Telegram push notifications                                         |    No    | `false`                  |
 | `BASH_TOOL_DISPLAY_MAX_LENGTH`             | Maximum displayed length for `bash` commands and `execute` code in Telegram summaries; longer ones are truncated      |    No    | `128`                    |
-| `TRACK_BACKGROUND_SESSIONS`                | Track detached/non-current sessions in the current selected project/worktree and send short notifications             |    No    | `true`                   |
+| `TRACK_BACKGROUND_SESSIONS`                | Send background notices in the selected project/worktree: confirmed roots only for replies, questions and permissions; detached manual compaction can also notify for a child |    No    | `true`                   |
 | `MESSAGE_FORMAT_MODE`                      | Assistant reply formatting mode: `markdown` (native Telegram rich blocks) or `raw` (plain text)                       |    No    | `markdown`               |
 | `MESSAGE_MERGE_WINDOW_MS`                  | Merge Telegram-split long text messages into one prompt after this wait window (ms); `0` disables merging             |    No    | `1500`                   |
 | `INITIAL_SETTINGS_PRESET`                  | JSON object that seeds default `/settings` values on first run (keys not yet persisted); see [Runtime Settings](#runtime-settings) |    No    | `{}`                     |
@@ -334,7 +334,7 @@ Runtime preferences are changed from `/settings` and stored in `settings.json`:
 - Delete progress on finish: available only in Compact, removes each progress card instead of showing its summary
 - Thinking content display: available only in Full
 - Assistant run footer display
-- Notifications from other sessions: on by default. Off silences chat notices about replies, questions and permission requests from sessions that are not the one selected in the bot. Tracking keeps running, and a pending question or permission stays answerable from a TUI or Desktop
+- Notifications from other sessions: on by default. Only confirmed root sessions send background notices about replies, questions and permissions. Detached manual compaction can still report success for a child session. Off silences these notices without stopping tracking; pending questions and permissions stay answerable from a TUI or Desktop.
 - Diff file attachments: available only in Full; files in the assistant reply are unaffected
 - Response streaming mode: `edit` (default), `draft (experimental)`, or `off`. With `off`, each completed assistant reply is sent in full as soon as it is ready, without a preview and without waiting for the turn to end. Thinking, progress and interactive prompts are unaffected. A mode change applies to the next reply.
 - Audio replies: `off`, `all`, or `auto` when TTS is configured
