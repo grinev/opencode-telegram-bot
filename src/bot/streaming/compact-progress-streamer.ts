@@ -14,20 +14,16 @@ interface CompactProgressState {
   sessionId: string;
   messageId: number | null;
   latestText: string;
+  activityCallId?: string | undefined;
+  startedTools: Map<string, boolean>;
   // Counted calls by id, so a call reported finished twice counts once.
   toolCalls: Map<string, ToolCallCounts>;
   filePaths: Set<string>;
-  // Background operations started on this card, in start order, with their current text.
-  backgroundActivities: Map<string, string>;
+  backgroundActivities: Map<string, { direct?: string; nested?: string }>;
   timer: ReturnType<typeof setTimeout> | null;
   task: Promise<boolean>;
   cancelled: boolean;
   sendFailed: boolean;
-}
-
-interface HeldStretch {
-  activity: string | null;
-  toolCalls: Map<string, ToolCallCounts>;
 }
 
 export interface CompactProgressStreamerOptions {
@@ -48,6 +44,7 @@ function createInitialState(sessionId: string): CompactProgressState {
     sessionId,
     messageId: null,
     latestText: "",
+    startedTools: new Map(),
     toolCalls: new Map(),
     filePaths: new Set(),
     backgroundActivities: new Map(),
@@ -60,7 +57,7 @@ function createInitialState(sessionId: string): CompactProgressState {
 
 export class CompactProgressStreamer {
   private readonly states = new Map<string, CompactProgressState>();
-  private readonly heldBySession = new Map<string, HeldStretch>();
+  private readonly heldBySession = new Map<string, CompactProgressState>();
   private readonly finalizing = new Set<CompactProgressState>();
   // Cards closed for their stretch that still show a running background operation.
   private readonly parked = new Set<CompactProgressState>();
@@ -88,19 +85,22 @@ export class CompactProgressStreamer {
     return resolveStreamThrottleMs(this.throttleMs, sessionId);
   }
 
-  updateActivity(sessionId: string, activity: string): void {
+  updateActivity(sessionId: string, activity: string, callId?: string): void {
     const normalizedActivity = activity.trim();
     if (!sessionId || !normalizedActivity) {
       return;
     }
 
-    const held = this.heldBySession.get(sessionId);
-    if (held) {
-      held.activity = normalizedActivity;
-      return;
-    }
+    const state = (callId && this.findToolCard(sessionId, callId)) || this.getActivityCard(sessionId);
+    if (this.parked.has(state)) return;
+    const nested = callId ? state.backgroundActivities.get(callId)?.nested : undefined;
+    this.updateActivityState(state, nested ?? normalizedActivity, callId);
+  }
 
-    this.updateActivityState(sessionId, normalizedActivity, true);
+  registerToolCall(sessionId: string, callId: string, isTask: boolean): void {
+    if (!this.findToolCard(sessionId, callId)) {
+      this.getActivityCard(sessionId).startedTools.set(callId, isTask);
+    }
   }
 
   holdForClose(sessionId: string): void {
@@ -108,7 +108,7 @@ export class CompactProgressStreamer {
       return;
     }
 
-    this.heldBySession.set(sessionId, { activity: null, toolCalls: new Map() });
+    this.heldBySession.set(sessionId, createInitialState(sessionId));
   }
 
   isHolding(sessionId: string): boolean {
@@ -138,7 +138,22 @@ export class CompactProgressStreamer {
   releaseHold(sessionId: string): void {
     const held = this.heldBySession.get(sessionId);
     this.heldBySession.delete(sessionId);
-    this.replayHeld(sessionId, held);
+    if (!held) return;
+    const open = this.states.get(sessionId);
+    if (!open) {
+      this.openHeld(held);
+      return;
+    }
+    for (const [callId, task] of held.startedTools) open.startedTools.set(callId, task);
+    for (const [callId, counts] of held.toolCalls) open.toolCalls.set(callId, counts);
+    for (const [callId, activity] of held.backgroundActivities) {
+      open.backgroundActivities.set(callId, activity);
+    }
+    if (held.latestText) {
+      open.latestText = held.latestText;
+      open.activityCallId = held.activityCallId;
+      this.ensureTimer(open);
+    }
   }
 
   updateThinking(sessionId: string): void {
@@ -154,13 +169,11 @@ export class CompactProgressStreamer {
       return;
     }
 
-    const held = this.heldBySession.get(sessionId);
-    if (held) {
-      held.toolCalls.set(callId, counts);
-      return;
-    }
-
-    this.states.get(sessionId)?.toolCalls.set(callId, counts);
+    const state =
+      this.findToolCard(sessionId, callId) ??
+      this.heldBySession.get(sessionId) ??
+      this.states.get(sessionId);
+    state?.toolCalls.set(callId, counts);
   }
 
   addFileChange(sessionId: string, filePath: string): void {
@@ -172,29 +185,52 @@ export class CompactProgressStreamer {
     this.states.get(sessionId)?.filePaths.add(normalizedPath);
   }
 
-  /** Registers a background operation on the open card, or updates its text on its own card. */
+  /** Promotes a launch on the card where its call first appeared, even during a close. */
   addBackgroundOperation(sessionId: string, callId: string, activity: string): void {
     if (!sessionId || !callId || !activity.trim()) {
       return;
     }
 
-    if (this.findBackgroundCard(sessionId, callId)) {
-      this.updateBackgroundOperation(sessionId, callId, activity);
-      return;
-    }
-
-    this.getOrCreateState(sessionId).backgroundActivities.set(callId, activity.trim());
+    const state = this.findToolCard(sessionId, callId) ?? this.getActivityCard(sessionId);
+    if (!state.startedTools.has(callId)) state.startedTools.set(callId, false);
+    this.setBackgroundActivity(state, callId, "direct", activity.trim());
   }
 
   updateBackgroundOperation(sessionId: string, callId: string, activity: string): void {
-    const state = this.findBackgroundCard(sessionId, callId);
-    if (!state || !activity.trim()) {
-      return;
+    const state = this.findToolCard(sessionId, callId);
+    if (state?.backgroundActivities.get(callId)?.direct !== undefined && activity.trim()) {
+      this.setBackgroundActivity(state, callId, "direct", activity);
     }
+  }
 
-    state.backgroundActivities.set(callId, activity.trim());
+  hasToolCall(sessionId: string, callId: string): boolean {
+    return this.findToolCard(sessionId, callId) !== undefined;
+  }
+
+  isToolCallParked(sessionId: string, callId: string): boolean {
+    const state = this.findToolCard(sessionId, callId);
+    return state !== undefined && this.parked.has(state);
+  }
+
+  updateNestedBackgroundOperation(sessionId: string, callId: string, activity: string): void {
+    const state = this.findToolCard(sessionId, callId);
+    if (state) this.setBackgroundActivity(state, callId, "nested", activity);
+  }
+
+  private setBackgroundActivity(
+    state: CompactProgressState,
+    callId: string,
+    kind: "direct" | "nested",
+    activity: string,
+  ): void {
+    const current = state.backgroundActivities.get(callId) ?? {};
+    if (current[kind] === activity) return;
+    current[kind] = activity;
+    state.backgroundActivities.set(callId, current);
     if (this.parked.has(state)) {
       this.showNewestBackgroundOperation(state);
+    } else if (state.activityCallId === callId) {
+      this.updateActivityState(state, current.nested ?? activity, callId);
     }
   }
 
@@ -205,22 +241,64 @@ export class CompactProgressStreamer {
     counts: ToolCallCounts,
     deleteOnFinish = false,
   ): Promise<void> {
-    const state = this.findBackgroundCard(sessionId, callId);
-    if (!state) {
-      return;
-    }
+    await this.endBackgroundActivity(sessionId, callId, "direct", counts, deleteOnFinish);
+  }
 
-    state.backgroundActivities.delete(callId);
-    state.toolCalls.set(callId, counts);
-    if (!this.parked.has(state)) {
-      return;
-    }
+  async endNestedBackgroundOperation(
+    sessionId: string,
+    callId: string,
+    counts: ToolCallCounts | undefined,
+    deleteOnFinish: boolean,
+  ): Promise<void> {
+    await this.endBackgroundActivity(sessionId, callId, "nested", counts, deleteOnFinish);
+  }
 
-    if (state.backgroundActivities.size > 0) {
-      this.showNewestBackgroundOperation(state);
-      return;
+  private async endBackgroundActivity(
+    sessionId: string,
+    callId: string,
+    kind: "direct" | "nested",
+    counts: ToolCallCounts | undefined,
+    deleteOnFinish: boolean,
+  ): Promise<void> {
+    const state = this.findToolCard(sessionId, callId);
+    const activity = state?.backgroundActivities.get(callId);
+    if (!state || activity?.[kind] === undefined) return;
+    if (counts) state.toolCalls.set(callId, counts);
+    delete activity[kind];
+    if (!activity.direct && !activity.nested) state.backgroundActivities.delete(callId);
+    if (this.parked.has(state)) {
+      if (state.backgroundActivities.size > 0) this.showNewestBackgroundOperation(state);
+      else await this.closeParked(state, deleteOnFinish);
+    } else if (state.activityCallId === callId && activity.direct) {
+      this.updateActivityState(state, activity.direct, callId);
     }
+  }
 
+  /** A confirmed server loss ends task-bearing progress; command-only cards still freeze. */
+  endBackgroundTasks(
+    sessionId: string,
+    countEndedCall: (callId: string, isTask: boolean) => ToolCallCounts,
+    deleteOnFinish: boolean,
+  ): { hadOpenTask: boolean; parkedClosed: Promise<void> } {
+    let hadOpenTask = false;
+    const closing: Promise<void>[] = [];
+    const open = this.states.get(sessionId);
+    const held = this.heldBySession.get(sessionId);
+    for (const state of [open, held, ...this.parked]) {
+      if (state?.sessionId !== sessionId) continue;
+      const calls = [...state.backgroundActivities.keys()];
+      if (!calls.some((id) => state.startedTools.get(id))) continue;
+      for (const id of calls) {
+        state.toolCalls.set(id, countEndedCall(id, state.startedTools.get(id) === true));
+      }
+      state.backgroundActivities.clear();
+      if (this.parked.has(state)) closing.push(this.closeParked(state, deleteOnFinish));
+      else hadOpenTask = true;
+    }
+    return { hadOpenTask, parkedClosed: Promise.all(closing).then(() => undefined) };
+  }
+
+  private async closeParked(state: CompactProgressState, deleteOnFinish: boolean): Promise<void> {
     this.parked.delete(state);
     this.clearTimer(state);
     this.finalizing.add(state);
@@ -229,7 +307,7 @@ export class CompactProgressStreamer {
 
   /** Forgets background operations of a session (or all); their cards stay as they are. */
   dropBackgroundOperations(sessionId?: string): void {
-    for (const state of this.states.values()) {
+    for (const state of [...this.states.values(), ...this.heldBySession.values()]) {
       if (sessionId === undefined || state.sessionId === sessionId) {
         state.backgroundActivities.clear();
       }
@@ -254,13 +332,8 @@ export class CompactProgressStreamer {
     const parked = state && this.parked.has(state) ? state : undefined;
     if (parked) {
       this.onPark?.(sessionId, Array.from(parked.backgroundActivities.keys()));
-      // A timer tick of a background operation held during the close belongs to the
-      // parked card, not to the next stretch.
-      if (held?.activity && Array.from(parked.backgroundActivities.values()).includes(held.activity)) {
-        held.activity = null;
-      }
     }
-    this.replayHeld(sessionId, held);
+    if (held) this.openHeld(held);
 
     if (!state) {
       return;
@@ -370,14 +443,14 @@ export class CompactProgressStreamer {
     logger.debug(`[CompactProgress] Cleared all sessions: reason=${reason}`);
   }
 
-  private findBackgroundCard(sessionId: string, callId: string): CompactProgressState | undefined {
+  private findToolCard(sessionId: string, callId: string): CompactProgressState | undefined {
     const open = this.states.get(sessionId);
-    if (open?.backgroundActivities.has(callId)) {
-      return open;
-    }
+    if (open?.startedTools.has(callId)) return open;
+    const held = this.heldBySession.get(sessionId);
+    if (held?.startedTools.has(callId)) return held;
 
     for (const state of this.parked) {
-      if (state.sessionId === sessionId && state.backgroundActivities.has(callId)) {
+      if (state.sessionId === sessionId && state.startedTools.has(callId)) {
         return state;
       }
     }
@@ -387,16 +460,13 @@ export class CompactProgressStreamer {
 
   /** A parked card shows the most recently started background operation still running. */
   private showNewestBackgroundOperation(state: CompactProgressState): void {
-    const activity = Array.from(state.backgroundActivities.values()).pop();
-    if (!activity) {
+    for (const callId of [...state.startedTools.keys()].reverse()) {
+      const operation = state.backgroundActivities.get(callId);
+      const activity = operation?.nested ?? operation?.direct;
+      if (!activity) continue;
+      this.updateActivityState(state, activity, callId);
       return;
     }
-
-    state.latestText = t("progress.compact.activity", {
-      header: t("progress.compact.working_header"),
-      activity,
-    });
-    this.ensureTimer(state);
   }
 
   private cancelParked(sessionId?: string): boolean {
@@ -412,21 +482,15 @@ export class CompactProgressStreamer {
     return cancelled;
   }
 
-  private replayHeld(sessionId: string, held: HeldStretch | undefined): void {
-    if (!held) {
-      return;
-    }
-
-    if (held.activity) {
-      this.updateActivity(sessionId, held.activity);
-    }
-
-    for (const [callId, counts] of held.toolCalls) {
-      this.addToolCall(sessionId, callId, counts);
-    }
+  private openHeld(held: CompactProgressState): void {
+    if (!held.latestText && !held.startedTools.size) return;
+    this.states.set(held.sessionId, held);
+    if (held.latestText) this.ensureTimer(held);
   }
 
-  private getOrCreateState(sessionId: string): CompactProgressState {
+  private getActivityCard(sessionId: string): CompactProgressState {
+    const held = this.heldBySession.get(sessionId);
+    if (held) return held;
     const existing = this.states.get(sessionId);
     if (existing) {
       return existing;
@@ -437,22 +501,13 @@ export class CompactProgressStreamer {
     return state;
   }
 
-  private updateActivityState(sessionId: string, activity: string, createIfMissing: boolean): void {
-    const normalizedActivity = activity.trim();
-    if (!sessionId || !normalizedActivity) {
-      return;
-    }
-
-    const state = createIfMissing ? this.getOrCreateState(sessionId) : this.states.get(sessionId);
-    if (!state) {
-      return;
-    }
-
+  private updateActivityState(state: CompactProgressState, activity: string, callId?: string): void {
+    state.activityCallId = callId;
     state.latestText = t("progress.compact.activity", {
       header: t("progress.compact.working_header"),
-      activity: normalizedActivity,
+      activity,
     });
-    this.ensureTimer(state);
+    if (this.heldBySession.get(state.sessionId) !== state) this.ensureTimer(state);
   }
 
   private ensureTimer(state: CompactProgressState): void {

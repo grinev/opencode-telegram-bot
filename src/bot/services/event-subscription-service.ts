@@ -3,6 +3,8 @@ import type { Event } from "@opencode-ai/sdk/v2";
 import { config } from "../../config.js";
 import { opencodeServerVersion } from "../../opencode/client.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
+import { countToolCall } from "../../app/formatters/compact-summary-formatter.js";
+import { getDeleteCompactProgressOnFinish } from "../../app/stores/settings-store.js";
 import { restorePendingInteractionsAfterReconnect } from "../../app/services/attach-service.js";
 import { reconcileInboxPrompts } from "../../app/services/prompt-inbox-service.js";
 import { logger } from "../../utils/logger.js";
@@ -232,7 +234,18 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         ? closeQuestionNotAnswered(destination.api, destination.chatId, deps)
         : Promise.resolve();
 
-    // The server took every session's background commands with it.
+    const sessionId = getCurrentSession()?.id;
+    const taskProgress = sessionId
+      ? runtime.compactProgressStreamer.endBackgroundTasks(
+          sessionId,
+          (callId, isTask) =>
+            countToolCall(
+              runtime.getRunningToolInfo(sessionId, callId) ?? { tool: isTask ? "task" : "bash" },
+            ),
+          getDeleteCompactProgressOnFinish(),
+        )
+      : undefined;
+    // The server took every session's background operations with it.
     this.stopBackgroundCommands(reason);
     const { summaryAggregator } = deps;
     summaryAggregator.forgetLiveTurn();
@@ -243,13 +256,13 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       // the server resumes gets a new card.
       summaryAggregator.interruptSubagents(true);
 
-      const sessionId = getCurrentSession()?.id;
       if (sessionId) runtime.minimalProgress.clear(sessionId);
       const runningTools = sessionId ? runtime.getRunningToolInfos(sessionId) : [];
       if (
         sessionId &&
         (deps.assistantRunState.hasRun(sessionId) ||
           runningTools.length > 0 ||
+          taskProgress?.hadOpenTask ||
           runtime.hasOffAssistantResponse(sessionId))
       ) {
         logger.info(
@@ -268,6 +281,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       await Promise.all([
         pollClosed,
+        taskProgress?.parkedClosed,
         summaryAggregator.drainOutbound(0, holdGeneration),
         summaryAggregator.whenOutboundIdle(),
       ]);

@@ -3,12 +3,15 @@ import { createTestHome } from "../../helpers/test-environment.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
 import type { Event } from "@opencode-ai/sdk/v2";
+import type { OpenCodeEvent } from "@opencode/client";
 import { setRuntimeMode } from "../../../src/runtime/mode.js";
 import { resetSingletonState } from "../../helpers/reset-singleton-state.js";
 import { defined } from "../../helpers/defined.js";
 import { t } from "../../../src/i18n/index.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import type { EventCallback } from "../../../src/opencode/events.js";
+import { createV2EventTranslator } from "../../../src/opencode/v2/events.js";
 
 const mocked = vi.hoisted(() => ({
   subscribeToEvents: vi.fn(),
@@ -2165,6 +2168,185 @@ describe("bot/services/event-subscription-service", () => {
   });
 
   describe("background operations", () => {
+    function v2Events() {
+      const translate = createV2EventTranslator();
+      const receive = mocked.subscribeToEvents.mock.calls.at(-1)?.[1] as EventCallback;
+      let eventId = 0;
+      const emit = (type: string, data: Record<string, unknown>) => {
+        for (const { payload, directory } of translate({
+          id: `v2-event-${++eventId}`,
+          type,
+          data,
+          created: Date.now(),
+          location: { directory: "D:/repo" },
+        } as unknown as OpenCodeEvent)) {
+          receive({ event: payload, directory: defined(directory) });
+        }
+      };
+      return emit;
+    }
+
+    function startV2Task(
+      emit: ReturnType<typeof v2Events>,
+      base: Record<string, string>,
+      task: string,
+    ) {
+      emit("session.tool.input.started", { ...base, name: "subagent" });
+      emit("session.tool.called", { ...base, input: { agent: "explore", description: task } });
+    }
+
+    function returnV2Task(
+      emit: ReturnType<typeof v2Events>,
+      base: Record<string, string>,
+      childId: string,
+      status: "running" | "completed",
+    ) {
+      emit("session.tool.success", { ...base, content: [], metadata: { sessionID: childId, status } });
+    }
+
+    const rootTask = { sessionID: "session-1", assistantMessageID: "message-1", id: "root-call" };
+
+    it.each([false, true])(
+      "keeps an implicitly background V2 task on its original Compact card (delete: %s)",
+      async (deleteProgress) => {
+        const { api, summaryAggregator } = await setupService(false, {
+          startAssistantRun: true,
+          outputMode: "compact",
+        });
+        const settingsStore = await import("../../../src/app/stores/settings-store.js");
+        settingsStore.setDeleteCompactProgressOnFinish(deleteProgress);
+        useTrackerFakeTimers();
+        const emit = v2Events();
+        startV2Task(emit, rootTask, "Check the launch");
+        returnV2Task(emit, rootTask, "child-session-1", "running");
+        await flushPendingDispatch();
+        expect(api.sendMessage).toHaveBeenCalledWith(
+          42,
+          "⏳ Working\n🤖 Running Task: Check the launch",
+          expect.anything(),
+        );
+
+        if (deleteProgress) {
+          emitQuestionAsked(summaryAggregator, "q-bg");
+          await flushPendingDispatch();
+          expect(collectSentTexts(api)).toContainEqual(
+            expect.stringContaining("Which option for q-bg?"),
+          );
+          expect(api.deleteMessage).not.toHaveBeenCalledWith(42, 100);
+          emitQuestionSettled(summaryAggregator, "question.replied", "q-bg");
+          await flushPendingDispatch();
+        }
+        emitAssistantTextPart(summaryAggregator, "The parent replied.");
+        emitAssistantCompleted(summaryAggregator);
+        await flushPendingDispatch();
+        emit("session.execution.succeeded", { sessionID: "session-1" });
+        await flushPendingDispatch();
+        expect(collectSentTexts(api)).toContain("The parent replied.");
+        expect(collectSentTexts(api)).toContainEqual(
+          expect.stringContaining("🧠 test-provider/test-model"),
+        );
+        expect(collectSentTexts(api)).not.toContain("✅ tools: 1");
+        const edits = () => api.editMessageText.mock.calls.filter((call) => call[1] === 100);
+        expect(String(edits().at(-1)?.[2])).toMatch(/Running Task: Check the launch · 🕒 /);
+
+        if (!deleteProgress) {
+          emit("session.execution.started", { sessionID: "session-1" });
+          emitReadTool(summaryAggregator, "running", { callId: "new-read", filePath: "new.txt" });
+          await flushPendingDispatch();
+          emitReadTool(summaryAggregator, "completed", { callId: "new-read", filePath: "new.txt" });
+          emit("session.execution.succeeded", { sessionID: "session-1" });
+          await flushPendingDispatch();
+          expect(
+            api.editMessageText.mock.calls.some(
+              (call) => call[1] !== 100 && call[2] === "✅ reads: 1",
+            ),
+          ).toBe(true);
+        }
+
+        emit("session.execution.succeeded", { sessionID: "child-session-1" });
+        emit("session.execution.succeeded", { sessionID: "child-session-1" });
+        await flushPendingDispatch();
+        if (deleteProgress) {
+          expect(api.deleteMessage.mock.calls.filter((call) => call[1] === 100)).toHaveLength(1);
+          expect(collectSentTexts(api)).not.toContain("✅ tools: 1");
+        } else {
+          expect(edits().filter((call) => call[2] === "✅ tools: 1")).toHaveLength(1);
+          expect(edits().at(-1)?.[2]).toBe("✅ tools: 1");
+          expect(collectSentTexts(api)).not.toContain("✅ reads: 1, tools: 1");
+        }
+      },
+    );
+
+    it.each(["compact", "full"] as const)(
+      "keeps one %s progress surface while nested V2 tasks survive an interrupted turn",
+      async (outputMode) => {
+        const { api, summaryAggregator } = await setupService(false, { outputMode });
+        useTrackerFakeTimers();
+        const emit = v2Events();
+        startV2Task(emit, rootTask, "Parent subagent");
+        emitSubagentStart(summaryAggregator);
+        const childSession = { sessionID: "child-session-1", assistantMessageID: "child-message-1" };
+        emit("session.tool.progress", {
+          ...rootTask,
+          metadata: { sessionID: childSession.sessionID },
+        });
+        await flushPendingDispatch();
+
+        for (const id of ["first", "second"]) {
+          const nestedTask = { ...childSession, id };
+          startV2Task(emit, nestedTask, `Wait ${id}`);
+          emit("session.created", {
+            parentID: childSession.sessionID,
+            sessionID: `${id}-nested`,
+            location: { directory: "D:/repo" },
+            title: `Wait ${id}`,
+          });
+          returnV2Task(emit, nestedTask, `${id}-nested`, "running");
+        }
+        emit("session.execution.interrupted", { sessionID: childSession.sessionID, reason: "user" });
+        returnV2Task(emit, rootTask, childSession.sessionID, "completed");
+        await interruptRun(summaryAggregator);
+
+        expect(activeService?.countBackgroundOperations("session-1")).toBe(1);
+        const edits = () => api.editMessageText.mock.calls.filter((call) => call[1] === 100);
+        expect(String(edits().at(-1)?.[2])).toMatch(/Running Task: Wait second · 🕒 /);
+        expect(api.sendMessage).toHaveBeenCalledTimes(1);
+
+        emit("session.execution.succeeded", { sessionID: "second-nested" });
+        await flushPendingDispatch();
+        expect(activeService?.countBackgroundOperations("session-1")).toBe(1);
+        expect(String(edits().at(-1)?.[2])).toMatch(/Running Task: Wait first · 🕒 /);
+
+        emit("session.execution.succeeded", { sessionID: "first-nested" });
+        await flushPendingDispatch();
+        expect(activeService?.countBackgroundOperations("session-1")).toBe(0);
+        expect(String(edits().at(-1)?.[2])).toMatch(
+          outputMode === "compact" ? /^✅ tools: 1$/ : /⏹ Interrupted · 🕒 /,
+        );
+        expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("does not reopen Minimal progress when V2 promotes a returned launch", async () => {
+      const { api, summaryAggregator } = await setupService(false, { outputMode: "minimal" });
+      useTrackerFakeTimers();
+      const emit = v2Events();
+      startV2Task(emit, rootTask, "Background check");
+      await flushPendingDispatch();
+      expect(collectSentTexts(api)).toContain("⏳ Working");
+
+      emitAssistantTextPart(summaryAggregator, "The parent replied.");
+      emitAssistantCompleted(summaryAggregator);
+      await flushPendingDispatch();
+      expect(api.deleteMessage).toHaveBeenCalledWith(42, 100);
+      returnV2Task(emit, rootTask, "child-session-1", "running");
+      emit("session.execution.succeeded", { sessionID: "child-session-1" });
+      await flushPendingDispatch();
+
+      expect(collectSentTexts(api).filter((text) => text === "⏳ Working")).toHaveLength(1);
+      expect(collectSentTexts(api).some((text) => text.includes("Background check"))).toBe(false);
+    });
+
     function emitBackgroundBash(
       summaryAggregator: { processEvent(event: Event): void },
       status: "running" | "completed",

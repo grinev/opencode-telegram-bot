@@ -82,6 +82,7 @@ interface SessionState {
   parentID?: string;
   title?: string;
   created?: number;
+  executionEnd?: { time: number; error?: string };
 }
 
 export interface V2EventTranslatorOptions {
@@ -287,6 +288,12 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
     return part ? [partUpdated(part, created)] : [];
   };
 
+  const rememberExecutionEnd = (sessionID: string, time: number, error?: string): void => {
+    const session = sessions.get(sessionID) ?? {};
+    session.executionEnd = { time, ...(error !== undefined ? { error } : {}) };
+    sessions.set(sessionID, session);
+  };
+
   const translatePayload = (event: OpenCodeEvent, restarted?: boolean): Event[] => {
     const created =
       "created" in event && typeof event.created === "number" ? event.created : Date.now();
@@ -303,6 +310,7 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
       case "session.created": {
         const data = event.data;
         sessions.set(data.sessionID, {
+          ...sessions.get(data.sessionID),
           directory: data.location.directory,
           projectID: data.projectID,
           ...(data.parentID ? { parentID: data.parentID } : {}),
@@ -348,6 +356,7 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
         ];
 
       case "session.deleted":
+        sessions.delete(event.data.sessionID);
         return [
           {
             id: event.id,
@@ -359,7 +368,9 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
           },
         ];
 
-      case "session.execution.started":
+      case "session.execution.started": {
+        const session = sessions.get(event.data.sessionID);
+        if (session) delete session.executionEnd;
         return [
           {
             id: event.id,
@@ -367,10 +378,12 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
             properties: { sessionID: event.data.sessionID, status: { type: "busy" } },
           },
         ];
+      }
 
       // A background subagent ends with its child session; its parent's task call ends there too.
       case "session.execution.succeeded":
       case "session.execution.interrupted":
+        rememberExecutionEnd(event.data.sessionID, created);
         return [
           ...idleEvents(
             event.data.sessionID,
@@ -382,6 +395,7 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
         ];
 
       case "session.execution.failed":
+        rememberExecutionEnd(event.data.sessionID, created, event.data.error.message);
         return [
           {
             id: `${event.id}:error`,
@@ -682,29 +696,49 @@ export function createV2EventTranslator(options: V2EventTranslatorOptions = {}) 
         const output = toolContentText(data.content);
         tools.delete(data.id);
 
-        // V2 reports a background command or subagent done as soon as it is launched; it
-        // stays a running tool here until the operation itself ends.
-        const key = metadata.status === "running" ? backgroundKey(metadata) : null;
+        // A subagent return can report a running child even when the call had no
+        // background argument. Progress metadata alone is not evidence of an early return.
+        const childId =
+          call.tool === "task" && typeof metadata.sessionID === "string"
+            ? metadata.sessionID
+            : undefined;
+        const explicitBackground = call.input.background === true || metadata.background === true;
+        const childStillRunning =
+          childId !== undefined &&
+          (data.metadata?.status === "running" ||
+            (explicitBackground && metadata.status === "running"));
+        const childEnd = childStillRunning ? sessions.get(childId)?.executionEnd : undefined;
+        const alreadyEnded = childEnd && childEnd.time >= call.start ? childEnd : undefined;
+        const key =
+          call.tool === "task"
+            ? childStillRunning && !alreadyEnded
+              ? `session:${childId}`
+              : null
+            : metadata.status === "running"
+              ? backgroundKey(metadata)
+              : null;
         if (key) {
-          backgroundCalls.set(key, { ...call, metadata, callID: data.id, output });
+          const runningMetadata = childStillRunning ? { ...metadata, background: true } : metadata;
+          backgroundCalls.set(key, { ...call, metadata: runningMetadata, callID: data.id, output });
           const part = toolPart(
             data.id,
-            { status: "running", input: call.input, metadata, time: { start: call.start } },
+            {
+              status: "running",
+              input: call.input,
+              metadata: runningMetadata,
+              time: { start: call.start },
+            },
             call,
           );
           return part ? [partUpdated(part, created)] : [];
         }
 
+        const time = { start: call.start, end: alreadyEnded?.time ?? created };
         const part = toolPart(
           data.id,
-          {
-            status: "completed",
-            input: call.input,
-            output,
-            title: "",
-            metadata,
-            time: { start: call.start, end: created },
-          },
+          alreadyEnded?.error !== undefined
+            ? { status: "error", input: call.input, error: alreadyEnded.error, metadata, time }
+            : { status: "completed", input: call.input, output, title: "", metadata, time },
           call,
         );
         return part ? [partUpdated(part, created)] : [];

@@ -147,6 +147,7 @@ export type SubagentStatus = "pending" | "running" | "completed" | "error" | "in
 
 export interface SubagentInfo {
   cardId: string;
+  taskCallId?: string | undefined;
   sessionId: string | null;
   parentSessionId: string;
   agent: string;
@@ -173,6 +174,7 @@ export interface SubagentInfo {
   launchDescription?: string | undefined;
   /** A nested subagent it launched in the background still runs: the card outlives its parent's turn. */
   waitsOnBackgroundLaunch?: boolean | undefined;
+  backgroundLaunch?: { startedAt: number; description?: string | undefined } | undefined;
   createdAt: number;
   finishedAt?: number | undefined;
   updatedAt: number;
@@ -487,8 +489,10 @@ export class SummaryAggregator {
   private pendingChildSessionIdsByParent: Map<string, string[]> = new Map();
   private fallbackSubagentCardIdsByParent: Map<string, string[]> = new Map();
   // Root task calls still open, each with the card it was matched to once that is known.
-  private openTaskCalls: Map<string, { parentSessionId: string; cardId: string | null }> =
-    new Map();
+  private openTaskCalls = new Map<
+    string,
+    { parentSessionId: string; cardId: string | null; childSessionId?: string }
+  >();
   private finishedSubagentSessionIds: Set<string> = new Set();
   // Ended sessions still tracked because a nested session hangs off them.
   private endedTrackedSessionIds: Set<string> = new Set();
@@ -1133,14 +1137,23 @@ export class SummaryAggregator {
     return [...state.launches.values()].some((launch) => launch.background);
   }
 
-  private getNewestLaunch(state: SubagentState): SubagentLaunch | undefined {
+  private getNewestLaunch(state: SubagentState, backgroundOnly = false): SubagentLaunch | undefined {
     let newest: SubagentLaunch | undefined;
     for (const launch of state.launches.values()) {
-      if (launch.shown && (newest === undefined || launch.startedAt >= newest.startedAt)) {
+      if (
+        launch.shown &&
+        (!backgroundOnly || launch.background) &&
+        (newest === undefined || launch.startedAt >= newest.startedAt)
+      ) {
         newest = launch;
       }
     }
     return newest;
+  }
+
+  private getBackgroundLaunch(state: SubagentState): SubagentInfo["backgroundLaunch"] {
+    const launch = this.getNewestLaunch(state, true);
+    return launch && { startedAt: launch.startedAt, description: launch.description };
   }
 
   /**
@@ -1282,6 +1295,7 @@ export class SummaryAggregator {
       .filter((state): state is SubagentState => Boolean(state))
       .map((state) => ({
         cardId: state.cardId,
+        taskCallId: state.taskCallId,
         sessionId: state.sessionId,
         parentSessionId: state.parentSessionId,
         agent: state.agent,
@@ -1304,6 +1318,7 @@ export class SummaryAggregator {
         launchStartedAt: this.getNewestLaunch(state)?.startedAt,
         launchDescription: this.getNewestLaunch(state)?.description,
         waitsOnBackgroundLaunch: this.hasBackgroundLaunch(state),
+        backgroundLaunch: this.getBackgroundLaunch(state),
         createdAt: state.createdAt,
         finishedAt: state.finishedAt,
         updatedAt: state.updatedAt,
@@ -1312,6 +1327,7 @@ export class SummaryAggregator {
     const snapshot = JSON.stringify(
       subagents.map((subagent) => ({
         cardId: subagent.cardId,
+        taskCallId: subagent.taskCallId,
         sessionId: subagent.sessionId,
         parentSessionId: subagent.parentSessionId,
         agent: subagent.agent,
@@ -1334,6 +1350,7 @@ export class SummaryAggregator {
         launchStartedAt: subagent.launchStartedAt,
         launchDescription: subagent.launchDescription,
         waitsOnBackgroundLaunch: subagent.waitsOnBackgroundLaunch,
+        backgroundLaunch: subagent.backgroundLaunch,
         finishedAt: subagent.finishedAt,
       })),
     );
@@ -1481,13 +1498,15 @@ export class SummaryAggregator {
       return null;
     }
 
-    if (call.cardId) {
-      return this.subagentStates.get(call.cardId) ?? null;
+    if (childSessionId) call.childSessionId = childSessionId;
+    const linked = call.cardId ? this.subagentStates.get(call.cardId) : undefined;
+    if (linked && (!call.childSessionId || linked.sessionId === call.childSessionId)) {
+      return linked;
     }
 
     let cardId: string | undefined;
-    if (childSessionId) {
-      cardId = this.subagentCardIdBySessionId.get(childSessionId);
+    if (call.childSessionId) {
+      cardId = this.subagentCardIdBySessionId.get(call.childSessionId);
     } else {
       const openCalls = [...this.openTaskCalls.values()];
       const linkedCardIds = new Set(openCalls.map((openCall) => openCall.cardId));
@@ -1512,8 +1531,11 @@ export class SummaryAggregator {
       return null;
     }
 
+    if (linked?.taskCallId === callId) linked.taskCallId = undefined;
     call.cardId = cardId;
-    return this.subagentStates.get(cardId) ?? null;
+    const card = this.subagentStates.get(cardId);
+    if (card) card.taskCallId = callId;
+    return card ?? null;
   }
 
   private updateSubagentFromTaskTool(
@@ -1680,6 +1702,16 @@ export class SummaryAggregator {
     }
 
     const subagent = this.getOrCreateSubagentForSession(info.id);
+    // A foreground task may not name its child until it returns. Reuse the
+    // unambiguous pairing while the child is still running its own launches.
+    const calls = [...this.openTaskCalls].filter(([, call]) => call.parentSessionId === info.parentID);
+    const named = calls.find(([, call]) => call.childSessionId === info.id);
+    if (named) {
+      this.findSubagentForTaskCall(named[0], info.id);
+    } else {
+      const waiting = calls.filter(([, call]) => !call.cardId && !call.childSessionId);
+      if (waiting.length === 1) this.findSubagentForTaskCall(waiting[0]![0], undefined);
+    }
     this.enrichSubagentFromSessionTitle(subagent, info.title);
     this.emitSubagentState();
   }

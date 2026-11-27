@@ -573,12 +573,12 @@ describe("opencode/v2/events", () => {
       expect(toolStates(result).map((state) => state.status)).toEqual(["pending", "completed"]);
     });
 
-    function launchSubagent(translate: ReturnType<typeof createV2EventTranslator>) {
+    function launchSubagent(translate: ReturnType<typeof createV2EventTranslator>, explicit = false) {
       return payloads(translate, [
         event("session.tool.input.started", { ...base, name: "subagent" }),
         event("session.tool.called", {
           ...base,
-          input: { description: "Scan", agent: "general", background: true },
+          input: { description: "Scan", agent: "general", ...(explicit ? { background: true } : {}) },
           executed: false,
         }),
         event("session.tool.success", {
@@ -590,15 +590,21 @@ describe("opencode/v2/events", () => {
       ]);
     }
 
-    it("keeps a background subagent's task running and names its child session", () => {
+    it.each([false, true])("marks a returned subagent as background (explicit: %s)", (explicit) => {
       const translate = createV2EventTranslator();
 
-      const states = toolStates(launchSubagent(translate));
+      const states = toolStates(launchSubagent(translate, explicit));
 
+      expect(states[1]?.metadata).not.toHaveProperty("background");
+      expect(states[2]?.input).toEqual({
+        description: "Scan",
+        agent: "general",
+        subagent_type: "general",
+        ...(explicit ? { background: true } : {}),
+      });
       expect(states[2]).toMatchObject({
         status: "running",
-        input: { background: true },
-        metadata: { sessionID: "child-1", sessionId: "child-1" },
+        metadata: { sessionID: "child-1", sessionId: "child-1", background: true },
       });
     });
 
@@ -613,7 +619,10 @@ describe("opencode/v2/events", () => {
             input: { description: "Scan", agent: "general" },
             executed: false,
           }),
-          event("session.tool.progress", { ...base, metadata: { sessionID: "child-1" } }),
+          event("session.tool.progress", {
+            ...base,
+            metadata: { sessionID: "child-1", status: "running" },
+          }),
           event("session.tool.success", {
             ...base,
             content: [{ type: "text", text: "Done" }],
@@ -631,6 +640,8 @@ describe("opencode/v2/events", () => {
         status: "completed",
         metadata: { sessionID: "child-1", sessionId: "child-1" },
       });
+      expect(states[2]?.metadata).not.toHaveProperty("background");
+      expect(states[3]?.metadata).not.toHaveProperty("background");
     });
 
     it("completes the parent's task after the child session ends", () => {
@@ -638,18 +649,32 @@ describe("opencode/v2/events", () => {
       launchSubagent(translate);
 
       const result = payloads(translate, [
+        event("session.execution.succeeded", { sessionID: "other-child" }, false),
         event("session.execution.succeeded", { sessionID: "child-1" }, false),
+        event("session.execution.succeeded", { sessionID: "child-1" }, false),
+        event("session.tool.success", { ...base, content: [], executed: true }),
       ]);
 
-      expect(result.map((item) => item.type)).toEqual([
+      const terminalParts = result.filter((item) => item.type === "message.part.updated");
+      expect(result.slice(2, 5).map((item) => item.type)).toEqual([
         "session.status",
         "session.idle",
         "message.part.updated",
       ]);
-      expect(result[1]).toMatchObject({ properties: { sessionID: "child-1" } });
-      expect(result[2]).toMatchObject({
+      expect(terminalParts).toHaveLength(1);
+      expect(terminalParts[0]).toMatchObject({
         properties: {
-          part: { callID: "call-bg", tool: "task", sessionID: SESSION, state: { status: "completed" } },
+          part: {
+            callID: "call-bg",
+            tool: "task",
+            sessionID: SESSION,
+            messageID: MESSAGE,
+            state: {
+              status: "completed",
+              metadata: { background: true },
+              time: { start: 1000, end: 1000 },
+            },
+          },
         },
       });
     });
@@ -667,8 +692,58 @@ describe("opencode/v2/events", () => {
       ]);
 
       expect(result.at(-1)).toMatchObject({
-        properties: { part: { callID: "call-bg", state: { status: "error", error: "boom" } } },
+        properties: {
+          part: {
+            callID: "call-bg",
+            state: { status: "error", error: "boom", metadata: { background: true } },
+          },
+        },
       });
     });
+
+    it("releases an interrupted child with its idle outcome and one marked tool end", () => {
+      const translate = createV2EventTranslator();
+      launchSubagent(translate);
+
+      const result = payloads(translate, [
+        event("session.execution.interrupted", { sessionID: "child-1", reason: "user" }, false),
+      ]);
+
+      expect(result[1]).toMatchObject({
+        type: "session.idle",
+        properties: { sessionID: "child-1", interrupted: true },
+      });
+      expect(toolStates(result)).toMatchObject([
+        { status: "completed", metadata: { background: true } },
+      ]);
+    });
+
+    it.each([false, true])(
+      "does not await an already-ended execution (child resumed: %s)",
+      (resumed) => {
+        const translate = createV2EventTranslator();
+        const child = { sessionID: "child-1" };
+        const states = toolStates(
+          payloads(translate, [
+            event("session.tool.input.started", { ...base, name: "subagent" }),
+            event("session.tool.called", { ...base, input: { agent: "general" }, executed: false }),
+            event("session.execution.succeeded", child, false),
+            ...(resumed ? [event("session.execution.started", child, false)] : []),
+            event("session.tool.success", {
+              ...base,
+              content: [],
+              metadata: { ...child, status: "running" },
+              executed: false,
+            }),
+          ]),
+        );
+
+        expect(states.at(-1)?.status).toBe(resumed ? "running" : "completed");
+        expect(states.at(-1)?.metadata).toMatchObject(
+          resumed ? { background: true } : { sessionId: "child-1" },
+        );
+        if (!resumed) expect(states.at(-1)?.metadata).not.toHaveProperty("background");
+      },
+    );
   });
 });
