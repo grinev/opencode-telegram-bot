@@ -17,7 +17,6 @@ const mocked = vi.hoisted(() => ({
   pinnedRefreshContextLimitMock: vi.fn(),
   pinnedGetContextInfoMock: vi.fn(),
   pinnedGetContextLimitMock: vi.fn(),
-  pinnedRefreshMock: vi.fn(),
   createMainKeyboardMock: vi.fn(),
   switchedMock: vi.fn(),
   notifyMock: vi.fn(),
@@ -81,11 +80,10 @@ function createDeps() {
       updateAgent: mocked.keyboardUpdateAgentMock,
       updateContext: mocked.keyboardUpdateContextMock,
     } as never,
-    pinnedMessageManager: {
+    sessionMetricsManager: {
       refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
       getContextInfo: mocked.pinnedGetContextInfoMock,
       getContextLimit: mocked.pinnedGetContextLimitMock,
-      refresh: mocked.pinnedRefreshMock,
     } as never,
   });
 }
@@ -108,7 +106,6 @@ describe("bot variant selection", () => {
     mocked.pinnedRefreshContextLimitMock.mockReset();
     mocked.pinnedGetContextInfoMock.mockReset();
     mocked.pinnedGetContextLimitMock.mockReset();
-    mocked.pinnedRefreshMock.mockReset();
     mocked.createMainKeyboardMock.mockReset();
     mocked.switchedMock.mockReset();
     mocked.notifyMock.mockReset();
@@ -128,11 +125,10 @@ describe("bot variant selection", () => {
     mocked.pinnedGetContextInfoMock.mockReturnValue(null);
     mocked.createMainKeyboardMock.mockReturnValue({});
     mocked.switchedMock.mockResolvedValue(undefined);
-    mocked.pinnedRefreshMock.mockResolvedValue(undefined);
     mocked.pinnedRefreshContextLimitMock.mockResolvedValue(undefined);
   });
 
-  it("refreshes the pinned dashboard after a successful variant pick", async () => {
+  it("publishes the keyboard after a successful variant pick", async () => {
     const keyboard = { kind: "main" };
     mocked.createMainKeyboardMock.mockReturnValue(keyboard);
 
@@ -149,7 +145,6 @@ describe("bot variant selection", () => {
       t("variant.changed_message", { name: "Low" }),
       keyboard,
     );
-    expect(mocked.pinnedRefreshMock).toHaveBeenCalledOnce();
   });
 
   it("does not refresh the pin when no model is selected", async () => {
@@ -166,7 +161,6 @@ describe("bot variant selection", () => {
 
     expect(result).toBe(true);
     expect(mocked.setCurrentVariantMock).not.toHaveBeenCalled();
-    expect(mocked.pinnedRefreshMock).not.toHaveBeenCalled();
     expect(mocked.notifyMock).toHaveBeenCalled();
   });
 });

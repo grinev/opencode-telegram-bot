@@ -3,4 +3,5 @@ export interface RenameState {
   sessionDirectory: string;
   currentTitle: string;
   messageId: number | null;
+  submittedTitle?: string;
 }

@@ -24,7 +24,6 @@ export type AbortPauseOutcome =
   | { kind: "failed"; reason: string };
 
 type GoalNoticeListener = (sessionId: string, notice: GoalNotice) => void | Promise<void>;
-type GoalSnapshotListener = () => void | Promise<void>;
 
 /**
  * Reads and changes the followed session's server goal. It decides when a
@@ -33,16 +32,11 @@ type GoalSnapshotListener = () => void | Promise<void>;
 export class GoalService {
   private capability: "unknown" | "supported" | "unsupported" = "unknown";
   private onNotice: GoalNoticeListener | null = null;
-  private onSnapshot: GoalSnapshotListener | null = null;
 
   constructor(private readonly manager: GoalManager) {}
 
   setOnNotice(listener: GoalNoticeListener | null): void {
     this.onNotice = listener;
-  }
-
-  setOnSnapshot(listener: GoalSnapshotListener | null): void {
-    this.onSnapshot = listener;
   }
 
   forgetCapability(): void {
@@ -305,12 +299,6 @@ export class GoalService {
   }
 
   private async publish(sessionId: string, notice: GoalNotice | null): Promise<void> {
-    try {
-      await this.onSnapshot?.();
-    } catch (error) {
-      logger.warn("[Goal] Dashboard refresh failed", error);
-    }
-
     if (!notice || !this.onNotice) {
       return;
     }

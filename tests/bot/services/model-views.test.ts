@@ -23,9 +23,8 @@ import {
 } from "../../../src/bot/services/model-views.js";
 
 function createDeps() {
-  const pinnedMessageManager = {
+  const sessionMetricsManager = {
     refreshContextLimit: vi.fn().mockResolvedValue(undefined),
-    refresh: vi.fn().mockResolvedValue(undefined),
   };
   const keyboardManager = {
     isInitialized: vi.fn(() => true),
@@ -33,8 +32,8 @@ function createDeps() {
   };
 
   return {
-    deps: { pinnedMessageManager, keyboardManager } as unknown as ModelViewsDeps,
-    pinnedMessageManager,
+    deps: { sessionMetricsManager, keyboardManager } as unknown as ModelViewsDeps,
+    sessionMetricsManager,
     keyboardManager,
   };
 }
@@ -45,12 +44,12 @@ describe("bot/services/model-views", () => {
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
-    const { deps, pinnedMessageManager, keyboardManager } = createDeps();
+    const { deps, sessionMetricsManager, keyboardManager } = createDeps();
 
     refreshModelViewsAfterLateCatalogSettle(deps, "opencode_start_success");
 
     await vi.waitFor(() => expect(mocked.nextLateCatalogChangeMock).toHaveBeenCalledTimes(3));
-    expect(pinnedMessageManager.refresh).toHaveBeenCalledTimes(2);
+    expect(sessionMetricsManager.refreshContextLimit).toHaveBeenCalledTimes(2);
     expect(keyboardManager.updateModel).toHaveBeenCalledTimes(2);
     expect(keyboardManager.updateModel).toHaveBeenCalledWith({
       providerID: "opencode",
@@ -62,12 +61,12 @@ describe("bot/services/model-views", () => {
   it("does not redraw when the catalog settles without a change", async () => {
     mocked.nextLateCatalogChangeMock.mockReset();
     mocked.nextLateCatalogChangeMock.mockResolvedValue(false);
-    const { deps, pinnedMessageManager } = createDeps();
+    const { deps, sessionMetricsManager } = createDeps();
 
     refreshModelViewsAfterLateCatalogSettle(deps, "config_reload");
 
     await vi.waitFor(() => expect(mocked.nextLateCatalogChangeMock).toHaveBeenCalledTimes(1));
     await Promise.resolve();
-    expect(pinnedMessageManager.refresh).not.toHaveBeenCalled();
+    expect(sessionMetricsManager.refreshContextLimit).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,22 @@ export function getCurrentSession(): SessionInfo | null {
   return getSettingsSession() ?? null;
 }
 
+/** Commit metadata only, without triggering a selection change or touching queued prompts. */
+export function updateSelectedSessionTitle(sessionId: string, title: string): SessionInfo | null {
+  const current = getCurrentSession();
+  if (!current || current.id !== sessionId || !title.trim() || current.title === title) {
+    return null;
+  }
+  setSettingsSession({ ...current, title });
+  return current;
+}
+
+/** Ignore a delayed read if a switch or newer title already reached the store. */
+export async function reconcileSelectedSessionTitle(session: SessionInfo): Promise<SessionInfo | null> {
+  const title = await fetchSessionTitle(session);
+  return getCurrentSession() === session ? updateSelectedSessionTitle(session.id, title) : null;
+}
+
 /**
  * Title OpenCode has for the session now. The remembered one goes stale once
  * OpenCode names a session after its first prompt, so it is only the fallback.

@@ -133,6 +133,7 @@ beforeEach(() => {
     keyboardManager: {
       updateAgent: mocked.keyboardUpdateAgentMock,
       updateModel: mocked.keyboardUpdateModelMock,
+      sendKeyboardUpdate: vi.fn().mockResolvedValue(undefined),
     } as never,
     bot: {
       api: {

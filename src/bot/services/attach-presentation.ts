@@ -1,5 +1,6 @@
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import type { AttachPresentationDeps } from "../../app/services/attach-service.js";
+import { getDashboardButtonLabel } from "../keyboards/dashboard-button.js";
 import {
   applyPermissionPromptChanges,
   showPermissionRequest,
@@ -12,62 +13,36 @@ import {
   type QuestionMenuDeps,
 } from "../menus/question-menu.js";
 
-type AttachPresentationFactoryDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager"> &
+type AttachPresentationFactoryDeps = Pick<AppContainer, "keyboardManager" | "sessionMetricsManager"> &
   PermissionMenuDeps &
   QuestionMenuDeps;
 
 export function createAttachPresentation(
   deps: AttachPresentationFactoryDeps,
 ): AttachPresentationDeps {
-  const { keyboardManager, pinnedMessageManager } = deps;
+  const { keyboardManager, sessionMetricsManager } = deps;
 
   return {
-    async preparePinnedSession({
+    async prepareSessionMetrics({
       api,
       chatId,
       session,
       forceFullRestore = false,
       sessionCreated = false,
     }) {
-      if (!pinnedMessageManager.isInitialized()) {
-        pinnedMessageManager.initialize(api, chatId);
-      }
-
       keyboardManager.initialize(api, chatId);
-
-      const pinnedState = pinnedMessageManager.getState();
-      if (pinnedState.sessionId === session.id && pinnedState.messageId) {
-        // Back to the session on screen: a change still loading must not replace its dashboard.
-        pinnedMessageManager.dropPendingPrepare();
-        if (forceFullRestore) {
-          await pinnedMessageManager.loadContextFromHistory(session.id, session.directory);
-        }
-        return;
-      }
-
-      if (pinnedState.messageId && pinnedState.sessionId === null) {
-        await pinnedMessageManager.prepareRestore(session.id, session.title, session.directory);
-      } else {
-        await pinnedMessageManager.prepareSessionChange(session.id, session.title, {
-          directory: session.directory,
-          created: sessionCreated,
-        });
-      }
-    },
-    async showPinnedSession() {
-      await pinnedMessageManager.showPreparedSession();
-
-      const contextInfo = pinnedMessageManager.getContextInfo();
+      await sessionMetricsManager.prepare(session, { force: forceFullRestore, created: sessionCreated });
+      const contextInfo = sessionMetricsManager.getContextInfo();
       if (contextInfo) {
         keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
       }
     },
-    async syncAttachState(attached, busy) {
-      if (!pinnedMessageManager.isInitialized()) {
+    async refreshRestoredSelection(api, chatId, previousTitle) {
+      if (previousTitle !== undefined && getDashboardButtonLabel(previousTitle) === getDashboardButtonLabel()) {
         return;
       }
-
-      await pinnedMessageManager.setAttachState(attached, busy);
+      keyboardManager.initialize(api, chatId);
+      await keyboardManager.sendKeyboardUpdate(chatId);
     },
     showCurrentQuestion: (api, chatId) => showCurrentQuestion(api, chatId, deps),
     showPermissionRequest: (api, chatId, request) =>

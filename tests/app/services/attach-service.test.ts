@@ -11,6 +11,7 @@ import { createAttachPresentation } from "../../../src/bot/services/attach-prese
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 import { defined } from "../../helpers/defined.js";
+import { deferred } from "../../helpers/deferred.js";
 
 const mocked = vi.hoisted(() => ({
   currentProject: {
@@ -30,20 +31,13 @@ const mocked = vi.hoisted(() => ({
   setSessionSummaryMock: vi.fn(),
   setBotAndChatIdMock: vi.fn(),
   registerRestoredPermissionChildMock: vi.fn(),
-  pinnedIsInitializedMock: vi.fn(() => true),
-  pinnedInitializeMock: vi.fn(),
-  pinnedGetStateMock: vi.fn(),
-  pinnedPrepareSessionChangeMock: vi.fn(),
-  pinnedPrepareRestoreMock: vi.fn(),
-  pinnedShowPreparedSessionMock: vi.fn(),
-  pinnedDropPendingPrepareMock: vi.fn(),
-  pinnedLoadContextFromHistoryMock: vi.fn(),
-  pinnedGetContextInfoMock: vi.fn(() => null),
-  pinnedSetAttachStateMock: vi.fn(),
-  pinnedClearMock: vi.fn(),
+  prepareMetricsMock: vi.fn(),
+  getContextInfoMock: vi.fn(),
+  updateTitleMock: vi.fn(),
   clearSessionMock: vi.fn(),
   keyboardInitializeMock: vi.fn(),
   keyboardUpdateContextMock: vi.fn(),
+  sendKeyboardUpdateMock: vi.fn(),
   showCurrentQuestionMock: vi.fn(),
   showPermissionRequestMock: vi.fn(),
   closeQuestionSettledOutsideMock: vi.fn(),
@@ -57,11 +51,13 @@ const mocked = vi.hoisted(() => ({
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
+  getCurrentSession: vi.fn(() => mocked.currentSession),
 }));
 
 vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
   clearSession: mocked.clearSessionMock,
+  updateSelectedSessionTitle: mocked.updateTitleMock,
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -108,22 +104,14 @@ function createDeps(): AppContainer {
       startMissedLiveTurn: mocked.startMissedLiveTurnMock,
       clear: vi.fn(),
     } as unknown as AppContainer["summaryAggregator"],
-    pinnedMessageManager: {
-      isInitialized: mocked.pinnedIsInitializedMock,
-      initialize: mocked.pinnedInitializeMock,
-      getState: mocked.pinnedGetStateMock,
-      prepareSessionChange: mocked.pinnedPrepareSessionChangeMock,
-      prepareRestore: mocked.pinnedPrepareRestoreMock,
-      showPreparedSession: mocked.pinnedShowPreparedSessionMock,
-      dropPendingPrepare: mocked.pinnedDropPendingPrepareMock,
-      loadContextFromHistory: mocked.pinnedLoadContextFromHistoryMock,
-      getContextInfo: mocked.pinnedGetContextInfoMock,
-      setAttachState: mocked.pinnedSetAttachStateMock,
-      clear: mocked.pinnedClearMock,
-    } as unknown as AppContainer["pinnedMessageManager"],
+    sessionMetricsManager: {
+      prepare: mocked.prepareMetricsMock,
+      getContextInfo: mocked.getContextInfoMock,
+    } as unknown as AppContainer["sessionMetricsManager"],
     keyboardManager: {
       initialize: mocked.keyboardInitializeMock,
       updateContext: mocked.keyboardUpdateContextMock,
+      sendKeyboardUpdate: mocked.sendKeyboardUpdateMock,
     } as unknown as AppContainer["keyboardManager"],
   };
 }
@@ -177,9 +165,9 @@ describe("attach/service", () => {
     });
     mocked.sessionGetMock.mockReset();
     mocked.sessionGetMock.mockResolvedValue({ data: { id: "session-1" }, error: undefined });
-    mocked.pinnedClearMock.mockReset();
-    mocked.pinnedClearMock.mockResolvedValue(undefined);
     mocked.clearSessionMock.mockReset();
+    mocked.sendKeyboardUpdateMock.mockReset();
+    mocked.updateTitleMock.mockReset();
     mocked.registerRestoredPermissionChildMock.mockReset();
     mocked.questionListMock.mockReset();
     mocked.questionListMock.mockResolvedValue({ data: [], error: null });
@@ -187,27 +175,8 @@ describe("attach/service", () => {
     mocked.permissionListMock.mockResolvedValue({ data: [], error: null });
     mocked.setSessionSummaryMock.mockReset();
     mocked.setBotAndChatIdMock.mockReset();
-    mocked.pinnedIsInitializedMock.mockReset();
-    mocked.pinnedIsInitializedMock.mockReturnValue(true);
-    mocked.pinnedInitializeMock.mockReset();
-    mocked.pinnedGetStateMock.mockReset();
-    mocked.pinnedGetStateMock.mockImplementation(() => ({
-      sessionId: mocked.currentSession?.id ?? null,
-      messageId: 123,
-    }));
-    mocked.pinnedPrepareSessionChangeMock.mockReset();
-    mocked.pinnedPrepareSessionChangeMock.mockResolvedValue(undefined);
-    mocked.pinnedPrepareRestoreMock.mockReset();
-    mocked.pinnedPrepareRestoreMock.mockResolvedValue(undefined);
-    mocked.pinnedShowPreparedSessionMock.mockReset();
-    mocked.pinnedShowPreparedSessionMock.mockResolvedValue(undefined);
-    mocked.pinnedDropPendingPrepareMock.mockReset();
-    mocked.pinnedLoadContextFromHistoryMock.mockReset();
-    mocked.pinnedLoadContextFromHistoryMock.mockResolvedValue(undefined);
-    mocked.pinnedGetContextInfoMock.mockReset();
-    mocked.pinnedGetContextInfoMock.mockReturnValue(null);
-    mocked.pinnedSetAttachStateMock.mockReset();
-    mocked.pinnedSetAttachStateMock.mockResolvedValue(undefined);
+    mocked.prepareMetricsMock.mockReset().mockResolvedValue(undefined);
+    mocked.getContextInfoMock.mockReset().mockReturnValue(null);
     mocked.keyboardInitializeMock.mockReset();
     mocked.keyboardUpdateContextMock.mockReset();
     mocked.showCurrentQuestionMock.mockReset();
@@ -226,26 +195,28 @@ describe("attach/service", () => {
     mocked.stopEventListeningMock.mockReset();
   });
 
-  it("draws the dashboard only after the session's updates are followed", async () => {
-    mocked.pinnedGetStateMock.mockReturnValueOnce({ sessionId: "other", messageId: 1 });
+  it("loads keyboard context before following updates without sending a dashboard", async () => {
+    mocked.getContextInfoMock.mockReturnValue({ tokensUsed: 20, tokensLimit: 100 });
+    const bot = createBot();
 
     await attachToSession({
       ...deps,
-      bot: createBot(),
+      bot,
       chatId: 777,
       session: mocked.currentSession!,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
-    const prepared = defined(mocked.pinnedPrepareSessionChangeMock.mock.invocationCallOrder[0]);
+    const prepared = defined(mocked.prepareMetricsMock.mock.invocationCallOrder[0]);
     const followed = defined(mocked.setSessionSummaryMock.mock.invocationCallOrder[0]);
-    const shown = defined(mocked.pinnedShowPreparedSessionMock.mock.invocationCallOrder[0]);
     expect(prepared).toBeLessThan(followed);
-    expect(followed).toBeLessThan(shown);
+    expect(mocked.keyboardUpdateContextMock).toHaveBeenCalledWith(20, 100);
+    expect(bot.api.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("still draws the prepared dashboard when following the session fails", async () => {
+  it("keeps the new keyboard context when following the session fails", async () => {
     mocked.ensureEventSubscriptionMock.mockRejectedValueOnce(new Error("subscribe failed"));
+    mocked.getContextInfoMock.mockReturnValue({ tokensUsed: 20, tokensLimit: 100 });
 
     await expect(
       attachToSession({
@@ -257,7 +228,7 @@ describe("attach/service", () => {
       }),
     ).rejects.toThrow("subscribe failed");
 
-    expect(mocked.pinnedShowPreparedSessionMock).toHaveBeenCalledTimes(1);
+    expect(mocked.keyboardUpdateContextMock).toHaveBeenCalledWith(20, 100);
   });
 
   it("follows an idle session and updates attach state", async () => {
@@ -278,7 +249,6 @@ describe("attach/service", () => {
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledWith("D:\\Projects\\Repo");
     expect(mocked.setSessionSummaryMock).toHaveBeenCalledWith("session-1");
     expect(mocked.setBotAndChatIdMock).toHaveBeenCalled();
-    expect(mocked.pinnedSetAttachStateMock).toHaveBeenCalledWith(true, false);
     expect(container.attachManager.getSnapshot()).toMatchObject({
       sessionId: "session-1",
       directory: "D:\\Projects\\Repo",
@@ -481,27 +451,27 @@ describe("attach/service", () => {
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledTimes(1);
   });
 
-  it("reuses a saved pinned message after restart instead of recreating it", async () => {
-    mocked.pinnedGetStateMock.mockReturnValueOnce({
-      sessionId: null,
-      messageId: 123,
+  it("corrects a restored title and sends only the keyboard update", async () => {
+    const bot = createBot();
+    mocked.sessionGetMock.mockResolvedValue({ data: { id: "session-1", title: "Current title" } });
+    mocked.updateTitleMock.mockImplementation(() => {
+      const previous = mocked.currentSession!;
+      mocked.currentSession = { ...previous, title: "Current title" };
+      return previous;
     });
 
     const restored = await restoreAttachedCurrentSession({
       ...deps,
-      bot: createBot(),
+      bot,
       chatId: 777,
       ensureEventSubscription: mocked.ensureEventSubscriptionMock,
     });
 
     expect(restored).toBe(true);
-    expect(mocked.pinnedPrepareRestoreMock).toHaveBeenCalledWith(
-      "session-1",
-      "Session One",
-      "D:\\Projects\\Repo",
-    );
-    expect(mocked.pinnedPrepareSessionChangeMock).not.toHaveBeenCalled();
-    expect(mocked.pinnedShowPreparedSessionMock).toHaveBeenCalledTimes(1);
+    expect(mocked.updateTitleMock).toHaveBeenCalledWith("session-1", "Current title");
+    expect(mocked.sendKeyboardUpdateMock).toHaveBeenCalledExactlyOnceWith(777);
+    expect(mocked.prepareMetricsMock).toHaveBeenCalledWith(mocked.currentSession, { created: false, force: false });
+    expect(bot.api.sendMessage).not.toHaveBeenCalled();
   });
 
   it("drops a saved session the server no longer has instead of following it", async () => {
@@ -519,9 +489,39 @@ describe("attach/service", () => {
 
     expect(restored).toBe(false);
     expect(mocked.clearSessionMock).toHaveBeenCalledOnce();
-    expect(mocked.pinnedClearMock).toHaveBeenCalledOnce();
+    expect(mocked.sendKeyboardUpdateMock).toHaveBeenCalledExactlyOnceWith(777);
     expect(mocked.ensureEventSubscriptionMock).not.toHaveBeenCalled();
     expect(container.attachManager.getSnapshot()).toBeNull();
+  });
+
+  it("does not clear a newer selection when an old startup lookup returns not found", async () => {
+    const pending = deferred<{ error: { name: string; data: { message: string } } }>();
+    mocked.sessionGetMock.mockReturnValueOnce(pending.promise);
+    const restoring = restoreAttachedCurrentSession({
+      ...deps, bot: createBot(), chatId: 777, ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+    await vi.waitFor(() => expect(mocked.sessionGetMock).toHaveBeenCalledOnce());
+    mocked.currentSession = { ...mocked.currentSession!, id: "newer" };
+    pending.resolve({ error: { name: "NotFoundError", data: { message: "Session not found" } } });
+
+    expect(await restoring).toBe(false);
+    expect(mocked.clearSessionMock).not.toHaveBeenCalled();
+    expect(mocked.sendKeyboardUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("still clears a missing saved session if only its title changed during the lookup", async () => {
+    const pending = deferred<{ error: { name: string; data: { message: string } } }>();
+    mocked.sessionGetMock.mockReturnValueOnce(pending.promise);
+    const restoring = restoreAttachedCurrentSession({
+      ...deps, bot: createBot(), chatId: 777, ensureEventSubscription: mocked.ensureEventSubscriptionMock,
+    });
+    await vi.waitFor(() => expect(mocked.sessionGetMock).toHaveBeenCalledOnce());
+    mocked.currentSession = { ...mocked.currentSession!, title: "External title" };
+    pending.resolve({ error: { name: "NotFoundError", data: { message: "Session not found" } } });
+
+    expect(await restoring).toBe(false);
+    expect(mocked.clearSessionMock).toHaveBeenCalledOnce();
+    expect(mocked.ensureEventSubscriptionMock).not.toHaveBeenCalled();
   });
 
   it("keeps the saved session when its lookup fails for another reason", async () => {
@@ -818,7 +818,7 @@ describe("attach/service", () => {
     });
 
     expect(restored).toBe(false);
-    expect(mocked.pinnedLoadContextFromHistoryMock).not.toHaveBeenCalled();
+    expect(mocked.prepareMetricsMock).not.toHaveBeenCalled();
     expect(mocked.sessionStatusMock).not.toHaveBeenCalled();
     expect(mocked.questionListMock).not.toHaveBeenCalled();
     expect(mocked.permissionListMock).not.toHaveBeenCalled();
@@ -847,7 +847,9 @@ describe("attach/service", () => {
 
     expect(result.alreadyAttached).toBe(true);
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledTimes(1);
-    expect(mocked.pinnedLoadContextFromHistoryMock).toHaveBeenCalledTimes(1);
+    expect(mocked.prepareMetricsMock).toHaveBeenLastCalledWith(
+      mocked.currentSession, { force: true, created: false },
+    );
     expect(mocked.sessionStatusMock).toHaveBeenCalledTimes(2);
     expect(mocked.questionListMock).toHaveBeenCalledTimes(2);
   });

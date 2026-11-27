@@ -35,7 +35,6 @@ const mocked = vi.hoisted(() => ({
   keyboardUpdateModelMock: vi.fn(),
   keyboardUpdateContextMock: vi.fn(),
   applySessionSettingsMock: vi.fn(),
-  pinnedGetStateMock: vi.fn(),
   pinnedOnModelChangeMock: vi.fn(),
   getStoredModelMock: vi.fn(() => ({
     providerID: "opencode-go",
@@ -213,9 +212,8 @@ function createDeps() {
       updateModel: mocked.keyboardUpdateModelMock,
       updateContext: mocked.keyboardUpdateContextMock,
     } as never,
-    pinnedMessageManager: {
-      getState: mocked.pinnedGetStateMock,
-      onModelChange: mocked.pinnedOnModelChangeMock,
+    sessionMetricsManager: {
+      refreshContextLimit: mocked.pinnedOnModelChangeMock,
     } as never,
     bot: { api: {} } as Bot<Context>,
   };
@@ -264,8 +262,6 @@ describe("bot/commands/sessions", () => {
     mocked.keyboardUpdateContextMock.mockReset();
     mocked.applySessionSettingsMock.mockReset();
     mocked.applySessionSettingsMock.mockResolvedValue(false);
-    mocked.pinnedGetStateMock.mockReset();
-    mocked.pinnedGetStateMock.mockReturnValue({ sessionId: null, messageId: null });
     mocked.pinnedOnModelChangeMock.mockReset();
     mocked.pinnedOnModelChangeMock.mockResolvedValue(undefined);
     mocked.resolveProjectAgentMock.mockReset();
@@ -1129,7 +1125,7 @@ describe("bot/commands/sessions", () => {
     );
   });
 
-  describe("redrawing the dashboard after the pull", () => {
+  describe("refreshing keyboard context after the pull", () => {
     async function selectSessionOne(): Promise<void> {
       mocked.sessionGetMock.mockResolvedValueOnce({ data: createSession(0), error: null });
       startInteractionForTest(container.interactionManager, {
@@ -1141,8 +1137,8 @@ describe("bot/commands/sessions", () => {
       await handleSessionSelect(createCallbackContext("session:session-1", 456), createDeps());
     }
 
-    it("redraws the dashboard of the re-selected session when the pull changed the model", async () => {
-      mocked.pinnedGetStateMock.mockReturnValue({ sessionId: "session-1", messageId: 999 });
+    it("refreshes the limit of the re-selected session when the pull changed the model", async () => {
+      mocked.currentSession = { id: "session-1", title: "Session 1", directory: "/test" };
       mocked.applySessionSettingsMock.mockResolvedValue(true);
 
       await selectSessionOne();
@@ -1153,8 +1149,8 @@ describe("bot/commands/sessions", () => {
       );
     });
 
-    it("leaves the dashboard of the re-selected session alone when the model did not change", async () => {
-      mocked.pinnedGetStateMock.mockReturnValue({ sessionId: "session-1", messageId: 999 });
+    it("does not refresh the limit of the re-selected session when the model did not change", async () => {
+      mocked.currentSession = { id: "session-1", title: "Session 1", directory: "/test" };
 
       await selectSessionOne();
 
@@ -1162,7 +1158,7 @@ describe("bot/commands/sessions", () => {
     });
 
     it("leaves a switch to another session to the attach", async () => {
-      mocked.pinnedGetStateMock.mockReturnValue({ sessionId: "session-other", messageId: 999 });
+      mocked.currentSession = { id: "session-other", title: "Other", directory: "/test" };
       mocked.applySessionSettingsMock.mockResolvedValue(true);
 
       await selectSessionOne();

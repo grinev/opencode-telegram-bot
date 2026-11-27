@@ -1,75 +1,36 @@
-import { logger } from "../../../utils/logger.js";
 import { isCompactProgressMode, type EventHandlerDeps } from "./handler-context.js";
 
 type DashboardDeps = EventHandlerDeps<
-  "keyboardManager" | "pinnedMessageManager" | "summaryAggregator"
+  "keyboardManager" | "sessionMetricsManager" | "summaryAggregator"
 >;
 
-/** Token, cost, context and changed-file updates for the pinned dashboard and keyboard. */
-export function registerDashboardHandlers(deps: DashboardDeps): void {
-  const { runtime, keyboardManager, pinnedMessageManager, summaryAggregator } = deps;
+/** Live values for the keyboard and on-demand snapshots, not Telegram card edits. */
+export function registerDashboardHandlers(
+  deps: DashboardDeps,
+  reconcileTitle?: (sessionId: string) => void,
+): void {
+  const { runtime, keyboardManager, sessionMetricsManager, summaryAggregator, policy } = deps;
 
-  // Values reach the dashboard at once; its redraws wait while the chat's output is held.
-  pinnedMessageManager.setRenderScheduler((render) => summaryAggregator.runOutbound(render));
-
-  summaryAggregator.setOnTokens(async (_sessionId, tokens, isCompleted) => {
-    if (!pinnedMessageManager.isInitialized()) {
-      return;
-    }
-
-    try {
-      logger.debug(
-        `[Bot] Received tokens: input=${tokens.input}, output=${tokens.output}, completed=${isCompleted}`,
-      );
-
-      const contextSize = tokens.input + tokens.cacheRead;
-      const contextLimit = pinnedMessageManager.getContextLimit();
-
-      if (!isCompleted && contextSize === 0) {
-        logger.debug("[Bot] Skipping zero-token intermediate update");
-        return;
-      }
-
-      if (contextLimit > 0) {
-        keyboardManager.updateContext(contextSize, contextLimit);
-      }
-      pinnedMessageManager.updateTokensSilent(tokens);
-
-      if (isCompleted) {
-        await pinnedMessageManager.onMessageComplete(tokens);
-      }
-    } catch (err) {
-      logger.error("[Bot] Error updating pinned message with tokens:", err);
-    }
+  summaryAggregator.setOnTokens((sessionId, tokens, isCompleted) => {
+    if (!policy.isForegroundSession(sessionId)) return;
+    const contextSize = tokens.input + tokens.cacheRead;
+    if (isCompleted || contextSize > 0) sessionMetricsManager.onTokens(sessionId, contextSize);
+    if (isCompleted) reconcileTitle?.(sessionId);
   });
 
-  summaryAggregator.setOnCost(async (_sessionId, cost) => {
-    if (!pinnedMessageManager.isInitialized()) {
-      return;
-    }
-
-    try {
-      logger.debug(`[Bot] Cost update: $${cost.toFixed(2)}`);
-      await pinnedMessageManager.onCostUpdate(cost);
-    } catch (err) {
-      logger.error("[Bot] Error updating cost:", err);
+  summaryAggregator.setOnCost((sessionId, cost) => {
+    if (policy.isForegroundSession(sessionId)) {
+      sessionMetricsManager.onCostUpdate(sessionId, cost);
     }
   });
 
   summaryAggregator.setOnSessionCompacted(async (sessionId, directory) => {
-    if (!pinnedMessageManager.isInitialized()) {
-      return;
-    }
-
-    try {
-      logger.info(`[Bot] Session compacted, reloading context: ${sessionId}`);
-      await pinnedMessageManager.onSessionCompacted(sessionId, directory);
-    } catch (err) {
-      logger.error("[Bot] Error reloading context after compaction:", err);
+    if (policy.isForegroundSession(sessionId)) {
+      await sessionMetricsManager.onSessionCompacted(sessionId, directory);
     }
   });
 
-  summaryAggregator.setOnSessionDiff(async (sessionId, diffs) => {
+  summaryAggregator.setOnSessionDiff((sessionId, diffs) => {
     if (isCompactProgressMode()) {
       // Held with the card's other updates, so it keeps their order.
       void summaryAggregator.runOutbound(() => {
@@ -79,14 +40,8 @@ export function registerDashboardHandlers(deps: DashboardDeps): void {
       });
     }
 
-    if (!pinnedMessageManager.isInitialized()) {
-      return;
-    }
-
-    try {
-      await pinnedMessageManager.onSessionDiff(diffs);
-    } catch (err) {
-      logger.error("[Bot] Error updating session diff:", err);
+    if (policy.isForegroundSession(sessionId)) {
+      sessionMetricsManager.onSessionDiff(sessionId, diffs);
     }
   });
 
@@ -96,19 +51,11 @@ export function registerDashboardHandlers(deps: DashboardDeps): void {
         runtime.compactProgressStreamer.addFileChange(sessionId, change.file),
       );
     }
-
-    if (!pinnedMessageManager.isInitialized()) {
-      return;
-    }
-    pinnedMessageManager.requestFileRefresh();
   });
 
-  pinnedMessageManager.setOnKeyboardUpdate(async (tokensUsed, tokensLimit) => {
-    try {
-      logger.debug(`[Bot] Updating keyboard with context: ${tokensUsed}/${tokensLimit}`);
+  sessionMetricsManager.setOnKeyboardUpdate((tokensUsed, tokensLimit) => {
+    if (keyboardManager.isInitialized()) {
       keyboardManager.updateContext(tokensUsed, tokensLimit);
-    } catch (err) {
-      logger.error("[Bot] Error updating keyboard context:", err);
     }
   });
 }

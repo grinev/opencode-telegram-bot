@@ -4,6 +4,7 @@ import { formatModelForButton } from "../../app/types/model.js";
 import type { ModelInfo } from "../../app/types/model.js";
 import type { ContextInfo } from "./keyboard-types.js";
 import { t } from "../../i18n/index.js";
+import { getDashboardButtonLabel } from "./dashboard-button.js";
 
 /**
  * Format token count for display (e.g., 150000 -> "150K", 1500000 -> "1.5M")
@@ -34,8 +35,7 @@ function formatContextForButton(contextInfo: ContextInfo): string {
  * @param contextInfo Optional context information (tokens used/limit)
  * @param variantName Optional variant display name (e.g., "💭 Default")
  * @param queuedPromptLabels Optional queued prompt labels, one row each above the fixed grid
- * @returns Reply Keyboard with queued prompts on top, agent and context in the next row,
- *          model and variant in the last row
+ * @returns Reply Keyboard with queued prompts, goal, dashboard, and the fixed grid
  */
 export function createMainKeyboard(
   currentAgent: string,
@@ -71,10 +71,12 @@ export function createMainKeyboard(
     keyboard.row();
   }
 
-  // Row 1: agent and context buttons
+  keyboard.text(getDashboardButtonLabel()).row();
+
+  // Agent and context buttons
   keyboard.text(agentText).text(contextText).row();
 
-  // Row 2: model and variant buttons
+  // Model and variant buttons
   keyboard.text(modelText).text(variantText).row();
 
   return keyboard.resized().persistent();

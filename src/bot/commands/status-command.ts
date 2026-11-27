@@ -14,7 +14,7 @@ import { t } from "../../i18n/index.js";
 import { sendBotText } from "../messages/telegram-text.js";
 import { getBotVersion } from "../../runtime/bot-version.js";
 
-export type StatusCommandDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager"> &
+export type StatusCommandDeps = Pick<AppContainer, "keyboardManager" | "sessionMetricsManager"> &
   Partial<Pick<AppContainer, "manualCompaction">>;
 
 export async function statusCommand(ctx: CommandContext<Context>, deps: StatusCommandDeps) {
@@ -86,19 +86,16 @@ export async function statusCommand(ctx: CommandContext<Context>, deps: StatusCo
     }
 
     if (ctx.chat) {
-      if (!deps.pinnedMessageManager.isInitialized()) {
-        deps.pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
-      }
       // Fetch context limit if not yet loaded (e.g. fresh bot start)
-      if (deps.pinnedMessageManager.getContextLimit() === 0) {
-        await deps.pinnedMessageManager.refreshContextLimit();
+      if (deps.sessionMetricsManager.getContextLimit() === 0) {
+        await deps.sessionMetricsManager.refreshContextLimit();
       }
       deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
     // A session change or restore still loading answers with its values, not the previous ones
-    await deps.pinnedMessageManager.waitForSessionValues();
+    await deps.sessionMetricsManager.waitForSessionValues();
     // Sync current context (tokens used + limit) into keyboard state
-    const contextInfo = deps.pinnedMessageManager.getContextInfo();
+    const contextInfo = deps.sessionMetricsManager.getContextInfo();
     if (contextInfo) {
       deps.keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
     }

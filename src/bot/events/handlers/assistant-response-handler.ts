@@ -50,7 +50,6 @@ type AssistantResponseDeps = EventHandlerDeps<
   | "externalUserInputSuppressionManager"
   | "foregroundSessionState"
   | "keyboardManager"
-  | "pinnedMessageManager"
   | "scheduledTaskRuntime"
   | "summaryAggregator"
 >;
@@ -669,9 +668,6 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
     }
     if (isMinimalProgressMode()) {
       runtime.noteMinimalWork(update.sessionId, { messageId: update.messageId });
-      if (update.isFirstUpdate && deps.pinnedMessageManager.isInitialized()) {
-        await deps.pinnedMessageManager.refresh();
-      }
       return;
     }
     await runtime.waitForReplyDocuments(update.sessionId, update.messageId);
@@ -690,9 +686,6 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
         runtime.compactProgressStreamer.updateThinking(update.sessionId);
       }
 
-      if (update.isFirstUpdate && deps.pinnedMessageManager.isInitialized()) {
-        await deps.pinnedMessageManager.refresh();
-      }
       return;
     }
 
@@ -722,9 +715,6 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
       deliverThinkingMessage(update.sessionId, runtime.toolMessageBatcher);
     }
 
-    if (update.isFirstUpdate && deps.pinnedMessageManager.isInitialized()) {
-      await deps.pinnedMessageManager.refresh();
-    }
   });
 
   summaryAggregator.setOnThinkingFinished((sessionId, messageId) => {

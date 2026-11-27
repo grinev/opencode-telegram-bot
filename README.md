@@ -50,6 +50,7 @@ Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`
 - **Reply documents** — ordinary project-relative Markdown links such as `[Report](./report.pdf)` deliver files after the complete reply text, in link order, before the footer, including replay and scheduled results. Files are read through OpenCode on V1/V2, including Docker without shared storage. V2 and V1 binary files keep their original bytes; V1 text files contain the server's trimmed text, without leading/trailing whitespace or the final newline. Code, bare paths and external URLs do not attach files; `![alt](path)` remains a photo. `OUTGOING_DOCUMENT_MAX_SIZE_MB` limits these documents and `/ls` downloads independently of code/diff and incoming-file limits. Raw mode is unchanged
 - **Scheduled tasks** — schedule prompts to run later or on a recurring interval; see [Scheduled Tasks](#scheduled-tasks)
 - **Message queue** — messages sent while the agent is busy are held and sent one by one afterwards (Queue) or, on OpenCode V2, steered into the running task (Steer); each waiting message is a bottom-keyboard button you can tap to withdraw it; `/detach` leaves waiting messages to the session they were sent to
+- **Session dashboard** — the 📋 button shows the current project and session on the bottom keyboard. Tap it for a fresh snapshot of context, session cost and changed files, and tap Close to remove it without changing the session. The bot does not pin dashboards automatically; old pins can be removed manually.
 - **Context control** — tap the bottom 📊 button to see context usage and the latest assistant message's tokens and cost; compact from the details with an inline confirmation
 - **Input flow control** — when an interactive flow is active, the bot accepts only relevant input to keep context consistent and avoid accidental actions
 - **Git worktree switching** — browse and switch between existing git worktrees for the current repository with `/worktree`
@@ -333,7 +334,6 @@ Runtime preferences are changed from `/settings` and stored in `settings.json`:
 - Delete progress on finish: available only in Compact, removes each progress card instead of showing its summary
 - Thinking content display: available only in Full
 - Assistant run footer display
-- Pin session dashboard
 - Notifications from other sessions: on by default. Off silences chat notices about replies, questions and permission requests from sessions that are not the one selected in the bot. Tracking keeps running, and a pending question or permission stays answerable from a TUI or Desktop
 - Diff file attachments: available only in Full; files in the assistant reply are unaffected
 - Response streaming mode: `edit` (default), `draft (experimental)`, or `off`. With `off`, each completed assistant reply is sent in full as soon as it is ready, without a preview and without waiting for the turn to end. Thinking, progress and interactive prompts are unaffected. A mode change applies to the next reply.
@@ -351,10 +351,12 @@ On OpenCode V1 the bot holds the messages itself and sends them one at a time as
 You can seed the initial defaults for any of these settings without hard-coding them in your Docker image by setting `INITIAL_SETTINGS_PRESET` to a JSON object. Only keys not yet persisted in `settings.json` are affected — settings the user has already changed via `/settings` are left untouched:
 
 ```env
-INITIAL_SETTINGS_PRESET={"showAssistantRunFooter":false,"outputMode":"minimal","ttsMode":"auto","pinnedDashboardEnabled":true}
+INITIAL_SETTINGS_PRESET={"showAssistantRunFooter":false,"outputMode":"minimal","ttsMode":"auto"}
 ```
 
 For output mode, a saved `outputMode` wins. An older saved `compactOutputMode` still means `compact` for `true` and `full` for `false`, and takes precedence over the preset. The preset also accepts that legacy boolean when it has no `outputMode`.
+
+For compatibility, an existing preset may still contain the boolean `pinnedDashboardEnabled`. It is accepted but has no effect.
 
 Settings are written atomically: the new content goes to a temporary file that then replaces `settings.json`, and the previous version is kept as `settings.json.bak`. A crash during a write can never leave a truncated file — the bot falls back to the backup on the next start. If both `settings.json` and `settings.json.bak` are unreadable, the bot refuses to start instead of overwriting them, and the error names the file so you can fix or remove it manually.
 

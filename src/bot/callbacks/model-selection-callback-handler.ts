@@ -57,7 +57,7 @@ interface ModelListMetadata {
 
 export type ModelSelectionDeps = Pick<
   AppContainer,
-  "interactionManager" | "keyboardManager" | "pinnedMessageManager"
+  "interactionManager" | "keyboardManager" | "sessionMetricsManager"
 >;
 
 function parseModelItems(value: unknown): ModelInfo[] {
@@ -438,13 +438,13 @@ async function applyModelSelectionAndNotify(
 
   selectModel(modelInfo);
   deps.keyboardManager.updateModel(modelInfo);
-  await deps.pinnedMessageManager.onModelChange();
+  await deps.sessionMetricsManager.refreshContextLimit();
 
   const currentAgent = await resolveProjectAgent(getStoredAgent());
   const contextInfo =
-    deps.pinnedMessageManager.getContextInfo() ??
-    (deps.pinnedMessageManager.getContextLimit() > 0
-      ? { tokensUsed: 0, tokensLimit: deps.pinnedMessageManager.getContextLimit() }
+    deps.sessionMetricsManager.getContextInfo() ??
+    (deps.sessionMetricsManager.getContextLimit() > 0
+      ? { tokensUsed: 0, tokensLimit: deps.sessionMetricsManager.getContextLimit() }
       : null);
 
   deps.keyboardManager.updateAgent(currentAgent);

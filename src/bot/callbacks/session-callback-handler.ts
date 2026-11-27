@@ -67,7 +67,7 @@ export type SessionSelectDeps = Pick<
   | "interactionManager"
   | "keyboardManager"
   | "permissionManager"
-  | "pinnedMessageManager"
+  | "sessionMetricsManager"
   | "questionManager"
   | "resetInteractions"
   | "summaryAggregator"
@@ -317,13 +317,9 @@ export async function selectSessionById(
     title: session.title,
     directory: currentProject.worktree,
   };
+  const previousSession = getCurrentSession();
   setCurrentSession(sessionInfo);
-  // The attach does not redraw the dashboard already showing this session.
-  const pinnedState = deps.pinnedMessageManager.getState();
-  const isSessionOnDashboard =
-    pinnedState.sessionId === session.id && Boolean(pinnedState.messageId);
-  // Pull before attaching: the pinned message is rendered inside attachToSession
-  // and reads the stored model, so its Model line comes out already pulled.
+  // Pull before attaching so context uses the selected session's model.
   const modelChanged = await applySessionSettings(session);
   deps.resetInteractions("session_switched");
 
@@ -368,11 +364,14 @@ export async function selectSessionById(
         }
       }
       logger.error("[Sessions] Error following selected session:", err);
+      if (ctx.chat && options.source === "menu") {
+        await deps.keyboardManager.sendKeyboardUpdate(ctx.chat.id);
+      }
       throw err;
     }
 
-    if (isSessionOnDashboard && modelChanged) {
-      await deps.pinnedMessageManager.onModelChange();
+    if (previousSession?.id === session.id && modelChanged) {
+      await deps.sessionMetricsManager.refreshContextLimit();
     }
 
     if (ctx.chat) {
@@ -570,6 +569,12 @@ export async function handleBackgroundSessionOpen(
     logger.error("[Sessions] Error selecting background session:", error);
     if (rollback) {
       await restoreSelectionAfterFailedOpen(ctx, deps, rollback);
+    }
+    if (ctx.chat && (
+      getCurrentProject()?.worktree !== previousProject?.worktree ||
+      getCurrentSession()?.id !== previousSession?.id
+    )) {
+      await deps.keyboardManager.sendKeyboardUpdate(ctx.chat.id);
     }
     await ctx
       .answerCallbackQuery({ text: t("sessions.select_error"), show_alert: true })

@@ -37,6 +37,7 @@ import {
 import { handleVariantSelect } from "./variant-selection-callback-handler.js";
 import { handleWorktreeCallback } from "./worktree-callback-handler.js";
 import { clearLsPathIndex, clearOpenPathIndex } from "../menus/file-browser-menu.js";
+import { handleDashboardClose } from "../dashboard/dashboard-card.js";
 
 type CallbackHandler = (ctx: Context) => Promise<boolean>;
 
@@ -85,6 +86,14 @@ export function registerCallbackRouter(bot: Bot<Context>, deps: CallbackRouterDe
         name: "commands",
         handlers: [(ctx) => handleCommandsCallback(ctx, botDeps)],
         errorScope: "interaction",
+      },
+    ],
+    [
+      "dashboard",
+      {
+        name: "dashboard",
+        handlers: [(ctx) => handleDashboardClose(ctx, container.dashboardCardManager)],
+        errorScope: "none",
       },
     ],
     [

@@ -167,6 +167,14 @@ describe("bot/rich-message-routing", () => {
     expect(promptQueue.list().map((item) => item.text)).toEqual(["Sent after re-attaching"]);
   });
 
+  it("opens the current dashboard, not the agent picker or prompt handler, for an old label", async () => {
+    const { bot, replies } = createRoutingBot();
+    await bot.handleUpdate(richUpdate([{ type: "paragraph", text: "📋 Old project · Session Agent" }]));
+
+    expect(replies).toEqual([t("keyboard.updated"), t("dashboard.card.no_project")]);
+    expect(mocked.queuePromptForMerging).not.toHaveBeenCalled();
+  });
+
   it("routes a converted rich sentence as an ordinary prompt", async () => {
     const { bot } = createRoutingBot();
 

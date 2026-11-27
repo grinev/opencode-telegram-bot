@@ -21,7 +21,7 @@ describe("context details menu", () => {
 
   it("renders the window and latest message metrics with exactly two controls", async () => {
     const deps = createTestAppContainer();
-    vi.spyOn(deps.pinnedMessageManager, "getContextInfo").mockReturnValue({ tokensUsed: 65000, tokensLimit: 1000000 });
+    vi.spyOn(deps.sessionMetricsManager, "getContextInfo").mockReturnValue({ tokensUsed: 65000, tokensLimit: 1000000 });
     mocked.metrics.mockResolvedValue({ input: 123, output: 45, reasoning: 6, cacheRead: 7, cacheWrite: 8, cost: 0.123 });
     const ctx = { reply: vi.fn().mockResolvedValue({ message_id: 42 }) } as unknown as Context;
 
@@ -41,7 +41,7 @@ describe("context details menu", () => {
 
   it("shows only the window without a previous assistant message", async () => {
     const deps = createTestAppContainer();
-    vi.spyOn(deps.pinnedMessageManager, "getContextInfo").mockReturnValue({ tokensUsed: 0, tokensLimit: 200000 });
+    vi.spyOn(deps.sessionMetricsManager, "getContextInfo").mockReturnValue({ tokensUsed: 0, tokensLimit: 200000 });
     const ctx = { reply: vi.fn().mockResolvedValue({ message_id: 43 }) } as unknown as Context;
 
     await handleContextButtonPress(ctx, deps);

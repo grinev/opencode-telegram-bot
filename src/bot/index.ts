@@ -1,6 +1,6 @@
 import { Bot, Context } from "grammy";
 import { config } from "../config.js";
-import { getCurrentProject } from "../app/stores/settings-store.js";
+import { getCurrentProject, setSelectionChangeListener } from "../app/stores/settings-store.js";
 import type { AppContainer } from "../app/bootstrap/app-container.js";
 import {
   configureAttachPresentation,
@@ -31,6 +31,8 @@ import { registerMessageRouter } from "./routers/message-router.js";
 import { MediaGroupAttachmentHandler } from "./handlers/media-group-handler.js";
 import { createAttachPresentation } from "./services/attach-presentation.js";
 import { createTelegramBotOptions } from "./telegram-client-options.js";
+import { retireDashboardCard } from "./dashboard/dashboard-card.js";
+import { t } from "../i18n/index.js";
 
 const TRANSIENT_RETRY_SAFE_TELEGRAM_METHODS = new Set([
   "editMessageReplyMarkup",
@@ -112,6 +114,11 @@ export function createBot(
   const bot = new Bot(config.telegram.token, botOptions);
 
   configureAttachPresentation(createAttachPresentation(container));
+  setSelectionChangeListener(() => {
+    retireDashboardCard(bot.api, container.dashboardCardManager);
+    container.sessionMetricsManager.clear();
+    if (container.keyboardManager.isInitialized()) container.keyboardManager.clearContext();
+  });
 
   container.setTelegramContext(bot, config.telegram.allowedUserId);
 
@@ -268,13 +275,16 @@ export function restoreFollowedSessionOnPollingStart(
   bot: Bot<Context>,
   container: AppContainer,
 ): void {
+  const chatId = config.telegram.allowedUserId;
+  container.keyboardManager.initialize(bot.api, chatId);
+  void container.keyboardManager.sendKeyboardUpdate(chatId, t("dashboard.keyboard.restored"));
   safeBackgroundTask({
     taskName: "bot.restoreAfterPollingStart",
     task: () =>
       restoreAttachedCurrentSession({
         ...container,
         bot,
-        chatId: config.telegram.allowedUserId,
+        chatId,
         forceFullRestore: true,
       }),
   });

@@ -34,6 +34,16 @@ export class RenameManager {
     return this.state?.messageId ?? null;
   }
 
+  submitTitle(title: string): void {
+    const state = this.state;
+    if (state) state.submittedTitle = title;
+  }
+
+  isSubmittingTitle(sessionId: string, title: string): boolean {
+    const state = this.state;
+    return state?.sessionId === sessionId && state.submittedTitle === title;
+  }
+
   isActiveMessage(messageId: number | null): boolean {
     const activeMessageId = this.getMessageId();
     return activeMessageId !== null && activeMessageId === messageId;

@@ -25,7 +25,7 @@ export interface InteractionGuardDeps extends InteractionGuardDecisionDeps, RunC
   rejectCompactionAlbum?: (ctx: Context) => boolean;
 }
 
-function getInteractionBlockedMessage(
+export function getInteractionBlockedMessage(
   reason: BlockReason | undefined,
   interactionKind: InteractionKind | undefined,
 ): string {

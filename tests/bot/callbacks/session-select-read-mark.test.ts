@@ -95,10 +95,9 @@ function deps(): SessionSelectDeps {
     permissionManager: {} as SessionSelectDeps["permissionManager"],
     questionManager: {} as SessionSelectDeps["questionManager"],
     resetInteractions: vi.fn(),
-    pinnedMessageManager: {
-      getState: () => ({ sessionId: null, messageId: null }),
-      onModelChange: vi.fn(),
-    } as unknown as SessionSelectDeps["pinnedMessageManager"],
+    sessionMetricsManager: {
+      refreshContextLimit: vi.fn(),
+    } as unknown as SessionSelectDeps["sessionMetricsManager"],
     keyboardManager: {
       updateAgent: vi.fn(),
       updateModel: vi.fn(),

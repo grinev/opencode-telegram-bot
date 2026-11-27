@@ -15,7 +15,6 @@ import { getStoredAgent, resolveProjectAgent } from "./agent-selection-service.j
 import { getStoredModel } from "./model-selection-service.js";
 import { formatVariantForButton } from "./variant-selection-service.js";
 import type { AppContainer } from "../bootstrap/app-container.js";
-import { logger } from "../../utils/logger.js";
 import { config } from "../../config.js";
 
 interface ProjectSwitchContextInfo {
@@ -30,7 +29,6 @@ type ProjectSwitchReplyMarkup =
   | ForceReply;
 
 export interface ProjectSwitchPresentation {
-  clearPinnedMessage(): Promise<void>;
   initializeKeyboard(ctx: Context): void;
   refreshContextLimit(): Promise<number>;
   updateKeyboardContext(contextInfo: ProjectSwitchContextInfo): void;
@@ -64,12 +62,6 @@ export async function switchToProject(
   clearSession();
   options.resetAggregator();
   options.resetInteractions(reason);
-
-  try {
-    await options.presentation.clearPinnedMessage();
-  } catch (err) {
-    logger.error("[Bot] Error clearing pinned message:", err);
-  }
 
   options.presentation.initializeKeyboard(ctx);
 

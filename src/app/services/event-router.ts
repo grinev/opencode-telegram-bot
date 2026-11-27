@@ -7,6 +7,8 @@ import { logger } from "../../utils/logger.js";
 import { markAttachedSessionBusy } from "./attach-service.js";
 import { reconcileBusyState } from "./busy-reconciliation-service.js";
 import { ingestSessionInfoForCache } from "./session-cache-service.js";
+import { updateSelectedSessionTitle } from "./session-service.js";
+import type { SessionInfo } from "../types/session.js";
 
 export type EventRouterDeps = Pick<
   AppContainer,
@@ -25,6 +27,7 @@ export interface EventRouterOptions {
   deps: EventRouterDeps;
   isForegroundSession: (sessionId: string) => boolean;
   onLiveToolActivity?: (sessionId: string, callId: string) => void;
+  onSelectedTitleChanged?: (previous: SessionInfo, title: string) => void;
 }
 
 /** The session an event belongs to, read from the event itself. */
@@ -66,6 +69,7 @@ export function createEventRouter({
   deps,
   isForegroundSession,
   onLiveToolActivity,
+  onSelectedTitleChanged,
 }: EventRouterOptions): (envelope: EventEnvelope) => void {
   const backgroundTails = new Map<string, Promise<void>>();
 
@@ -95,6 +99,11 @@ export function createEventRouter({
 
     if (event.type === "session.created" || event.type === "session.updated") {
       const info = event.properties.info;
+
+      if (event.type === "session.updated" && info?.id && typeof info.title === "string") {
+        const previous = updateSelectedSessionTitle(info.id, info.title);
+        if (previous) onSelectedTitleChanged?.(previous, info.title);
+      }
 
       if (info?.directory) {
         safeBackgroundTask({

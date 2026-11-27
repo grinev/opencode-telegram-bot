@@ -13,7 +13,7 @@ import {
   refreshModelViewsAfterLateCatalogSettle,
 } from "../services/model-views.js";
 
-export type ReloadCommandDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager">;
+export type ReloadCommandDeps = Pick<AppContainer, "keyboardManager" | "sessionMetricsManager">;
 
 function formatReloadResult(result: ConfigReloadResult): string {
   if (result.kind === "success") {

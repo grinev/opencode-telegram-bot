@@ -7,13 +7,14 @@ import { setRuntimeMode } from "../../../src/runtime/mode.js";
 import type { ScheduledTask } from "../../../src/app/types/scheduled-task.js";
 import {
   __resetSettingsForTests,
+  clearProject,
+  clearSession,
   flushSettings,
   getOutputMode,
   getLastTodoSnapshot,
   getPromptQueueMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
-  getPinnedDashboardEnabled,
   getSessionReplyReadState,
   getShowAssistantRunFooter,
   getShowBackgroundSessionNotifications,
@@ -21,6 +22,9 @@ import {
   getScheduledTasks,
   getTtsMode,
   loadSettings,
+  setCurrentProject,
+  setCurrentSession,
+  setSelectionChangeListener,
   setOutputMode,
   setLastTodoSnapshot,
   setPromptQueueMode,
@@ -96,12 +100,6 @@ describe("app/stores/settings-store", () => {
     expect(getShowAssistantRunFooter()).toBe(true);
   });
 
-  it("enables the pinned session dashboard by default", async () => {
-    await loadSettings();
-
-    expect(getPinnedDashboardEnabled()).toBe(true);
-  });
-
   it("shows background session notifications by default", async () => {
     await loadSettings();
 
@@ -119,15 +117,15 @@ describe("app/stores/settings-store", () => {
     expect(getShowBackgroundSessionNotifications()).toBe(false);
   });
 
-  it("loads the pinned session dashboard setting from settings.json", async () => {
-    await writeFile(
-      path.join(tempHome, "settings.json"),
-      JSON.stringify({ pinnedDashboardEnabled: false }),
-    );
+  it("does not migrate legacy dashboard settings", async () => {
+    const settingsPath = path.join(tempHome, "settings.json");
+    const settings = JSON.stringify({ pinnedDashboardEnabled: false, pinnedMessageId: 99 });
+    await writeFile(settingsPath, settings);
 
     await loadSettings();
 
-    expect(getPinnedDashboardEnabled()).toBe(false);
+    await flushSettings();
+    expect(JSON.parse(await readFile(settingsPath, "utf-8"))).toMatchObject(JSON.parse(settings));
   });
 
   describe("prompt queue mode", () => {
@@ -233,10 +231,13 @@ describe("app/stores/settings-store", () => {
     expect(store.getSendDiffFileAttachments()).toBe(false);
     expect(store.getShowThinkingContent()).toBe(false);
     expect(store.getPromptQueueMode()).toBe("queue");
-    expect(store.getPinnedDashboardEnabled()).toBe(false);
     expect(store.getShowBackgroundSessionNotifications()).toBe(false);
 
+    store.setShowAssistantRunFooter(false);
     await store.flushSettings();
+    const persisted = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
+    expect(persisted).not.toHaveProperty("pinnedDashboardEnabled");
+    expect(persisted).not.toHaveProperty("pinnedMessageId");
     vi.unstubAllEnvs();
     vi.resetModules();
   });
@@ -258,6 +259,22 @@ describe("app/stores/settings-store", () => {
     await store.flushSettings();
     vi.unstubAllEnvs();
     vi.resetModules();
+  });
+
+  it("notifies on selection identity changes and empty resets, but not a rename", () => {
+    const changed = vi.fn();
+    setSelectionChangeListener(changed);
+    const project = { id: "project", worktree: "/repo" };
+    const session = { id: "session", directory: project.worktree, title: "Initial" };
+    setCurrentProject(project);
+    setCurrentSession(session);
+    setCurrentSession({ ...session, title: "Renamed" });
+    expect(changed).toHaveBeenCalledTimes(2);
+
+    clearSession();
+    clearProject();
+    clearProject();
+    expect(changed).toHaveBeenCalledTimes(5);
   });
 
   it.each([

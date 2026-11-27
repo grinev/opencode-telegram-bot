@@ -7,7 +7,6 @@ const mocked = vi.hoisted(() => ({
   clearSessionMock: vi.fn(),
   summaryAggregatorClearMock: vi.fn(),
   clearAllInteractionStateMock: vi.fn(),
-  pinnedClearMock: vi.fn().mockResolvedValue(undefined),
   pinnedRefreshMock: vi.fn().mockResolvedValue(undefined),
   pinnedGetLimitMock: vi.fn(() => 128000),
   keyboardInitMock: vi.fn(),
@@ -57,11 +56,10 @@ import { createTestAppContainer } from "../../helpers/app-container.js";
 const deps = createTestAppContainer({
   resetAggregator: mocked.summaryAggregatorClearMock,
   resetInteractions: mocked.clearAllInteractionStateMock,
-  pinnedMessageManager: {
-    clear: mocked.pinnedClearMock,
+  sessionMetricsManager: {
     refreshContextLimit: mocked.pinnedRefreshMock,
     getContextLimit: mocked.pinnedGetLimitMock,
-  } as unknown as AppContainer["pinnedMessageManager"],
+  } as unknown as AppContainer["sessionMetricsManager"],
   keyboardManager: {
     initialize: mocked.keyboardInitMock,
     updateContext: mocked.keyboardUpdateMock,
@@ -88,7 +86,6 @@ function switchTestProject(ctx: Context) {
 
 describe("app/services/project-switch-service", () => {
   beforeEach(() => {
-    mocked.pinnedClearMock.mockReset().mockResolvedValue(undefined);
     mocked.pinnedRefreshMock.mockReset().mockResolvedValue(undefined);
     mocked.pinnedGetLimitMock.mockReset().mockReturnValue(128000);
     mocked.getStoredAgentMock.mockReset().mockReturnValue("code");
@@ -111,11 +108,10 @@ describe("app/services/project-switch-service", () => {
     expect(mocked.clearAllInteractionStateMock).toHaveBeenCalledWith("test_reason");
   });
 
-  it("should clear pinned message and refresh context limit", async () => {
+  it("refreshes the context limit", async () => {
     const ctx = createCtx();
     await switchTestProject(ctx);
 
-    expect(mocked.pinnedClearMock).toHaveBeenCalled();
     expect(mocked.pinnedRefreshMock).toHaveBeenCalled();
     expect(mocked.pinnedGetLimitMock).toHaveBeenCalled();
   });
@@ -163,13 +159,4 @@ describe("app/services/project-switch-service", () => {
     expect(mocked.formatVariantMock).toHaveBeenCalledWith("default");
   });
 
-  it("should not throw if pinnedMessageManager.clear rejects", async () => {
-    mocked.pinnedClearMock.mockRejectedValue(new Error("unpin failed"));
-    const ctx = createCtx();
-
-    const result = await switchTestProject(ctx);
-
-    expect(mocked.createMainKeyboardMock).toHaveBeenCalled();
-    expect(result).toEqual({ keyboard: [[{ text: "mock" }]] });
-  });
 });

@@ -62,6 +62,7 @@ vi.mock("../../../src/app/services/session-cache-service.js", () => ({
 
 vi.mock("../../../src/app/stores/settings-store.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
+  getCurrentSession: vi.fn(() => mocked.currentSession),
   getTtsMode: mocked.getTtsModeMock,
 }));
 
@@ -115,18 +116,11 @@ function createContext(): Context {
 function createDeps(): ProcessPromptDeps {
   return {
     ...container,
-    pinnedMessageManager: {
-      isInitialized: vi.fn(() => true),
-      initialize: vi.fn(),
-      getState: vi.fn(() => ({ messageId: 1 })),
-      onSessionChange: vi.fn(),
-      clear: vi.fn(),
-      getContextInfo: vi.fn(() => null),
-    } as unknown as AppContainer["pinnedMessageManager"],
     keyboardManager: {
       initialize: vi.fn(),
       clearContext: vi.fn(),
       updateAgent: vi.fn(),
+      getKeyboard: vi.fn(),
     } as unknown as AppContainer["keyboardManager"],
     summaryAggregator: {
       setSession: mocked.setSessionSummaryMock,

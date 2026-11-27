@@ -4,12 +4,11 @@ import { watchLateModelCatalogChanges } from "../../opencode/ready-refresh.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 
-export type ModelViewsDeps = Pick<AppContainer, "keyboardManager" | "pinnedMessageManager">;
+export type ModelViewsDeps = Pick<AppContainer, "keyboardManager" | "sessionMetricsManager">;
 
-/** Redraws what shows the selected model: the pinned dashboard and the keyboard model button. */
+/** Refreshes the selected model and its context limit for the keyboard. */
 export async function refreshModelViews(deps: ModelViewsDeps): Promise<void> {
-  await deps.pinnedMessageManager.refreshContextLimit();
-  await deps.pinnedMessageManager.refresh();
+  await deps.sessionMetricsManager.refreshContextLimit();
   if (deps.keyboardManager.isInitialized()) {
     deps.keyboardManager.updateModel(getStoredModel());
   }

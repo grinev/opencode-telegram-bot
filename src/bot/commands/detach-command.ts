@@ -20,7 +20,7 @@ export type DetachCommandDeps = Pick<
   | "foregroundSessionState"
   | "goalManager"
   | "keyboardManager"
-  | "pinnedMessageManager"
+  | "sessionMetricsManager"
   | "resetAggregator"
   | "resetInteractions"
 >;
@@ -54,20 +54,12 @@ export async function detachCommand(
     deps.resetInteractions("detach_command");
     clearSession();
 
-    if (deps.pinnedMessageManager.isInitialized()) {
-      try {
-        await deps.pinnedMessageManager.clear();
-      } catch (error) {
-        logger.error("[Detach] Failed to clear pinned message:", error);
-      }
-    }
-
     if (ctx.chat) {
       deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
 
-    await deps.pinnedMessageManager.refreshContextLimit();
-    const contextLimit = deps.pinnedMessageManager.getContextLimit();
+    await deps.sessionMetricsManager.refreshContextLimit();
+    const contextLimit = deps.sessionMetricsManager.getContextLimit();
     deps.keyboardManager.updateContext(0, contextLimit);
 
     const keyboard = deps.keyboardManager.getKeyboard();

@@ -11,13 +11,10 @@ import { t } from "../../i18n/index.js";
 import { detachAttachedSession } from "../../app/services/attach-service.js";
 
 export type StartCommandDeps = AbortCommandDeps &
-  Pick<AppContainer, "keyboardManager" | "pinnedMessageManager" | "resetAggregator" | "goalManager">;
+  Pick<AppContainer, "keyboardManager" | "sessionMetricsManager" | "resetAggregator" | "goalManager">;
 
 export async function startCommand(ctx: Context, deps: StartCommandDeps): Promise<void> {
   if (ctx.chat) {
-    if (!deps.pinnedMessageManager.isInitialized()) {
-      deps.pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
-    }
     deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
   }
 
@@ -29,10 +26,9 @@ export async function startCommand(ctx: Context, deps: StartCommandDeps): Promis
   clearSession();
   clearProject();
   deps.keyboardManager.clearContext();
-  await deps.pinnedMessageManager.clear();
 
-  if (deps.pinnedMessageManager.getContextLimit() === 0) {
-    await deps.pinnedMessageManager.refreshContextLimit();
+  if (deps.sessionMetricsManager.getContextLimit() === 0) {
+    await deps.sessionMetricsManager.refreshContextLimit();
   }
 
   // Get current agent, model, and context
@@ -40,9 +36,9 @@ export async function startCommand(ctx: Context, deps: StartCommandDeps): Promis
   const currentModel = getStoredModel();
   const variantName = formatVariantForButton(currentModel.variant || "default");
   const contextInfo =
-    deps.pinnedMessageManager.getContextInfo() ??
-    (deps.pinnedMessageManager.getContextLimit() > 0
-      ? { tokensUsed: 0, tokensLimit: deps.pinnedMessageManager.getContextLimit() }
+    deps.sessionMetricsManager.getContextInfo() ??
+    (deps.sessionMetricsManager.getContextLimit() > 0
+      ? { tokensUsed: 0, tokensLimit: deps.sessionMetricsManager.getContextLimit() }
       : null);
 
   deps.keyboardManager.updateAgent(currentAgent);

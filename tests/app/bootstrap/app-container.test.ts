@@ -36,7 +36,8 @@ describe("app/bootstrap/app-container", () => {
 
     expect(other.interactionManager).not.toBe(container.interactionManager);
     expect(other.summaryAggregator).not.toBe(container.summaryAggregator);
-    expect(other.pinnedMessageManager).not.toBe(container.pinnedMessageManager);
+    expect(other.sessionMetricsManager).not.toBe(container.sessionMetricsManager);
+    expect(other.dashboardCardManager).not.toBe(container.dashboardCardManager);
     expect(other.scheduledTaskRuntime).not.toBe(container.scheduledTaskRuntime);
     expect(other.opencodeAutoRestartService).not.toBe(container.opencodeAutoRestartService);
     expect(other.opencodeReadyLifecycle).not.toBe(container.opencodeReadyLifecycle);

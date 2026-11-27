@@ -5,26 +5,23 @@ import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
 
 export type ProjectSwitchPresentationDeps = Pick<
   AppContainer,
-  "keyboardManager" | "pinnedMessageManager"
+  "keyboardManager" | "sessionMetricsManager"
 >;
 
 export function createProjectSwitchPresentation(
   deps: ProjectSwitchPresentationDeps,
 ): ProjectSwitchPresentation {
-  const { keyboardManager, pinnedMessageManager } = deps;
+  const { keyboardManager, sessionMetricsManager } = deps;
 
   return {
-    async clearPinnedMessage() {
-      await pinnedMessageManager.clear();
-    },
     initializeKeyboard(ctx: Context) {
       if (ctx.chat) {
         keyboardManager.initialize(ctx.api, ctx.chat.id);
       }
     },
     async refreshContextLimit() {
-      await pinnedMessageManager.refreshContextLimit();
-      return pinnedMessageManager.getContextLimit();
+      await sessionMetricsManager.refreshContextLimit();
+      return sessionMetricsManager.getContextLimit();
     },
     updateKeyboardContext(contextInfo) {
       keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
