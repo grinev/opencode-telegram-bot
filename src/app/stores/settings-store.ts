@@ -158,19 +158,29 @@ export function flushSettings(): Promise<void> {
 }
 
 let currentSettings: Settings = {};
+let onSelectionChange: (() => void) | undefined;
+
+export function setSelectionChangeListener(listener?: () => void): void {
+  onSelectionChange = listener;
+}
 
 export function getCurrentProject(): ProjectInfo | undefined {
   return currentSettings.currentProject;
 }
 
 export function setCurrentProject(projectInfo: ProjectInfo): void {
+  const previous = currentSettings.currentProject;
   currentSettings.currentProject = projectInfo;
   void writeSettingsFile(currentSettings);
+  if (previous?.id !== projectInfo.id || previous.worktree !== projectInfo.worktree) {
+    onSelectionChange?.();
+  }
 }
 
 export function clearProject(): void {
   currentSettings.currentProject = undefined;
   void writeSettingsFile(currentSettings);
+  onSelectionChange?.();
 }
 
 export function getCurrentSession(): SessionInfo | undefined {
@@ -178,13 +188,19 @@ export function getCurrentSession(): SessionInfo | undefined {
 }
 
 export function setCurrentSession(sessionInfo: SessionInfo): void {
+  const previous = currentSettings.currentSession;
   currentSettings.currentSession = sessionInfo;
   void writeSettingsFile(currentSettings);
+  if (previous?.id !== sessionInfo.id || previous.directory !== sessionInfo.directory) {
+    onSelectionChange?.();
+  }
 }
 
 export function clearSession(): void {
+  const previous = currentSettings.currentSession;
   currentSettings.currentSession = undefined;
   void writeSettingsFile(currentSettings);
+  if (previous) onSelectionChange?.();
 }
 
 export type TtsMode = "off" | "all" | "auto";
@@ -242,15 +258,6 @@ export function getShowAssistantRunFooter(): boolean {
 
 export function setShowAssistantRunFooter(enabled: boolean): void {
   currentSettings.showAssistantRunFooter = enabled;
-  void writeSettingsFile(currentSettings);
-}
-
-export function getPinnedDashboardEnabled(): boolean {
-  return currentSettings.pinnedDashboardEnabled ?? true;
-}
-
-export function setPinnedDashboardEnabled(enabled: boolean): void {
-  currentSettings.pinnedDashboardEnabled = enabled;
   void writeSettingsFile(currentSettings);
 }
 
@@ -334,20 +341,6 @@ export function clearCurrentModel(): void {
   void writeSettingsFile(currentSettings);
 }
 
-export function getPinnedMessageId(): number | undefined {
-  return currentSettings.pinnedMessageId;
-}
-
-export function setPinnedMessageId(messageId: number): void {
-  currentSettings.pinnedMessageId = messageId;
-  void writeSettingsFile(currentSettings);
-}
-
-export function clearPinnedMessageId(): void {
-  currentSettings.pinnedMessageId = undefined;
-  void writeSettingsFile(currentSettings);
-}
-
 export function getLastTodoSnapshot(): TodoSnapshotInfo | undefined {
   const info = currentSettings.lastTodoSnapshot;
   return info ? { ...info } : undefined;
@@ -418,6 +411,7 @@ export function setSessionReplyReadState(state: SessionReplyReadState): Promise<
 
 export function __resetSettingsForTests(): void {
   currentSettings = {};
+  onSelectionChange = undefined;
   skipNextBackupRotation = false;
 }
 
@@ -490,8 +484,7 @@ function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
             currentSettings.showAssistantRunFooter = value;
           break;
         case "pinnedDashboardEnabled":
-          if (currentSettings.pinnedDashboardEnabled === undefined)
-            currentSettings.pinnedDashboardEnabled = value;
+          // Accept the documented legacy preset without applying it.
           break;
         case "showBackgroundSessionNotifications":
           if (currentSettings.showBackgroundSessionNotifications === undefined)

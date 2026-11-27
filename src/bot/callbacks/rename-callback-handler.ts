@@ -1,7 +1,7 @@
 import { Context } from "grammy";
 import type { AppContainer } from "../../app/bootstrap/app-container.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { setCurrentSession } from "../../app/services/session-service.js";
+import { getCurrentSession, updateSelectedSessionTitle } from "../../app/services/session-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { cancelPrompt } from "./feedback.js";
@@ -19,7 +19,7 @@ function getCallbackMessageId(ctx: Context): number | null {
 
 export type RenameCallbackDeps = Pick<
   AppContainer,
-  "interactionManager" | "pinnedMessageManager" | "renameManager"
+  "interactionManager" | "keyboardManager" | "renameManager"
 >;
 
 function clearRenameInteraction(deps: RenameCallbackDeps, reason: string): void {
@@ -105,6 +105,8 @@ export async function handleRenameTextAnswer(
 
   logger.info(`[RenameHandler] Renaming session ${sessionInfo.sessionId} to: ${newTitle}`);
 
+  deps.renameManager.submitTitle(newTitle);
+  const messageId = deps.renameManager.getMessageId();
   try {
     const { data: updatedSession, error } = await opencodeClient.session.update({
       sessionID: sessionInfo.sessionId,
@@ -116,29 +118,23 @@ export async function handleRenameTextAnswer(
       throw error || new Error("Failed to update session");
     }
 
-    setCurrentSession({
-      id: sessionInfo.sessionId,
-      title: newTitle,
-      directory: sessionInfo.directory,
-    });
-
-    if (deps.pinnedMessageManager.isInitialized()) {
-      await deps.pinnedMessageManager.onSessionChange(sessionInfo.sessionId, newTitle, {
-        directory: sessionInfo.directory,
-      });
+    const selected = getCurrentSession();
+    if (selected?.id === sessionInfo.sessionId && selected.directory === sessionInfo.directory) {
+      updateSelectedSessionTitle(selected.id, updatedSession.title || newTitle);
     }
 
-    const messageId = deps.renameManager.getMessageId();
     if (messageId && ctx.chat) {
       await ctx.api.deleteMessage(ctx.chat.id, messageId).catch(() => {});
     }
 
-    await ctx.reply(t("rename.success", { title: newTitle }));
+    const keyboard = deps.keyboardManager.getKeyboard();
+    await ctx.reply(t("rename.success", { title: newTitle }), keyboard ? { reply_markup: keyboard } : undefined);
 
     logger.info(`[RenameHandler] Session renamed successfully: ${newTitle}`);
   } catch (error) {
     logger.error("[RenameHandler] Error renaming session:", error);
-    await ctx.reply(t("rename.error"));
+    const keyboard = deps.keyboardManager.getKeyboard();
+    await ctx.reply(t("rename.error"), keyboard ? { reply_markup: keyboard } : undefined);
   }
 
   clearRenameInteraction(deps, "rename_completed");

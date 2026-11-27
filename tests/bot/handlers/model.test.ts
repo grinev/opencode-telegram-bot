@@ -91,8 +91,8 @@ function createDeps() {
       updateAgent: mocked.keyboardUpdateAgentMock,
       updateContext: mocked.keyboardUpdateContextMock,
     } as never,
-    pinnedMessageManager: {
-      onModelChange: mocked.pinnedOnModelChangeMock,
+    sessionMetricsManager: {
+      refreshContextLimit: mocked.pinnedOnModelChangeMock,
       getContextInfo: mocked.pinnedGetContextInfoMock,
       getContextLimit: mocked.pinnedGetContextLimitMock,
     } as never,

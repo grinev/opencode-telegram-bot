@@ -23,7 +23,6 @@ import {
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
   SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK,
   SETTINGS_DIFF_FILES_CALLBACK,
-  SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK,
   SETTINGS_PROMPT_QUEUE_CALLBACK,
   SETTINGS_RESPONSE_STREAMING_CALLBACK,
   SETTINGS_THINKING_CONTENT_CALLBACK,
@@ -45,12 +44,8 @@ const mocked = vi.hoisted(() => ({
   setShowThinkingContentMock: vi.fn(),
   getShowAssistantRunFooterMock: vi.fn(),
   setShowAssistantRunFooterMock: vi.fn(),
-  getPinnedDashboardEnabledMock: vi.fn(),
-  setPinnedDashboardEnabledMock: vi.fn(),
   getShowBackgroundSessionNotificationsMock: vi.fn(),
   setShowBackgroundSessionNotificationsMock: vi.fn(),
-  applyPinnedDashboardEnabledMock: vi.fn(),
-  refreshSessionValuesMock: vi.fn(),
   getTtsModeMock: vi.fn(),
   setTtsModeMock: vi.fn(),
   getPromptQueueModeMock: vi.fn(),
@@ -82,8 +77,6 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
   setShowThinkingContent: mocked.setShowThinkingContentMock,
   getShowAssistantRunFooter: mocked.getShowAssistantRunFooterMock,
   setShowAssistantRunFooter: mocked.setShowAssistantRunFooterMock,
-  getPinnedDashboardEnabled: mocked.getPinnedDashboardEnabledMock,
-  setPinnedDashboardEnabled: mocked.setPinnedDashboardEnabledMock,
   getShowBackgroundSessionNotifications: mocked.getShowBackgroundSessionNotificationsMock,
   setShowBackgroundSessionNotifications: mocked.setShowBackgroundSessionNotificationsMock,
   getTtsMode: mocked.getTtsModeMock,
@@ -97,14 +90,7 @@ vi.mock("../../../src/app/services/tts-service.js", () => ({
 }));
 
 function createDeps() {
-  return {
-    ...container,
-    pinnedMessageManager: {
-      initialize: vi.fn(),
-      applyPinnedDashboardEnabled: mocked.applyPinnedDashboardEnabledMock,
-      refreshSessionValues: mocked.refreshSessionValuesMock,
-    } as never,
-  };
+  return container;
 }
 
 let container: AppContainer;
@@ -127,11 +113,8 @@ describe("bot/commands/settings-command", () => {
     mocked.setShowThinkingContentMock.mockReset();
     mocked.getShowAssistantRunFooterMock.mockReset();
     mocked.setShowAssistantRunFooterMock.mockReset();
-    mocked.getPinnedDashboardEnabledMock.mockReset();
-    mocked.setPinnedDashboardEnabledMock.mockReset();
     mocked.getShowBackgroundSessionNotificationsMock.mockReset();
     mocked.setShowBackgroundSessionNotificationsMock.mockReset();
-    mocked.applyPinnedDashboardEnabledMock.mockReset();
     mocked.getTtsModeMock.mockReset();
     mocked.setTtsModeMock.mockReset();
     mocked.getPromptQueueModeMock.mockReset();
@@ -140,9 +123,7 @@ describe("bot/commands/settings-command", () => {
     mocked.getResponseStreamingModeMock.mockReturnValue("edit");
     mocked.getSendDiffFileAttachmentsMock.mockReturnValue(true);
     mocked.getShowAssistantRunFooterMock.mockReturnValue(true);
-    mocked.getPinnedDashboardEnabledMock.mockReturnValue(true);
     mocked.getShowBackgroundSessionNotificationsMock.mockReturnValue(true);
-    mocked.applyPinnedDashboardEnabledMock.mockResolvedValue(undefined);
     mocked.getPromptQueueModeMock.mockReturnValue("off");
     container.interactionManager.clear("settings_test_reset");
   });
@@ -178,18 +159,16 @@ describe("bot/commands/settings-command", () => {
       `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[4][0].text).toBe(
-      `${t("settings.pin_session_dashboard.label")}: ${t("settings.value.on")}`,
-    );
-    expect(opts.reply_markup.inline_keyboard[5][0].text).toBe(
       `${t("settings.background_notifications.label")}: ${t("settings.value.on")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[6][0].text).toBe(
+    expect(opts.reply_markup.inline_keyboard[5][0].text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.auto")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[7][0].text).toBe(
+    expect(opts.reply_markup.inline_keyboard[6][0].text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.off")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[8][0].text).toBe(t("inline.button.close"));
+    expect(opts.reply_markup.inline_keyboard[7][0].text).toBe(t("inline.button.close"));
+    expect(JSON.stringify(opts.reply_markup)).not.toContain("pin_session_dashboard");
   });
 
   it("shows thinking content setting when compact output is disabled", async () => {
@@ -221,15 +200,12 @@ describe("bot/commands/settings-command", () => {
       `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
     );
     expect(opts.reply_markup.inline_keyboard[5][0].text).toBe(
-      `${t("settings.pin_session_dashboard.label")}: ${t("settings.value.on")}`,
-    );
-    expect(opts.reply_markup.inline_keyboard[6][0].text).toBe(
       `${t("settings.background_notifications.label")}: ${t("settings.value.on")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[7][0].text).toBe(
+    expect(opts.reply_markup.inline_keyboard[6][0].text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.off")}`,
     );
-    expect(opts.reply_markup.inline_keyboard[8][0].text).toBe(
+    expect(opts.reply_markup.inline_keyboard[7][0].text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.off")}`,
     );
   });
@@ -271,11 +247,8 @@ describe("bot/callbacks/settings-callback-handler", () => {
     mocked.setShowThinkingContentMock.mockReset();
     mocked.getShowAssistantRunFooterMock.mockReset();
     mocked.setShowAssistantRunFooterMock.mockReset();
-    mocked.getPinnedDashboardEnabledMock.mockReset();
-    mocked.setPinnedDashboardEnabledMock.mockReset();
     mocked.getShowBackgroundSessionNotificationsMock.mockReset();
     mocked.setShowBackgroundSessionNotificationsMock.mockReset();
-    mocked.applyPinnedDashboardEnabledMock.mockReset();
     mocked.getTtsModeMock.mockReset();
     mocked.setTtsModeMock.mockReset();
     mocked.getPromptQueueModeMock.mockReset();
@@ -284,9 +257,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     mocked.getResponseStreamingModeMock.mockReturnValue("edit");
     mocked.getSendDiffFileAttachmentsMock.mockReturnValue(true);
     mocked.getShowAssistantRunFooterMock.mockReturnValue(true);
-    mocked.getPinnedDashboardEnabledMock.mockReturnValue(true);
     mocked.getShowBackgroundSessionNotificationsMock.mockReturnValue(true);
-    mocked.applyPinnedDashboardEnabledMock.mockResolvedValue(undefined);
     mocked.getPromptQueueModeMock.mockReturnValue("off");
     container.interactionManager.clear("settings_test_reset");
   });
@@ -339,12 +310,9 @@ describe("bot/callbacks/settings-callback-handler", () => {
       `${t("settings.assistant_footer.label")}: ${t("settings.value.on")}`,
     );
     expect(defined(opts?.reply_markup?.inline_keyboard[4]?.[0]).text).toBe(
-      `${t("settings.pin_session_dashboard.label")}: ${t("settings.value.on")}`,
-    );
-    expect(defined(opts?.reply_markup?.inline_keyboard[5]?.[0]).text).toBe(
       `${t("settings.background_notifications.label")}: ${t("settings.value.on")}`,
     );
-    expect(defined(opts?.reply_markup?.inline_keyboard[6]?.[0]).text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[5]?.[0]).text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.off")}`,
     );
   });
@@ -503,7 +471,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
     const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(defined(opts?.reply_markup?.inline_keyboard[6]?.[0]).text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[5]?.[0]).text).toBe(
       `${t("settings.background_notifications.label")}: ${t("settings.value.off")}`,
     );
   });
@@ -524,7 +492,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
     const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(defined(opts?.reply_markup?.inline_keyboard[8]?.[0]).text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[7]?.[0]).text).toBe(
       `${t("settings.prompt_queue.label")}: ${t("settings.value.on")}`,
     );
   });
@@ -596,7 +564,7 @@ describe("bot/callbacks/settings-callback-handler", () => {
     const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
     const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(defined(opts?.reply_markup?.inline_keyboard[7]?.[0]).text).toBe(
+    expect(defined(opts?.reply_markup?.inline_keyboard[6]?.[0]).text).toBe(
       `${t("settings.tts.label")}: ${t("status.tts.all")}`,
     );
   });
@@ -634,53 +602,13 @@ describe("bot/callbacks/settings-callback-handler", () => {
     expect(ctx.editMessageText).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles pin session dashboard and applies it immediately", async () => {
-    mocked.getOutputModeMock.mockReturnValue("full");
-    mocked.getShowThinkingContentMock.mockReturnValue(true);
-    mocked.getTtsModeMock.mockReturnValue("off");
-    mocked.getPinnedDashboardEnabledMock.mockReturnValueOnce(true).mockReturnValueOnce(false);
+  it("does not act on a retired dashboard pin callback", async () => {
     activateSettingsMenu();
-    const ctx = createCallbackContext(SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK);
+    const ctx = createCallbackContext("settings:pin_session_dashboard");
 
     const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
-    expect(mocked.applyPinnedDashboardEnabledMock).toHaveBeenCalledWith(false);
-    expect(mocked.setPinnedDashboardEnabledMock).toHaveBeenCalledWith(false);
-    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
-    const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
-    const [, opts] = call;
-    expect(defined(opts?.reply_markup?.inline_keyboard[5]?.[0]).text).toBe(
-      `${t("settings.pin_session_dashboard.label")}: ${t("settings.value.off")}`,
-    );
-  });
-
-  it("corrects a dashboard turned on to the session's loaded values after saving", async () => {
-    mocked.refreshSessionValuesMock.mockReset();
-    mocked.refreshSessionValuesMock.mockResolvedValue(undefined);
-    mocked.getPinnedDashboardEnabledMock.mockReturnValueOnce(false);
-    activateSettingsMenu();
-    const ctx = createCallbackContext(SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK);
-
-    await handleSettingsCallback(ctx, createDeps());
-
-    expect(mocked.applyPinnedDashboardEnabledMock).toHaveBeenCalledWith(true);
-    expect(mocked.setPinnedDashboardEnabledMock).toHaveBeenCalledWith(true);
-    expect(mocked.refreshSessionValuesMock).toHaveBeenCalledOnce();
-    expect(mocked.setPinnedDashboardEnabledMock.mock.invocationCallOrder[0]).toBeLessThan(
-      defined(mocked.refreshSessionValuesMock.mock.invocationCallOrder[0]),
-    );
-  });
-
-  it("does not persist pin session dashboard when applying it fails", async () => {
-    mocked.applyPinnedDashboardEnabledMock.mockRejectedValue(new Error("pin failed"));
-    activateSettingsMenu();
-    const ctx = createCallbackContext(SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK);
-
-    const result = await handleSettingsCallback(ctx, createDeps());
-
-    expect(result).toBe(true);
-    expect(mocked.setPinnedDashboardEnabledMock).not.toHaveBeenCalled();
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("callback.processing_error") });
     expect(ctx.editMessageText).not.toHaveBeenCalled();
   });
@@ -702,25 +630,6 @@ describe("bot/callbacks/settings-callback-handler", () => {
 
     expect(result).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("callback.processing_error") });
-  });
-});
-
-describe("pin session dashboard labels", () => {
-  it("uses the settled labels in each dictionary", () => {
-    expect(en["settings.pin_session_dashboard.label"]).toBe("Pin session dashboard");
-    expect(ru["settings.pin_session_dashboard.label"]).toBe("Закреплять дашборд сессии");
-    for (const [dictionary, label] of [
-      [ar, "تثبيت لوحة معلومات الجلسة"],
-      [de, "Sitzungsdashboard anheften"],
-      [es, "Fijar el panel de la sesión"],
-      [fr, "Épingler le tableau de bord de la session"],
-      [itLocale, "Fissa il pannello della sessione"],
-      [ko, "세션 대시보드 고정"],
-      [pt, "Fixar o painel da sessão"],
-      [zh, "置顶会话仪表盘"],
-    ] as const) {
-      expect(dictionary["settings.pin_session_dashboard.label"]).toBe(label);
-    }
   });
 });
 

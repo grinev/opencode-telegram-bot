@@ -98,18 +98,17 @@ No public inbound ports are required for normal usage.
 - Ordinary project-relative Markdown file links in finalized assistant replies deliver separate documents after all reply text, in link order, before later output and the footer; replay and scheduled results also deliver them. Files are read through OpenCode without shared storage. V2 and V1 binary files retain their bytes; V1 text is returned after the server trims leading/trailing whitespace and the final newline. Images written with `![alt](path)` remain photos, not documents. Raw output is unchanged
 - Deliver reasoning as a collapsed quote that expands on tap
 - Hide full model reasoning by default; optionally stream it in the thinking message when explicitly enabled
-- Stream intermediate assistant/tool/thinking edits and pinned file-change updates once per second for the first minute, then slow down to 2s / 5s / 10s so long runs stay under Telegram rate limits; the interval resets when the run stops
+- Stream intermediate assistant/tool/thinking edits once per second for the first minute, then slow down to 2s / 5s / 10s so long runs stay under Telegram rate limits; the interval resets when the run stops
 - Split long responses into multiple Telegram messages, which is now rare: native messages hold 32768 characters instead of 4096
 - Send code updates as files (size-limited)
 
 ### Session status in chat
 
-- Keep a pinned status message in the chat; it can be turned off in `/settings` (default on)
-- Show session title, project, model, context usage, and changed files; when a variant is set, the model line is `provider/id (variant)`. The changed-file list and its counts are OpenCode's session diff, live and after a switch or restart, not a sum of each edit; an empty diff removes the list, and a failed refresh keeps the last one
-- On a session switch, a bot restart or `/rename`, the dashboard appears with the session's real context, cost and changed files, never a placeholder zero; turning it on in `/settings` sends it at once and corrects it once the values load
-- Picking a model, selecting an agent that applies its own model, or re-selecting the session on the dashboard when it brings another model edits the dashboard at once, mid-run too, to that model and its context limit; a limit the catalog does not list yet shows the default and is corrected once it does
-- Auto-update status from SSE and tool events
-- Preserve pinned message ID across bot restarts
+- Show the current project and session on a persistent bottom-keyboard row below queued messages and goal controls. The row follows changes, renames and bot restarts; long names are shortened only on the button
+- Tapping the row opens a fresh dashboard at the bottom of the chat, even during a run or manual compaction, but not during a blocking interaction. An old label still opens the current selection, after refreshing the keyboard
+- The dashboard shows full names, project branch/worktree and goal where applicable, and a snapshot of context usage, session cost and changed files from OpenCode's session diff. It omits unavailable values rather than showing placeholder zeroes. Model, agent and effort remain on the keyboard
+- Close removes the current card even during another interaction, without changing the session. Opening a new card or changing or resetting the selection retires the previous one. If Telegram cannot delete it or the bot has restarted, its Close button is inactive
+- The bot does not send or pin dashboards automatically; existing pins are left untouched
 
 ### Security
 
@@ -131,7 +130,7 @@ No public inbound ports are required for normal usage.
 - Configurable scheduled task limit (default: 10)
 - Configurable bot locale
 - Configurable visibility for thinking content and diff-file attachments
-- Output mode (`/settings`) cycles full (default), compact, and minimal; thinking content and diff files are Full-only, and deleting progress on finish is Compact-only. Assistant footer, pinned session dashboard, notifications from other sessions, message queue and TTS remain configurable.
+- Output mode (`/settings`) cycles full (default), compact, and minimal; thinking content and diff files are Full-only, and deleting progress on finish is Compact-only. Assistant footer, notifications from other sessions, message queue and TTS remain configurable.
 - Assistant response streaming (`/settings`) cycles edit (default), draft (experimental), and off independently of output mode; changing the setting does not switch the mode of a reply already in progress
 - Configurable opt-in display of full thinking/reasoning content
 - Configurable max code file size in KB (default: 100)
@@ -169,11 +168,11 @@ Current command set:
 - `/help` - show command help
 - `/ls` - interactive file browser for the current project directory; a text file can be attached to the next prompt from its detail view
 
-Model, agent, variant, and context actions are available from the persistent bottom keyboard. The context button opens window usage and the latest assistant message's token breakdown and cost when a session is idle; its inline controls close the details or open a separate compaction confirmation.
+Project and session status, model, agent, variant, and context actions are available from the persistent bottom keyboard. The separate context button opens window usage and the latest assistant message's token breakdown and cost when a session is idle; its inline controls close the details or open a separate compaction confirmation.
 
 After confirming manual context compaction in Telegram, the bot remains responsive but refuses new prompts, media, commands and skills for that session without queueing them. `/detach`, `/abort`, `/status`, `/help` and `/opencode_stop` remain available. `/status` shows compaction, and `/abort` reports cancellation separately without claiming an unconfirmed result. `/detach` leaves compaction running and leaves its original progress message unchanged; returning before it ends shows fresh progress, and a successful result while detached uses the ordinary other-session notice and switch button. A V2 queue admission is not a successful result.
 
-On OpenCode V2, sessions, projects and worktrees whose folder the server reports as no longer existing are left out of `/recent`, `/sessions`, `/projects` and `/worktree`. A current project in such a folder stays selected and named in `/status` and the pinned message; a prompt, `/new` or `/task` there answers that the folder is gone and points to `/projects` (or to `/worktree` for a worktree whose main repository still exists, where `/worktree` then lists that repository's worktrees) instead of reaching OpenCode. A scheduled task in such a folder fails each run with that reason and stays in the list.
+On OpenCode V2, sessions, projects and worktrees whose folder the server reports as no longer existing are left out of `/recent`, `/sessions`, `/projects` and `/worktree`. A current project in such a folder stays selected and named in `/status` and the bottom keyboard; a prompt, `/new` or `/task` there answers that the folder is gone and points to `/projects` (or to `/worktree` for a worktree whose main repository still exists, where `/worktree` then lists that repository's worktrees) instead of reaching OpenCode. A scheduled task in such a folder fails each run with that reason and stays in the list.
 
 Text messages (non-commands) are treated as prompts for OpenCode only when no blocking interaction is active. Voice/audio messages are transcribed and then sent as prompts when STT is configured. When TTS mode in `/settings` is set to `all`, completed assistant replies include a generated audio file if TTS is configured. When it is set to `auto`, audio replies are sent only after voice/audio prompts.
 
@@ -230,7 +229,7 @@ Agent picker behavior:
 - [x] Background notifications for detached/non-current sessions in the currently selected project/worktree, with an opt-out in `/settings` that defaults to on and does not cancel the request in OpenCode; an assistant-response notification names the session by its title and its own project, labelled the way `/recent` labels a folder, with an unnamed session reading as `new session`, while question and permission notifications keep their shorter text; a notification's open button selects that session's own project and worktree, whichever project is selected by the time it is pressed, and follows the session there
 - [x] Telegram-friendly result delivery, including sending generated code/files when needed
 - [x] Interactive question and permission handling directly in chat (buttons + custom answers)
-- [x] Live pinned session status in chat (project, model with variant in parentheses when set, context usage, changed files from OpenCode's session diff rather than a sum of each edit), with an opt-out in `/settings` that defaults to on. On OpenCode V2, when the session has a goal, a line after the title shows its status and a short objective; no goal means no line
+- [x] Current project and session on the bottom keyboard, with a closable on-demand dashboard for context usage, session cost, changed files, and the OpenCode V2 goal when present
 - [x] In-chat controls for model, agent, variant, and context
 - [x] Built-in and custom command catalog access (`/commands`)
 - [x] Search commands by full name or description in `/commands`, with paginated results and the existing execution confirmation

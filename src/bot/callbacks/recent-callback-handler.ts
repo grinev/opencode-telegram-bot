@@ -14,7 +14,7 @@ import { selectSessionById, type SessionSelectDeps } from "./session-callback-ha
 import { failure } from "./feedback.js";
 
 type RecentSelectDeps = SessionSelectDeps & Pick<AppContainer,
-  "backgroundSessionTracker" | "pinnedMessageManager" | "resetAggregator" | "goalManager">;
+  "backgroundSessionTracker" | "resetAggregator" | "goalManager">;
 
 export async function handleRecentSelect(ctx: Context, deps: RecentSelectDeps): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
@@ -37,6 +37,7 @@ export async function handleRecentSelect(ctx: Context, deps: RecentSelectDeps): 
     return true;
   }
 
+  const previousProject = getCurrentProject();
   try {
     const { data: session, error } = await opencodeClient.session.get({ sessionID: sessionId, directory });
     if (error || !session || session.directory !== directory || session.parentID) {
@@ -58,6 +59,9 @@ export async function handleRecentSelect(ctx: Context, deps: RecentSelectDeps): 
     deps.resetInteractions("recent_select_error");
     logger.error(`[Recent] Failed to select session ${sessionId} in ${directory}:`, error);
     await failure(ctx, "sessions.select_error");
+    if (ctx.chat && getCurrentProject()?.worktree !== previousProject?.worktree) {
+      await deps.keyboardManager.sendKeyboardUpdate(ctx.chat.id);
+    }
   }
   return true;
 }

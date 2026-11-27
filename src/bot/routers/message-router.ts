@@ -14,6 +14,7 @@ import { handleSessionSearchTextInput } from "../callbacks/session-callback-hand
 import { handleCommandsSearchTextInput } from "../callbacks/command-catalog-callback-handler.js";
 import { handleSkillsSearchTextInput } from "../callbacks/skills-catalog-callback-handler.js";
 import { handleRenameTextAnswer } from "../callbacks/rename-callback-handler.js";
+import { handleDashboardOpen } from "../dashboard/dashboard-card.js";
 import { handleContextButtonPress } from "../menus/context-control-menu.js";
 import { showAgentSelectionMenu } from "../menus/agent-selection-menu.js";
 import { showModelSelectionMenu } from "../menus/model-selection-menu.js";
@@ -21,6 +22,7 @@ import { showVariantSelectionMenu } from "../menus/variant-selection-menu.js";
 import {
   AGENT_MODE_BUTTON_TEXT_PATTERN,
   CONTEXT_BUTTON_TEXT_PATTERN,
+  DASHBOARD_BUTTON_TEXT_PATTERN,
   GOAL_BUTTON_TEXT_PATTERN,
   MODEL_BUTTON_TEXT_PATTERN,
   QUEUED_PROMPT_BUTTON_TEXT_PATTERN,
@@ -42,6 +44,7 @@ import { handleVoiceMessage } from "../handlers/voice-handler.js";
 import { unknownCommandMiddleware } from "../middleware/unknown-command.js";
 import { getIncomingPrompt } from "../handlers/rich-message-handler.js";
 import { handleUnsupportedMessage } from "../handlers/unsupported-message-handler.js";
+import { isDashboardOpen } from "../middleware/interaction-guard-decision.js";
 
 interface MessageRouterDeps {
   container: AppContainer;
@@ -109,6 +112,10 @@ export function registerMessageRouter(bot: Bot<Context>, deps: MessageRouterDeps
     const keyboard = container.keyboardManager.getKeyboard();
     await ctx.reply(t("queue.not_found"), keyboard ? { reply_markup: keyboard } : {});
   });
+
+  bot.hears(DASHBOARD_BUTTON_TEXT_PATTERN, (ctx, next) =>
+    isDashboardOpen(ctx) ? handleDashboardOpen(ctx, container) : next(),
+  );
 
   bot.hears(AGENT_MODE_BUTTON_TEXT_PATTERN, async (ctx) => {
     logger.debug(`[Bot] Agent button pressed: ${ctx.message?.text}`);

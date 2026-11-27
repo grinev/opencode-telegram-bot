@@ -90,6 +90,35 @@ describe("interactionGuardMiddleware", () => {
     expect(ctx.reply).not.toHaveBeenCalled();
   });
 
+  it("lets a stale dashboard press pass work and manual compaction without queueing it", async () => {
+    const session = { id: "manual", title: "Current", directory: "/project" };
+    vi.spyOn(settingsStore, "getCurrentSession").mockReturnValue(session);
+    deps.foregroundSessionState.markBusy(session.id, session.directory);
+    mocked.getPromptQueueMode.mockReturnValue("queue");
+    const next = vi.fn();
+    await interactionGuardMiddleware(createTextContext("📋 Old project · Old Agent"), next, deps);
+    expect(deps.manualCompaction.reserve(session)).toBeDefined();
+    await interactionGuardMiddleware(createTextContext("📋 Old project · Old Agent"), next, deps);
+
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(promptQueue.size()).toBe(0);
+    expect(mocked.reconcileForegroundBusyStateMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses open but lets Close through while a question is awaiting typed input", async () => {
+    startInteractionForTest(deps.interactionManager, { kind: "question", expectedInput: "text" });
+    const state = deps.interactionManager.getSnapshot();
+    const ctx = createTextContext("📋 Project · Session");
+    const next = vi.fn();
+    await interactionGuardMiddleware(ctx, next, deps);
+    expect(ctx.reply).toHaveBeenCalledWith(t("question.blocked.expected_answer"));
+    expect(next).not.toHaveBeenCalled();
+
+    await interactionGuardMiddleware(createCallbackContext("dashboard:close"), next, deps);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(deps.interactionManager.getSnapshot()).toEqual(state);
+  });
+
   it("blocks new text, media and catalog runs before the normal busy or queue logic", async () => {
     const session = { id: "manual", title: "Manual", directory: "/project" };
     vi.spyOn(settingsStore, "getCurrentSession").mockReturnValue(session);

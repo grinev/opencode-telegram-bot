@@ -7,6 +7,7 @@ const mocked = vi.hoisted(() => ({
   markAttachedSessionBusy: vi.fn(),
   ingestSessionInfoForCache: vi.fn(),
   getCurrentSession: vi.fn(),
+  updateSelectedSessionTitle: vi.fn(),
 }));
 
 vi.mock("../../../src/config.js", async (importOriginal) => {
@@ -37,6 +38,7 @@ vi.mock("../../../src/app/services/session-cache-service.js", async (importOrigi
 vi.mock("../../../src/app/services/session-service.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/app/services/session-service.js")>()),
   getCurrentSession: mocked.getCurrentSession,
+  updateSelectedSessionTitle: mocked.updateSelectedSessionTitle,
 }));
 
 import { createEventRouter, type EventRouterDeps } from "../../../src/app/services/event-router.js";
@@ -123,6 +125,22 @@ describe("app/services/event-router", () => {
     expect(mocked.markAttachedSessionBusy).not.toHaveBeenCalled();
     expect(deps.backgroundSessionTracker.processEvent).toHaveBeenCalledWith(event, null);
     expect(deps.summaryAggregator.processEvent).toHaveBeenCalledWith(event);
+  });
+
+  it("forwards a title change using the normalized session info even without a directory", () => {
+    const { routerDeps } = createDeps();
+    const previous = { id: "session-1", directory: "/repo", title: "" };
+    mocked.updateSelectedSessionTitle.mockReturnValueOnce(previous);
+    const onSelectedTitleChanged = vi.fn();
+    const route = createEventRouter({
+      directory: "/repo", deps: routerDeps, isForegroundSession: () => true, onSelectedTitleChanged,
+    });
+    route(envelope({
+      type: "session.updated", properties: { info: { id: "session-1", title: "Generated title" } },
+    }));
+
+    expect(mocked.updateSelectedSessionTitle).toHaveBeenCalledExactlyOnceWith("session-1", "Generated title");
+    expect(onSelectedTitleChanged).toHaveBeenCalledExactlyOnceWith(previous, "Generated title");
   });
 
   it("marks the attached session busy from its own progress events", () => {

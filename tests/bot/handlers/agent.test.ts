@@ -15,8 +15,6 @@ const mocked = vi.hoisted(() => ({
   pinnedRefreshContextLimitMock: vi.fn(),
   pinnedGetContextInfoMock: vi.fn(),
   pinnedGetContextLimitMock: vi.fn(),
-  pinnedRefreshMock: vi.fn(),
-  pinnedOnModelChangeMock: vi.fn(),
   createMainKeyboardMock: vi.fn(),
   switchedMock: vi.fn(),
   showVariantMenuAfterModelChangeMock: vi.fn(),
@@ -68,12 +66,10 @@ function createDeps() {
       updateContext: mocked.keyboardUpdateContextMock,
       getState: mocked.keyboardGetStateMock,
     } as never,
-    pinnedMessageManager: {
+    sessionMetricsManager: {
       refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
       getContextInfo: mocked.pinnedGetContextInfoMock,
       getContextLimit: mocked.pinnedGetContextLimitMock,
-      refresh: mocked.pinnedRefreshMock,
-      onModelChange: mocked.pinnedOnModelChangeMock,
     } as never,
   });
 }
@@ -107,8 +103,6 @@ describe("bot agent selection", () => {
     mocked.pinnedRefreshContextLimitMock.mockReset();
     mocked.pinnedGetContextInfoMock.mockReset();
     mocked.pinnedGetContextLimitMock.mockReset();
-    mocked.pinnedRefreshMock.mockReset();
-    mocked.pinnedOnModelChangeMock.mockReset();
     mocked.createMainKeyboardMock.mockReset();
     mocked.switchedMock.mockReset();
     mocked.showVariantMenuAfterModelChangeMock.mockReset();
@@ -120,13 +114,11 @@ describe("bot agent selection", () => {
       modelID: "kimi",
       variant: "high",
     });
-    mocked.pinnedGetContextLimitMock.mockReturnValue(0);
+    mocked.pinnedGetContextLimitMock.mockReturnValue(200_000);
     mocked.pinnedGetContextInfoMock.mockReturnValue(null);
     mocked.keyboardGetStateMock.mockReturnValue({ variantName: "💡 High" });
     mocked.createMainKeyboardMock.mockReturnValue({});
     mocked.switchedMock.mockResolvedValue(undefined);
-    mocked.pinnedRefreshMock.mockResolvedValue(undefined);
-    mocked.pinnedOnModelChangeMock.mockResolvedValue(undefined);
     mocked.pinnedRefreshContextLimitMock.mockResolvedValue(undefined);
   });
 
@@ -159,7 +151,7 @@ describe("bot agent selection", () => {
     expect(mocked.createMainKeyboardMock).toHaveBeenCalledWith(
       "plan",
       { providerID: "opencode-go", modelID: "kimi", variant: "high" },
-      undefined,
+      { tokensUsed: 0, tokensLimit: 200_000 },
       "💡 High",
     );
     expect(mocked.switchedMock).toHaveBeenCalledWith(
@@ -167,14 +159,14 @@ describe("bot agent selection", () => {
       t("agent.changed_message", { name: getAgentDisplayName("plan") }),
       keyboard,
     );
-    expect(mocked.pinnedOnModelChangeMock).toHaveBeenCalledOnce();
+    expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalledOnce();
     expect(mocked.showVariantMenuAfterModelChangeMock).not.toHaveBeenCalled();
   });
 
   it("draws the keyboard with the limit of the model the agent applied", async () => {
     mocked.applyAgentConfiguredSettingsMock.mockResolvedValueOnce(true);
     mocked.pinnedGetContextInfoMock.mockReturnValue({ tokensUsed: 10, tokensLimit: 200_000 });
-    mocked.pinnedOnModelChangeMock.mockImplementation(async () => {
+    mocked.pinnedRefreshContextLimitMock.mockImplementation(async () => {
       mocked.pinnedGetContextInfoMock.mockReturnValue({ tokensUsed: 10, tokensLimit: 1_000_000 });
     });
 
@@ -187,12 +179,12 @@ describe("bot agent selection", () => {
       { tokensUsed: 10, tokensLimit: 1_000_000 },
       expect.anything(),
     );
-    expect(defined(mocked.pinnedOnModelChangeMock.mock.invocationCallOrder[0])).toBeLessThan(
+    expect(defined(mocked.pinnedRefreshContextLimitMock.mock.invocationCallOrder[0])).toBeLessThan(
       defined(mocked.switchedMock.mock.invocationCallOrder[0]),
     );
   });
 
-  it("refreshes the pinned dashboard when only a variant was applied", async () => {
+  it("keeps the variant on the keyboard when only a variant was applied", async () => {
     mocked.applyAgentConfiguredSettingsMock.mockResolvedValueOnce(true);
 
     const ctx = mockContext({
@@ -201,19 +193,18 @@ describe("bot agent selection", () => {
 
     await handleAgentSelect(ctx, createDeps());
 
-    expect(mocked.pinnedOnModelChangeMock).toHaveBeenCalledOnce();
+    expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalledOnce();
     expect(mocked.showVariantMenuAfterModelChangeMock).not.toHaveBeenCalled();
   });
 
-  it("does not refresh the pinned dashboard when neither model nor variant was applied", async () => {
+  it("does not reload the limit when neither model nor variant was applied", async () => {
     const ctx = mockContext({
       callbackQuery: { data: "agent:plan" },
     });
 
     await handleAgentSelect(ctx, createDeps());
 
-    expect(mocked.pinnedOnModelChangeMock).not.toHaveBeenCalled();
-    expect(mocked.pinnedRefreshMock).not.toHaveBeenCalled();
+    expect(mocked.pinnedRefreshContextLimitMock).not.toHaveBeenCalled();
     expect(mocked.showVariantMenuAfterModelChangeMock).not.toHaveBeenCalled();
   });
 });

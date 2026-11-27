@@ -2,7 +2,8 @@ import { Bot, Context } from "grammy";
 import type { Event } from "@opencode-ai/sdk/v2";
 import { config } from "../../config.js";
 import { opencodeServerVersion } from "../../opencode/client.js";
-import { getCurrentSession } from "../../app/services/session-service.js";
+import { getCurrentSession, reconcileSelectedSessionTitle } from "../../app/services/session-service.js";
+import type { SessionInfo } from "../../app/types/session.js";
 import { countToolCall } from "../../app/formatters/compact-summary-formatter.js";
 import { getDeleteCompactProgressOnFinish } from "../../app/stores/settings-store.js";
 import { restorePendingInteractionsAfterReconnect } from "../../app/services/attach-service.js";
@@ -33,6 +34,8 @@ import { registerSessionLifecycleHandlers } from "../events/handlers/session-lif
 import { registerDashboardHandlers } from "../events/handlers/dashboard-handler.js";
 import { registerGoalHandlers } from "../events/handlers/goal-handler.js";
 import { registerManualCompactionPresentation } from "../events/handlers/manual-compaction-handler.js";
+import { getDashboardButtonLabel } from "../keyboards/dashboard-button.js";
+import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 
 export interface BotEventSubscriptionService {
   ensureEventSubscription(directory: string): Promise<void>;
@@ -58,9 +61,10 @@ export type EventSubscriptionServiceDeps = Pick<
   | "interactionManager"
   | "keyboardManager"
   | "permissionManager"
-  | "pinnedMessageManager"
   | "questionManager"
+  | "renameManager"
   | "scheduledTaskRuntime"
+  | "sessionMetricsManager"
   | "summaryAggregator"
 > & Partial<Pick<AppContainer, "manualCompaction">>;
 
@@ -195,7 +199,10 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     registerToolActivityHandlers(handlerDeps);
     registerInteractionHandlers(handlerDeps);
     registerSessionLifecycleHandlers(handlerDeps);
-    registerDashboardHandlers(handlerDeps);
+    registerDashboardHandlers(handlerDeps, (sessionId) => {
+      const session = getCurrentSession();
+      if (session?.id === sessionId) this.reconcileTitle(session);
+    });
     registerGoalHandlers(handlerDeps);
 
     logger.info(`[Bot] Subscribing to OpenCode events for project: ${directory}`);
@@ -206,6 +213,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
         deps: { ...deps, captureMinimalProgressEnd: this.captureMinimalProgressEnd },
         isForegroundSession: policy.isForegroundSession,
         onLiveToolActivity: (sessionId, callId) => runtime.noteMinimalWork(sessionId, { callId }),
+        onSelectedTitleChanged: (previous, title) => this.publishTitle(previous, title),
       }),
       (info) => this.restoreAfterReconnect(info),
     ).catch((err) => {
@@ -313,6 +321,7 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     // A pickup or cancel of a waiting message in the gap was missed with the other events.
     const session = getCurrentSession();
     if (session) {
+      this.reconcileTitle(session);
       logger.debug(`[Bot] Reconciling the session inbox after reconnect: session=${session.id}`);
       reconcileInboxPrompts(session.id).catch((error) => {
         logger.warn("[Bot] Failed to reconcile the session inbox after reconnect:", error);
@@ -333,6 +342,25 @@ class EventSubscriptionService implements BotEventSubscriptionService {
     ).catch((error) => {
       logger.warn("[Bot] Failed to restore pending requests after event stream reconnect:", error);
     });
+  }
+
+  private reconcileTitle(session: SessionInfo): void {
+    safeBackgroundTask({
+      taskName: "dashboard.reconcileTitle",
+      task: () => reconcileSelectedSessionTitle(session),
+      onSuccess: (previous) => {
+        const selected = getCurrentSession();
+        if (previous && selected?.id === previous.id) this.publishTitle(previous, selected.title);
+      },
+    });
+  }
+
+  private publishTitle(previous: SessionInfo, title: string): void {
+    if (this.deps.renameManager.isSubmittingTitle(previous.id, title)) return;
+    const destination = this.getChatDestination();
+    if (!destination || getDashboardButtonLabel(previous.title) === getDashboardButtonLabel()) return;
+    this.deps.keyboardManager.initialize(destination.api, destination.chatId);
+    this.deps.keyboardManager.scheduleDashboardTitleUpdate(destination.chatId);
   }
 
   private getChatDestination(): TelegramDestination | null {

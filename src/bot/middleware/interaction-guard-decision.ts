@@ -8,10 +8,16 @@ import type {
   InteractionState,
   InteractionKind,
 } from "../../app/types/interaction.js";
-import { GOAL_BUTTON_TEXT_PATTERN, QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../message-patterns.js";
+import {
+  DASHBOARD_BUTTON_TEXT_PATTERN,
+  DASHBOARD_CLOSE_CALLBACK,
+  GOAL_BUTTON_TEXT_PATTERN,
+  QUEUED_PROMPT_BUTTON_TEXT_PATTERN,
+} from "../message-patterns.js";
 import type { LocalCommandRegistry } from "../../app/services/local-command-registry.js";
 import { isKnownCommand } from "../routers/command-utils.js";
 import { getCurrentSession } from "../../app/services/session-service.js";
+import { getIncomingPrompt } from "../handlers/rich-message-handler.js";
 
 export type InteractionGuardDecisionDeps = Pick<
   AppContainer,
@@ -45,6 +51,12 @@ function allowsBusyInteraction(kind: InteractionKind | undefined): boolean {
 function isQueuedPromptButtonPress(ctx: Context): boolean {
   const text = ctx.message?.text;
   return typeof text === "string" && QUEUED_PROMPT_BUTTON_TEXT_PATTERN.test(text);
+}
+
+export function isDashboardOpen(ctx: Context): boolean {
+  return typeof ctx.message?.text === "string" &&
+    DASHBOARD_BUTTON_TEXT_PATTERN.test(ctx.message.text) &&
+    !getIncomingPrompt(ctx)?.photos.length;
 }
 
 function normalizeIncomingCommand(text: string): string | null {
@@ -91,6 +103,7 @@ export function resolveCompactionInput(
   ctx: Context,
   deps: InteractionGuardDecisionDeps,
 ): "allow" | "block" | null {
+  if (isDashboardOpen(ctx) || ctx.callbackQuery?.data === DASHBOARD_CLOSE_CALLBACK) return null;
   if (!deps.manualCompaction?.isActive(getCurrentSession()?.id)) return null;
   const { inputType, command } = classifyIncomingInput(ctx);
   return inputType === "command" && command && BUSY_ALLOWED_COMMAND_SET.has(command)
@@ -98,7 +111,7 @@ export function resolveCompactionInput(
     : "block";
 }
 
-function getExpectedInputBlockReason(expectedInput: ExpectedInput): BlockReason {
+export function getExpectedInputBlockReason(expectedInput: ExpectedInput): BlockReason {
   switch (expectedInput) {
     case "callback":
       return "expected_callback";
@@ -181,6 +194,14 @@ export function resolveInteractionGuardDecision(
   const { attachManager, foregroundSessionState, interactionManager } = deps;
   const state = interactionManager.getSnapshot();
   const { inputType, command } = classifyIncomingInput(ctx);
+  if (ctx.callbackQuery?.data === DASHBOARD_CLOSE_CALLBACK) {
+    return createAllowDecision(inputType, state);
+  }
+  if (isDashboardOpen(ctx)) {
+    return state
+      ? createBlockDecision(inputType, state, getExpectedInputBlockReason(state.expectedInput))
+      : createAllowDecision(inputType, null);
+  }
   const isBusy = foregroundSessionState.isBusy() || attachManager.isBusy();
 
   const goalLabel = typeof ctx.message?.text === "string" && GOAL_BUTTON_TEXT_PATTERN.test(ctx.message.text);

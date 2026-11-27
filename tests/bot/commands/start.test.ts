@@ -16,12 +16,9 @@ const mocked = vi.hoisted(() => ({
     variant: "default",
   })),
   formatVariantForButtonMock: vi.fn(() => "Default"),
-  pinnedIsInitializedMock: vi.fn(() => false),
-  pinnedInitializeMock: vi.fn(),
   pinnedGetContextLimitMock: vi.fn(() => 0),
   pinnedRefreshContextLimitMock: vi.fn().mockResolvedValue(undefined),
   pinnedGetContextInfoMock: vi.fn(() => null),
-  pinnedClearMock: vi.fn().mockResolvedValue(undefined),
   keyboardInitializeMock: vi.fn(),
   keyboardUpdateAgentMock: vi.fn(),
   keyboardUpdateModelMock: vi.fn(),
@@ -59,13 +56,10 @@ vi.mock("../../../src/app/services/variant-selection-service.js", () => ({
 
 function createDeps() {
   return createTestAppContainer({
-    pinnedMessageManager: {
-      isInitialized: mocked.pinnedIsInitializedMock,
-      initialize: mocked.pinnedInitializeMock,
+    sessionMetricsManager: {
       getContextLimit: mocked.pinnedGetContextLimitMock,
       refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
       getContextInfo: mocked.pinnedGetContextInfoMock,
-      clear: mocked.pinnedClearMock,
     } as never,
     keyboardManager: {
       initialize: mocked.keyboardInitializeMock,
@@ -109,17 +103,12 @@ describe("bot/commands/start-command", () => {
     mocked.formatVariantForButtonMock.mockReset();
     mocked.formatVariantForButtonMock.mockReturnValue("Default");
 
-    mocked.pinnedIsInitializedMock.mockReset();
-    mocked.pinnedIsInitializedMock.mockReturnValue(false);
-    mocked.pinnedInitializeMock.mockReset();
     mocked.pinnedGetContextLimitMock.mockReset();
     mocked.pinnedGetContextLimitMock.mockReturnValue(0);
     mocked.pinnedRefreshContextLimitMock.mockReset();
     mocked.pinnedRefreshContextLimitMock.mockResolvedValue(undefined);
     mocked.pinnedGetContextInfoMock.mockReset();
     mocked.pinnedGetContextInfoMock.mockReturnValue(null);
-    mocked.pinnedClearMock.mockReset();
-    mocked.pinnedClearMock.mockResolvedValue(undefined);
 
     mocked.keyboardInitializeMock.mockReset();
     mocked.keyboardUpdateAgentMock.mockReset();
@@ -138,9 +127,7 @@ describe("bot/commands/start-command", () => {
     expect(mocked.clearSessionMock).toHaveBeenCalledTimes(1);
     expect(mocked.clearProjectMock).toHaveBeenCalledTimes(1);
     expect(mocked.keyboardClearContextMock).toHaveBeenCalledTimes(1);
-    expect(mocked.pinnedClearMock).toHaveBeenCalledTimes(1);
 
-    expect(mocked.pinnedInitializeMock).toHaveBeenCalledWith(ctx.api, 100);
     expect(mocked.keyboardInitializeMock).toHaveBeenCalledWith(ctx.api, 100);
     expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalledTimes(1);
 

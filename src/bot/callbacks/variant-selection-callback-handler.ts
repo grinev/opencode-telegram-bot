@@ -20,7 +20,7 @@ import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-m
  */
 export type VariantSelectDeps = Pick<
   AppContainer,
-  "interactionManager" | "keyboardManager" | "pinnedMessageManager"
+  "interactionManager" | "keyboardManager" | "sessionMetricsManager"
 >;
 
 export async function handleVariantSelect(ctx: Context, deps: VariantSelectDeps): Promise<boolean> {
@@ -42,8 +42,8 @@ export async function handleVariantSelect(ctx: Context, deps: VariantSelectDeps)
       deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
 
-    if (deps.pinnedMessageManager.getContextLimit() === 0) {
-      await deps.pinnedMessageManager.refreshContextLimit();
+    if (deps.sessionMetricsManager.getContextLimit() === 0) {
+      await deps.sessionMetricsManager.refreshContextLimit();
     }
 
     // Parse callback data: "variant:variantId"
@@ -71,9 +71,9 @@ export async function handleVariantSelect(ctx: Context, deps: VariantSelectDeps)
     // Build keyboard with correct context info
     const currentAgent = await resolveProjectAgent(getStoredAgent());
     const contextInfo =
-      deps.pinnedMessageManager.getContextInfo() ??
-      (deps.pinnedMessageManager.getContextLimit() > 0
-        ? { tokensUsed: 0, tokensLimit: deps.pinnedMessageManager.getContextLimit() }
+      deps.sessionMetricsManager.getContextInfo() ??
+      (deps.sessionMetricsManager.getContextLimit() > 0
+        ? { tokensUsed: 0, tokensLimit: deps.sessionMetricsManager.getContextLimit() }
         : null);
 
     deps.keyboardManager.updateAgent(currentAgent);
@@ -97,7 +97,6 @@ export async function handleVariantSelect(ctx: Context, deps: VariantSelectDeps)
 
     // Send confirmation message with updated keyboard, then drop the inline menu
     await switched(ctx, t("variant.changed_message", { name: displayName }), keyboard);
-    await deps.pinnedMessageManager.refresh();
 
     return true;
   } catch (err) {

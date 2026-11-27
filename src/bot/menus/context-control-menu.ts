@@ -57,7 +57,7 @@ export function buildCompactConfirmationMenu(): InlineKeyboard {
  */
 export async function handleContextButtonPress(
   ctx: Context,
-  deps: Pick<AppContainer, "interactionManager" | "pinnedMessageManager">,
+  deps: Pick<AppContainer, "interactionManager" | "sessionMetricsManager">,
 ): Promise<void> {
   logger.debug("[ContextHandler] Context button pressed");
 
@@ -73,7 +73,7 @@ export async function handleContextButtonPress(
 
   await replyWithInlineMenu(ctx, {
     menuKind: "context",
-    text: formatContextDetails(deps.pinnedMessageManager.getContextInfo(), metrics),
+    text: formatContextDetails(deps.sessionMetricsManager.getContextInfo(), metrics),
     keyboard,
     cancelButtonText: t("context.button.close"),
     metadata: { stage: "details" },

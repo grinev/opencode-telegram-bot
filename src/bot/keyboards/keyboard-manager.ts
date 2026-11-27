@@ -24,8 +24,8 @@ export class KeyboardManager {
 
   private api: Api | null = null;
   private chatId: number | null = null;
-  private lastUpdateTime: number = 0;
-  private readonly UPDATE_DEBOUNCE_MS = 2000; // Don't update more than once per 2 seconds
+  private updateQueue: Promise<void> = Promise.resolve();
+  private dashboardTitleUpdate: ReturnType<typeof setTimeout> | undefined;
 
   /**
    * Initialize the keyboard manager with Telegram API and chat ID
@@ -107,6 +107,7 @@ export class KeyboardManager {
    * Clear context information
    */
   public clearContext(): void {
+    this.cancelDashboardTitleUpdate();
     if (!this.state) {
       logger.warn("[KeyboardManager] Cannot clear context: not initialized");
       return;
@@ -141,44 +142,49 @@ export class KeyboardManager {
     );
   }
 
-  /**
-   * Send keyboard update to user
-   * Implements debouncing to avoid rate limits
-   */
-  public async sendKeyboardUpdate(chatId?: number): Promise<void> {
-    if (!this.api) {
-      logger.warn("[KeyboardManager] API not initialized");
-      return;
-    }
+  /** Explicit corrections are serialized and use the latest keyboard at send time. */
+  public sendKeyboardUpdate(chatId?: number, text = t("keyboard.updated")): Promise<void> {
+    this.cancelDashboardTitleUpdate();
+    return this.enqueueKeyboardUpdate(chatId, text);
+  }
 
-    const targetChatId = chatId ?? this.chatId;
-    if (!targetChatId) {
-      logger.warn("[KeyboardManager] No chatId available");
-      return;
-    }
-
-    // Debounce: don't update more frequently than UPDATE_DEBOUNCE_MS
-    const now = Date.now();
-    if (now - this.lastUpdateTime < this.UPDATE_DEBOUNCE_MS) {
-      logger.debug("[KeyboardManager] Update debounced");
-      return;
-    }
-
-    this.lastUpdateTime = now;
-
-    try {
-      const keyboard = this.buildKeyboard();
-
-      // Send a dummy message with updated keyboard
-      // This is needed because Reply Keyboard updates require a message
-      await this.api.sendMessage(targetChatId, t("keyboard.updated"), {
-        reply_markup: keyboard,
+  /** Batch rapid title changes; a normal keyboard update can deliver the new title sooner. */
+  public scheduleDashboardTitleUpdate(chatId: number): void {
+    if (this.dashboardTitleUpdate || !this.api) return;
+    const timer = setTimeout(() => {
+      void this.enqueueKeyboardUpdate(chatId, t("keyboard.updated"), () => {
+        if (this.dashboardTitleUpdate !== timer) return false;
+        this.dashboardTitleUpdate = undefined;
+        return true;
       });
+    }, 1000);
+    this.dashboardTitleUpdate = timer;
+    timer.unref();
+  }
 
-      logger.debug("[KeyboardManager] Keyboard update sent");
-    } catch (err) {
-      logger.error("[KeyboardManager] Failed to send keyboard update:", err);
-    }
+  private cancelDashboardTitleUpdate(): void {
+    clearTimeout(this.dashboardTitleUpdate);
+    this.dashboardTitleUpdate = undefined;
+  }
+
+  private enqueueKeyboardUpdate(
+    chatId: number | undefined,
+    text: string,
+    shouldSend?: () => boolean,
+  ): Promise<void> {
+    const api = this.api;
+    const targetChatId = chatId ?? this.chatId;
+    if (!api || targetChatId === null) return Promise.resolve();
+    const task = this.updateQueue.then(async () => {
+      if (shouldSend && !shouldSend()) return;
+      try {
+        await api.sendMessage(targetChatId, text, { reply_markup: this.buildKeyboard() });
+      } catch (error) {
+        logger.warn("[KeyboardManager] Failed to send keyboard update:", error);
+      }
+    });
+    this.updateQueue = task;
+    return task;
   }
 
   /**

@@ -1,7 +1,6 @@
 import type { Bot, Context } from "grammy";
 import { createEventSubscriptionService } from "../../bot/services/event-subscription-service.js";
 import { KeyboardManager } from "../../bot/keyboards/keyboard-manager.js";
-import { PinnedMessageManager } from "../../bot/pinned/pinned-message-manager.js";
 import { OpencodeAutoRestartService } from "../../opencode/auto-restart.js";
 import {
   OpencodeReadyLifecycle,
@@ -12,6 +11,8 @@ import { logger } from "../../utils/logger.js";
 import { AssistantRunState } from "../managers/assistant-run-state-manager.js";
 import { AttachManager } from "../managers/attach-manager.js";
 import { BackgroundSessionTracker } from "../managers/background-session-manager.js";
+import { DashboardCardManager } from "../managers/dashboard-card-manager.js";
+import { SessionMetricsManager } from "../managers/session-metrics-manager.js";
 import { ExternalUserInputSuppressionManager } from "../managers/external-input-suppression-manager.js";
 import { ForegroundSessionState } from "../managers/foreground-session-state-manager.js";
 import { GoalManager } from "../managers/goal-manager.js";
@@ -24,7 +25,6 @@ import { SummaryAggregator } from "../managers/summary-aggregation-manager.js";
 import { GoalService } from "../services/goal-service.js";
 import { HealthServer } from "../services/health-server-service.js";
 import { ManualCompactionService } from "../services/manual-compaction-service.js";
-import { formatDashboardGoalLine } from "../formatters/goal-text.js";
 import { ScheduledTaskRuntime } from "../services/scheduled-task-runtime-service.js";
 
 const HEARTBEAT_INTERVAL_MS = 5000;
@@ -41,6 +41,7 @@ export interface AppContainer {
   readonly assistantRunState: AssistantRunState;
   readonly attachManager: AttachManager;
   readonly backgroundSessionTracker: BackgroundSessionTracker;
+  readonly dashboardCardManager: DashboardCardManager;
   readonly externalUserInputSuppressionManager: ExternalUserInputSuppressionManager;
   readonly foregroundSessionState: ForegroundSessionState;
   readonly goalManager: GoalManager;
@@ -52,7 +53,7 @@ export interface AppContainer {
   readonly opencodeAutoRestartService: OpencodeAutoRestartService;
   readonly opencodeReadyLifecycle: OpencodeReadyLifecycle;
   readonly permissionManager: PermissionManager;
-  readonly pinnedMessageManager: PinnedMessageManager;
+  readonly sessionMetricsManager: SessionMetricsManager;
   readonly questionManager: QuestionManager;
   readonly renameManager: RenameManager;
   readonly scheduledTaskRuntime: ScheduledTaskRuntime;
@@ -99,8 +100,6 @@ export function createAppContainer(): AppContainer {
   const foregroundSessionState = new ForegroundSessionState();
   const goalManager = new GoalManager();
   const goalService = new GoalService(goalManager);
-  const pinnedMessageManager = new PinnedMessageManager();
-  pinnedMessageManager.setGoalLine(() => formatDashboardGoalLine(goalManager.snapshot().goal));
   const interactionManager = new InteractionManager();
   const opencodeReadyLifecycle = new OpencodeReadyLifecycle();
   const summaryAggregator = new SummaryAggregator();
@@ -124,6 +123,7 @@ export function createAppContainer(): AppContainer {
     assistantRunState: new AssistantRunState(),
     attachManager: new AttachManager(),
     backgroundSessionTracker: new BackgroundSessionTracker(),
+    dashboardCardManager: new DashboardCardManager(),
     externalUserInputSuppressionManager: new ExternalUserInputSuppressionManager(),
     foregroundSessionState,
     goalManager,
@@ -135,7 +135,7 @@ export function createAppContainer(): AppContainer {
     opencodeAutoRestartService: new OpencodeAutoRestartService(opencodeReadyLifecycle),
     opencodeReadyLifecycle,
     permissionManager: new PermissionManager(interactionManager),
-    pinnedMessageManager,
+    sessionMetricsManager: new SessionMetricsManager(),
     questionManager: new QuestionManager(interactionManager),
     renameManager: new RenameManager(interactionManager),
     scheduledTaskRuntime: new ScheduledTaskRuntime(foregroundSessionState),

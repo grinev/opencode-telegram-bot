@@ -4,7 +4,7 @@ import { isOpencodeServerHealthy } from "../../opencode/ready-refresh.js";
 import type { AppContainer } from "../bootstrap/app-container.js";
 import type { PermissionPromptChange, PermissionRequest } from "../types/permission.js";
 import type { SessionInfo } from "../types/session.js";
-import { clearSession, getCurrentSession } from "./session-service.js";
+import { clearSession, getCurrentSession, updateSelectedSessionTitle } from "./session-service.js";
 import { getCurrentProject } from "../stores/settings-store.js";
 import { resolveSessionParentChain } from "./recent-sessions-service.js";
 import { resetStreamThrottle } from "../../bot/streaming/stream-throttle.js";
@@ -14,7 +14,7 @@ import {
   isOpencodeNotFoundError,
 } from "../../utils/opencode-error.js";
 
-interface EnsureAttachPinnedSessionParams {
+interface PrepareSessionMetricsParams {
   api: Bot<Context>["api"];
   chatId: number;
   session: SessionInfo;
@@ -23,11 +23,8 @@ interface EnsureAttachPinnedSessionParams {
 }
 
 export interface AttachPresentationDeps {
-  /** Loads the session's dashboard values without drawing them. */
-  preparePinnedSession(params: EnsureAttachPinnedSessionParams): Promise<void>;
-  /** Draws the dashboard prepared last, once the session's updates are followed. */
-  showPinnedSession(): Promise<void>;
-  syncAttachState(attached: boolean, busy: boolean): Promise<void>;
+  prepareSessionMetrics(params: PrepareSessionMetricsParams): Promise<void>;
+  refreshRestoredSelection(api: Bot<Context>["api"], chatId: number, previousTitle?: string): Promise<void>;
   showCurrentQuestion(api: Bot<Context>["api"], chatId: number): Promise<void>;
   showPermissionRequest(
     api: Bot<Context>["api"],
@@ -86,8 +83,7 @@ export interface AttachSessionResult {
   restoredPermissions: number;
 }
 
-export interface RestoreAttachedCurrentSessionDeps
-  extends AttachRestoreDeps, Pick<AppContainer, "pinnedMessageManager"> {
+export interface RestoreAttachedCurrentSessionDeps extends AttachRestoreDeps {
   bot: Bot<Context>;
   chatId: number;
   ensureEventSubscription: (directory: string) => Promise<void>;
@@ -104,15 +100,6 @@ function getAttachBusyStatus(
   statuses: Record<string, { type?: string }> | undefined,
 ): boolean {
   return statuses?.[sessionId]?.type === "busy";
-}
-
-async function syncPinnedAttachState(deps: AttachStateDeps): Promise<void> {
-  if (!attachPresentation) {
-    return;
-  }
-
-  const attached = deps.attachManager.getSnapshot();
-  await attachPresentation.syncAttachState(attached !== null, attached?.busy ?? false);
 }
 
 async function listPendingQuestions(directory: string): Promise<PendingQuestion[] | null> {
@@ -334,7 +321,7 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
 
   deps.goalService?.follow(session.id);
 
-  await attachPresentation?.preparePinnedSession({
+  await attachPresentation?.prepareSessionMetrics({
     api: bot.api,
     chatId,
     session,
@@ -342,21 +329,12 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
     sessionCreated: deps.sessionCreated ?? false,
   });
 
-  try {
-    if (!alreadyAttached) {
-      await ensureEventSubscription(session.directory);
-      summaryAggregator.setSession(session.id);
-      summaryAggregator.setBotAndChatId(bot, chatId);
-      attachManager.attach(session.id, session.directory);
-    } else {
-      summaryAggregator.setSession(session.id);
-      summaryAggregator.setBotAndChatId(bot, chatId);
-    }
-  } finally {
-    // Drawn only now, so updates that arrived since the values loaded are in the first draw;
-    // drawn even when following fails, as the prepared values are this session's.
-    await attachPresentation?.showPinnedSession();
+  if (!alreadyAttached) {
+    await ensureEventSubscription(session.directory);
   }
+  summaryAggregator.setSession(session.id);
+  summaryAggregator.setBotAndChatId(bot, chatId);
+  if (!alreadyAttached) attachManager.attach(session.id, session.directory);
 
   const { data: statuses, error: statusesError } = await opencodeClient.session.status({
     directory: session.directory,
@@ -376,8 +354,6 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
   } else {
     attachManager.markIdle(session.id);
   }
-
-  await syncPinnedAttachState(deps);
 
   let restoredQuestion = false;
   let restoredPermissions = 0;
@@ -426,8 +402,7 @@ export async function attachToSession(deps: AttachSessionDeps): Promise<AttachSe
 
 /**
  * Restores the followed session, joining a restore already in progress: the OpenCode ready
- * notification and the Telegram polling start both restore at startup, and running both in
- * parallel draws two dashboards (two pinned messages) for the same session. A joined restore
+ * notification and the Telegram polling start both restore at startup. A joined restore
  * that failed (for example, the server was not ready yet) is attempted once more, so the
  * caller whose condition just changed still gets its own attempt.
  */
@@ -478,11 +453,35 @@ async function performAttachedCurrentSessionRestore(
       return false;
     }
 
-    if (await dropSavedSessionIfMissing(currentSession, deps)) {
+    const { data, error } = await opencodeClient.session.get({
+      sessionID: currentSession.id,
+      directory: currentSession.directory,
+    });
+    const selected = getCurrentSession();
+    const project = getCurrentProject();
+    if (
+      selected?.id !== currentSession.id ||
+      selected.directory !== currentSession.directory ||
+      project?.id !== currentProject.id ||
+      project.worktree !== currentProject.worktree
+    ) {
       return false;
     }
-
-    await attachToSession({ ...deps, session: currentSession });
+    if (isOpencodeNotFoundError(error)) {
+      logger.info(`[Attach] Saved session is missing, clearing ${currentSession.id}`);
+      clearSession();
+      await attachPresentation?.refreshRestoredSelection(deps.bot.api, deps.chatId);
+      return false;
+    }
+    // A title event may already have updated this session while the read was in flight.
+    if (selected === currentSession && !error && data?.title &&
+      updateSelectedSessionTitle(currentSession.id, data.title)
+    ) {
+      await attachPresentation?.refreshRestoredSelection(deps.bot.api, deps.chatId, currentSession.title);
+    }
+    const session = getCurrentSession();
+    if (session?.id !== currentSession.id || session.directory !== currentSession.directory) return false;
+    await attachToSession({ ...deps, session });
     logger.info(
       `[Attach] Restored followed session on startup: session=${currentSession.id}, directory=${currentSession.directory}`,
     );
@@ -496,36 +495,6 @@ async function performAttachedCurrentSessionRestore(
 /** Clears the in-flight restore guard (tests). */
 export function __resetAttachRestoreForTests(): void {
   restoreInFlight = null;
-}
-
-/**
- * A saved session the server does not have (for example after switching the API version)
- * stops being the current session; prompts and commands then follow the no-session path.
- */
-async function dropSavedSessionIfMissing(
-  session: SessionInfo,
-  deps: Pick<AppContainer, "pinnedMessageManager">,
-): Promise<boolean> {
-  const { error } = await opencodeClient.session.get({
-    sessionID: session.id,
-    directory: session.directory,
-  });
-  if (!isOpencodeNotFoundError(error)) {
-    return false;
-  }
-
-  logger.info(
-    `[Attach] Saved session no longer exists on the OpenCode server; clearing it: session=${session.id}, directory=${session.directory}`,
-  );
-  clearSession();
-  if (deps.pinnedMessageManager.isInitialized()) {
-    try {
-      await deps.pinnedMessageManager.clear();
-    } catch (clearError) {
-      logger.warn("[Attach] Failed to clear pinned message for a missing session:", clearError);
-    }
-  }
-  return true;
 }
 
 /**
@@ -631,27 +600,20 @@ export function detachAttachedSession(reason: string, deps: DetachSessionDeps): 
 
   deps.resetAggregator();
   deps.attachManager.clear(reason);
-  void syncPinnedAttachState(deps);
 }
 
-export async function markAttachedSessionBusy(
+export function markAttachedSessionBusy(
   sessionId: string,
   deps: AttachStateDeps,
 ): Promise<void> {
-  if (!deps.attachManager.markBusy(sessionId)) {
-    return;
-  }
-
-  await syncPinnedAttachState(deps);
+  deps.attachManager.markBusy(sessionId);
+  return Promise.resolve();
 }
 
-export async function markAttachedSessionIdle(
+export function markAttachedSessionIdle(
   sessionId: string,
   deps: AttachStateDeps,
 ): Promise<void> {
-  if (!deps.attachManager.markIdle(sessionId)) {
-    return;
-  }
-
-  await syncPinnedAttachState(deps);
+  deps.attachManager.markIdle(sessionId);
+  return Promise.resolve();
 }

@@ -7,14 +7,12 @@ import {
   getPromptQueueMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
-  getPinnedDashboardEnabled,
   getShowAssistantRunFooter,
   getShowBackgroundSessionNotifications,
   getShowThinkingContent,
   getTtsMode,
   setDeleteCompactProgressOnFinish,
   setOutputMode,
-  setPinnedDashboardEnabled,
   setPromptQueueMode,
   setShowBackgroundSessionNotifications,
   setResponseStreamingMode,
@@ -29,7 +27,6 @@ import {
 import { t } from "../../i18n/index.js";
 import { opencodeServerVersion } from "../../opencode/client.js";
 import { logger } from "../../utils/logger.js";
-import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 import {
   buildSettingsMenuView,
@@ -39,7 +36,6 @@ import {
   SETTINGS_COMPACT_OUTPUT_CALLBACK,
   SETTINGS_DELETE_PROGRESS_ON_FINISH_CALLBACK,
   SETTINGS_DIFF_FILES_CALLBACK,
-  SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK,
   SETTINGS_PROMPT_QUEUE_CALLBACK,
   SETTINGS_RESPONSE_STREAMING_CALLBACK,
   SETTINGS_THINKING_CONTENT_CALLBACK,
@@ -89,7 +85,7 @@ function getNextResponseStreamingMode(mode: ResponseStreamingMode): ResponseStre
   return "edit";
 }
 
-export type SettingsCallbackDeps = Pick<AppContainer, "interactionManager" | "pinnedMessageManager">;
+export type SettingsCallbackDeps = Pick<AppContainer, "interactionManager">;
 
 export async function handleSettingsCallback(
   ctx: Context,
@@ -170,29 +166,6 @@ export async function handleSettingsCallback(
 
     if (callbackData === SETTINGS_ASSISTANT_FOOTER_CALLBACK) {
       setShowAssistantRunFooter(!getShowAssistantRunFooter());
-      const { text, keyboard } = buildSettingsMenuView();
-      await ctx.answerCallbackQuery({ text: t("settings.saved") });
-      await ctx.editMessageText(text, {
-        reply_markup: appendInlineMenuCancelButton(keyboard, "settings"),
-      });
-      return true;
-    }
-
-    if (callbackData === SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK) {
-      const nextEnabled = !getPinnedDashboardEnabled();
-      const chatId = ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id;
-      if (ctx.api && chatId !== undefined) {
-        deps.pinnedMessageManager.initialize(ctx.api, chatId);
-      }
-      await deps.pinnedMessageManager.applyPinnedDashboardEnabled(nextEnabled);
-      setPinnedDashboardEnabled(nextEnabled);
-      if (nextEnabled) {
-        // Sent at once from what the bot holds; corrected once the session's values load.
-        safeBackgroundTask({
-          taskName: "settings.refreshPinnedDashboard",
-          task: () => deps.pinnedMessageManager.refreshSessionValues(),
-        });
-      }
       const { text, keyboard } = buildSettingsMenuView();
       await ctx.answerCallbackQuery({ text: t("settings.saved") });
       await ctx.editMessageText(text, {

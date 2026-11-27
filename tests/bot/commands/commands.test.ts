@@ -383,6 +383,7 @@ describe("bot/commands/commands", () => {
     });
     expect(ctx.reply).toHaveBeenCalledWith(
       t("bot.session_created", { title: t("pinned.default_session_title") }),
+      undefined,
     );
   });
 

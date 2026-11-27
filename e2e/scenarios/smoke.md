@@ -17,7 +17,7 @@ Cost is deliberately minimal: one short prompt, no tool calls.
 - OpenCode is up. If `/status` says the server is down, `/opencode_start` from
   the chat brings the stand's server up on the test port. That start does not
   replace the user's OpenCode server. Do not start `opencode serve` by hand.
-- The pinned dashboard shows the project under test and an allowed model.
+- The bottom keyboard shows the project under test and an allowed model.
 
 ## Steps
 
@@ -28,12 +28,12 @@ Cost is deliberately minimal: one short prompt, no tool calls.
 
 ## Pass criteria
 
-- `/new` is confirmed and the pinned dashboard shows the new session with an
-  empty or near-empty context.
+- `/new` is confirmed and the 📋 row shows the project and the new session.
 - The run reaches `finished` — the `{agent} · 🧠 {model} · 🕒 {duration}`
   footer, in compact and normal mode alike.
 - The assistant produced a non-empty text reply.
-- The pinned dashboard still shows the expected project and model.
+- The bottom keyboard still shows the expected project and model. Tapping 📋
+  sends a fresh dashboard with the session's context; Close removes just that card.
 - The log delta contains no `[ERROR]`.
 
 ## Notes

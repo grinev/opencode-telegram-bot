@@ -99,7 +99,7 @@ async function isSessionBusy(sessionId: string, directory: string): Promise<bool
   }
 }
 
-async function resetMismatchedSessionContext(deps: ProcessPromptDeps): Promise<void> {
+function resetMismatchedSessionContext(deps: ProcessPromptDeps): void {
   detachAttachedSession("session_mismatch_reset", deps);
   stopEventListening();
   deps.resetAggregator();
@@ -109,15 +109,6 @@ async function resetMismatchedSessionContext(deps: ProcessPromptDeps): Promise<v
   clearSession();
   deps.keyboardManager.clearContext();
 
-  if (!deps.pinnedMessageManager.isInitialized()) {
-    return;
-  }
-
-  try {
-    await deps.pinnedMessageManager.clear();
-  } catch (err) {
-    logger.error("[Bot] Failed to clear pinned message during session reset:", err);
-  }
 }
 
 export interface ProcessPromptDeps
@@ -131,7 +122,6 @@ export interface ProcessPromptDeps
     | "interactionManager"
     | "keyboardManager"
     | "permissionManager"
-    | "pinnedMessageManager"
     | "questionManager"
     | "resetAggregator"
     | "resetInteractions"
@@ -220,8 +210,10 @@ export async function processUserPrompt(
     logger.warn(
       `[Bot] Session/project mismatch detected. sessionDirectory=${currentSession.directory}, projectDirectory=${currentProject.worktree}. Resetting session context.`,
     );
-    await resetMismatchedSessionContext(deps);
-    await ctx.reply(t("bot.session_reset_project_mismatch"));
+    resetMismatchedSessionContext(deps);
+    keyboardManager.initialize(ctx.api, ctx.chat!.id);
+    const keyboard = keyboardManager.getKeyboard();
+    await ctx.reply(t("bot.session_reset_project_mismatch"), keyboard ? { reply_markup: keyboard } : undefined);
     return false;
   }
 

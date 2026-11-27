@@ -308,8 +308,7 @@ export async function handleMessagesCallback(
         };
 
         setCurrentSession(sessionInfo);
-        // Pull before attaching, so the pinned message rendered inside
-        // attachToSession already carries the forked session's model.
+        // Pull before attaching so the context limit uses the forked session's model.
         await applySessionSettings(forkedSession);
         deps.keyboardManager.updateAgent(getStoredAgent());
         deps.keyboardManager.updateModel(getStoredModel());
@@ -325,6 +324,7 @@ export async function handleMessagesCallback(
         const successText = t("messages.fork_success", { text: selectedMessage.text });
         await ctx.editMessageText(truncateMessageHistoryText(successText, TELEGRAM_MESSAGE_LIMIT));
         clearMessagesInteraction(deps, "messages_fork_success");
+        await deps.keyboardManager.sendKeyboardUpdate(ctx.chat!.id);
 
         safeBackgroundTask({
           taskName: "messages.sendLatestAssistantResponse",

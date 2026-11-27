@@ -42,14 +42,12 @@ export interface Settings {
   currentSession?: SessionInfo | undefined;
   currentAgent?: string | undefined;
   currentModel?: ModelInfo | undefined;
-  pinnedMessageId?: number | undefined;
   ttsMode?: "off" | "all" | "auto" | undefined;
   outputMode?: OutputMode | undefined;
   compactOutputMode?: boolean | undefined;
   deleteCompactProgressOnFinish?: boolean | undefined;
   showThinkingContent?: boolean | undefined;
   showAssistantRunFooter?: boolean | undefined;
-  pinnedDashboardEnabled?: boolean | undefined;
   showBackgroundSessionNotifications?: boolean | undefined;
   responseStreamingMode?: ResponseStreamingMode | undefined;
   sendDiffFileAttachments?: boolean | undefined;

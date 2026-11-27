@@ -20,7 +20,7 @@ import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-m
  */
 export type AgentSelectDeps = Pick<
   AppContainer,
-  "interactionManager" | "keyboardManager" | "pinnedMessageManager"
+  "interactionManager" | "keyboardManager" | "sessionMetricsManager"
 >;
 
 export async function handleAgentSelect(ctx: Context, deps: AgentSelectDeps): Promise<boolean> {
@@ -42,8 +42,8 @@ export async function handleAgentSelect(ctx: Context, deps: AgentSelectDeps): Pr
       deps.keyboardManager.initialize(ctx.api, ctx.chat.id);
     }
 
-    if (deps.pinnedMessageManager.getContextLimit() === 0) {
-      await deps.pinnedMessageManager.refreshContextLimit();
+    if (deps.sessionMetricsManager.getContextLimit() === 0) {
+      await deps.sessionMetricsManager.refreshContextLimit();
     }
 
     const agentName = callbackQuery.data.replace("agent:", "");
@@ -51,16 +51,16 @@ export async function handleAgentSelect(ctx: Context, deps: AgentSelectDeps): Pr
     selectAgent(agentName);
     const settingsApplied = await applyAgentConfiguredSettings(agentName);
     if (settingsApplied) {
-      await deps.pinnedMessageManager.onModelChange();
+      await deps.sessionMetricsManager.refreshContextLimit();
     }
 
     deps.keyboardManager.updateAgent(agentName);
 
     const currentModel = getStoredModel();
     const contextInfo =
-      deps.pinnedMessageManager.getContextInfo() ??
-      (deps.pinnedMessageManager.getContextLimit() > 0
-        ? { tokensUsed: 0, tokensLimit: deps.pinnedMessageManager.getContextLimit() }
+      deps.sessionMetricsManager.getContextInfo() ??
+      (deps.sessionMetricsManager.getContextLimit() > 0
+        ? { tokensUsed: 0, tokensLimit: deps.sessionMetricsManager.getContextLimit() }
         : null);
 
     deps.keyboardManager.updateModel(currentModel);

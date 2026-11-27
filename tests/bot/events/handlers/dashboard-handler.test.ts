@@ -35,21 +35,9 @@ describe("bot/events/dashboard-handler", () => {
     aggregator = new SummaryAggregator();
     aggregator.setSession("session-1");
     calls = [];
-    let schedule: ((task: () => Promise<void>) => Promise<void>) | null = null;
-
-    const pinnedMessageManager = {
-      isInitialized: () => true,
-      setRenderScheduler: (scheduler: (task: () => Promise<void>) => Promise<void>) => {
-        schedule = scheduler;
-      },
-      onSessionDiff: async (diffs: Array<{ file: string }>) => {
+    const sessionMetricsManager = {
+      onSessionDiff: (_sessionId: string, diffs: Array<{ file: string }>) => {
         calls.push(`value:${diffs.map((diff) => diff.file).join(",")}`);
-        await schedule?.(async () => {
-          calls.push("redraw");
-        });
-      },
-      requestFileRefresh: () => {
-        calls.push("refresh");
       },
       setOnKeyboardUpdate: vi.fn(),
     };
@@ -60,14 +48,14 @@ describe("bot/events/dashboard-handler", () => {
           addFileChange: (_sessionId: string, file: string) => calls.push(`card:${file}`),
         },
       },
-      policy: {},
+      policy: { isForegroundSession: (id: string) => id === "session-1" },
       keyboardManager: { updateContext: vi.fn() },
-      pinnedMessageManager,
+      sessionMetricsManager,
       summaryAggregator: aggregator,
     } as never);
   });
 
-  it("applies values at once during a hold and queues the redraw and the card's files in order", async () => {
+  it("applies values at once during a hold and queues Compact progress files in order", async () => {
     const generation = aggregator.holdOutbound();
 
     emitSessionDiff(aggregator, "src/a.ts");
@@ -82,20 +70,18 @@ describe("bot/events/dashboard-handler", () => {
       "value:src/a.ts",
       "value:src/b.ts",
       "card:src/a.ts",
-      "redraw",
       "card:src/b.ts",
-      "redraw",
     ]);
   });
 
-  it("feeds the card and redraws at once when nothing is held", async () => {
+  it("feeds Compact progress and current values at once when nothing is held", async () => {
     emitSessionDiff(aggregator, "src/a.ts");
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(calls).toEqual(["card:src/a.ts", "value:src/a.ts", "redraw"]);
+    expect(calls).toEqual(["card:src/a.ts", "value:src/a.ts"]);
   });
 
-  it("asks the dashboard to refresh from the session diff and still records the card path", () => {
+  it("counts file-changing tools in Compact progress without using them as dashboard diff", () => {
     aggregator.processEvent({
       type: "message.updated",
       properties: {
@@ -126,7 +112,6 @@ describe("bot/events/dashboard-handler", () => {
       },
     } as unknown as Event);
 
-    expect(calls).toContain("refresh");
     expect(calls).toContain("card:src/a.ts");
     expect(calls.some((call) => call.startsWith("value:"))).toBe(false);
   });

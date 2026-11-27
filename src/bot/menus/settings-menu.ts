@@ -5,7 +5,6 @@ import {
   getPromptQueueMode,
   getResponseStreamingMode,
   getSendDiffFileAttachments,
-  getPinnedDashboardEnabled,
   getShowAssistantRunFooter,
   getShowBackgroundSessionNotifications,
   getShowThinkingContent,
@@ -24,7 +23,6 @@ export const SETTINGS_THINKING_CONTENT_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}th
 export const SETTINGS_RESPONSE_STREAMING_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}response_streaming`;
 export const SETTINGS_DIFF_FILES_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}diff_files`;
 export const SETTINGS_ASSISTANT_FOOTER_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}assistant_footer`;
-export const SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}pin_session_dashboard`;
 export const SETTINGS_BACKGROUND_NOTIFICATIONS_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}background_notifications`;
 export const SETTINGS_TTS_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}tts`;
 export const SETTINGS_PROMPT_QUEUE_CALLBACK = `${SETTINGS_CALLBACK_PREFIX}prompt_queue`;
@@ -73,7 +71,6 @@ export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboar
   const responseStreamingMode = getResponseStreamingMode();
   const sendDiffFileAttachments = getSendDiffFileAttachments();
   const showAssistantRunFooter = getShowAssistantRunFooter();
-  const pinnedDashboardEnabled = getPinnedDashboardEnabled();
   const showBackgroundSessionNotifications = getShowBackgroundSessionNotifications();
   const ttsMode = getTtsMode();
   const promptQueueMode = getPromptQueueMode();
@@ -110,11 +107,6 @@ export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboar
     .text(
       `${t("settings.assistant_footer.label")}: ${formatBooleanSettingValue(showAssistantRunFooter)}`,
       SETTINGS_ASSISTANT_FOOTER_CALLBACK,
-    )
-    .row()
-    .text(
-      `${t("settings.pin_session_dashboard.label")}: ${formatBooleanSettingValue(pinnedDashboardEnabled)}`,
-      SETTINGS_PIN_SESSION_DASHBOARD_CALLBACK,
     )
     .row()
     .text(

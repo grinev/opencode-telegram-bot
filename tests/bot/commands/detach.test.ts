@@ -12,8 +12,6 @@ const mocked = vi.hoisted(() => ({
   fetchSessionTitleMock: vi.fn(),
   detachAttachedSessionMock: vi.fn(),
   clearAllInteractionStateMock: vi.fn(),
-  pinnedIsInitializedMock: vi.fn(() => true),
-  pinnedClearMock: vi.fn().mockResolvedValue(undefined),
   pinnedRefreshContextLimitMock: vi.fn().mockResolvedValue(undefined),
   pinnedGetContextLimitMock: vi.fn(() => 200000),
   keyboardInitializeMock: vi.fn(),
@@ -50,9 +48,7 @@ vi.mock("../../../src/bot/handlers/prompt-handover.js", () => ({
 function createDeps() {
   return createTestAppContainer({
     resetInteractions: mocked.clearAllInteractionStateMock,
-    pinnedMessageManager: {
-      isInitialized: mocked.pinnedIsInitializedMock,
-      clear: mocked.pinnedClearMock,
+    sessionMetricsManager: {
       refreshContextLimit: mocked.pinnedRefreshContextLimitMock,
       getContextLimit: mocked.pinnedGetContextLimitMock,
     } as never,
@@ -88,10 +84,6 @@ describe("bot/commands/detach", () => {
     mocked.fetchSessionTitleMock.mockImplementation(async (session: { title: string }) => session.title);
     mocked.detachAttachedSessionMock.mockClear();
     mocked.clearAllInteractionStateMock.mockClear();
-    mocked.pinnedIsInitializedMock.mockClear();
-    mocked.pinnedIsInitializedMock.mockReturnValue(true);
-    mocked.pinnedClearMock.mockClear();
-    mocked.pinnedClearMock.mockResolvedValue(undefined);
     mocked.pinnedRefreshContextLimitMock.mockClear();
     mocked.pinnedRefreshContextLimitMock.mockResolvedValue(undefined);
     mocked.pinnedGetContextLimitMock.mockClear();
@@ -130,7 +122,6 @@ describe("bot/commands/detach", () => {
     expect(mocked.foregroundMarkIdleMock).toHaveBeenCalledWith("session-1");
     expect(mocked.assistantClearRunMock).toHaveBeenCalledWith("session-1", "detach_command");
     expect(mocked.clearPromptResponseModeMock).toHaveBeenCalledWith("session-1");
-    expect(mocked.pinnedClearMock).toHaveBeenCalledTimes(1);
     expect(mocked.pinnedRefreshContextLimitMock).toHaveBeenCalledTimes(1);
     expect(mocked.pinnedGetContextLimitMock).toHaveBeenCalledTimes(1);
     expect(mocked.keyboardUpdateContextMock).toHaveBeenCalledWith(0, 200000);

@@ -84,7 +84,6 @@ export type ExecuteCommandDeps = Pick<
   | "interactionManager"
   | "keyboardManager"
   | "permissionManager"
-  | "pinnedMessageManager"
   | "questionManager"
   | "resetAggregator"
   | "resetInteractions"
@@ -221,7 +220,7 @@ async function ensureSessionForProject(
   ctx: Context,
   deps: ExecuteCommandDeps,
   projectDirectory: string,
-): Promise<SessionInfo | null> {
+): Promise<{ session: SessionInfo; created: boolean } | null> {
   let currentSession = getCurrentSession();
 
   if (currentSession && currentSession.directory !== projectDirectory) {
@@ -233,12 +232,15 @@ async function ensureSessionForProject(
     deps.summaryAggregator.clear();
     deps.foregroundSessionState.clearAll("session_mismatch_reset");
     deps.assistantRunState.clearAll("session_mismatch_reset");
-    await ctx.reply(t("bot.session_reset_project_mismatch"));
+    deps.keyboardManager.initialize(ctx.api, ctx.chat!.id);
+    deps.keyboardManager.clearContext();
+    const keyboard = deps.keyboardManager.getKeyboard();
+    await ctx.reply(t("bot.session_reset_project_mismatch"), keyboard ? { reply_markup: keyboard } : undefined);
     currentSession = null;
   }
 
   if (currentSession) {
-    return currentSession;
+    return { session: currentSession, created: false };
   }
 
   await ctx.reply(t("bot.creating_session"));
@@ -260,9 +262,7 @@ async function ensureSessionForProject(
 
   setCurrentSession(sessionInfo);
   await ingestSessionInfoForCache(session);
-  await ctx.reply(t("bot.session_created", { title: formatSessionTitle(session.title) }));
-
-  return sessionInfo;
+  return { session: sessionInfo, created: true };
 }
 
 export async function executeCommand(
@@ -278,16 +278,25 @@ export async function executeCommand(
   const executingMessage = formatExecutingCommandMessage(params.commandName, args);
   await ctx.reply(executingMessage.text, { entities: executingMessage.entities });
 
-  const session = await ensureSessionForProject(ctx, deps, params.projectDirectory);
-  if (!session) {
+  const result = await ensureSessionForProject(ctx, deps, params.projectDirectory);
+  if (!result) {
     return;
   }
+  const { session, created } = result;
 
   await attachToSession({
     ...deps,
     chatId: ctx.chat.id,
     session,
+    sessionCreated: created,
   });
+  if (created) {
+    const keyboard = deps.keyboardManager.getKeyboard();
+    await ctx.reply(
+      t("bot.session_created", { title: formatSessionTitle(session.title) }),
+      keyboard ? { reply_markup: keyboard } : undefined,
+    );
+  }
 
   const sessionIsBusy = await isSessionBusy(session.id, session.directory);
   if (sessionIsBusy) {

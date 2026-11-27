@@ -74,7 +74,9 @@ function isQueueablePrompt(input: IncomingPrompt): boolean {
   return (
     hasContent &&
     !normalizedText.startsWith("/") &&
-    !isReplyKeyboardButtonText(input.text)
+    // Dashboard taps were intercepted before this router. Prepared media and
+    // dictation can still contain text that happens to look like its label.
+    !isReplyKeyboardButtonText(input.text, false)
   );
 }
 

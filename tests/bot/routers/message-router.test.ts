@@ -23,7 +23,7 @@ vi.mock("../../../src/bot/handlers/message-merger.js", async (importOriginal) =>
 }));
 
 import { registerMessageRouter } from "../../../src/bot/routers/message-router.js";
-import { GOAL_BUTTON_TEXT_PATTERN, QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../../../src/bot/message-patterns.js";
+import { DASHBOARD_BUTTON_TEXT_PATTERN, GOAL_BUTTON_TEXT_PATTERN, QUEUED_PROMPT_BUTTON_TEXT_PATTERN } from "../../../src/bot/message-patterns.js";
 import { promptQueue } from "../../../src/app/managers/prompt-queue-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { defined } from "../../helpers/defined.js";
@@ -43,9 +43,10 @@ describe("bot/routers/message-router", () => {
       container: createTestAppContainer({ ensureEventSubscription: vi.fn(), setTelegramContext: vi.fn() }),
     });
 
-    expect(bot.hears).toHaveBeenCalledTimes(6);
+    expect(bot.hears).toHaveBeenCalledTimes(7);
     expect(defined(bot.hears.mock.calls[0]?.[0])).toBe(GOAL_BUTTON_TEXT_PATTERN);
     expect(defined(bot.hears.mock.calls[1]?.[0])).toBe(QUEUED_PROMPT_BUTTON_TEXT_PATTERN);
+    expect(defined(bot.hears.mock.calls[2]?.[0])).toBe(DASHBOARD_BUTTON_TEXT_PATTERN);
     expect(bot.on.mock.calls.map(([event]) => event)).toEqual([
       "message:text",
       "message:text",

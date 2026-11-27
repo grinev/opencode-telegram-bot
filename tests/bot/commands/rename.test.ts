@@ -16,9 +16,8 @@ const mocked = vi.hoisted(() => ({
     directory: "D:/repo",
   } as { id: string; title: string; directory: string } | null,
   updateSessionMock: vi.fn(),
-  setCurrentSessionMock: vi.fn(),
+  updateSelectedSessionTitleMock: vi.fn(),
   fetchSessionTitleMock: vi.fn(),
-  pinnedOnSessionChangeMock: vi.fn(),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -31,7 +30,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
 
 vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
-  setCurrentSession: mocked.setCurrentSessionMock,
+  updateSelectedSessionTitle: mocked.updateSelectedSessionTitleMock,
   fetchSessionTitle: mocked.fetchSessionTitleMock,
 }));
 
@@ -68,9 +67,8 @@ function createRenameCallbackContext(messageId: number): Context {
 function createDeps() {
   return {
     ...container,
-    pinnedMessageManager: {
-      isInitialized: vi.fn(() => false),
-      onSessionChange: mocked.pinnedOnSessionChangeMock,
+    keyboardManager: {
+      getKeyboard: () => ({ keyboard: [[{ text: "📋 repo · New title" }]] }),
     } as never,
   };
 }
@@ -96,11 +94,9 @@ describe("bot/commands/rename", () => {
       data: { id: "session-1", title: "New title" },
       error: null,
     });
-    mocked.setCurrentSessionMock.mockReset();
+    mocked.updateSelectedSessionTitleMock.mockReset();
     mocked.fetchSessionTitleMock.mockReset();
     mocked.fetchSessionTitleMock.mockResolvedValue("Old title");
-    mocked.pinnedOnSessionChangeMock.mockReset();
-    mocked.pinnedOnSessionChangeMock.mockResolvedValue(undefined);
   });
 
   it("starts rename flow and interaction state", async () => {
@@ -160,13 +156,11 @@ describe("bot/commands/rename", () => {
       directory: "D:/repo",
       title: "New title",
     });
-    expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith({
-      id: "session-1",
-      title: "New title",
-      directory: "D:/repo",
-    });
+    expect(mocked.updateSelectedSessionTitleMock).toHaveBeenCalledWith("session-1", "New title");
     expect(ctx.api.deleteMessage).toHaveBeenCalledWith(101, 555);
-    expect(ctx.reply).toHaveBeenCalledWith(t("rename.success", { title: "New title" }));
+    expect(ctx.reply).toHaveBeenCalledWith(t("rename.success", { title: "New title" }), {
+      reply_markup: { keyboard: [[{ text: "📋 repo · New title" }]] },
+    });
     expect(container.renameManager.isWaitingForName()).toBe(false);
     expect(container.interactionManager.getSnapshot()).toBeNull();
   });
