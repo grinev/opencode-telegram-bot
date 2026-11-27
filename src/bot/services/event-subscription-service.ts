@@ -166,8 +166,8 @@ class EventSubscriptionService implements BotEventSubscriptionService {
       deps.backgroundSessionTracker.clear();
     }
 
-    deps.summaryAggregator.setOnCleared(() => {
-      runtime.clearAllOutput("summary_aggregator_clear");
+    deps.summaryAggregator.setOnCleared((previousSessionId) => {
+      runtime.clearAllOutput("summary_aggregator_clear", previousSessionId);
     });
 
     const handlerDeps = { ...deps, runtime, policy };
@@ -226,7 +226,12 @@ class EventSubscriptionService implements BotEventSubscriptionService {
 
       const sessionId = getCurrentSession()?.id;
       const runningTools = sessionId ? runtime.getRunningToolInfos(sessionId) : [];
-      if (sessionId && (deps.assistantRunState.hasRun(sessionId) || runningTools.length > 0)) {
+      if (
+        sessionId &&
+        (deps.assistantRunState.hasRun(sessionId) ||
+          runningTools.length > 0 ||
+          runtime.hasOffAssistantResponse(sessionId))
+      ) {
         logger.info(
           `[Bot] Ending the run lost with the OpenCode server: session=${sessionId}, runningTools=${runningTools.length}, reason=${reason}`,
         );

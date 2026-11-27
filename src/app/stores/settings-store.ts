@@ -254,7 +254,8 @@ export function setShowBackgroundSessionNotifications(enabled: boolean): void {
 export type { PromptQueueMode, ResponseStreamingMode };
 
 export function getResponseStreamingMode(): ResponseStreamingMode {
-  return currentSettings.responseStreamingMode === "draft" ? "draft" : "edit";
+  const mode = currentSettings.responseStreamingMode;
+  return mode === "draft" || mode === "off" ? mode : "edit";
 }
 
 export function setResponseStreamingMode(mode: ResponseStreamingMode): void {
@@ -409,7 +410,7 @@ export function __resetSettingsForTests(): void {
 }
 
 const VALID_TTS_MODES: readonly TtsMode[] = ["off", "all", "auto"];
-const VALID_STREAMING_MODES: readonly ResponseStreamingMode[] = ["edit", "draft"];
+const VALID_STREAMING_MODES: readonly ResponseStreamingMode[] = ["edit", "draft", "off"];
 
 function applyInitialSettingsPreset(preset: Record<string, unknown>): void {
   const knownKeys = new Set([

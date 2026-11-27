@@ -63,9 +63,7 @@ export function formatPromptQueueModeValue(mode: PromptQueueMode): string {
 }
 
 export function formatResponseStreamingModeValue(mode: ResponseStreamingMode): string {
-  return mode === "draft"
-    ? t("settings.response_streaming.draft")
-    : t("settings.response_streaming.edit");
+  return t(`settings.response_streaming.${mode}`);
 }
 
 export function buildSettingsMenuView(): { text: string; keyboard: InlineKeyboard } {

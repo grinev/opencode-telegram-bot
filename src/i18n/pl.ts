@@ -192,6 +192,7 @@ export const pl: I18nDictionary = {
   "settings.response_streaming.label": "Strumieniowanie odpowiedzi",
   "settings.response_streaming.edit": "edycja",
   "settings.response_streaming.draft": "szkic (eksperymentalne)",
+  "settings.response_streaming.off": "wył.",
   "settings.diff_files.label": "Pliki diff",
   "settings.assistant_footer.label": "Stopka asystenta",
   "assistant.footer.interrupted": "przerwano",

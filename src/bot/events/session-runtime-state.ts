@@ -248,6 +248,25 @@ export class SessionRuntimeState {
     );
   }
 
+  captureAssistantStreamMode(sessionId: string, messageId: string): void {
+    const key = sessionKey(sessionId, messageId);
+    if (!this.assistantStreamModes.has(key)) {
+      this.assistantStreamModes.set(key, getResponseStreamingMode());
+    }
+  }
+
+  forgetUnstreamedAssistantMode(sessionId: string, messageId: string): void {
+    const key = sessionKey(sessionId, messageId);
+    if (!this.assistantLatestTexts.has(key)) this.assistantStreamModes.delete(key);
+  }
+
+  discardPendingOffReply(sessionId: string, messageId: string): boolean {
+    const key = sessionKey(sessionId, messageId);
+    if (this.assistantStreamModes.get(key) !== "off") return false;
+    this.assistantStreamModes.delete(key);
+    return true;
+  }
+
   markAssistantCompletionStarted(sessionId: string, messageId: string): void {
     this.assistantCompletionsStarted.add(sessionKey(sessionId, messageId));
   }
@@ -261,9 +280,9 @@ export class SessionRuntimeState {
     messageId: string,
     payload: StreamingMessagePayload,
   ): void {
+    this.captureAssistantStreamMode(sessionId, messageId);
     const mode = this.getAssistantStreamMode(sessionId, messageId);
-    this.assistantStreamModes.set(sessionKey(sessionId, messageId), mode);
-    this.getAssistantStreamer(mode).enqueue(sessionId, messageId, payload);
+    if (mode !== "off") this.getAssistantStreamer(mode).enqueue(sessionId, messageId, payload);
   }
 
   async completeAssistantResponse(
@@ -271,14 +290,12 @@ export class SessionRuntimeState {
     messageId: string,
     payload?: StreamingMessagePayload,
     options?: Parameters<ResponseStreamer["complete"]>[3],
+    mode = this.getAssistantStreamMode(sessionId, messageId),
   ) {
-    const mode = this.getAssistantStreamMode(sessionId, messageId);
-    const result = await this.getAssistantStreamer(mode).complete(
-      sessionId,
-      messageId,
-      payload,
-      options,
-    );
+    const result =
+      mode === "off"
+        ? { streamed: false, telegramMessageIds: [] }
+        : await this.getAssistantStreamer(mode).complete(sessionId, messageId, payload, options);
     this.deleteAssistantResponseRecords(sessionId, messageId);
     return result;
   }
@@ -294,8 +311,9 @@ export class SessionRuntimeState {
     payload?: StreamingMessagePayload,
     options?: Parameters<ResponseStreamer["complete"]>[3],
   ) {
+    this.captureAssistantStreamMode(sessionId, messageId);
     const mode = this.getAssistantStreamMode(sessionId, messageId);
-    this.assistantStreamModes.set(sessionKey(sessionId, messageId), mode);
+    if (mode === "off") return { streamed: false, telegramMessageIds: [] };
     return this.getAssistantStreamer(mode).complete(sessionId, messageId, payload, options);
   }
 
@@ -379,8 +397,8 @@ export class SessionRuntimeState {
       }
 
       const messageId = key.slice(sessionPrefix.length);
-      if (this.getAssistantStreamMode(sessionId, messageId) !== "draft" &&
-          !this.replyDocumentGates.has(key)) {
+      const mode = this.getAssistantStreamMode(sessionId, messageId);
+      if (mode === "off" || (mode !== "draft" && !this.replyDocumentGates.has(key))) {
         continue;
       }
 
@@ -449,8 +467,17 @@ export class SessionRuntimeState {
   hasActiveAssistantResponse(sessionId: string): boolean {
     return (
       this.assistantEditStreamer.hasActiveStream(sessionId) ||
-      this.assistantDraftStreamer.hasActiveStream(sessionId)
+      this.assistantDraftStreamer.hasActiveStream(sessionId) ||
+      this.hasOffAssistantResponse(sessionId)
     );
+  }
+
+  hasOffAssistantResponse(sessionId: string): boolean {
+    const prefix = `${sessionId}:`;
+    for (const [key, mode] of this.assistantStreamModes) {
+      if (mode === "off" && key.startsWith(prefix)) return true;
+    }
+    return false;
   }
 
   // --- order of a reply and what follows it ---
@@ -756,11 +783,13 @@ export class SessionRuntimeState {
   }
 
   /** Drops all output of all sessions; queued completion work is kept. */
-  clearAllOutput(reason: string): void {
+  clearAllOutput(reason: string, previousSessionId?: string | null): void {
     this.todoSnapshots.cancelPending();
     this.toolMessageBatcher.clearAll(reason);
     this.toolCallStreamer.clearAll(reason);
-    this.assistantStreamModes.clear();
+    // A deferred session-switch clear must not erase modes captured for the new session.
+    if (previousSessionId === undefined) this.assistantStreamModes.clear();
+    else if (previousSessionId !== null) deleteSessionKeys(this.assistantStreamModes, previousSessionId);
     this.assistantLatestTexts.clear();
     this.assistantDeliveredTexts.clear();
     this.assistantDocumentOccurrences.clear();
@@ -798,7 +827,7 @@ export class SessionRuntimeState {
     this.begunReplies.delete(key);
   }
 
-  private getAssistantStreamer(mode: ResponseStreamingMode): ResponseStreamer {
+  private getAssistantStreamer(mode: Exclude<ResponseStreamingMode, "off">): ResponseStreamer {
     return mode === "draft" ? this.assistantDraftStreamer : this.assistantEditStreamer;
   }
 

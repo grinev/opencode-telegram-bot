@@ -193,6 +193,7 @@ export const ko: I18nDictionary = {
   "settings.response_streaming.label": "응답 스트리밍",
   "settings.response_streaming.edit": "편집",
   "settings.response_streaming.draft": "초안 (실험적)",
+  "settings.response_streaming.off": "끄기",
   "settings.diff_files.label": "Diff 파일",
   "settings.assistant_footer.label": "어시스턴트 푸터",
   "assistant.footer.interrupted": "interrupted",

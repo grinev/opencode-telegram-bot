@@ -3,7 +3,7 @@ import type { ProjectInfo } from "./project.js";
 import type { SessionDirectoryCacheInfo, SessionInfo } from "./session.js";
 import type { ScheduledTask } from "./scheduled-task.js";
 
-export type ResponseStreamingMode = "edit" | "draft";
+export type ResponseStreamingMode = "edit" | "draft" | "off";
 
 export type PromptQueueMode = "off" | "queue" | "steer";
 

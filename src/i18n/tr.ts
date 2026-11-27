@@ -187,6 +187,7 @@ export const tr: I18nDictionary = {
   "settings.response_streaming.label": "Yanıt akışı",
   "settings.response_streaming.edit": "düzenleme",
   "settings.response_streaming.draft": "taslak (deneysel)",
+  "settings.response_streaming.off": "kapalı",
   "settings.diff_files.label": "Diff dosyaları",
   "settings.assistant_footer.label": "Asistan alt bilgisi",
   "assistant.footer.interrupted": "interrupted",

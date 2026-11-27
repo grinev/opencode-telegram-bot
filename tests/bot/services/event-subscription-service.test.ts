@@ -580,7 +580,7 @@ describe("bot/services/event-subscription-service", () => {
   async function setupService(
     sendDiffFileAttachments: boolean,
     options: {
-      responseStreamingMode?: "edit" | "draft";
+      responseStreamingMode?: import("../../../src/app/types/settings.js").ResponseStreamingMode;
       showThinkingContent?: boolean;
       showAssistantRunFooter?: boolean;
       startAssistantRun?: boolean;
@@ -2500,9 +2500,9 @@ describe("bot/services/event-subscription-service", () => {
     expect(defined(api.sendMessage.mock.calls[0]?.[1])).toBe("Final answer");
   });
 
-  it("notifies the final draft response when assistant run footer is disabled", async () => {
+  it.each(["draft", "off"] as const)("notifies the final %s response when the footer is disabled", async (mode) => {
     const { api, summaryAggregator } = await setupService(true, {
-      responseStreamingMode: "draft",
+      responseStreamingMode: mode,
       showAssistantRunFooter: false,
       startAssistantRun: true,
     });
@@ -2522,9 +2522,9 @@ describe("bot/services/event-subscription-service", () => {
     expect(api.sendMessageDraft).not.toHaveBeenCalled();
   });
 
-  it("keeps the final draft response silent when assistant run footer is enabled", async () => {
+  it.each(["draft", "off"] as const)("keeps the final %s response silent when the footer is enabled", async (mode) => {
     const { api, summaryAggregator } = await setupService(true, {
-      responseStreamingMode: "draft",
+      responseStreamingMode: mode,
       showAssistantRunFooter: true,
       startAssistantRun: true,
     });
@@ -2547,6 +2547,43 @@ describe("bot/services/event-subscription-service", () => {
     expect(defined(api.sendMessage.mock.calls[1]?.[1])).toContain("test-provider/test-model");
     expect(api.sendMessageDraft).not.toHaveBeenCalled();
   });
+
+  it.each(["question", "permission"] as const)(
+    "shows a %s without releasing an unfinished Off reply or its file",
+    async (interaction) => {
+      const { api, summaryAggregator } = await setupService(false, {
+        responseStreamingMode: "off",
+      });
+      const settings = await import("../../../src/app/stores/settings-store.js");
+      settings.setCompactOutputMode(interaction === "question");
+      emitAssistantTextPart(summaryAggregator, "[Report](report.txt)");
+      const prompt = interaction === "question" ? "Which option for q-off?" : "D:/shared/*";
+      if (interaction === "question") {
+        emitQuestionAsked(summaryAggregator, "q-off");
+      } else {
+        emitPermissionAsked(summaryAggregator, "perm-off");
+      }
+
+      const sentTexts = () => api.sendMessage.mock.calls.map((call) => String(call[1]));
+      await vi.waitFor(() => expect(sentTexts().some((text) => text.includes(prompt))).toBe(true), {
+        timeout: 3000,
+      });
+      expect(sentTexts()).not.toContain("Report");
+      expect(api.sendDocument).not.toHaveBeenCalled();
+      expect(api.sendMessageDraft).not.toHaveBeenCalled();
+      expect(mocked.sendTtsResponseForSession).not.toHaveBeenCalled();
+
+      emitAssistantCompleted(summaryAggregator);
+      await vi.waitFor(() => expect(mocked.sendTtsResponseForSession).toHaveBeenCalledOnce(), {
+        timeout: 3000,
+      });
+      expect(sentTexts().indexOf("Report")).toBeGreaterThan(
+        sentTexts().findIndex((text) => text.includes(prompt)),
+      );
+      expect(api.sendDocument).toHaveBeenCalledOnce();
+      expect(mocked.sendTtsResponseForSession.mock.calls[0]?.[0].text).toBe("[Report](report.txt)");
+    },
+  );
 
   describe("draft text before a question or permission prompt", () => {
     it.each(["draft", "edit"] as const)("does not retry a failed early file reply or upload its documents (%s)", async (mode) => {

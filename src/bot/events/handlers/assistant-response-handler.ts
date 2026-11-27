@@ -349,6 +349,14 @@ export function closeCompactCardBeforeNextActivity(
 export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): void {
   const { runtime, policy, summaryAggregator } = deps;
 
+  summaryAggregator.setOnAssistantReplyState((sessionId, messageId, state) => {
+    if (state === "no_reply") {
+      runtime.forgetUnstreamedAssistantMode(sessionId, messageId);
+    } else if (policy.isForegroundSession(sessionId)) {
+      runtime.captureAssistantStreamMode(sessionId, messageId);
+    }
+  });
+
   summaryAggregator.setOnPartial((sessionId, messageId, messageText) => {
     if (!policy.getDestination(sessionId) || !policy.isForegroundSession(sessionId)) {
       return;
@@ -358,10 +366,14 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
       runtime.compactProgressStreamer.updateResponding(sessionId);
     }
 
+    runtime.captureAssistantStreamMode(sessionId, messageId);
+    const mode = runtime.getAssistantStreamMode(sessionId, messageId);
+    if (mode === "off") return;
+
     runtime.recordAssistantText(sessionId, messageId, messageText);
     if (
       config.bot.messageFormatMode === "markdown" &&
-      runtime.getAssistantStreamMode(sessionId, messageId) === "edit" &&
+      mode === "edit" &&
       collectAssistantFileLinks(messageText).length > 0
     ) {
       beginEditReply(runtime, sessionId, messageId);
@@ -396,6 +408,12 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
   });
 
   summaryAggregator.setOnComplete((sessionId, messageId, messageText, completionInfo) => {
+    const assistantResponseMode = runtime.getAssistantStreamMode(sessionId, messageId);
+    if (assistantResponseMode === "off" && completionInfo.failed) {
+      runtime.clearAssistantResponse(sessionId, messageId, "assistant_message_failed");
+      return;
+    }
+
     // Its card closed when the next activity came: the open card is below this reply.
     const compactCardClosed = runtime.takeCompactClosedForReply(sessionId, messageId);
     if (
@@ -452,8 +470,6 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
 
         await completeThinkingStream(deps, sessionId, messageId);
 
-        const assistantResponseMode = runtime.getAssistantStreamMode(sessionId, messageId);
-
         // Tool output that started after this reply's text waits below it.
         if (
           assistantResponseMode === "edit" &&
@@ -506,15 +522,19 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
             }
             if (hasDocumentLinks) await runtime.todoSnapshots.flush(sessionId);
           },
-          responseStreamer: {
-            complete: (completeSessionId, completeMessageId, payload, options) =>
-              runtime.completeAssistantResponse(
-                completeSessionId,
-                completeMessageId,
-                payload,
-                options,
-              ),
-          },
+          responseStreamer:
+            assistantResponseMode === "off"
+              ? undefined
+              : {
+                  complete: (completeSessionId, completeMessageId, payload, options) =>
+                    runtime.completeAssistantResponse(
+                      completeSessionId,
+                      completeMessageId,
+                      payload,
+                      options,
+                      assistantResponseMode,
+                    ),
+                },
           flushPendingServiceMessages: () => {
             runtime.clearToolTracking(sessionId, "assistant_message_completed", true);
 
@@ -531,7 +551,7 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
               () => policy.isForegroundSession(sessionId),
             ),
           getReplyKeyboard: () => getReplyKeyboard(deps),
-          notifyFirstFinalPart: assistantResponseMode === "draft" && !getShowAssistantRunFooter(),
+          notifyFirstFinalPart: assistantResponseMode !== "edit" && !getShowAssistantRunFooter(),
           sendRenderedPart: async (part, options) => {
             await runtime.delivery.sendRenderedPart(
               destination,
@@ -573,6 +593,9 @@ export function registerAssistantResponseHandlers(deps: AssistantResponseDeps): 
       } finally {
         runtime.releaseReplyDocuments(sessionId, messageId);
         runtime.clearAssistantDocuments(sessionId, messageId);
+        if (assistantResponseMode === "off") {
+          runtime.forgetUnstreamedAssistantMode(sessionId, messageId);
+        }
         await deps.scheduledTaskRuntime.flushDeferredDeliveries();
       }
     });

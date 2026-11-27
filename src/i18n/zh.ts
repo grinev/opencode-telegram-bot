@@ -173,6 +173,7 @@ export const zh: I18nDictionary = {
   "settings.response_streaming.label": "回复流式模式",
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draft (experimental)",
+  "settings.response_streaming.off": "关闭",
   "settings.diff_files.label": "Diff 文件",
   "settings.assistant_footer.label": "回复页脚",
   "assistant.footer.interrupted": "interrupted",

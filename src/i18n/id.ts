@@ -193,6 +193,7 @@ export const id: I18nDictionary = {
   "settings.response_streaming.label": "Streaming balasan",
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draf (eksperimental)",
+  "settings.response_streaming.off": "nonaktif",
   "settings.diff_files.label": "File diff",
   "settings.assistant_footer.label": "Tampilkan footer asisten",
   "assistant.footer.interrupted": "interrupted",

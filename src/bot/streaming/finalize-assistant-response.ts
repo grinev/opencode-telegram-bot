@@ -8,7 +8,7 @@ interface FinalizeAssistantResponseOptions {
   sessionId: string;
   messageId: string;
   messageText: string;
-  responseStreamer: Pick<ResponseStreamer, "complete">;
+  responseStreamer?: Pick<ResponseStreamer, "complete"> | undefined;
   flushPendingServiceMessages: () => Promise<void>;
   prepareStreamingPayload: (messageText: string) => StreamingMessagePayload | null;
   renderFinalParts: (messageText: string) => TelegramRenderedPart[];
@@ -52,43 +52,45 @@ export async function finalizeAssistantResponse({
     disable_notification: true,
     ...(replyOptions ?? {}),
   };
-  const streamSendOptions = {
-    ...silentReplyOptions,
-  } as StreamingMessagePayload["sendOptions"];
+  let finalParts: TelegramRenderedPart[] | undefined;
+  if (responseStreamer) {
+    const streamSendOptions = {
+      ...silentReplyOptions,
+    } as StreamingMessagePayload["sendOptions"];
 
-  let preparedStreamPayload = prepareStreamingPayload(messageText);
-  const imageParts =
-    strictFinalPayload || preparedStreamPayload?.parts.some(hasDeferredImages)
-      ? renderFinalParts(messageText)
-      : undefined;
-  if (imageParts) preparedStreamPayload = prepareStreamingPayload(omitMarkdownImages(messageText));
-  if (preparedStreamPayload) {
-    preparedStreamPayload.sendOptions = streamSendOptions;
-    preparedStreamPayload.editOptions = undefined;
-  }
+    let preparedStreamPayload = prepareStreamingPayload(messageText);
+    if (strictFinalPayload || preparedStreamPayload?.parts.some(hasDeferredImages)) {
+      finalParts = renderFinalParts(messageText);
+      preparedStreamPayload = prepareStreamingPayload(omitMarkdownImages(messageText));
+    }
+    if (preparedStreamPayload) {
+      preparedStreamPayload.sendOptions = streamSendOptions;
+      preparedStreamPayload.editOptions = undefined;
+    }
 
-  const result = imageParts
-    ? await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined, {
-        notifyFirstCompletePart: notifyFirstFinalPart,
-        finalPayload: { parts: imageParts, sendOptions: streamSendOptions },
-      })
-    : notifyFirstFinalPart
+    const result = finalParts
       ? await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined, {
-          notifyFirstCompletePart: true,
+          notifyFirstCompletePart: notifyFirstFinalPart,
+          finalPayload: { parts: finalParts, sendOptions: streamSendOptions },
         })
-      : await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined);
+      : notifyFirstFinalPart
+        ? await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined, {
+            notifyFirstCompletePart: true,
+          })
+        : await responseStreamer.complete(sessionId, messageId, preparedStreamPayload ?? undefined);
 
-  if (result.streamed) {
-    await afterTextAccepted?.();
-    await flushPendingServiceMessages();
-    logger.debug(
-      `[FinalizeResponse] Finalized streamed assistant message in place: session=${sessionId}, message=${messageId}, telegramMessages=${result.telegramMessageIds.length}`,
-    );
-    return true;
+    if (result.streamed) {
+      await afterTextAccepted?.();
+      await flushPendingServiceMessages();
+      logger.debug(
+        `[FinalizeResponse] Finalized streamed assistant message in place: session=${sessionId}, message=${messageId}, telegramMessages=${result.telegramMessageIds.length}`,
+      );
+      return true;
+    }
   }
 
   if (!strictFinalPayload) await flushPendingServiceMessages();
-  const parts = imageParts ?? renderFinalParts(messageText);
+  const parts = finalParts ?? renderFinalParts(messageText);
 
   let notifyNextPart = notifyFirstFinalPart;
   for (const part of parts) {

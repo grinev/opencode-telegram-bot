@@ -256,6 +256,46 @@ describe("bot/services/event-subscription-service lost run", () => {
     expect(collectSentTexts(api)).toHaveLength(sentBefore);
   });
 
+  it("ends a lost V2 run with only a buffered Off reply and never publishes its text", async () => {
+    const settingsStore = await import("../../../src/app/stores/settings-store.js");
+    settingsStore.setResponseStreamingMode("off");
+    const { assistantRunState, foregroundSessionState, summaryAggregator } = container;
+    assistantRunState.clearRun("session-1", "no_reply_or_tool_seen");
+    foregroundSessionState.markBusy("session-1", "D:/repo");
+    const info = { id: "off-reply", sessionID: "session-1", role: "assistant" };
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: { info: { ...info, time: { created: 1 } } },
+    } as unknown as Event);
+    summaryAggregator.processEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "off-text",
+          sessionID: info.sessionID,
+          messageID: info.id,
+          type: "text",
+          text: "Unfinished reply lost with the server",
+        },
+      },
+    } as unknown as Event);
+
+    const ending = service!.endRunLostWithServer("opencode_restarted");
+    await settle();
+    await ending;
+
+    expect(foregroundSessionState.isBusy()).toBe(false);
+    summaryAggregator.processEvent({
+      type: "message.updated",
+      properties: { info: { ...info, time: { created: 1, completed: 2 } } },
+    } as unknown as Event);
+    await settle();
+
+    expect(api.sendRichMessage).not.toHaveBeenCalled();
+    expect(api.sendMessage).not.toHaveBeenCalled();
+    expect(api.sendMessageDraft).not.toHaveBeenCalled();
+  });
+
   it("finishes ending the lines before it resolves, so a reset right after loses nothing", async () => {
     emitTool(container, "bash", "running", "call-bash", { command: "npm test" });
     await settle();

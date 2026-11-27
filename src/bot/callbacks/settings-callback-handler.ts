@@ -84,7 +84,9 @@ function getNextPromptQueueMode(mode: PromptQueueMode): PromptQueueMode {
 }
 
 function getNextResponseStreamingMode(mode: ResponseStreamingMode): ResponseStreamingMode {
-  return mode === "edit" ? "draft" : "edit";
+  if (mode === "edit") return "draft";
+  if (mode === "draft") return "off";
+  return "edit";
 }
 
 export type SettingsCallbackDeps = Pick<AppContainer, "interactionManager" | "pinnedMessageManager">;
