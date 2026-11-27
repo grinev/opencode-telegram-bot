@@ -494,6 +494,52 @@ describe("bot/streaming/compact-progress-streamer", () => {
 
     const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+    it("promotes old and new calls onto their own cards while a reply is held", async () => {
+      const { streamer, sendText, editText, onPark } = createStreamer();
+      streamer.registerToolCall("s1", "old", true);
+      streamer.updateActivity("s1", "old task", "old");
+      await tick();
+
+      streamer.holdForClose("s1");
+      streamer.registerToolCall("s1", "new", true);
+      streamer.addBackgroundOperation("s1", "new", "new task");
+      streamer.updateActivity("s1", "new task", "new");
+      streamer.addBackgroundOperation("s1", "old", "old task");
+      streamer.updateActivity("s1", "old task · 🕒 20s", "old");
+      await streamer.finalize("s1");
+      await tick();
+
+      expect(onPark).toHaveBeenCalledExactlyOnceWith("s1", ["old"]);
+      expect(sendText).toHaveBeenNthCalledWith(2, "s1", "⏳ Working\nnew task");
+      await streamer.endBackgroundOperation("s1", "old", TOOL);
+      expect(editText).toHaveBeenLastCalledWith("s1", 10, "✅ tools: 1");
+
+      await streamer.endBackgroundOperation("s1", "new", TOOL);
+      await streamer.finalize("s1");
+      expect(editText).toHaveBeenLastCalledWith("s1", 11, "✅ tools: 1");
+    });
+
+    it("shows parked background calls by start order, not promotion order", async () => {
+      const { streamer, sendText, editText } = createStreamer();
+      streamer.registerToolCall("s1", "earlier", true);
+      streamer.registerToolCall("s1", "later", true);
+      streamer.updateActivity("s1", "working");
+      await tick();
+
+      streamer.addBackgroundOperation("s1", "later", "later task");
+      streamer.addBackgroundOperation("s1", "earlier", "earlier task");
+      await streamer.finalize("s1");
+      await tick();
+      expect(editText).toHaveBeenLastCalledWith("s1", 10, "⏳ Working\nlater task");
+
+      await streamer.endBackgroundOperation("s1", "later", TOOL);
+      await tick();
+      expect(editText).toHaveBeenLastCalledWith("s1", 10, "⏳ Working\nearlier task");
+      await streamer.endBackgroundOperation("s1", "earlier", TOOL);
+      expect(editText).toHaveBeenLastCalledWith("s1", 10, "✅ tools: 2");
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
     it("keeps a card with a running background operation open past its close", async () => {
       const { streamer, editText, onPark } = createStreamer();
 

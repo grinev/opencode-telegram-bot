@@ -406,6 +406,45 @@ describe("bot/services/event-subscription-service lost run", () => {
     expect(lastCardText(api).split("\n").at(-1)).toMatch(/^⏹ Interrupted · 🕒 \d+m/);
   });
 
+  it.each([
+    { serverRestarted: true, mixed: false, finalEdit: ["✅ tools: 1"] },
+    { serverRestarted: true, mixed: true, finalEdit: ["✅ commands: 1, tools: 1"] },
+    { serverRestarted: false, mixed: false, finalEdit: [] },
+  ])(
+    "only closes parked Compact task progress on a confirmed restart ($serverRestarted, mixed: $mixed)",
+    async ({ serverRestarted, mixed, finalEdit }) => {
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      settingsStore.setOutputMode("compact");
+      if (mixed) {
+        emitTool(container, "bash", "running", "call-background-command", {
+          command: "npm test",
+          background: true,
+        });
+      }
+      startSubagent(container, true);
+      await settle();
+      container.summaryAggregator.processEvent({
+        type: "session.idle",
+        properties: { sessionID: "session-1" },
+      } as unknown as Event);
+      await settle();
+      container.assistantRunState.clearRun("session-1", "test");
+      expect(collectSentTexts(api).at(-1)).toMatch(/Running Task: slow sleeper · 🕒 /);
+      const editsBefore = api.editMessageText.mock.calls.length;
+      const onReconnect = mocked.subscribeToEvents.mock.calls.at(-1)?.[2] as (info: {
+        serverRestarted: boolean;
+      }) => void;
+
+      onReconnect({ serverRestarted });
+      await settle();
+
+      expect(api.editMessageText.mock.calls.slice(editsBefore).map((call) => call[2])).toEqual(
+        finalEdit,
+      );
+      expect(api.sendMessage).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("does nothing to the chat when nothing of the session runs", async () => {
     container.assistantRunState.clearRun("session-1", "test");
     const sentBefore = collectSentTexts(api).length;

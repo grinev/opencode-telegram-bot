@@ -17,8 +17,10 @@ import { renderSubagentCard } from "../../../app/formatters/subagent-formatter.j
 import { countToolCall } from "../../../app/formatters/compact-summary-formatter.js";
 import {
   RUNNING_ICON,
+  TOOL_ELAPSED_THRESHOLD_MS,
   appendDuration,
   appendDurationToFirstLine,
+  bucketElapsedMs,
   formatDuration,
   formatDurationOverHours,
 } from "../../../app/formatters/duration-formatter.js";
@@ -162,7 +164,7 @@ function syncCompactToolActivity(
   const tick = runtime.runningToolTracker.displayTick(callId);
   const text = tick ? appendDuration(activity, formatElapsed(tick)) : activity;
 
-  runtime.compactProgressStreamer.updateActivity(sessionId, text);
+  runtime.compactProgressStreamer.updateActivity(sessionId, text, callId);
 }
 
 /** A todo call cut short has no result list: finish the list it was running on. */
@@ -274,6 +276,7 @@ function handleRunningToolTick(deps: EventHandlerBase, tick: RunningToolTick): v
     runtime.compactProgressStreamer.updateActivity(
       tick.sessionId,
       appendDuration(cached.activity, elapsed),
+      tick.callId,
     );
     return;
   }
@@ -296,13 +299,45 @@ function handleRunningToolTick(deps: EventHandlerBase, tick: RunningToolTick): v
   );
 }
 
+function updateCompactNestedTasks(
+  runtime: SessionRuntimeState,
+  sessionId: string,
+  subagents: SubagentInfo[],
+): void {
+  for (const subagent of subagents) {
+    const { taskCallId, backgroundLaunch } = subagent;
+    if (!taskCallId) continue;
+    const progress = runtime.compactProgressStreamer;
+    if (backgroundLaunch) {
+      const elapsedMs = Date.now() - backgroundLaunch.startedAt;
+      const activity = formatRunningTaskLine({ description: backgroundLaunch.description });
+      progress.updateNestedBackgroundOperation(
+        sessionId,
+        taskCallId,
+        elapsedMs >= TOOL_ELAPSED_THRESHOLD_MS
+          ? appendDuration(activity, formatDuration(bucketElapsedMs(elapsedMs)))
+          : activity,
+      );
+    } else {
+      const finished = subagent.status !== "pending" && subagent.status !== "running";
+      void progress
+        .endNestedBackgroundOperation(
+          sessionId,
+          taskCallId,
+          finished ? countToolCall({ tool: "task" }) : undefined,
+          getDeleteCompactProgressOnFinish(),
+        )
+        .catch((error) => logger.error("[Bot] Failed to finish nested task progress:", error));
+    }
+  }
+}
+
 async function refreshSubagentCards(
   { runtime, policy }: EventHandlerBase,
   sessionId: string,
 ): Promise<void> {
-  if (!isFullProgressMode()) {
-    return;
-  }
+  const compact = isCompactProgressMode();
+  if (!compact && !isFullProgressMode()) return;
 
   const subagents = runtime.getSubagentSnapshot(sessionId);
   if (!subagents) {
@@ -311,6 +346,11 @@ async function refreshSubagentCards(
 
   if (!policy.isForegroundSession(sessionId)) {
     runtime.stopBackgroundOperations("session_not_current", sessionId);
+    return;
+  }
+
+  if (compact) {
+    updateCompactNestedTasks(runtime, sessionId, subagents);
     return;
   }
 
@@ -352,19 +392,31 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
     // Read before the release below forgets the call. A background call no longer
     // tracked was stopped: its line or card stays as it was.
     const backgroundTracked = background && runtime.runningToolTracker.isBackground(callId);
-    const backgroundDetached = background && runtime.runningToolTracker.isDetached(callId);
+    const detached = runtime.runningToolTracker.isDetached(callId);
     // Its line is shown once its arguments are known; until then it is tracked
     // (the clock runs from here) but drawn nowhere.
     const composing = isComposing(toolInfo);
     const storedInfo = runtime.getRunningToolInfo(sessionId, callId);
     const failedWhileComposing = status === "error" && !!storedInfo && isComposing(storedInfo);
 
-    if (!fullMode && !compactMode && status === "running" && !composing && !backgroundTracked) {
+    const isBackgroundTaskReturn = toolInfo.tool === "task" && toolInfo.metadata?.background === true;
+    if (
+      !fullMode &&
+      !compactMode &&
+      status === "running" &&
+      !composing &&
+      !backgroundTracked &&
+      !isBackgroundTaskReturn
+    ) {
       runtime.noteMinimalWork(sessionId, { callId });
     }
 
-    if (compactMode && !isTerminal && !storedInfo) {
+    const progress = runtime.compactProgressStreamer;
+    if (compactMode && !isTerminal && !storedInfo && !progress.hasToolCall(sessionId, callId)) {
       closeCompactCardBeforeNextActivity(runtime, sessionId);
+      if (toolInfo.tool === "task" || background) {
+        progress.registerToolCall(sessionId, callId, toolInfo.tool === "task");
+      }
     }
 
     if (isTerminal) {
@@ -409,11 +461,14 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
         const activity = getCompactToolActivity(toolInfo);
         const tick = runtime.runningToolTracker.displayTick(callId);
         if (activity) {
-          runtime.compactProgressStreamer.addBackgroundOperation(
+          progress.addBackgroundOperation(
             sessionId,
             callId,
             tick ? appendDuration(activity, formatElapsed(tick)) : activity,
           );
+          if (progress.isToolCallParked(sessionId, callId)) {
+            runtime.runningToolTracker.detach([callId]);
+          }
         }
       }
     }
@@ -434,9 +489,21 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
         .catch((error) => {
           logger.error("[Bot] Failed to close the progress card of a background operation", error);
         });
-      if (!backgroundTracked || backgroundDetached) {
+      if (!backgroundTracked || detached) {
         return;
       }
+    }
+
+    // A failed call counts as finished work only if it was seen running: one that
+    // failed while composing, or after the bot already ended it, was never shown.
+    const seenFailing = status === "error" && !!storedInfo && !failedWhileComposing;
+    const ownsTask = toolInfo.tool !== "task" || progress.hasToolCall(sessionId, callId);
+    const shouldCount = (status === "completed" || seenFailing) && !background && ownsTask;
+
+    if (!ownsTask || detached || progress.isToolCallParked(sessionId, callId)) {
+      // Still count a root task on its parked message if a nested launch holds it.
+      if (shouldCount) progress.addToolCall(sessionId, callId, countToolCall(toolInfo));
+      return;
     }
 
     if (isTerminal) {
@@ -447,7 +514,7 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
         const activity = getCompactToolActivity(toolInfo);
         if (activity) {
           runtime.setCompactActivity(sessionId, { callId, activity });
-          runtime.compactProgressStreamer.updateActivity(sessionId, activity);
+          progress.updateActivity(sessionId, activity, callId);
         }
       }
     } else if (!composing && runtime.runningToolTracker.newestCallId(sessionId) === callId) {
@@ -457,12 +524,7 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
       }
     }
 
-    // A failed call counts as finished work only if it was seen running: one that
-    // failed while composing, or after the bot already ended it, was never shown.
-    const seenFailing = status === "error" && !!storedInfo && !failedWhileComposing;
-    if ((status === "completed" || seenFailing) && !background) {
-      runtime.compactProgressStreamer.addToolCall(sessionId, callId, countToolCall(toolInfo));
-    }
+    if (shouldCount) progress.addToolCall(sessionId, callId, countToolCall(toolInfo));
   });
 
   summaryAggregator.setOnTool(async (toolInfo) => {
@@ -514,6 +576,13 @@ export function registerToolActivityHandlers(deps: ToolActivityDeps): void {
     }
 
     if (!policy.isForegroundSession(sessionId)) {
+      return;
+    }
+    if (isCompactProgressMode()) {
+      const active = subagents.filter((subagent) => subagent.taskCallId && subagent.backgroundLaunch);
+      runtime.setSubagentSnapshot(sessionId, active);
+      runtime.runningToolTracker.setHeartbeatActive(sessionId, active.length > 0);
+      updateCompactNestedTasks(runtime, sessionId, subagents);
       return;
     }
     if (!isFullProgressMode()) {
