@@ -28,6 +28,7 @@ export interface MessageCompletionInfo {
   modelID?: string | undefined;
   createdAt?: number | undefined;
   completedAt?: number | undefined;
+  failed?: true;
 }
 
 type MessageCompleteCallback = (
@@ -38,6 +39,11 @@ type MessageCompleteCallback = (
 ) => void;
 
 type MessagePartialCallback = (sessionId: string, messageId: string, messageText: string) => void;
+type AssistantReplyStateCallback = (
+  sessionId: string,
+  messageId: string,
+  state: "open" | "no_reply",
+) => void;
 
 export interface ThinkingSection {
   id: string;
@@ -238,7 +244,7 @@ type SessionDiffCallback = (sessionId: string, diffs: FileChange[]) => void;
 
 type FileChangeCallback = (sessionId: string, change: FileChange) => void;
 
-type ClearedCallback = () => void;
+type ClearedCallback = (previousSessionId: string | null) => void;
 
 interface PreparedToolFile extends ToolFileEntry {
   fileChange: FileChange | null;
@@ -416,6 +422,8 @@ export class SummaryAggregator {
   private messages: Map<string, { role: string }> = new Map();
   private messageCount = 0;
   private onCompleteCallback: MessageCompleteCallback | null = null;
+  private onAssistantReplyStateCallback: AssistantReplyStateCallback | null = null;
+  private onFollowedRunTerminatedCallback: ((sessionId: string) => void) | null = null;
   private onAssistantStepCallback: AssistantStepCallback | null = null;
   private onSessionBoundaryCallback: SessionBoundaryCallback | null = null;
   private onFooterSuppressedCallback: FooterSuppressedCallback | null = null;
@@ -458,6 +466,7 @@ export class SummaryAggregator {
   private thinkingFiredForMessages: Set<string> = new Set();
   private thinkingFinishedForMessages: Set<string> = new Set();
   private deliveredExternalUserMessageIds: Set<string> = new Set();
+  private discardedReplyTextIds = new Set<string>();
   private knownTextPartIds: Map<string, Set<string>> = new Map();
   // Parts OpenCode injected itself, tracked by id because `message.part.delta` events may
   // carry only the id and would otherwise stream their content past the synthetic filter.
@@ -498,6 +507,24 @@ export class SummaryAggregator {
 
   setOnComplete(callback: MessageCompleteCallback): void {
     this.onCompleteCallback = callback;
+  }
+
+  setOnAssistantReplyState(callback: AssistantReplyStateCallback): void {
+    this.onAssistantReplyStateCallback = callback;
+  }
+
+  setOnFollowedRunTerminated(callback: (sessionId: string) => void): void {
+    this.onFollowedRunTerminatedCallback = callback;
+  }
+
+  /** Discard selected incomplete replies before any late text or completion can revive them. */
+  discardPendingReplyText(sessionId: string, discard: (messageId: string) => boolean): void {
+    if (sessionId !== this.currentSessionId) return;
+    for (const messageId of this.textMessageStates.keys()) {
+      if (!discard(messageId)) continue;
+      this.discardedReplyTextIds.add(messageId);
+      this.textMessageStates.delete(messageId);
+    }
   }
 
   setOnAssistantStep(callback: AssistantStepCallback): void {
@@ -916,6 +943,7 @@ export class SummaryAggregator {
   }
 
   clear(): void {
+    const previousSessionId = this.currentSessionId;
     this.stopTypingIndicator();
     this.currentSessionId = null;
     this.textMessageStates.clear();
@@ -928,6 +956,7 @@ export class SummaryAggregator {
     this.thinkingFiredForMessages.clear();
     this.thinkingFinishedForMessages.clear();
     this.deliveredExternalUserMessageIds.clear();
+    this.discardedReplyTextIds.clear();
     this.trackedSessionParents.clear();
     this.subagentStates.clear();
     this.subagentOrder = [];
@@ -950,7 +979,7 @@ export class SummaryAggregator {
     if (this.onClearedCallback) {
       try {
         this.scheduleOutbound(() => {
-          this.onClearedCallback?.();
+          this.onClearedCallback?.(previousSessionId);
         }, false);
       } catch (err) {
         logger.error("[Aggregator] Error in clear callback:", err);
@@ -1943,12 +1972,19 @@ export class SummaryAggregator {
     this.messages.set(messageID, { role: info.role });
 
     if (info.role === "user") {
+      this.onAssistantReplyStateCallback?.(info.sessionID, messageID, "no_reply");
       this.emitExternalUserInputIfReady(info.sessionID, messageID);
       return;
     }
 
     if (info.role === "assistant") {
-      if (!this.textMessageStates.has(messageID)) {
+      const discarded = this.discardedReplyTextIds.has(messageID);
+      const time = info.time;
+      const isCompleted = Boolean(time?.completed);
+      if (!discarded && !isCompleted) {
+        this.onAssistantReplyStateCallback?.(info.sessionID, messageID, "open");
+      }
+      if (!discarded && !this.textMessageStates.has(messageID)) {
         this.textMessageStates.set(messageID, {
           orderedPartIds: [],
           partTexts: new Map(),
@@ -1958,13 +1994,10 @@ export class SummaryAggregator {
         this.startTypingIndicator();
       }
 
-      const textState = this.getOrCreateTextMessageState(messageID);
+      const textState = this.textMessageStates.get(messageID);
+      const messageText = discarded ? "" : this.getCombinedMessageText(messageID, isCompleted);
 
-      const time = info.time;
-      const isCompleted = Boolean(time?.completed);
-      const messageText = this.getCombinedMessageText(messageID, isCompleted);
-
-      if (!isCompleted && textState.optimisticUpdateCount === 1) {
+      if (!isCompleted && textState?.optimisticUpdateCount === 1) {
         this.emitPartialText(info.sessionID, messageID, messageText);
       }
 
@@ -2006,15 +2039,15 @@ export class SummaryAggregator {
         const finalText = messageText;
 
         logger.debug(
-          `[Aggregator] Message part completed: messageId=${messageID}, textLength=${finalText.length}, totalParts=${textState.orderedPartIds.length}, session=${this.currentSessionId}`,
+          `[Aggregator] Message part completed: messageId=${messageID}, textLength=${finalText.length}, totalParts=${textState?.orderedPartIds.length ?? 0}, session=${this.currentSessionId}`,
         );
 
         // This is the only trace left once the placeholder is filtered out, so
         // an upstream regression stays visible in the logs.
-        const droppedParts = textState.orderedPartIds.filter((partID) =>
+        const droppedParts = textState?.orderedPartIds.filter((partID) =>
           isUpstreamEmptyResponseText(textState.partTexts.get(partID) || "", true),
         );
-        if (droppedParts.length > 0) {
+        if (droppedParts?.length) {
           logger.warn(
             `[Aggregator] Dropped upstream empty-response placeholder: messageId=${messageID}, parts=${droppedParts.length}, session=${this.currentSessionId}`,
           );
@@ -2029,8 +2062,11 @@ export class SummaryAggregator {
           );
         }
 
-        if (this.onCompleteCallback && finalText.length > 0) {
+        if (finalText.length === 0) {
+          this.onAssistantReplyStateCallback?.(info.sessionID, messageID, "no_reply");
+        } else if (this.onCompleteCallback) {
           const sessionId = this.currentSessionId;
+          const failed = Boolean(info.error);
           this.scheduleOutbound(() => {
             if (!sessionId) {
               return;
@@ -2041,6 +2077,7 @@ export class SummaryAggregator {
               modelID: info.modelID,
               createdAt: time?.created,
               completedAt: time?.completed,
+              ...(failed ? { failed: true } : {}),
             });
           }, false);
         }
@@ -2110,6 +2147,8 @@ export class SummaryAggregator {
 
     const messageID = part.messageID;
     const messageInfo = this.messages.get(messageID);
+
+    if (part.type === "text" && this.discardedReplyTextIds.has(messageID)) return;
 
     // OpenCode injects synthetic text parts of its own: expanded file attachments,
     // MCP resource dumps, plan-mode hints. They are context for the model, never content
@@ -2203,6 +2242,8 @@ export class SummaryAggregator {
 
         if (state.optimisticUpdateCount >= 2) {
           this.emitPartialText(part.sessionID, messageID, fullText);
+        } else if (fullText.trim()) {
+          this.onAssistantReplyStateCallback?.(part.sessionID, messageID, "open");
         }
       }
     } else if (part.type === "tool") {
@@ -2373,6 +2414,8 @@ export class SummaryAggregator {
     if (partType && partType !== "text") {
       return;
     }
+
+    if (this.discardedReplyTextIds.has(messageID)) return;
 
     if (partType === "text") {
       this.registerKnownTextPart(messageID, partID);
@@ -2652,9 +2695,14 @@ export class SummaryAggregator {
       return;
     }
 
+    if (!this.messages.has(messageId)) {
+      this.onAssistantReplyStateCallback?.(sessionId, messageId, "open");
+    }
+
     const callback = this.onPartialCallback;
     this.scheduleOutbound(
       () => {
+        if (this.discardedReplyTextIds.has(messageId)) return;
         try {
           callback(sessionId, messageId, messageText);
         } catch (err) {
@@ -2945,6 +2993,7 @@ export class SummaryAggregator {
     logger.info(`[Aggregator] Session became idle: ${sessionID}`);
     // Before the idle callback is scheduled, so a step of the next turn cannot join this run.
     this.onSessionBoundaryCallback?.(sessionID);
+    this.onFollowedRunTerminatedCallback?.(sessionID);
     this.emitSessionRunEnded(sessionID);
     this.liveTurnStartedAt = null;
     this.turnEndCount++;
@@ -3032,6 +3081,7 @@ export class SummaryAggregator {
     }
 
     logger.warn(`[Aggregator] Session error: ${sessionID}: ${message}`);
+    this.onFollowedRunTerminatedCallback?.(sessionID);
     this.emitSessionRunEnded(sessionID);
     this.liveTurnStartedAt = null;
     this.turnEndCount++;

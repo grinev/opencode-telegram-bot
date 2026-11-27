@@ -186,6 +186,7 @@ export const ar: I18nDictionary = {
   "settings.response_streaming.label": "بث الرد",
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draft (experimental)",
+  "settings.response_streaming.off": "معطّل",
   "settings.diff_files.label": "ملفات diff",
   "settings.assistant_footer.label": "تذييل الرد",
   "assistant.footer.interrupted": "interrupted",

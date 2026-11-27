@@ -412,10 +412,15 @@ describe("bot/callbacks/settings-callback-handler", () => {
     );
   });
 
-  it("toggles response streaming mode and returns to settings menu", async () => {
-    mocked.getCompactOutputModeMock.mockReturnValue(false);
+  it.each([
+    ["edit", "draft", false, 3],
+    ["draft", "off", false, 3],
+    ["draft", "off", true, 2],
+    ["off", "edit", true, 2],
+  ] as const)("cycles %s to %s and redraws the settings row (compact=%s)", async (mode, next, compact, row) => {
+    mocked.getCompactOutputModeMock.mockReturnValue(compact);
     mocked.getShowThinkingContentMock.mockReturnValue(true);
-    mocked.getResponseStreamingModeMock.mockReturnValueOnce("edit").mockReturnValueOnce("draft");
+    mocked.getResponseStreamingModeMock.mockReturnValueOnce(mode).mockReturnValueOnce(next);
     mocked.getTtsModeMock.mockReturnValue("off");
     activateSettingsMenu();
     const ctx = createCallbackContext(SETTINGS_RESPONSE_STREAMING_CALLBACK);
@@ -423,13 +428,13 @@ describe("bot/callbacks/settings-callback-handler", () => {
     const result = await handleSettingsCallback(ctx, createDeps());
 
     expect(result).toBe(true);
-    expect(mocked.setResponseStreamingModeMock).toHaveBeenCalledWith("draft");
+    expect(mocked.setResponseStreamingModeMock).toHaveBeenCalledWith(next);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({ text: t("settings.saved") });
     const call = defined(vi.mocked(ctx.editMessageText).mock.calls[0]);
     const [text, opts] = call;
     expect(text).toBe(t("settings.menu.title"));
-    expect(defined(opts?.reply_markup?.inline_keyboard[3]?.[0]).text).toBe(
-      `${t("settings.response_streaming.label")}: ${t("settings.response_streaming.draft")}`,
+    expect(defined(opts?.reply_markup?.inline_keyboard[row]?.[0]).text).toBe(
+      `${t("settings.response_streaming.label")}: ${t(`settings.response_streaming.${next}`)}`,
     );
   });
 

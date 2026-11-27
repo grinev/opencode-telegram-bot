@@ -177,6 +177,7 @@ export const en = {
   "settings.response_streaming.label": "Response streaming",
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draft (experimental)",
+  "settings.response_streaming.off": "off",
   "settings.diff_files.label": "Diff files",
   "settings.assistant_footer.label": "Assistant footer",
   "assistant.footer.interrupted": "interrupted",

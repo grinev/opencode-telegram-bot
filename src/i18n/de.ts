@@ -193,6 +193,7 @@ export const de: I18nDictionary = {
   "settings.response_streaming.label": "Antwort-Streaming",
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draft (experimental)",
+  "settings.response_streaming.off": "aus",
   "settings.diff_files.label": "Diff-Dateien",
   "settings.assistant_footer.label": "Antwort-Footer",
   "assistant.footer.interrupted": "interrupted",

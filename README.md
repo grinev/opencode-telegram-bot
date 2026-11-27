@@ -336,7 +336,7 @@ Runtime preferences are changed from `/settings` and stored in `settings.json`:
 - Pin session dashboard
 - Notifications from other sessions: on by default. Off silences chat notices about replies, questions and permission requests from sessions that are not the one selected in the bot. Tracking keeps running, and a pending question or permission stays answerable from a TUI or Desktop
 - Diff file attachments
-- Response streaming mode: `edit` or `draft (experimental)`; applies only to final assistant replies, not thinking messages
+- Response streaming mode: `edit` (default), `draft (experimental)`, or `off`. With `off`, each completed assistant reply is sent in full as soon as it is ready, without a preview and without waiting for the turn to end. Thinking, progress and interactive prompts are unaffected. A mode change applies to the next reply.
 - Audio replies: `off`, `all`, or `auto` when TTS is configured
 - Message queue: `Off`, or what happens to text, voice, photos, rich formatted messages with photos, documents, and media groups sent while the agent is busy — on OpenCode V2 `Queue` or `Steer` (the default), on V1 `On` (the bot's own queue, off by default)
 

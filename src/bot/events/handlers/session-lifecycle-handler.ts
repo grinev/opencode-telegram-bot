@@ -47,6 +47,12 @@ function endRunningForegroundCalls(
 export function registerSessionLifecycleHandlers(deps: SessionLifecycleDeps): void {
   const { runtime, policy, summaryAggregator } = deps;
 
+  summaryAggregator.setOnFollowedRunTerminated((sessionId) => {
+    summaryAggregator.discardPendingReplyText(sessionId, (messageId) =>
+      runtime.discardPendingOffReply(sessionId, messageId),
+    );
+  });
+
   summaryAggregator.setOnSessionIdle(async (sessionId, { interrupted, reason }) => {
     wakePromptHandover(sessionId);
     resetStreamThrottle(sessionId);

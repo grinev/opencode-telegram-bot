@@ -260,6 +260,27 @@ describe("app/stores/settings-store", () => {
     vi.resetModules();
   });
 
+  it.each([undefined, "edit", "draft"] as const)(
+    "accepts the off preset without overwriting stored mode %s",
+    async (storedMode) => {
+      await writeFile(
+        path.join(tempHome, "settings.json"),
+        JSON.stringify({ responseStreamingMode: storedMode }),
+      );
+      vi.resetModules();
+      vi.stubEnv("INITIAL_SETTINGS_PRESET", '{"responseStreamingMode":"off"}');
+      vi.stubEnv("OPENCODE_TELEGRAM_HOME", tempHome);
+
+      const store = await import("../../../src/app/stores/settings-store.js");
+      await store.loadSettings();
+
+      expect(store.getResponseStreamingMode()).toBe(storedMode ?? "off");
+      await store.flushSettings();
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    },
+  );
+
   it("does not overwrite a persisted background notifications setting with INITIAL_SETTINGS_PRESET", async () => {
     await writeFile(
       path.join(tempHome, "settings.json"),
@@ -338,12 +359,12 @@ describe("app/stores/settings-store", () => {
     expect(getResponseStreamingMode()).toBe("edit");
   });
 
-  it("loads response streaming mode from settings.json", async () => {
-    await writeFile(path.join(tempHome, "settings.json"), JSON.stringify({ responseStreamingMode: "draft" }));
+  it.each(["draft", "off"] as const)("loads response streaming mode %s from settings.json", async (mode) => {
+    await writeFile(path.join(tempHome, "settings.json"), JSON.stringify({ responseStreamingMode: mode }));
 
     await loadSettings();
 
-    expect(getResponseStreamingMode()).toBe("draft");
+    expect(getResponseStreamingMode()).toBe(mode);
   });
 
   it("loads diff file attachment setting from settings.json", async () => {
@@ -793,12 +814,12 @@ describe("app/stores/settings-store", () => {
   it("persists response streaming mode to settings.json", async () => {
     await loadSettings();
 
-    setResponseStreamingMode("draft");
+    setResponseStreamingMode("off");
 
-    expect(getResponseStreamingMode()).toBe("draft");
+    expect(getResponseStreamingMode()).toBe("off");
     await vi.waitFor(async () => {
       const settings = JSON.parse(await readFile(path.join(tempHome, "settings.json"), "utf-8"));
-      expect(settings.responseStreamingMode).toBe("draft");
+      expect(settings.responseStreamingMode).toBe("off");
     });
   });
 });

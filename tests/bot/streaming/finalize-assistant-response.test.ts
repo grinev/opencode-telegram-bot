@@ -2,6 +2,36 @@
 import { finalizeAssistantResponse } from "../../../src/bot/streaming/finalize-assistant-response.js";
 
 describe("bot/streaming/finalize-assistant-response", () => {
+  it("sends finalized parts without a preview transport, notifying only with the first", async () => {
+    const part = (text: string) => ({ blocks: [], fallbackText: text, source: "plain" as const });
+    const parts = [part("first"), part("second")];
+    const prepareStreamingPayload = vi.fn();
+    const sendRenderedPart = vi.fn();
+    const afterTextAccepted = vi.fn();
+    const keyboard = { keyboard: [[{ text: "A" }]] };
+
+    await finalizeAssistantResponse({
+      sessionId: "s",
+      messageId: "m",
+      messageText: "complete reply",
+      flushPendingServiceMessages: vi.fn(),
+      prepareStreamingPayload,
+      renderFinalParts: () => parts,
+      getReplyKeyboard: () => keyboard,
+      notifyFirstFinalPart: true,
+      sendRenderedPart,
+      afterTextAccepted,
+    });
+
+    expect(prepareStreamingPayload).not.toHaveBeenCalled();
+    expect(sendRenderedPart).toHaveBeenNthCalledWith(1, parts[0], { reply_markup: keyboard });
+    expect(sendRenderedPart).toHaveBeenNthCalledWith(2, parts[1], {
+      disable_notification: true,
+      reply_markup: keyboard,
+    });
+    expect(afterTextAccepted).toHaveBeenCalledAfter(sendRenderedPart);
+  });
+
   it.each([true, false])(
     "keeps whole reply documents before later service output (streamed=%s)",
     async (streamed) => {

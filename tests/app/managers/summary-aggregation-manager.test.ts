@@ -2866,7 +2866,7 @@ describe("summary/aggregator", () => {
     });
   });
 
-  it("passes assistant metadata to onComplete", () => {
+  it.each([false, true])("passes assistant metadata to onComplete (failed=%s)", (failed) => {
     const onComplete = vi.fn();
     summaryAggregator.setOnComplete(onComplete);
     summaryAggregator.setSession("session-1");
@@ -2911,6 +2911,7 @@ describe("summary/aggregator", () => {
           providerID: "openai",
           modelID: "gpt-5.4",
           time: { created: 1000, completed: 2500 },
+          ...(failed ? { error: { name: "MessageAbortedError", data: { message: "Interrupted" } } } : {}),
         },
       },
     } as unknown as Event);
@@ -2919,13 +2920,14 @@ describe("summary/aggregator", () => {
       "session-1",
       "message-meta-1",
       "Done",
-      expect.objectContaining({
+      {
         agent: "plan",
         providerID: "openai",
         modelID: "gpt-5.4",
         createdAt: 1000,
         completedAt: 2500,
-      }),
+        ...(failed ? { failed: true } : {}),
+      },
     );
   });
 

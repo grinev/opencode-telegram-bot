@@ -177,6 +177,7 @@ export const ru: I18nDictionary = {
   "settings.response_streaming.label": "Стриминг ответа",
   "settings.response_streaming.edit": "edit",
   "settings.response_streaming.draft": "draft (experimental)",
+  "settings.response_streaming.off": "выкл.",
   "settings.diff_files.label": "Файлы с diff",
   "settings.assistant_footer.label": "Футер ответа",
   "assistant.footer.interrupted": "прерван",

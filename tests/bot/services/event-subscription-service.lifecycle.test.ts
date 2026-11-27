@@ -8,6 +8,7 @@ import { resetSingletonState } from "../../helpers/reset-singleton-state.js";
 import { defined } from "../../helpers/defined.js";
 import { createTestAppContainer } from "../../helpers/app-container.js";
 import type { AppContainer } from "../../../src/app/bootstrap/app-container.js";
+import type { ResponseStreamingMode } from "../../../src/app/types/settings.js";
 
 const mocked = vi.hoisted(() => ({
   subscribeToEvents: vi.fn(),
@@ -78,12 +79,12 @@ function createFakeBot(): { bot: Bot<Context>; api: FakeBotApi } {
   return { bot: { api } as unknown as Bot<Context>, api };
 }
 
-function emitAssistantMessage(aggregator: Aggregator): void {
+function emitAssistantMessage(aggregator: Aggregator, messageId = "message-1"): void {
   aggregator.processEvent({
     type: "message.updated",
     properties: {
       info: {
-        id: "message-1",
+        id: messageId,
         sessionID: "session-1",
         role: "assistant",
         time: { created: Date.now() },
@@ -92,14 +93,14 @@ function emitAssistantMessage(aggregator: Aggregator): void {
   } as unknown as Event);
 }
 
-function emitAssistantTextPart(aggregator: Aggregator, text: string): void {
+function emitAssistantTextPart(aggregator: Aggregator, text: string, messageId = "message-1"): void {
   aggregator.processEvent({
     type: "message.part.updated",
     properties: {
       part: {
         id: "text-1",
         sessionID: "session-1",
-        messageID: "message-1",
+        messageID: messageId,
         type: "text",
         text,
       },
@@ -107,18 +108,23 @@ function emitAssistantTextPart(aggregator: Aggregator, text: string): void {
   } as unknown as Event);
 }
 
-function emitAssistantCompleted(aggregator: Aggregator): void {
+function emitAssistantCompleted(
+  aggregator: Aggregator,
+  messageId = "message-1",
+  failed = false,
+): void {
   aggregator.processEvent({
     type: "message.updated",
     properties: {
       info: {
-        id: "message-1",
+        id: messageId,
         sessionID: "session-1",
         role: "assistant",
         agent: "test-agent",
         providerID: "test-provider",
         modelID: "test-model",
         time: { created: Date.now() - 1000, completed: Date.now() },
+        ...(failed ? { error: { name: "UnknownError", data: { message: "Failed" } } } : {}),
       },
     },
   } as unknown as Event);
@@ -296,7 +302,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
 
   async function setupService(
     options: {
-      responseStreamingMode?: "edit" | "draft";
+      responseStreamingMode?: ResponseStreamingMode;
       showAssistantRunFooter?: boolean;
       startAssistantRun?: boolean;
     } = {},
@@ -770,6 +776,53 @@ describe("bot/services/event-subscription-service lifecycle", () => {
   });
 
   describe("streaming mode switching", () => {
+    it("keeps the new session's capture while a session-pick clear is deferred", async () => {
+      const { api } = await setupService({ responseStreamingMode: "off" });
+      const { summaryAggregator } = activeContainer;
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      summaryAggregator.setSession("previous-session");
+      const hold = summaryAggregator.holdOutbound();
+      summaryAggregator.setSession("session-1");
+      emitAssistantMessage(summaryAggregator, "new-answer");
+      emitAssistantTextPart(summaryAggregator, "New session reply", "new-answer");
+
+      settingsStore.setResponseStreamingMode("edit");
+      await summaryAggregator.drainOutbound(0, hold);
+      await settle();
+      expect(countTelegramWrites(api)).toBe(0);
+      expect(hasActiveStream("session-1")).toBe(true);
+
+      emitAssistantCompleted(summaryAggregator, "new-answer");
+      await vi.waitFor(() =>
+        expect(collectSentTexts(api)).toEqual(["New session reply"]),
+      );
+    });
+
+    it("keeps an Off answer final-only after a switch, and streams the next answer", async () => {
+      const { api, summaryAggregator } = await setupService({ responseStreamingMode: "off" });
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+
+      // The assistant message has started but hasn't produced text yet.
+      settingsStore.setResponseStreamingMode("edit");
+      emitAssistantTextPart(summaryAggregator, "Hidden partial");
+      await settle();
+      expect(hasActiveStream("session-1")).toBe(true);
+      expect(countTelegramWrites(api)).toBe(0);
+
+      emitAssistantTextPart(summaryAggregator, "Complete Off answer");
+      emitAssistantCompleted(summaryAggregator);
+      await vi.waitFor(() => {
+        expect(collectSentTexts(api)).toEqual(["Complete Off answer"]);
+        expect(hasActiveStream("session-1")).toBe(false);
+      });
+
+      emitAssistantMessage(summaryAggregator, "message-2");
+      emitAssistantTextPart(summaryAggregator, "Visible Edit partial", "message-2");
+      await vi.waitFor(() => {
+        expect(collectSentTexts(api)).toEqual(["Complete Off answer", "Visible Edit partial"]);
+      }, { timeout: STREAM_WAIT_TIMEOUT_MS });
+    });
+
     it("finishes an answer with the streamer it was started with after a switch to draft", async () => {
       const { api, summaryAggregator } = await setupService({ responseStreamingMode: "edit" });
       const settingsStore = await import("../../../src/app/stores/settings-store.js");
@@ -823,6 +876,54 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       expect(api.editMessageText).not.toHaveBeenCalled();
       expect(defined(api.sendMessage.mock.calls[0]?.[1])).toBe("Partial answer, now complete");
     }, 30_000);
+  });
+
+  describe("Off reply lifecycle", () => {
+    it("sends each completed reply before idle and does not publish a failed step", async () => {
+      const { api, summaryAggregator } = await setupService({
+        responseStreamingMode: "off",
+        showAssistantRunFooter: true,
+        startAssistantRun: true,
+      });
+      emitAssistantTextPart(summaryAggregator, "First complete reply");
+      emitAssistantCompleted(summaryAggregator);
+      await vi.waitFor(() => expect(collectSentTexts(api)).toEqual(["First complete reply"]));
+
+      emitAssistantMessage(summaryAggregator, "message-2");
+      emitAssistantTextPart(summaryAggregator, "Second complete reply", "message-2");
+      emitAssistantCompleted(summaryAggregator, "message-2");
+      await vi.waitFor(() =>
+        expect(collectSentTexts(api)).toEqual(["First complete reply", "Second complete reply"]),
+      );
+
+      emitAssistantMessage(summaryAggregator, "message-3");
+      emitAssistantTextPart(summaryAggregator, "Unfinished reply", "message-3");
+      emitAssistantCompleted(summaryAggregator, "message-3", true);
+      emitSessionError(summaryAggregator, "Provider failed");
+      await vi.waitFor(() =>
+        expect(collectSentTexts(api).at(-1)).toContain("Provider failed"),
+      );
+
+      expect(collectSentTexts(api)).toHaveLength(3);
+      expect(api.sendMessageDraft).not.toHaveBeenCalled();
+      expect(api.editMessageText).not.toHaveBeenCalled();
+      expect(findFooterCalls(api)).toHaveLength(0);
+    });
+
+    it("does not revive interrupted text after switching modes and receiving late events", async () => {
+      const { api, summaryAggregator } = await setupService({ responseStreamingMode: "off" });
+      const settingsStore = await import("../../../src/app/stores/settings-store.js");
+      emitAssistantTextPart(summaryAggregator, "Unfinished reply");
+      emitSessionIdle(summaryAggregator, { interrupted: true, reason: "user" });
+      settingsStore.setResponseStreamingMode("draft");
+
+      emitAssistantTextPart(summaryAggregator, "Late unfinished snapshot");
+      emitAssistantCompleted(summaryAggregator);
+      await settle();
+
+      expect(countTelegramWrites(api)).toBe(0);
+      expect(hasActiveStream("session-1")).toBe(false);
+    });
   });
 
   describe("runtime state teardown", () => {
@@ -1087,8 +1188,11 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       );
     }, 30_000);
 
-    it("releases the session when the final answer cannot be delivered", async () => {
-      const { api, summaryAggregator } = await setupService({ startAssistantRun: true });
+    it.each(["edit", "off"] as const)("releases the session when the final %s answer cannot be delivered", async (mode) => {
+      const { api, summaryAggregator } = await setupService({
+        startAssistantRun: true,
+        responseStreamingMode: mode,
+      });
       const { foregroundSessionState, assistantRunState } = activeContainer;
       const { telegramOutageNoticeService } = await import(
         "../../../src/app/services/telegram-outage-notice-service.js"
@@ -1111,6 +1215,7 @@ describe("bot/services/event-subscription-service lifecycle", () => {
       expect(assistantRunState.finishRun("session-1", "assertion")).toBeNull();
       expect(clearSpy).not.toHaveBeenCalled();
       expect(markSpy).toHaveBeenCalled();
+      expect(api.sendMessage.mock.calls.filter((call) => call[1] === "Answer")).toHaveLength(1);
     }, 30_000);
   });
 
