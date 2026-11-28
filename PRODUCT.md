@@ -104,7 +104,7 @@ No public inbound ports are required for normal usage.
 
 ### Session status in chat
 
-- Show the current project and session on a persistent bottom-keyboard row below queued messages and goal controls. The row follows changes, renames and bot restarts; long names are shortened only on the button
+- Show the current project and session as `📋 [project] session` on a persistent bottom-keyboard row below queued messages and goal controls. The row follows changes, renames and bot restarts; long names are shortened only on the button, inside the brackets for the project
 - Tapping the row opens a fresh dashboard at the bottom of the chat, even during a run or manual compaction, but not during a blocking interaction. An old label still opens the current selection, after refreshing the keyboard
 - The dashboard shows full names, project branch/worktree and goal where applicable, and a snapshot of context usage, session cost and changed files from OpenCode's session diff. It omits unavailable values rather than showing placeholder zeroes. Model, agent and effort remain on the keyboard
 - Close removes the current card even during another interaction, without changing the session. Opening a new card or changing or resetting the selection retires the previous one. If Telegram cannot delete it or the bot has restarted, its Close button is inactive

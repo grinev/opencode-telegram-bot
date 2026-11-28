@@ -11,6 +11,7 @@ import {
   type TelegramPhotoInput,
 } from "../../app/types/prompt.js";
 import { t } from "../../i18n/index.js";
+import { DASHBOARD_BUTTON_TEXT_PATTERN } from "../message-patterns.js";
 
 const incomingPromptKey: unique symbol = Symbol("incomingPrompt");
 
@@ -54,7 +55,21 @@ export async function normalizeRichMessage(
     return;
   }
 
-  const converted = convertRichMessage(message.rich_message.blocks, message.message_id);
+  const blocks = message.rich_message.blocks;
+  const [block] = blocks;
+  // Match the literal dashboard button before Markdown conversion escapes its brackets.
+  if (
+    blocks.length === 1 &&
+    block?.type === "paragraph" &&
+    typeof block.text === "string" &&
+    DASHBOARD_BUTTON_TEXT_PATTERN.test(block.text)
+  ) {
+    Object.assign(message, { text: block.text });
+    await next();
+    return;
+  }
+
+  const converted = convertRichMessage(blocks, message.message_id);
   const input = createIncomingPrompt(converted.text, { photos: converted.photos });
   setIncomingPrompt(ctx, input);
 

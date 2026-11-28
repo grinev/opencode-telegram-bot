@@ -68,7 +68,7 @@ function createDeps() {
   return {
     ...container,
     keyboardManager: {
-      getKeyboard: () => ({ keyboard: [[{ text: "📋 repo · New title" }]] }),
+      getKeyboard: () => ({ keyboard: [[{ text: "📋 [repo] New title" }]] }),
     } as never,
   };
 }
@@ -159,7 +159,7 @@ describe("bot/commands/rename", () => {
     expect(mocked.updateSelectedSessionTitleMock).toHaveBeenCalledWith("session-1", "New title");
     expect(ctx.api.deleteMessage).toHaveBeenCalledWith(101, 555);
     expect(ctx.reply).toHaveBeenCalledWith(t("rename.success", { title: "New title" }), {
-      reply_markup: { keyboard: [[{ text: "📋 repo · New title" }]] },
+      reply_markup: { keyboard: [[{ text: "📋 [repo] New title" }]] },
     });
     expect(container.renameManager.isWaitingForName()).toBe(false);
     expect(container.interactionManager.getSnapshot()).toBeNull();
