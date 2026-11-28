@@ -16,7 +16,7 @@ No open ports, no exposed APIs. The bot communicates with your local OpenCode se
 
 Platforms: macOS, Windows, Linux
 
-Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`), Français (`fr`), Bahasa Indonesia (`id`), Italiano (`it`), 한국어 (`ko`), Polski (`pl`), Português (Brasil) (`pt`), Русский (`ru`), Türkçe (`tr`), 简体中文 (`zh`)
+Languages: English (`en`), العربية (`ar`), Deutsch (`de`), Español (`es`), Français (`fr`), Bahasa Indonesia (`id`), Italiano (`it`), 日本語 (`ja`), 한국어 (`ko`), Polski (`pl`), Português (Brasil) (`pt`), Русский (`ru`), Türkçe (`tr`), 简体中文 (`zh`)
 
 <p align="center">
   <img src="assets/screencast.gif" width="45%" alt="OpenCode Telegram Bot screencast" />
@@ -240,7 +240,7 @@ Set `OPENCODE_API_URL` (host and port, no `/api` suffix) if the server runs else
 
 ### Localization
 
-- Supported locales: `en`, `ar`, `de`, `es`, `fr`, `id`, `it`, `ko`, `pl`, `pt`, `ru`, `tr`, `zh`
+- Supported locales: `en`, `ar`, `de`, `es`, `fr`, `id`, `it`, `ja`, `ko`, `pl`, `pt`, `ru`, `tr`, `zh`
 - The setup wizard asks for language first
 - You can change locale later with `BOT_LOCALE`
 
@@ -284,7 +284,7 @@ Configuration can be provided through process environment variables or an `.env`
 | `OPENCODE_SERVER_PASSWORD`                 | Server auth password (needed for V2, see [Old and New OpenCode Versions](#old-and-new-opencode-versions))                                   |    No    | —                        |
 | `OPENCODE_MODEL_PROVIDER`                  | Default model provider                                                                                                |   Yes    | `opencode`               |
 | `OPENCODE_MODEL_ID`                        | Default model ID                                                                                                      |   Yes    | `big-pickle`             |
-| `BOT_LOCALE`                               | Bot UI language (supported locale code, e.g. `en`, `ar`, `de`, `es`, `fr`, `id`, `it`, `ko`, `pl`, `pt`, `ru`, `tr`, `zh`)  |    No    | `en`                     |
+| `BOT_LOCALE`                               | Bot UI language (supported locale code, e.g. `en`, `ar`, `de`, `es`, `fr`, `id`, `it`, `ja`, `ko`, `pl`, `pt`, `ru`, `tr`, `zh`)  |    No    | `en`                     |
 | `SESSIONS_LIST_LIMIT`                      | Sessions per page in `/sessions` and maximum sessions in `/recent`                                                    |    No    | `10`                     |
 | `MESSAGES_LIST_LIMIT`                      | User messages per page in `/messages`                                                                                 |    No    | `10`                     |
 | `PROJECTS_LIST_LIMIT`                      | Projects per page in `/projects`                                                                                      |    No    | `10`                     |

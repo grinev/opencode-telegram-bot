@@ -5,6 +5,7 @@ import { es } from "./es.js";
 import { fr } from "./fr.js";
 import { id } from "./id.js";
 import { it } from "./it.js";
+import { ja } from "./ja.js";
 import { ko } from "./ko.js";
 import { pt } from "./pt.js";
 import { ru } from "./ru.js";
@@ -61,6 +62,12 @@ const LOCALE_DEFINITIONS = [
     label: "Italiano",
     dateLocale: "it-IT",
     dictionary: it,
+  },
+  {
+    code: "ja",
+    label: "日本語",
+    dateLocale: "ja-JP",
+    dictionary: ja,
   },
   {
     code: "ko",
