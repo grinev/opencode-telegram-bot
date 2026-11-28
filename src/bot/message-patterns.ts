@@ -5,7 +5,7 @@ export { GOAL_BUTTON_TEXT_PATTERN };
 export const AGENT_MODE_BUTTON_TEXT_PATTERN = /^(📋|🛠️|💬|🔍|📝|📄|📦|🤖)\s.+\s(?:Mode|Agent)$/;
 
 // Reply keyboard taps are plain text. Recognize even labels from older selections or locales.
-export const DASHBOARD_BUTTON_TEXT_PATTERN = /^📋 \S[^\r\n]* · \S[^\r\n]*(?![\s\S])/u;
+export const DASHBOARD_BUTTON_TEXT_PATTERN = /^📋 \[\S[^\r\n]*\] \S[^\r\n]*(?![\s\S])/u;
 export const DASHBOARD_CLOSE_CALLBACK = "dashboard:close";
 
 export const MODEL_BUTTON_TEXT_PATTERN = /^🧠\s(?!.*\s(?:Mode|Agent)$)[\s\S]+$/;

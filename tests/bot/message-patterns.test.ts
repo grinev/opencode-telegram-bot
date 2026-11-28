@@ -3,6 +3,7 @@ import { defined } from "../helpers/defined.js";
 import { createMainKeyboard } from "../../src/bot/keyboards/main-reply-keyboard.js";
 import {
   AGENT_MODE_BUTTON_TEXT_PATTERN,
+  DASHBOARD_BUTTON_TEXT_PATTERN,
   isReplyKeyboardButtonText,
   MODEL_BUTTON_TEXT_PATTERN,
   QUEUED_PROMPT_BUTTON_TEXT_PATTERN,
@@ -48,6 +49,11 @@ describe("bot/message-patterns", () => {
     expect("Create a migration plan").not.toMatch(MODEL_BUTTON_TEXT_PATTERN);
     expect("Create a migration plan").not.toMatch(AGENT_MODE_BUTTON_TEXT_PATTERN);
     expect("Create a migration plan").not.toMatch(VARIANT_BUTTON_TEXT_PATTERN);
+  });
+
+  it("recognises the bracketed dashboard label but not the unreleased format", () => {
+    expect("📋 [project…] Session").toMatch(DASHBOARD_BUTTON_TEXT_PATTERN);
+    expect("📋 project · Session").not.toMatch(DASHBOARD_BUTTON_TEXT_PATTERN);
   });
 
   it("matches current and legacy agent button labels with extra descriptors", () => {

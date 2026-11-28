@@ -169,10 +169,17 @@ describe("bot/rich-message-routing", () => {
 
   it("opens the current dashboard, not the agent picker or prompt handler, for an old label", async () => {
     const { bot, replies } = createRoutingBot();
-    await bot.handleUpdate(richUpdate([{ type: "paragraph", text: "📋 Old project · Session Agent" }]));
+    await bot.handleUpdate(richUpdate([{ type: "paragraph", text: "📋 [Old project] Session Agent" }]));
 
     expect(replies).toEqual([t("keyboard.no_session"), t("dashboard.card.no_project")]);
     expect(mocked.queuePromptForMerging).not.toHaveBeenCalled();
+  });
+
+  it("does not refresh the keyboard for its current bracketed label as rich text", async () => {
+    const { bot, replies } = createRoutingBot();
+    await bot.handleUpdate(richUpdate([{ type: "paragraph", text: "📋 [No project] No session" }]));
+
+    expect(replies).toEqual([t("dashboard.card.no_project")]);
   });
 
   it("routes a converted rich sentence as an ordinary prompt", async () => {

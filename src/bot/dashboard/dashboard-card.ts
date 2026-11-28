@@ -79,7 +79,7 @@ export async function handleDashboardOpen(ctx: Context, deps: DashboardDeps): Pr
       chatId,
       text,
       options: {
-        reply_markup: new InlineKeyboard().text(t("dashboard.button.close"), DASHBOARD_CLOSE_CALLBACK),
+        reply_markup: new InlineKeyboard().text(t("inline.button.close"), DASHBOARD_CLOSE_CALLBACK),
         link_preview_options: { is_disabled: true },
       },
     });

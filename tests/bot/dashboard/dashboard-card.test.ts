@@ -22,7 +22,7 @@ vi.mock("../../../src/app/stores/settings-store.js", () => ({
 }));
 vi.mock("../../../src/app/services/worktree-service.js", () => ({ getGitWorktreeContext: selected.git }));
 
-function fixture(label = "📋 Project · Full session title") {
+function fixture(label = "📋 [Project] Full session title") {
   const api = { sendMessage: vi.fn(), deleteMessage: vi.fn().mockResolvedValue(true) };
   api.sendMessage.mockResolvedValueOnce({ message_id: 11 }).mockResolvedValue({ message_id: 12 });
   const deps = {
@@ -62,7 +62,7 @@ describe("on-demand dashboard", () => {
   });
 
   it("sends a stale keyboard update before the current plain snapshot and replaces it with a fresh card", async () => {
-    const { api, deps, open } = fixture("📋 Old project · Old session");
+    const { api, deps, open } = fixture("📋 [Old project] Old session");
     await open();
     await open();
 
@@ -70,7 +70,7 @@ describe("on-demand dashboard", () => {
     expect(api.sendMessage).toHaveBeenCalledTimes(2);
     expect(api.sendMessage).toHaveBeenCalledWith(1, expect.stringMatching(/Full session title[\s\S]*\$0\.42[\s\S]*a\.ts \(\+2 -1\)/), {
       link_preview_options: { is_disabled: true },
-      reply_markup: { inline_keyboard: [[{ text: "Close", callback_data: "dashboard:close" }]] },
+      reply_markup: { inline_keyboard: [[{ text: "❌ Close", callback_data: "dashboard:close" }]] },
     });
     expect(api.deleteMessage).toHaveBeenCalledExactlyOnceWith(1, 11);
     expect(api.sendMessage.mock.calls[0]?.[1]).not.toMatch(/Model:|Agent:|Effort:/);
@@ -82,6 +82,7 @@ describe("on-demand dashboard", () => {
     await open();
     await open();
 
+    expect(deps.keyboardManager.sendKeyboardUpdate).not.toHaveBeenCalled();
     const expired = close(11);
     const wrongChat = close(12, 2);
     const active = close(12);
@@ -129,7 +130,7 @@ describe("on-demand dashboard", () => {
 
   it("does not load session metrics when there is only a project", async () => {
     selected.getCurrentSession.mockReturnValue(undefined);
-    const { api, deps, open } = fixture("📋 Project · No session");
+    const { api, deps, open } = fixture("📋 [Project] No session");
     await open();
     expect(deps.sessionMetricsManager.snapshot).not.toHaveBeenCalled();
     expect(api.sendMessage.mock.calls[0]?.[1]).toContain("Session not selected. Use /sessions or /new.");

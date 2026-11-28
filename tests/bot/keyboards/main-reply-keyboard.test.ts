@@ -38,7 +38,7 @@ describe("bot/keyboards/main-reply-keyboard", () => {
       modelID: "openai/gpt-4o",
     });
 
-    expect(keyboard.keyboard[0]).toEqual([{ text: "📋 No project · No session" }]);
+    expect(keyboard.keyboard[0]).toEqual([{ text: "📋 [No project] No session" }]);
     expect(buttonTextAt(keyboard, 1, 0)).toBe("🛠️ Build Agent");
     expect(buttonTextAt(keyboard, 1, 1)).toBe("📊 0");
     expect(buttonTextAt(keyboard, 2, 0)).toBe("🧠 openrouter\nopenai/gpt-4o");
@@ -89,7 +89,7 @@ describe("bot/keyboards/main-reply-keyboard", () => {
 
     expect(buttonTextAt(keyboard, 0, 0)).toBe("❌ 1. first");
     expect(buttonTextAt(keyboard, 1, 0)).toBe("❌ 2. second");
-    expect(buttonTextAt(keyboard, 2, 0)).toBe("📋 No project · No session");
+    expect(buttonTextAt(keyboard, 2, 0)).toBe("📋 [No project] No session");
     expect(buttonTextAt(keyboard, 3, 0)).toBe("🛠️ Build Agent");
     expect(buttonTextAt(keyboard, 3, 1)).toBe("📊 0");
     expect(buttonTextAt(keyboard, 4, 0)).toBe("🧠 openrouter\nopenai/gpt-4o");
@@ -101,7 +101,7 @@ describe("bot/keyboards/main-reply-keyboard", () => {
       ["queued 1", "queued 2"], ["goal objective", "pause"]);
     expect(keyboard.keyboard[2]).toEqual([{ text: "goal objective" }, { text: "pause" }]);
     expect(buttonTextAt(keyboard, 0, 0)).toBe("queued 1");
-    expect(buttonTextAt(keyboard, 3, 0)).toBe("📋 No project · No session");
+    expect(buttonTextAt(keyboard, 3, 0)).toBe("📋 [No project] No session");
     expect(buttonTextAt(keyboard, 4, 0)).toBe("🛠️ Build Agent");
   });
 
@@ -110,16 +110,16 @@ describe("bot/keyboards/main-reply-keyboard", () => {
     selection.project.mockReturnValue({ id: "project", worktree, name: worktree });
     selection.session.mockReturnValue({ id: "session", directory: worktree, title: `${"🧪".repeat(20)}\nline two` });
     const keyboard = createMainKeyboard("build", { providerID: "p", modelID: "m" });
-    expect(buttonTextAt(keyboard, 0, 0)).toBe(`📋 ${"🚀".repeat(17)}… · ${"🧪".repeat(17)}…`);
+    expect(buttonTextAt(keyboard, 0, 0)).toBe(`📋 [${"🚀".repeat(17)}…] ${"🧪".repeat(17)}…`);
   });
 
   it("distinguishes a detached selection from an unnamed session", () => {
     const project = { id: "project", worktree: "/projects/demo" };
     selection.project.mockReturnValue(project);
     const keyboard = () => createMainKeyboard("build", { providerID: "p", modelID: "m" });
-    expect(buttonTextAt(keyboard(), 0, 0)).toBe("📋 demo · No session");
+    expect(buttonTextAt(keyboard(), 0, 0)).toBe("📋 [demo] No session");
     selection.session.mockReturnValue({ id: "session", directory: project.worktree, title: "" });
-    expect(buttonTextAt(keyboard(), 0, 0)).toBe("📋 demo · New session");
+    expect(buttonTextAt(keyboard(), 0, 0)).toBe("📋 [demo] New session");
   });
 
   it("coalesces title corrections without debouncing an explicit keyboard update", async () => {
@@ -137,7 +137,7 @@ describe("bot/keyboards/main-reply-keyboard", () => {
 
       expect(sendMessage).toHaveBeenCalledExactlyOnceWith(42, "Session updated: “Latest”", {
         reply_markup: expect.objectContaining({
-          keyboard: expect.arrayContaining([[{ text: "📋 repo · Latest" }]]),
+          keyboard: expect.arrayContaining([[{ text: "📋 [repo] Latest" }]]),
         }),
       });
       manager.scheduleDashboardTitleUpdate(42);
