@@ -477,7 +477,8 @@ export const id: I18nDictionary = {
   "queue.not_found": "Pesan ini sudah tidak ada di antrean.",
   "queue.steer_added": "📥 Ditambahkan ke tugas saat ini ({count}/{max}).",
   "queue.disabled_hint": "Aktifkan antrean pesan di /settings.",
-  "keyboard.updated": "⌨️ Keyboard diperbarui",
+  "keyboard.updated": "Sesi diperbarui: “{title}”",
+  "keyboard.no_session": "Belum ada sesi yang dipilih",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "Tidak ada proyek",
   "dashboard.button.no_session": "Tidak ada sesi",
@@ -485,7 +486,7 @@ export const id: I18nDictionary = {
   "dashboard.button.close": "Tutup",
   "dashboard.card.no_project": "Belum ada proyek yang dipilih. Gunakan /projects.",
   "dashboard.card.no_session": "Belum ada sesi yang dipilih. Gunakan /sessions atau /new.",
-  "dashboard.keyboard.restored": "Konteks dipulihkan",
+  "dashboard.keyboard.restored": "Terhubung ke sesi “{title}”",
 
   "pinned.default_session_title": "sesi baru",
   "pinned.unknown": "Tidak diketahui",

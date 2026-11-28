@@ -465,7 +465,8 @@ export const ar: I18nDictionary = {
   "queue.not_found": "لم تعد هذه الرسالة في قائمة الانتظار.",
   "queue.steer_added": "📥 تمت الإضافة إلى المهمة الحالية ({count}/{max}).",
   "queue.disabled_hint": "يمكن تفعيل قائمة انتظار الرسائل من /settings.",
-  "keyboard.updated": "⌨️ تم تحديث لوحة التحكم",
+  "keyboard.updated": "تم تحديث الجلسة: «{title}»",
+  "keyboard.no_session": "لم يتم اختيار جلسة",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "لا يوجد مشروع",
   "dashboard.button.no_session": "لا توجد جلسة",
@@ -473,7 +474,7 @@ export const ar: I18nDictionary = {
   "dashboard.button.close": "إغلاق",
   "dashboard.card.no_project": "لم يتم اختيار مشروع. استخدم /projects.",
   "dashboard.card.no_session": "لم يتم اختيار جلسة. استخدم /sessions أو /new.",
-  "dashboard.keyboard.restored": "تمت استعادة السياق",
+  "dashboard.keyboard.restored": "تم الاتصال بالجلسة «{title}»",
 
   "pinned.default_session_title": "جلسة جديدة",
   "pinned.unknown": "غير معروف",

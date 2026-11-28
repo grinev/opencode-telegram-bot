@@ -449,9 +449,10 @@ describe("attach/service", () => {
     expect(firstResult).toBe(false);
     expect(secondResult).toBe(true);
     expect(mocked.ensureEventSubscriptionMock).toHaveBeenCalledTimes(1);
+    expect(mocked.sendKeyboardUpdateMock).toHaveBeenCalledExactlyOnceWith(777, mocked.currentSession);
   });
 
-  it("corrects a restored title and sends only the keyboard update", async () => {
+  it("corrects a restored title and reports the successful attachment", async () => {
     const bot = createBot();
     mocked.sessionGetMock.mockResolvedValue({ data: { id: "session-1", title: "Current title" } });
     mocked.updateTitleMock.mockImplementation(() => {
@@ -469,7 +470,8 @@ describe("attach/service", () => {
 
     expect(restored).toBe(true);
     expect(mocked.updateTitleMock).toHaveBeenCalledWith("session-1", "Current title");
-    expect(mocked.sendKeyboardUpdateMock).toHaveBeenCalledExactlyOnceWith(777);
+    expect(mocked.sendKeyboardUpdateMock).toHaveBeenNthCalledWith(1, 777);
+    expect(mocked.sendKeyboardUpdateMock).toHaveBeenNthCalledWith(2, 777, mocked.currentSession);
     expect(mocked.prepareMetricsMock).toHaveBeenCalledWith(mocked.currentSession, { created: false, force: false });
     expect(bot.api.sendMessage).not.toHaveBeenCalled();
   });

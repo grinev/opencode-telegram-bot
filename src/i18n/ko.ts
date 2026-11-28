@@ -484,7 +484,8 @@ export const ko: I18nDictionary = {
   "queue.not_found": "이 메시지는 더 이상 대기열에 없습니다.",
   "queue.steer_added": "📥 현재 작업에 추가했습니다 ({count}/{max}).",
   "queue.disabled_hint": "메시지 대기열은 /settings에서 활성화할 수 있습니다.",
-  "keyboard.updated": "⌨️ 키보드가 업데이트되었습니다",
+  "keyboard.updated": "세션이 업데이트되었습니다: “{title}”",
+  "keyboard.no_session": "선택된 세션이 없습니다",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "프로젝트 없음",
   "dashboard.button.no_session": "세션 없음",
@@ -492,7 +493,7 @@ export const ko: I18nDictionary = {
   "dashboard.button.close": "닫기",
   "dashboard.card.no_project": "선택된 프로젝트가 없습니다. /projects를 사용하세요.",
   "dashboard.card.no_session": "선택된 세션이 없습니다. /sessions 또는 /new를 사용하세요.",
-  "dashboard.keyboard.restored": "컨텍스트가 복원되었습니다",
+  "dashboard.keyboard.restored": "“{title}” 세션에 연결되었습니다",
 
   "pinned.default_session_title": "새 세션",
   "pinned.unknown": "알 수 없음",

@@ -496,7 +496,8 @@ export const de: I18nDictionary = {
   "queue.not_found": "Diese Nachricht ist nicht mehr in der Warteschlange.",
   "queue.steer_added": "📥 Zur aktuellen Aufgabe hinzugefügt ({count}/{max}).",
   "queue.disabled_hint": "Die Nachrichtenwarteschlange lässt sich in /settings aktivieren.",
-  "keyboard.updated": "⌨️ Tastatur aktualisiert",
+  "keyboard.updated": "Sitzung aktualisiert: „{title}“",
+  "keyboard.no_session": "Keine Sitzung ausgewählt",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "Kein Projekt",
   "dashboard.button.no_session": "Keine Sitzung",
@@ -504,7 +505,7 @@ export const de: I18nDictionary = {
   "dashboard.button.close": "Schließen",
   "dashboard.card.no_project": "Kein Projekt ausgewählt. Verwende /projects.",
   "dashboard.card.no_session": "Keine Sitzung ausgewählt. Verwende /sessions oder /new.",
-  "dashboard.keyboard.restored": "Kontext wiederhergestellt",
+  "dashboard.keyboard.restored": "Mit der Sitzung „{title}“ verbunden",
 
   "pinned.default_session_title": "neue Sitzung",
   "pinned.unknown": "Unbekannt",

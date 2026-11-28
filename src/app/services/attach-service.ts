@@ -25,6 +25,7 @@ interface PrepareSessionMetricsParams {
 export interface AttachPresentationDeps {
   prepareSessionMetrics(params: PrepareSessionMetricsParams): Promise<void>;
   refreshRestoredSelection(api: Bot<Context>["api"], chatId: number, previousTitle?: string): Promise<void>;
+  notifySessionRestored(chatId: number, session: SessionInfo): void;
   showCurrentQuestion(api: Bot<Context>["api"], chatId: number): Promise<void>;
   showPermissionRequest(
     api: Bot<Context>["api"],
@@ -481,7 +482,8 @@ async function performAttachedCurrentSessionRestore(
     }
     const session = getCurrentSession();
     if (session?.id !== currentSession.id || session.directory !== currentSession.directory) return false;
-    await attachToSession({ ...deps, session });
+    const { alreadyAttached } = await attachToSession({ ...deps, session });
+    if (!alreadyAttached) attachPresentation?.notifySessionRestored(deps.chatId, session);
     logger.info(
       `[Attach] Restored followed session on startup: session=${currentSession.id}, directory=${currentSession.directory}`,
     );
