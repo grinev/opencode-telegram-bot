@@ -44,6 +44,9 @@ export function createAttachPresentation(
       keyboardManager.initialize(api, chatId);
       await keyboardManager.sendKeyboardUpdate(chatId);
     },
+    notifySessionRestored(chatId, session) {
+      void keyboardManager.sendKeyboardUpdate(chatId, session);
+    },
     showCurrentQuestion: (api, chatId) => showCurrentQuestion(api, chatId, deps),
     showPermissionRequest: (api, chatId, request) =>
       showPermissionRequest(api, chatId, request, deps),

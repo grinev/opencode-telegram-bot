@@ -477,7 +477,8 @@ export const tr: I18nDictionary = {
   "queue.not_found": "Bu mesaj artık kuyrukta değil.",
   "queue.steer_added": "📥 Geçerli göreve eklendi ({count}/{max}).",
   "queue.disabled_hint": "Mesaj kuyruğu /settings içinden açılabilir.",
-  "keyboard.updated": "⌨️ Klavye güncellendi",
+  "keyboard.updated": "Oturum güncellendi: “{title}”",
+  "keyboard.no_session": "Oturum seçilmedi",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "Proje yok",
   "dashboard.button.no_session": "Oturum yok",
@@ -485,7 +486,7 @@ export const tr: I18nDictionary = {
   "dashboard.button.close": "Kapat",
   "dashboard.card.no_project": "Proje seçilmedi. /projects komutunu kullanın.",
   "dashboard.card.no_session": "Oturum seçilmedi. /sessions veya /new komutunu kullanın.",
-  "dashboard.keyboard.restored": "Bağlam geri yüklendi",
+  "dashboard.keyboard.restored": "“{title}” oturumuna bağlanıldı",
 
   "pinned.default_session_title": "yeni oturum",
   "pinned.unknown": "Bilinmiyor",

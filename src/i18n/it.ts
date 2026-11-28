@@ -487,7 +487,8 @@ export const it: I18nDictionary = {
   "queue.not_found": "Questo messaggio non è più in coda.",
   "queue.steer_added": "📥 Aggiunto all'attività corrente ({count}/{max}).",
   "queue.disabled_hint": "La coda dei messaggi può essere attivata in /settings.",
-  "keyboard.updated": "⌨️ Tastiera aggiornata",
+  "keyboard.updated": "Sessione aggiornata: «{title}»",
+  "keyboard.no_session": "Nessuna sessione selezionata",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "Nessun progetto",
   "dashboard.button.no_session": "Nessuna sessione",
@@ -495,7 +496,7 @@ export const it: I18nDictionary = {
   "dashboard.button.close": "Chiudi",
   "dashboard.card.no_project": "Nessun progetto selezionato. Usa /projects.",
   "dashboard.card.no_session": "Nessuna sessione selezionata. Usa /sessions o /new.",
-  "dashboard.keyboard.restored": "Contesto ripristinato",
+  "dashboard.keyboard.restored": "Connessione alla sessione «{title}» stabilita",
 
   "pinned.default_session_title": "nuova sessione",
   "pinned.unknown": "Sconosciuto",

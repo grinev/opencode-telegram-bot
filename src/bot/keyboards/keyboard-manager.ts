@@ -10,6 +10,8 @@ import type { ContextInfo, KeyboardState } from "./keyboard-types.js";
 import { t } from "../../i18n/index.js";
 import type { GoalManager } from "../../app/managers/goal-manager.js";
 import { getGoalButtonLabels } from "./goal-button.js";
+import { getDashboardSelection } from "./dashboard-button.js";
+import type { SessionInfo } from "../../app/types/session.js";
 
 /**
  * Keyboard Manager - manages Reply Keyboard state and updates
@@ -143,16 +145,16 @@ export class KeyboardManager {
   }
 
   /** Explicit corrections are serialized and use the latest keyboard at send time. */
-  public sendKeyboardUpdate(chatId?: number, text = t("keyboard.updated")): Promise<void> {
-    this.cancelDashboardTitleUpdate();
-    return this.enqueueKeyboardUpdate(chatId, text);
+  public sendKeyboardUpdate(chatId?: number, restoredSession?: SessionInfo): Promise<void> {
+    if (!restoredSession) this.cancelDashboardTitleUpdate();
+    return this.enqueueKeyboardUpdate(chatId, restoredSession);
   }
 
   /** Batch rapid title changes; a normal keyboard update can deliver the new title sooner. */
   public scheduleDashboardTitleUpdate(chatId: number): void {
     if (this.dashboardTitleUpdate || !this.api) return;
     const timer = setTimeout(() => {
-      void this.enqueueKeyboardUpdate(chatId, t("keyboard.updated"), () => {
+      void this.enqueueKeyboardUpdate(chatId, undefined, () => {
         if (this.dashboardTitleUpdate !== timer) return false;
         this.dashboardTitleUpdate = undefined;
         return true;
@@ -169,7 +171,7 @@ export class KeyboardManager {
 
   private enqueueKeyboardUpdate(
     chatId: number | undefined,
-    text: string,
+    restoredSession?: SessionInfo,
     shouldSend?: () => boolean,
   ): Promise<void> {
     const api = this.api;
@@ -178,6 +180,19 @@ export class KeyboardManager {
     const task = this.updateQueue.then(async () => {
       if (shouldSend && !shouldSend()) return;
       try {
+        const { session } = getDashboardSelection();
+        if (
+          restoredSession &&
+          (session?.id !== restoredSession.id || session.directory !== restoredSession.directory)
+        ) {
+          return;
+        }
+        const text = session
+          ? t(restoredSession ? "dashboard.keyboard.restored" : "keyboard.updated", {
+              title:
+                session.title.replace(/\s+/gu, " ").trim() || t("dashboard.button.unnamed_session"),
+            })
+          : t("keyboard.no_session");
         await api.sendMessage(targetChatId, text, { reply_markup: this.buildKeyboard() });
       } catch (error) {
         logger.warn("[KeyboardManager] Failed to send keyboard update:", error);

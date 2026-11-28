@@ -32,7 +32,7 @@ import { MediaGroupAttachmentHandler } from "./handlers/media-group-handler.js";
 import { createAttachPresentation } from "./services/attach-presentation.js";
 import { createTelegramBotOptions } from "./telegram-client-options.js";
 import { retireDashboardCard } from "./dashboard/dashboard-card.js";
-import { t } from "../i18n/index.js";
+import { getDashboardSelection } from "./keyboards/dashboard-button.js";
 
 const TRANSIENT_RETRY_SAFE_TELEGRAM_METHODS = new Set([
   "editMessageReplyMarkup",
@@ -277,7 +277,11 @@ export function restoreFollowedSessionOnPollingStart(
 ): void {
   const chatId = config.telegram.allowedUserId;
   container.keyboardManager.initialize(bot.api, chatId);
-  void container.keyboardManager.sendKeyboardUpdate(chatId, t("dashboard.keyboard.restored"));
+  const { session } = getDashboardSelection();
+  if (!session) {
+    void container.keyboardManager.sendKeyboardUpdate(chatId);
+    return;
+  }
   safeBackgroundTask({
     taskName: "bot.restoreAfterPollingStart",
     task: () =>

@@ -492,7 +492,8 @@ export const es: I18nDictionary = {
   "queue.not_found": "Este mensaje ya no está en la cola.",
   "queue.steer_added": "📥 Añadido a la tarea actual ({count}/{max}).",
   "queue.disabled_hint": "La cola de mensajes se activa en /settings.",
-  "keyboard.updated": "⌨️ Teclado actualizado",
+  "keyboard.updated": "Sesión actualizada: «{title}»",
+  "keyboard.no_session": "No se ha seleccionado ninguna sesión",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "Sin proyecto",
   "dashboard.button.no_session": "Sin sesión",
@@ -500,7 +501,7 @@ export const es: I18nDictionary = {
   "dashboard.button.close": "Cerrar",
   "dashboard.card.no_project": "No hay ningún proyecto seleccionado. Usa /projects.",
   "dashboard.card.no_session": "No hay ninguna sesión seleccionada. Usa /sessions o /new.",
-  "dashboard.keyboard.restored": "Contexto restaurado",
+  "dashboard.keyboard.restored": "Conexión establecida con la sesión «{title}»",
 
   "pinned.default_session_title": "sesión nueva",
   "pinned.unknown": "Desconocido",

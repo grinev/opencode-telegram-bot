@@ -171,7 +171,7 @@ describe("bot/rich-message-routing", () => {
     const { bot, replies } = createRoutingBot();
     await bot.handleUpdate(richUpdate([{ type: "paragraph", text: "📋 Old project · Session Agent" }]));
 
-    expect(replies).toEqual([t("keyboard.updated"), t("dashboard.card.no_project")]);
+    expect(replies).toEqual([t("keyboard.no_session"), t("dashboard.card.no_project")]);
     expect(mocked.queuePromptForMerging).not.toHaveBeenCalled();
   });
 

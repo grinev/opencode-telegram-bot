@@ -5,6 +5,7 @@ import {
   removeKeyboard,
 } from "../../../src/bot/keyboards/main-reply-keyboard.js";
 import { defined } from "../../helpers/defined.js";
+import { deferred } from "../../helpers/deferred.js";
 import { KeyboardManager } from "../../../src/bot/keyboards/keyboard-manager.js";
 import type { Api } from "grammy";
 
@@ -134,7 +135,7 @@ describe("bot/keyboards/main-reply-keyboard", () => {
       manager.scheduleDashboardTitleUpdate(42);
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(sendMessage).toHaveBeenCalledExactlyOnceWith(42, "⌨️ Keyboard updated", {
+      expect(sendMessage).toHaveBeenCalledExactlyOnceWith(42, "Session updated: “Latest”", {
         reply_markup: expect.objectContaining({
           keyboard: expect.arrayContaining([[{ text: "📋 repo · Latest" }]]),
         }),
@@ -147,6 +148,32 @@ describe("bot/keyboards/main-reply-keyboard", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("reports the restored session by name only while it is still selected", async () => {
+    const manager = new KeyboardManager();
+    const sendMessage = vi.fn();
+    const restored = { id: "first", directory: "/repo", title: "First session" };
+    selection.project.mockReturnValue({ id: "project", worktree: restored.directory });
+    selection.session.mockReturnValue(restored);
+    manager.initialize({ sendMessage } as unknown as Api, 42);
+    await manager.sendKeyboardUpdate(42, restored);
+    expect(sendMessage).toHaveBeenCalledExactlyOnceWith(
+      42,
+      "Connected to session “First session”",
+      expect.objectContaining({ reply_markup: expect.anything() }),
+    );
+
+    const sending = deferred<void>();
+    sendMessage.mockClear().mockReturnValueOnce(sending.promise);
+    const update = manager.sendKeyboardUpdate(42);
+    await Promise.resolve();
+    const notice = manager.sendKeyboardUpdate(42, restored);
+    selection.session.mockReturnValue({ ...restored, id: "second", title: "Second session" });
+    sending.resolve();
+    await Promise.all([update, notice]);
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("creates custom agent keyboard and remove payload", () => {

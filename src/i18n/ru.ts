@@ -485,7 +485,8 @@ export const ru: I18nDictionary = {
   "queue.not_found": "Этого сообщения больше нет в очереди.",
   "queue.steer_added": "📥 Добавлено в текущую задачу ({count}/{max}).",
   "queue.disabled_hint": "Очередь сообщений включается в /settings.",
-  "keyboard.updated": "⌨️ Клавиатура обновлена",
+  "keyboard.updated": "Сессия обновлена: «{title}»",
+  "keyboard.no_session": "Сессия не выбрана",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "Нет проекта",
   "dashboard.button.no_session": "Нет сессии",
@@ -493,7 +494,7 @@ export const ru: I18nDictionary = {
   "dashboard.button.close": "Закрыть",
   "dashboard.card.no_project": "Проект не выбран. Используйте /projects.",
   "dashboard.card.no_session": "Сессия не выбрана. Используйте /sessions или /new.",
-  "dashboard.keyboard.restored": "Контекст восстановлен",
+  "dashboard.keyboard.restored": "Подключён к сессии «{title}»",
 
   "pinned.default_session_title": "новая сессия",
   "pinned.unknown": "Неизвестно",

@@ -497,7 +497,8 @@ export const fr: I18nDictionary = {
   "queue.not_found": "Ce message n'est plus dans la file d'attente.",
   "queue.steer_added": "📥 Ajouté à la tâche en cours ({count}/{max}).",
   "queue.disabled_hint": "La file d'attente des messages s'active dans /settings.",
-  "keyboard.updated": "⌨️ Clavier mis à jour",
+  "keyboard.updated": "Session mise à jour : « {title} »",
+  "keyboard.no_session": "Aucune session sélectionnée",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "Aucun projet",
   "dashboard.button.no_session": "Aucune session",
@@ -505,7 +506,7 @@ export const fr: I18nDictionary = {
   "dashboard.button.close": "Fermer",
   "dashboard.card.no_project": "Aucun projet sélectionné. Utilisez /projects.",
   "dashboard.card.no_session": "Aucune session sélectionnée. Utilisez /sessions ou /new.",
-  "dashboard.keyboard.restored": "Contexte restauré",
+  "dashboard.keyboard.restored": "Connexion établie à la session « {title} »",
 
   "pinned.default_session_title": "nouvelle session",
   "pinned.unknown": "Inconnu",

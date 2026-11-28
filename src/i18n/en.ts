@@ -482,7 +482,8 @@ export const en = {
   "queue.not_found": "This message is no longer in the queue.",
   "queue.steer_added": "📥 Added to the current task ({count}/{max}).",
   "queue.disabled_hint": "The message queue can be enabled in /settings.",
-  "keyboard.updated": "⌨️ Keyboard updated",
+  "keyboard.updated": "Session updated: “{title}”",
+  "keyboard.no_session": "No session selected",
   "dashboard.button.context": "📋 {project} · {session}",
   "dashboard.button.no_project": "No project",
   "dashboard.button.no_session": "No session",
@@ -490,7 +491,7 @@ export const en = {
   "dashboard.button.close": "Close",
   "dashboard.card.no_project": "Project not selected. Use /projects.",
   "dashboard.card.no_session": "Session not selected. Use /sessions or /new.",
-  "dashboard.keyboard.restored": "Context restored",
+  "dashboard.keyboard.restored": "Connected to session “{title}”",
 
   "pinned.default_session_title": "new session",
   "pinned.unknown": "Unknown",
